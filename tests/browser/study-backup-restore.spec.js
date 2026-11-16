@@ -234,4 +234,60 @@ test.describe('Study Sessions backup and restore', () => {
     await page.close();
   });
 
+
+  test('backup restore is serialized with subsequent Study mutations', async ({
+    context, extensionId, extensionWorker, extensionStorage
+  }) => {
+    await extensionStorage.clear();
+    const page = await openPopup(context, extensionId);
+    const study = {
+      studySessions:[],
+      studyTopics:['Restored Topic'],
+      studySelectedTopic:'Restored Topic',
+      studyAutoStopMinutes:15
+    };
+
+    // Hold the shared Study mutation queue so restore and the following save
+    // are forced to line up behind one another.
+    await extensionWorker.evaluate(() => {
+      globalThis.__studyQueueGateRelease = null;
+      globalThis.__studyQueueGateTail = null;
+      globalThis.__studyQueueGatePromise = runStudyMutation(() => new Promise(resolve => {
+        globalThis.__studyQueueGateRelease = resolve;
+      }));
+      globalThis.__studyQueueGateTail = pendingStudyMutation;
+    });
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      typeof globalThis.__studyQueueGateRelease === 'function'
+    )).toBe(true);
+
+    await page.evaluate(value => {
+      window.__restoreStudyBackupPromise = chrome.runtime.sendMessage({
+        type:'blbSuiteRestoreStudyBackup',
+        study:value
+      });
+    }, study);
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      pendingStudyMutation !== globalThis.__studyQueueGateTail
+    )).toBe(true);
+
+    await extensionWorker.evaluate(() => {
+      globalThis.__studySaveAfterRestorePromise = saveStudyTopicFromPopup('Concurrent After Restore');
+    });
+    await extensionWorker.evaluate(() => globalThis.__studyQueueGateRelease());
+
+    const restore = await page.evaluate(() => window.__restoreStudyBackupPromise);
+    expect(restore).toEqual({ok:true});
+    const saved = await extensionWorker.evaluate(() => globalThis.__studySaveAfterRestorePromise);
+    expect(saved.ok).toBe(true);
+
+    const stored = await readStudyBackupData(extensionWorker);
+    expect(stored.studyTopics).toContain('Restored Topic');
+    expect(stored.studyTopics).toContain('Concurrent After Restore');
+    expect(stored.studySessions).toEqual(expect.arrayContaining([
+      expect.objectContaining({title:'Concurrent After Restore'})
+    ]));
+    await page.close();
+  });
+
 });
