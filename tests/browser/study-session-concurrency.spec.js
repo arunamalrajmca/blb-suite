@@ -49,7 +49,7 @@ test('concurrent Study notes and capture operations do not overwrite one another
   }, topic);
 
   expect(result.outcomes.map(item => item === true || item?.ok === true)).toEqual([true, true, true, true]);
-  expect(result.session.notes).toEqual(['First concurrent note', 'Second concurrent note']);
+  expect(result.session.notes).toEqual(['First Concurrent Note', 'Second Concurrent Note']);
   expect(result.session.strongs).toEqual(['H3068']);
   expect(result.session.searchTerms).toEqual(['Faith']);
 });
