@@ -133,7 +133,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/blb-parse-popup.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/blb-parse-popup.spec.js"]
   },
   {
     paths: ["extension/blb-verse-link-navigation.js"],
@@ -188,6 +188,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/multiverse-tool-view.spec.js",
   "tests/browser/multiverse-handoff.spec.js",
   "tests/browser/blb-passive-new-tab-targets.spec.js",
+  "tests/browser/blb-parse-popup.spec.js",
   "tests/browser/source-page-collector-behavior.spec.js",
   "tests/browser/source-page-button-redirect-separation.spec.js",
   "tests/browser/blb-verse-link-navigation.spec.js",
@@ -238,6 +239,7 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/multiverse-tool-view.spec.js",
   "tests/browser/multiverse-handoff.spec.js",
   "tests/browser/blb-passive-new-tab-targets.spec.js",
+  "tests/browser/blb-parse-popup.spec.js",
   "tests/browser/source-page-collector-behavior.spec.js",
   "tests/browser/blb-verse-link-navigation.spec.js",
   "tests/browser/criteria-search-navigation.spec.js",
