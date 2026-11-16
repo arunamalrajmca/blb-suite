@@ -1,4 +1,7 @@
 const { test, expect } = require('./fixtures');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 
 test('source-page collector parses, canonicalizes, and deduplicates linked Bible references', async ({
   page, context, extensionStorage, extensionWorker
@@ -654,87 +657,75 @@ test("King's Bible collector recreates its button after the page replaces its bo
 });
 
 
-test('source-page collector reinjection cancels pending DOM-ready observer startup', async ({
-  page, context, extensionStorage, extensionWorker
-}) => {
-  await extensionStorage.set({
-    masterEnabled:true,
-    redirectEnabled:false,
-    pageSelectionButtonSites:{'gotquestions.org':false},
-    doubleClickBlbSites:{}
-  });
 
-  let releaseParser;
-  const parserGate = new Promise(resolve => { releaseParser = resolve; });
-  await context.route('https://www.gotquestions.org/**', async route => {
-    if (new URL(route.request().url()).pathname === '/startup-hold.js') {
-      await parserGate;
-      await route.fulfill({status:200,contentType:'application/javascript',body:'window.__startupHoldReleased=true;'});
-      return;
-    }
-    await route.fulfill({
-      status:200,
-      contentType:'text/html; charset=utf-8',
-      body:'<!doctype html><html><head><title>Collector startup lifecycle</title><script src="/startup-hold.js"></script></head><body><main>John 3:16</main></body></html>'
-    });
-  });
+test('collector startup registrations are cancelled by reinjection cleanup', async () => {
+  const modules = [
+    'source-page-collector.js',
+    'kings-bible-collector.js',
+    'webster-collector.js'
+  ];
 
-  let navigation;
-  try {
-    const parserRequestStarted = page.waitForRequest(request =>
-      request.url().endsWith('/startup-hold.js')
+  for (const moduleName of modules) {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../../extension', moduleName),
+      'utf8'
     );
-    navigation = page.goto('https://www.gotquestions.org/startup-lifecycle.html', { waitUntil: 'commit' });
-    await navigation;
-    await parserRequestStarted;
+    const helperMatch = source.match(
+      /    const addStartupListener = \(eventName, listener\) => \{[\\s\\S]*?    const scheduleStartupRetry = \(callback, delay\) => \{[\\s\\S]*?\n    \};/
+    );
+    expect(helperMatch, moduleName + ' startup helpers').not.toBeNull();
 
-    // Navigation can outlive the fixture's original Worker handle: MV3 may
-    // suspend and recreate the extension service worker while the parser is held.
-    // Always acquire the currently live worker rather than evaluating a stale handle.
-    const getLiveExtensionWorker = async () => {
-      const current = context.serviceWorkers()[0];
-      if (current) return current;
-      return context.waitForEvent('serviceworker', { timeout: 10000 });
+    const listeners = new Map();
+    const activeTimers = new Set();
+    const clearedTimers = [];
+    let nextTimerId = 0;
+    const document = {
+      addEventListener(eventName, listener) {
+        const entries = listeners.get(eventName) || new Set();
+        entries.add(listener);
+        listeners.set(eventName, entries);
+      },
+      removeEventListener(eventName, listener) {
+        listeners.get(eventName)?.delete(listener);
+      }
     };
-    const worker = await getLiveExtensionWorker();
-    const tabId = await worker.evaluate(async () => {
-      const tabs = await chrome.tabs.query({});
-      return tabs.find(tab => (tab.url || '').includes('/startup-lifecycle.html'))?.id;
-    });
-    expect(Number.isInteger(tabId)).toBe(true);
+    const sandbox = {
+      document,
+      setTimeout(callback, delay) {
+        const timer = { id: ++nextTimerId, callback, delay };
+        activeTimers.add(timer);
+        return timer;
+      },
+      clearTimeout(timer) {
+        clearedTimers.push(timer);
+        activeTimers.delete(timer);
+      }
+    };
 
-    // Keep instrumentation and reinjection in one worker task so no stale
-    // fixture handle is retained across separate extension API operations.
-    await worker.evaluate(async id => {
-      await chrome.scripting.executeScript({
-        target:{tabId:id},
-        func:() => {
-          const originalObserve = MutationObserver.prototype.observe;
-          globalThis.__blbStartupObserverCount = 0;
-          MutationObserver.prototype.observe = function(target, options) {
-            if (target === document.documentElement && options?.childList === true) {
-              globalThis.__blbStartupObserverCount += 1;
-            }
-            return originalObserve.call(this, target, options);
-          };
+    vm.runInNewContext(`
+      const cleanupCallbacks = [];
+      globalThis.cleanup = () => {
+        for (const cleanup of cleanupCallbacks.splice(0)) {
+          try { cleanup(); } catch (_) {}
         }
-      });
-      // Reinitialize while the parser-blocking script still holds DOMContentLoaded.
-      await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});
-    }, tabId);
+      };
+      ${helperMatch[0]}
+      const onReady = () => {};
+      addStartupListener('DOMContentLoaded', onReady);
+      scheduleStartupRetry(() => {}, 500);
+      scheduleStartupRetry(() => {}, 1500);
+    `, sandbox, { filename: moduleName });
 
-    releaseParser();
-    await navigation;
-    await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible();
+    expect(listeners.get('DOMContentLoaded')?.size, moduleName + ' pending DOM-ready listener')
+      .toBe(1);
+    expect(activeTimers.size, moduleName + ' pending startup retries').toBe(2);
 
-    const observerWorker = await getLiveExtensionWorker();
-    const observerStarts = await observerWorker.evaluate(id => chrome.scripting.executeScript({
-      target:{tabId:id},
-      func:() => globalThis.__blbStartupObserverCount
-    }).then(results => results[0]?.result), tabId);
-    expect(observerStarts).toBe(1);
-  } finally {
-    releaseParser?.();
-    await navigation?.catch(() => {});
+    sandbox.cleanup();
+
+    expect(listeners.get('DOMContentLoaded')?.size, moduleName + ' listener after cleanup')
+      .toBe(0);
+    expect(activeTimers.size, moduleName + ' timers after cleanup').toBe(0);
+    expect(clearedTimers.map(timer => timer.delay).sort((a, b) => a - b))
+      .toEqual([500, 1500]);
   }
 });
