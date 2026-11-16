@@ -688,13 +688,24 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
     await navigation;
     await parserRequestStarted;
 
-    const tabId = await extensionWorker.evaluate(async () => {
+    // Navigation can outlive the fixture's original Worker handle: MV3 may
+    // suspend and recreate the extension service worker while the parser is held.
+    // Always acquire the currently live worker rather than evaluating a stale handle.
+    const getLiveExtensionWorker = async () => {
+      const current = context.serviceWorkers()[0];
+      if (current) return current;
+      return context.waitForEvent('serviceworker', { timeout: 10000 });
+    };
+    const worker = await getLiveExtensionWorker();
+    const tabId = await worker.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       return tabs.find(tab => (tab.url || '').includes('/startup-lifecycle.html'))?.id;
     });
     expect(Number.isInteger(tabId)).toBe(true);
 
-    await extensionWorker.evaluate(async id => {
+    // Keep instrumentation and reinjection in one worker task so no stale
+    // fixture handle is retained across separate extension API operations.
+    await worker.evaluate(async id => {
       await chrome.scripting.executeScript({
         target:{tabId:id},
         func:() => {
@@ -716,7 +727,8 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
     await navigation;
     await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible();
 
-    const observerStarts = await extensionWorker.evaluate(id => chrome.scripting.executeScript({
+    const observerWorker = await getLiveExtensionWorker();
+    const observerStarts = await observerWorker.evaluate(id => chrome.scripting.executeScript({
       target:{tabId:id},
       func:() => globalThis.__blbStartupObserverCount
     }).then(results => results[0]?.result), tabId);
