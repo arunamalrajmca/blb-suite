@@ -169,8 +169,8 @@ test('content-script Study and MultiVerse messages enforce source hosts and curr
   }
 });
 
-test('host-access revocation removes registrations and later grants reactivate each independently enabled site feature', async ({
-  page, extensionWorker, extensionStorage
+test('host-access revocation removes registrations and later grants reactivate each independently enabled site feature across open tabs', async ({
+  page, context, extensionWorker, extensionStorage
 }) => {
   const pattern = 'https://example.com/*';
   const previous = await extensionWorker.evaluate(async () => chrome.storage.local.get({
@@ -180,6 +180,7 @@ test('host-access revocation removes registrations and later grants reactivate e
     redirectEnabled:false
   }));
 
+  let secondPage;
   const scenarios = [
     { label:'Show on BLB only', pageButton:true, doubleClick:false },
     { label:'Double-click only', pageButton:false, doubleClick:true },
@@ -187,11 +188,35 @@ test('host-access revocation removes registrations and later grants reactivate e
   ];
 
   try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false},
+      redirectEnabled:false
+    });
     await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () =>
       (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
     );
     expect(Number.isInteger(tabId)).toBe(true);
+    secondPage = await context.newPage();
+    await secondPage.goto('https://example.com/second-host-permission-tab', {waitUntil:'domcontentloaded'});
+    const secondTabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({url:'https://example.com/second-host-permission-tab'}).then(([tab]) => tab?.id)
+    );
+    expect(Number.isInteger(secondTabId)).toBe(true);
+
+    const readFeatures = async id => extensionWorker.evaluate(async tabId => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId},
+        world:'ISOLATED',
+        func:() => ({
+          floatingButtonPresent:Boolean(document.getElementById('blb-suite-page-selection-button')),
+          doubleClickEnabled:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return result.result;
+    }, id);
 
     const registrationId = await extensionWorker.evaluate(value =>
       runtimeContentScriptIdForPattern(value), pattern
@@ -250,6 +275,12 @@ test('host-access revocation removes registrations and later grants reactivate e
         injectEnabledTabsForGrantedOrigins([originPattern]), pattern
       );
       await expect.poll(registrationExists, {timeout:10000}).toBe(true);
+      const expectedFeatures = {
+        floatingButtonPresent:scenario.pageButton,
+        doubleClickEnabled:scenario.doubleClick
+      };
+      await expect.poll(() => readFeatures(tabId), {timeout:15000}).toEqual(expectedFeatures);
+      await expect.poll(() => readFeatures(secondTabId), {timeout:15000}).toEqual(expectedFeatures);
 
       await extensionWorker.evaluate(async originPattern =>
         unregisterRuntimeContentScriptForPattern(originPattern), pattern
@@ -260,6 +291,7 @@ test('host-access revocation removes registrations and later grants reactivate e
       await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set(settings);
     }, {originPattern:pattern,settings:previous});
+    await secondPage?.close().catch(() => {});
   }
 });
 test('site-feature opt-ins are committed only when the matching pending host permission is granted', async ({
@@ -1043,6 +1075,7 @@ test('a late host-permission grant activates the original site tab even after fo
     pendingSiteFeatureToggles:{}
   }));
   let otherPage;
+  let sameOriginPage;
   try {
     await extensionStorage.set({
       masterEnabled:true,
@@ -1056,6 +1089,15 @@ test('a late host-permission grant activates the original site tab even after fo
       chrome.tabs.query({url}).then(([tab]) => tab?.id), 'https://example.com/*'
     );
     expect(Number.isInteger(originalTabId)).toBe(true);
+
+    // A second already-open tab on the same origin must also be activated by
+    // the grant, even though it is not the active tab when permission arrives.
+    sameOriginPage = await context.newPage();
+    await sameOriginPage.goto('https://example.com/second-open-tab', {waitUntil:'domcontentloaded'});
+    const secondSameOriginTabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({url:'https://example.com/second-open-tab'}).then(([tab]) => tab?.id)
+    );
+    expect(Number.isInteger(secondSameOriginTabId)).toBe(true);
 
     // Model the popup closing while its permission prompt is pending, followed
     // by the user moving focus to a different tab before Chrome reports grant.
@@ -1095,6 +1137,7 @@ test('a late host-permission grant activates the original site tab even after fo
       {origin:pattern,feature:'pageButton'}
     ]);
     expect(activation.calls).toContain(originalTabId);
+    expect(activation.calls).toContain(secondSameOriginTabId);
     expect(activation.calls).not.toContain(activeTab.id);
 
     const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
@@ -1106,6 +1149,7 @@ test('a late host-permission grant activates the original site tab even after fo
   } finally {
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
     if (otherPage) await otherPage.close().catch(() => {});
+    if (sameOriginPage) await sameOriginPage.close().catch(() => {});
   }
 });
 
