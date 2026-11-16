@@ -1502,6 +1502,9 @@ function isValidStudyBackup(backup) {
 async function importStudyBackupFile(file) {
   if (!file) return;
   importStudyBackupButton.disabled = true;
+  // Start tracking as soon as import begins, including while the file is read.
+  const topicEditGenerationAtRestoreStart = topicInputEditGeneration;
+  const noteEditGenerationAtRestoreStart = noteInputEditGeneration;
   try {
     if (file.size > 25 * 1024 * 1024) {
       setStatus('Backup file is too large (maximum 25 MB).');
@@ -1526,8 +1529,6 @@ async function importStudyBackupFile(file) {
     // Preserve edits made while the service worker is applying the backup.
     // A restore replaces persisted Study data, but it must not overwrite newer
     // text the user has entered into this popup while the request was pending.
-    const topicEditGenerationAtRestoreStart = topicInputEditGeneration;
-    const noteEditGenerationAtRestoreStart = noteInputEditGeneration;
     const restoreResponse = await chrome.runtime.sendMessage({
       type:'blbSuiteRestoreStudyBackup',
       study:restored
