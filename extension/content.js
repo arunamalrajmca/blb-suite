@@ -565,21 +565,34 @@ const REDIRECT_HOSTS = new Set([
 ]);
 
 let sourceBibleRedirectEnabled = false;
-if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+let sourceBibleRedirectRefreshGeneration = 0;
+let sourceBibleRedirectAttempted = false;
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(location.hostname.toLowerCase().replace(/^www\\./, ""))) {
   installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
 }
 
-if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
-  const initialRedirectSettingsGeneration = redirectSettingsGeneration;
-  isSuiteEnabled().then(enabled => {
-    if (initialRedirectSettingsGeneration !== redirectSettingsGeneration || !enabled) return;
-    return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
-      if (initialRedirectSettingsGeneration !== redirectSettingsGeneration) return;
-      sourceBibleRedirectEnabled = redirectEnabled === true;
-      if (!redirectEnabled) return;
-      if (!redirectBlbNet()) redirectBibleSite();
-    });
-  }).catch(() => {});
+// Keep initial source-URL redirects eligible when a page was opened while the
+// Suite master switch was OFF. Re-enabling can run the same redirect path
+// without requiring the user to reload the source page.
+async function refreshSourceBibleRedirect() {
+  const generation = ++sourceBibleRedirectRefreshGeneration;
+  try {
+    const [enabled, settings] = await Promise.all([
+      isSuiteEnabled(),
+      chrome.storage.local.get({redirectEnabled:false})
+    ]);
+    if (generation !== sourceBibleRedirectRefreshGeneration || !enabled) return;
+    sourceBibleRedirectEnabled = settings.redirectEnabled === true;
+    if (!sourceBibleRedirectEnabled || sourceBibleRedirectAttempted) return;
+    sourceBibleRedirectAttempted = true;
+    if (!redirectBlbNet()) redirectBibleSite();
+  } catch (_) {
+    if (generation === sourceBibleRedirectRefreshGeneration) sourceBibleRedirectEnabled = false;
+  }
+}
+
+if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\\./, ''))) {
+  void refreshSourceBibleRedirect();
 }
 // The MultiVerse copy enhancement module is loaded before this content script.
 globalThis.BLBMultiVerseCopyModule?.initialize({
@@ -4058,13 +4071,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.redirectEnabled) {
     redirectSettingsGeneration += 1;
-    theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
     sourceBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
+    theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
+    sourceBibleRedirectRefreshGeneration += 1;
+    if (suiteEnabled && sourceBibleRedirectEnabled &&
+        REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\\./, ''))) {
+      void refreshSourceBibleRedirect();
+    }
   }
 
   if (changes.masterEnabled) {
     suiteSettingsGeneration += 1;
     suiteEnabled = changes.masterEnabled.newValue !== false;
+    sourceBibleRedirectRefreshGeneration += 1;
+    if (suiteEnabled && REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\\./, ''))) {
+      void refreshSourceBibleRedirect();
+    }
     blbPassiveNewTabTargets?.refresh?.();
     if (suiteEnabled) {
       // Features whose observers skip DOM mutations while disabled must rescan
