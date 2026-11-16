@@ -1640,6 +1640,22 @@ document.addEventListener('click', event => {
     if (themeInteractionGeneration === initialThemeGeneration) applyTheme('dark');
   });
 
+  // Theme is a shared popup preference. Other open popup instances must
+  // refresh it too; read the current value rather than trusting an event's
+  // payload, so rapid writes cannot apply an older queued change out of order.
+  let themeStorageRefreshGeneration = 0;
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local' || !changes.popupTheme) return;
+    const refreshGeneration = ++themeStorageRefreshGeneration;
+    const interactionGeneration = themeInteractionGeneration;
+    chrome.storage.local.get({popupTheme:'dark'}).then(({popupTheme}) => {
+      if (refreshGeneration !== themeStorageRefreshGeneration ||
+          interactionGeneration !== themeInteractionGeneration) return;
+      themeInteractionGeneration++;
+      applyTheme(popupTheme === 'light' ? 'light' : 'dark');
+    }).catch(() => {});
+  });
+
   button.addEventListener('click', async () => {
     themeInteractionGeneration++;
     const nextTheme = document.body.classList.contains('light') ? 'dark' : 'light';
