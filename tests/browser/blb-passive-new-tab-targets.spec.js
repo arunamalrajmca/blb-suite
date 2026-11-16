@@ -58,3 +58,46 @@ test('global Suite OFF leaves KJV verse links without passive new-tab targets', 
   await page.waitForTimeout(100);
   await expect(page.locator('#dynamic-kjv-verse')).not.toHaveAttribute('target', '_blank');
 });
+
+
+test('reinjection restores only the passive new-tab target owned by the previous instance', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true });
+  await serveLinks(context);
+  await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#kjv-verse')).toHaveAttribute('target', '_blank');
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ url: HOME_URL }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const [result] = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: async () => {
+        const replacement = globalThis.BLBPassiveNewTabTargetsModule.initialize({
+          BLB_HOSTNAME: 'blueletterbible.org',
+          isSuiteEnabledNow: () => false,
+          suiteSettingsReadyPromise: Promise.resolve(false)
+        });
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const targetAfterReinjection = document.querySelector('#kjv-verse').getAttribute('target');
+        replacement.cleanup();
+        return {
+          targetAfterReinjection,
+          cleanupRegistryReleased: !('__blbPassiveNewTabTargetsCleanup' in globalThis)
+        };
+      }
+    });
+    return [injected.result];
+  }, tabId);
+
+  expect(result).toEqual({
+    targetAfterReinjection: null,
+    cleanupRegistryReleased: true
+  });
+});
