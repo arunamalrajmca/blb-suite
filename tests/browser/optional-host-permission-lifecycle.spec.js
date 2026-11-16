@@ -177,7 +177,8 @@ test('host-access revocation removes registrations and later grants reactivate e
     masterEnabled:true,
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{},
-    redirectEnabled:false
+    redirectEnabled:false,
+    siteHostAccessRevokedSites:{}
   }));
 
   let secondPage;
@@ -282,7 +283,7 @@ test('host-access revocation removes registrations and later grants reactivate e
       // Restore the permission API and exercise the same activation path used
       // by the onAdded handler for both already-open tabs.
       await extensionWorker.evaluate(originPattern =>
-        injectEnabledTabsForGrantedOrigins([originPattern]), pattern
+        handleGrantedHostPermissions([originPattern]), pattern
       );
       await expect.poll(registrationExists, {timeout:10000}).toBe(true);
       const expectedFeatures = {
