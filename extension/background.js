@@ -3585,19 +3585,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenCurrentSelection') {
-    if (!(await isActiveTabContentScriptSender(sender))) {
-      sendResponse({ok:false, reason:'unauthorized-sender'});
-      return true;
-    }
-    // Use the same guarded handler as the registered Alt+B command. Returning
-    // its result makes the handoff deterministic for callers and regression
-    // tests instead of acknowledging the message before tab creation finishes.
+    // Reuse the command's complete site-policy path while pinning selection
+    // reads and selection clearing to the requesting document.
     try {
-      const result = await openCurrentSelectionInBlb(
-        sender.tab.id,
-        sender.url,
-        sender.documentId
-      );
+      const result = await handleOpenBibleSelectionCommand(sender);
       sendResponse(result || {ok:false, reason:'selection-not-opened'});
     } catch (error) {
       console.error('KJV Scripture Tools Alt+B message:', error);
@@ -6990,12 +6981,16 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
 
 chrome.contextMenus.onClicked.addListener(handleBlbSelectionContextMenuClick);
 
-async function clearPageSelectionAfterBlbAction(tabId) {
+async function clearPageSelectionAfterBlbAction(tabId, documentId = null) {
   if (!Number.isInteger(tabId)) return;
   const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
   const clearStartedAt = measureStage ? performance.now() : null;
   try {
-    await chrome.tabs.sendMessage(tabId, {type:'blbSuiteClearPageSelection'});
+    await chrome.tabs.sendMessage(
+      tabId,
+      {type:'blbSuiteClearPageSelection'},
+      typeof documentId === 'string' && documentId ? {documentId} : undefined
+    );
   } catch (_) {
     // Some supported pages (notably PDF viewers) may not expose a content
     // script message endpoint; the BLB action itself should still complete.
@@ -7004,11 +6999,19 @@ async function clearPageSelectionAfterBlbAction(tabId) {
   }
 }
 
-async function handleOpenBibleSelectionCommand() {
+async function handleOpenBibleSelectionCommand(sender = null) {
   if (!(await isSuiteEnabled())) return {ok:false, reason:'disabled'};
   try {
-    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-    const tab = tabs[0];
+    let tab;
+    if (sender) {
+      if (!(await isActiveTabContentScriptSender(sender))) {
+        return {ok:false, reason:'unauthorized-sender'};
+      }
+      tab = sender.tab;
+    } else {
+      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+      tab = tabs[0];
+    }
     if (!tab?.id) return {ok:false, reason:'no-active-tab'};
 
     // Preserve the feature-policy result for excluded sites before checking
@@ -7019,22 +7022,28 @@ async function handleOpenBibleSelectionCommand() {
     if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) {
       return {ok:false, reason:'site-disabled'};
     }
-    if (!(await hasSelectionActionPermissionForTab(tab))) {
+    if (!sender && !(await hasSelectionActionPermissionForTab(tab))) {
       return {ok:false, reason:'host-permission-revoked'};
     }
+    // Site-policy storage reads can yield. Recheck the original document
+    // afterward so a navigation during that await cannot continue the request.
+    if (sender && !(await isLiveContentScriptSenderDocument(sender))) {
+      return {ok:false, reason:'stale-sender-document'};
+    }
 
+    const documentId = sender?.documentId || null;
     if (siteKey === BLB_HOSTNAME) {
-      const selectedText = await getActiveTabSelection(tab.id);
+      const selectedText = await getActiveTabSelection(tab.id, documentId);
       if (!selectedText) return {ok:false, reason:'empty-selection'};
       const result = await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
-      await clearPageSelectionAfterBlbAction(tab.id);
+      await clearPageSelectionAfterBlbAction(tab.id, documentId);
       return {ok:true, ...result};
     }
 
-    // Keep the command and its regression-test message on one execution path.
-    // This also returns only after contextual resolution and tab opening finish.
-    const result = await openCurrentSelectionInBlb(tab.id, tab.url || '');
-    if (result?.ok) await clearPageSelectionAfterBlbAction(tab.id);
+    // Keep the command and its message bridge on one execution path while
+    // pinning all selection reads to the originating document when available.
+    const result = await openCurrentSelectionInBlb(tab.id, tab.url || sender?.url || '', documentId);
+    if (result?.ok) await clearPageSelectionAfterBlbAction(tab.id, documentId);
     return result;
   } catch (err) {
     console.error('KJV Scripture Tools Alt+B:', err);
