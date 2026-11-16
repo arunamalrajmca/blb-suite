@@ -3241,7 +3241,11 @@ async function isLiveContentScriptSenderDocument(sender) {
   // subframe messages rather than treating a frame's URL as the tab's origin.
   if (typeof sender.url !== 'string' || sender.url.startsWith(chrome.runtime.getURL(''))) return false;
 
-  if (typeof sender.documentId === 'string' && sender.documentId) {
+  // Local files and Chromium's PDF viewer use browser-managed documents.
+  // Their live identity is checked through the tab URL because executeScript
+  // cannot reliably target browser-owned PDF viewer documents.
+  const browserManagedDocument = /^file:\/\//i.test(sender.url) || isPdfViewerTab(sender.tab);
+  if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
     try {
       // Target the exact document that sent the request. If it navigated or
       // closed while permission checks were pending, Chrome rejects this
@@ -3258,7 +3262,10 @@ async function isLiveContentScriptSenderDocument(sender) {
 
   try {
     const liveTab = await chrome.tabs.get(sender.tab.id);
-    return sameSenderDocumentUrl(sender.url, liveTab?.url || liveTab?.pendingUrl);
+    return sameSenderDocumentUrl(
+      sender.tab?.url || sender.url,
+      liveTab?.url || liveTab?.pendingUrl
+    );
   } catch (_) {
     return false;
   }
