@@ -750,8 +750,18 @@ test('source Bible redirect activates on the same page when the Suite master swi
   }));
 
   await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
-  await expect.poll(async () => page.evaluate(() => window.__blbSuiteContentScriptLoadedV2 === true))
-    .toBe(true);
+  const sourceTabId = await extensionWorker.evaluate(async url =>
+    (await chrome.tabs.query({url}))[0]?.id || null, sourceUrl
+  );
+  expect(sourceTabId).toBeTruthy();
+  // Inspect the extension isolated world, not the page's separate JavaScript world.
+  await expect.poll(async () => extensionWorker.evaluate(async tabId => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId},
+      func:() => window.__blbSuiteContentScriptLoadedV2 === true
+    });
+    return result?.result === true;
+  }, sourceTabId)).toBe(true);
   await expect(page).toHaveURL(sourceUrl);
 
   const before = await extensionWorker.evaluate(async () =>
