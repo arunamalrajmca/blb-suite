@@ -1117,6 +1117,7 @@ test('a late host-permission grant activates the original site tab even after fo
   } finally {
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
     if (otherPage) await otherPage.close().catch(() => {});
+    if (sameOriginPage) await sameOriginPage.close().catch(() => {});
   }
 });
 
