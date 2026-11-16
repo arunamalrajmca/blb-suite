@@ -429,9 +429,8 @@ async function syncSelectedTopic(topic) {
   const value = titleCase(topic);
   const requestId = createStudyTopicSelectionRequestId();
   const begun = await beginStudyTopicSelection(requestId);
-  if (!begun?.ok) return value;
-  await commitStudyTopicSelection(requestId, value);
-  return value;
+  if (!begun?.ok) return begun || {ok:false};
+  return await commitStudyTopicSelection(requestId, value) || {ok:false};
 }
 
 async function loadSelectedTopic() {
@@ -828,7 +827,13 @@ async function startTopic() {
   const topic = selectedTopic();
   if (!topic) { setStatus('Enter a topic first.'); topicInput.focus(); return; }
   topicInput.value = topic;
-  await syncSelectedTopic(topic);
+  const selectionSync = await syncSelectedTopic(topic);
+  if (!selectionSync?.ok) {
+    setStatus(selectionSync?.stale
+      ? 'Another popup changed the selected topic. Select it again before starting.'
+      : 'Unable to save the selected topic. Recording was not started. Please try again.');
+    return;
+  }
   const isRecordingSelected = !!studyState.recording &&
     String(studyState.recordingTopic || '').toLowerCase() === topic.toLowerCase();
   if (isRecordingSelected) {
@@ -863,8 +868,14 @@ async function stopTopic() {
   const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
   if (!response?.ok) { setStatus('Unable to stop recording.'); return; }
   clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
-  await syncSelectedTopic('');
-  setStatus((lastRecordingTopic ? `Last Recording Stopped: ${lastRecordingTopic}` : 'Last Recording Stopped.') + (response.alarmCleanupPending ? ' Auto-stop alarm cleanup will retry on its next tick.' : ''));
+  const selectionSync = await syncSelectedTopic('');
+  if (!selectionSync?.ok && !selectionSync?.stale) {
+    setStatus('Recording stopped, but the selected topic could not be cleared. Please try again.');
+  } else if (selectionSync?.stale) {
+    setStatus('Recording stopped. A newer topic selection from another popup was preserved.');
+  } else {
+    setStatus((lastRecordingTopic ? `Last Recording Stopped: ${lastRecordingTopic}` : 'Last Recording Stopped.') + (response.alarmCleanupPending ? ' Auto-stop alarm cleanup will retry on its next tick.' : ''));
+  }
   await refreshStudyState();
 }
 async function downloadTopic() {
@@ -973,8 +984,14 @@ async function clearSelectedTopic() {
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudyTopic', topic});
   if (!response?.ok) { setStatus('Unable to clear the selected topic.'); return; }
   clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
-  await syncSelectedTopic('');
-  setStatus(`Cleared: ${response.topic || topic}${response.alarmCleanupPending ? '. Auto-stop alarm cleanup will retry on its next tick' : ''}`);
+  const selectionSync = await syncSelectedTopic('');
+  if (!selectionSync?.ok && !selectionSync?.stale) {
+    setStatus(`Cleared: ${response.topic || topic}, but the selected topic could not be cleared. Please try again.`);
+  } else if (selectionSync?.stale) {
+    setStatus(`Cleared: ${response.topic || topic}. A newer topic selection from another popup was preserved.`);
+  } else {
+    setStatus(`Cleared: ${response.topic || topic}${response.alarmCleanupPending ? '. Auto-stop alarm cleanup will retry on its next tick' : ''}`);
+  }
   await refreshStudyState();
 }
 
@@ -987,8 +1004,14 @@ async function clearAllTopics() {
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudy'});
   if (!response?.ok) { setStatus('Unable to clear Study Sessions.'); return; }
   clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
-  await syncSelectedTopic('');
-  setStatus(response.alarmCleanupPending ? 'All topics cleared. Auto-stop alarm cleanup will retry on its next tick.' : 'All topics cleared.');
+  const selectionSync = await syncSelectedTopic('');
+  if (!selectionSync?.ok && !selectionSync?.stale) {
+    setStatus('All topics cleared, but the selected topic could not be cleared. Please try again.');
+  } else if (selectionSync?.stale) {
+    setStatus('All topics cleared. A newer topic selection from another popup was preserved.');
+  } else {
+    setStatus(response.alarmCleanupPending ? 'All topics cleared. Auto-stop alarm cleanup will retry on its next tick.' : 'All topics cleared.');
+  }
   await refreshStudyState();
 }
 
@@ -1156,11 +1179,17 @@ async function clearTopicSelectionInput() {
   }
   if (noteInputEditGeneration === noteEditGenerationAtStart) editingNoteOriginal = '';
   if (notesHelp) notesHelp.textContent = 'Auto-saves on leaving the box';
-  await syncSelectedTopic('');
+  const selectionSync = await syncSelectedTopic('');
   closeTopicMenu();
+  if (!selectionSync?.ok && !selectionSync?.stale) {
+    setStatus('Topic field cleared, but the saved topic selection could not be cleared. Please try again.');
+  } else if (selectionSync?.stale) {
+    setStatus('A newer topic selection from another popup was preserved.');
+  } else if (wasRecording) {
+    setStatus('Select Start to record this topic.');
+  }
   if (wasRecording) {
     if (noteInputEditGeneration === noteEditGenerationAtStart) noteInput.value = '';
-    setStatus('Select Start to record this topic.');
     await refreshStudyState();
   } else {
     updateStudyButtons();
@@ -1190,6 +1219,10 @@ async function persistTopicValue(topic, editGeneration = topicInputEditGeneratio
       requestId
     });
     if (!response?.ok) {
+      // A newer explicit selection (for example, Start) may supersede this
+      // blur autosave while it is pending. That is not a save failure and
+      // must not replace feedback from the newer action.
+      if (response?.reason === 'stale-selection') return;
       setStatus('Unable to save this Study topic. Please try again.');
       return;
     }
