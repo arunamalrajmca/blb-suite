@@ -493,14 +493,19 @@ test('host permission revocation disables both site features in every open tab u
     delete cleanRevokedSites[pattern];
     await extensionStorage.set({
       masterEnabled:true,
-      pageSelectionButtonSites:{'example.com':true},
-      doubleClickBlbSites:{'example.com':true},
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false},
       redirectEnabled:false,
       siteHostAccessRevokedSites:cleanRevokedSites
     });
     await extensionWorker.evaluate(async originPattern =>
       unregisterRuntimeContentScriptForPattern(originPattern), pattern
     );
+    await expect.poll(() => extensionWorker.evaluate(async originPattern =>
+      (await chrome.scripting.getRegisteredContentScripts({
+        ids:[runtimeContentScriptIdForPattern(originPattern)]
+      })).length
+    , pattern)).toBe(0);
 
     const fixture = '<!doctype html><html><head><title>Permission revoke</title></head><body><p>John 3:16</p></body></html>';
     await page.route('https://example.com/**', route => route.fulfill({
@@ -519,12 +524,18 @@ test('host permission revocation disables both site features in every open tab u
         .map(tab => tab.id);
     });
     expect(tabIds).toHaveLength(2);
-
     for (const tabId of tabIds) {
       await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toEqual({
         floatingButtonPresent:false,
         doubleClickEnabled:false
       });
+    }
+
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    for (const tabId of tabIds) {
       const injected = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
       expect(injected).toBe(true);
       await expect.poll(() => isolatedTabState(extensionWorker, tabId), {timeout:15000}).toEqual({
