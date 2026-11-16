@@ -567,3 +567,46 @@ for (const feature of ['pageButton', 'doubleClick']) {
     );
   });
 }
+
+
+test('concurrent popup preference commits preserve both host entries', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  });
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+
+  const responses = await page.evaluate(async () => Promise.all([
+    chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin:'https://example.com/*',
+      feature:'pageButton',
+      enabled:true
+    }),
+    chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin:'https://another.example/*',
+      feature:'pageButton',
+      enabled:true
+    })
+  ]));
+  expect(responses).toEqual([{ok:true},{ok:true}]);
+  const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(stored.pageSelectionButtonSites).toEqual({
+    'example.com':true,
+    'another.example':true
+  });
+  expect(stored.doubleClickBlbSites).toEqual({});
+  expect(stored.pendingSiteFeatureToggles).toEqual({});
+  await page.close();
+});
