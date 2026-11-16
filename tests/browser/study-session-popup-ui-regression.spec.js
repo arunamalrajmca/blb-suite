@@ -194,6 +194,54 @@ test('Study stop reports when the selected topic could not be cleared', async ({
   await page.close();
 });
 
+test('a superseded topic blur autosave does not replace successful Start feedback', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  const topic = 'Superseded topic autosave ' + Date.now();
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const pending = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteSaveStudyTopic'
+        ? new Promise(resolve => pending.push({message, resolve}))
+        : originalSendMessage(message)
+    });
+    window.__pendingTopicSaves = pending;
+    window.__releasePendingTopicSave = async () => {
+      const item = pending.shift();
+      if (!item) throw new Error('No delayed topic save was pending');
+      const response = await originalSendMessage(item.message);
+      window.__releasedTopicSaveResponse = response;
+      item.resolve(response);
+      return response;
+    };
+  });
+
+  await page.locator('#studyTopic').fill(topic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect.poll(() => page.evaluate(() => window.__pendingTopicSaves.length)).toBe(1);
+
+  await page.evaluate(() => window.__releasePendingTopicSave());
+  await expect.poll(() => page.evaluate(() => window.__releasedTopicSaveResponse?.reason))
+    .toBe('stale-selection');
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get({
+      currentStudySessionId:null,
+      studySelectedTopic:''
+    });
+    return {recording:Boolean(state.currentStudySessionId), topic:state.studySelectedTopic};
+  })).toEqual({recording:true, topic:topic});
+  await page.close();
+});
+
 test('Study note autosaves from a cleared recording cannot write into a restarted topic', async ({
   extensionStorage, extensionWorker
 }) => {
