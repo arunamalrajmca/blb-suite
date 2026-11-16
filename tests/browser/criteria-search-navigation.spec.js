@@ -4,12 +4,12 @@ const SEARCH_URL = 'https://www.blueletterbible.org/search/search.cfm?Criteria=g
 const STRONG_URL = 'https://www.blueletterbible.org/lexicon/g25/kjv/tr/0-1/';
 const STRONG_SEARCH_URL = 'https://www.blueletterbible.org/search/search.cfm?Criteria=g25';
 
-async function serveCriteriaSearch(context) {
+async function serveCriteriaSearch(context, suppressNativeClick = false) {
   await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
     body: `<!doctype html><html><head><title>Criteria Search fixture</title></head><body>
-      <div class="parse-popup"><a id="strong-popup-link" href="${STRONG_URL}">Strong's G25</a></div>
+      <div class="parse-popup"><a id="strong-popup-link" href="${STRONG_URL}" ${suppressNativeClick ? 'onclick="event.preventDefault()"' : ''}>Strong's G25</a></div>
     </body></html>`
   }));
 }
@@ -127,4 +127,42 @@ test('enabled Criteria Search opens ordinary KJV verse results in a new tab but 
 
   await page.locator('#ordinary-link').click();
   await expect(page).toHaveURL('https://www.blueletterbible.org/about/');
+});
+
+test('Criteria Search navigation resumes on the same page after the global master switch is re-enabled', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: false });
+  await serveCriteriaSearch(context, true);
+  await page.goto(SEARCH_URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  const sourceUrl = page.url();
+  const before = await getBlbTabs(extensionWorker);
+  await page.locator('#strong-popup-link').click();
+  await expect(page).toHaveURL(sourceUrl);
+  await page.waitForTimeout(250);
+  expect(await getBlbTabs(extensionWorker)).toHaveLength(before.length);
+
+  await extensionStorage.set({ masterEnabled: true });
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: false })).masterEnabled
+  )).toBe(true);
+  await page.waitForTimeout(150);
+
+  await page.locator('#strong-popup-link').click();
+  await expect.poll(async () => {
+    const tabs = await getBlbTabs(extensionWorker);
+    const opened = tabs.filter(tab => !before.some(item => item.id === tab.id));
+    return {
+      lexicon: opened.some(tab =>
+        new URL(tab.url || tab.pendingUrl || '').pathname === '/lexicon/g25/kjv/tr/0-1/'
+      ),
+      strongSearch: opened.some(tab =>
+        new URL(tab.url || tab.pendingUrl || '').href === STRONG_SEARCH_URL
+      )
+    };
+  }, { timeout: 10000 }).toEqual({ lexicon: true, strongSearch: true });
+  expect(page).toHaveURL(sourceUrl);
 });
