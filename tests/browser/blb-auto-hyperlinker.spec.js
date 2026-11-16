@@ -101,7 +101,6 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
       world: 'ISOLATED',
       func: async () => {
         const clipboard = navigator.clipboard;
-        const originalWriteText = clipboard.writeText;
         const originalDescriptor = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
         const descriptorRestored = () => {
           const current = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
