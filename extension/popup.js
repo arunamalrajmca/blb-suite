@@ -1114,7 +1114,11 @@ async function clearTopicSelectionInput() {
   if (wasRecording) {
     const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
     if (!response?.ok) {
-      topicInput.value = topicToRestore;
+      if (topicInputEditGeneration === topicEditGenerationAtStart) {
+        topicInput.value = topicToRestore;
+        topicInputEditGeneration++;
+        topicInputEdited = false;
+      }
       setStatus('Unable to stop recording.');
       await refreshStudyState();
       return;
