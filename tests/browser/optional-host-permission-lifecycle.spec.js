@@ -242,11 +242,18 @@ test('host-access revocation removes registrations and later grants reactivate e
 
       const injected = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
       expect(injected, scenario.label + ': enabled preference must register the shared content script').toBe(true);
+      const secondInjected = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), secondTabId);
+      expect(secondInjected, scenario.label + ': the second open tab must also activate').toBe(true);
       await expect.poll(registrationExists, {timeout:10000}).toBe(true);
+      const expectedFeatures = {
+        floatingButtonPresent:scenario.pageButton,
+        doubleClickEnabled:scenario.doubleClick
+      };
+      await expect.poll(() => readFeatures(tabId), {timeout:15000}).toEqual(expectedFeatures);
+      await expect.poll(() => readFeatures(secondTabId), {timeout:15000}).toEqual(expectedFeatures);
 
-      // Headless Chromium cannot accept Chrome's native optional-permission
-      // prompt. Simulate the post-revocation permission lookup at the API
-      // boundary, then exercise the same serialized reconciler used by onRemoved.
+      // Simulate the permission API reporting that the optional origin was revoked,
+      // then exercise the same deactivation and registration reconciliation used by onRemoved.
       await extensionWorker.evaluate(async originPattern => {
         const originalContains = chrome.permissions.contains;
         chrome.permissions.contains = async details =>
@@ -254,13 +261,16 @@ test('host-access revocation removes registrations and later grants reactivate e
             ? false
             : originalContains(details);
         try {
-          await reconcileRuntimeContentScriptRegistrations();
+          await handleHostPermissionsRemoved([originPattern]);
         } finally {
           chrome.permissions.contains = originalContains;
         }
       }, pattern);
 
       await expect.poll(registrationExists, {timeout:10000}).toBe(false);
+      const disabledFeatures = {floatingButtonPresent:false,doubleClickEnabled:false};
+      await expect.poll(() => readFeatures(tabId), {timeout:15000}).toEqual(disabledFeatures);
+      await expect.poll(() => readFeatures(secondTabId), {timeout:15000}).toEqual(disabledFeatures);
       const preserved = await extensionWorker.evaluate(async () => chrome.storage.local.get({
         pageSelectionButtonSites:{}, doubleClickBlbSites:{}
       }));
@@ -270,7 +280,7 @@ test('host-access revocation removes registrations and later grants reactivate e
         .toBe(scenario.doubleClick);
 
       // Restore the permission API and exercise the same activation path used
-      // by the onAdded handler for the already-open tab.
+      // by the onAdded handler for both already-open tabs.
       await extensionWorker.evaluate(originPattern =>
         injectEnabledTabsForGrantedOrigins([originPattern]), pattern
       );
