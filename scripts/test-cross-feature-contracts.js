@@ -75,6 +75,10 @@ try {
     'unreferenced Study note capture protocol must not remain in the background');
   console.log('PASS: obsolete Study note capture handler and recorder are absent');
   has(popup, /const STUDY_BACKUP_KEYS = \['studySessions', 'studyTopics', 'studySelectedTopic', 'studyAutoStopMinutes'\]/, 'Study backup has an explicit allowlist of Study-only storage keys');
+  has(popup, /type:\s*['"]blbSuiteRestoreStudyBackup['"]/, 'popup delegates Study backup restoration to the background');
+  has(background, /function restoreStudyBackupFromPopup\(\.\.\.args\) \{\s*return runStudyMutation/, 'Study backup restoration shares the Study mutation queue');
+  has(background, /message\.type === ['"]blbSuiteRestoreStudyBackup['"]/, 'background retains the queued Study backup restore handler');
+  has(background, /entries\[feature\]\?\.requestId !== message\.requestId/, 'late permission grants cannot commit superseded site choices');
   assert.doesNotMatch(popup.match(/const STUDY_BACKUP_KEYS = \[[^\]]*\]/)?.[0] || '', /masterEnabled|pageSelectionButtonSites|doubleClickBlbSites|redirectEnabled/, 'Study backup must not include global/site settings');
   console.log('PASS: Study backup excludes extension-wide and per-site settings');
 
