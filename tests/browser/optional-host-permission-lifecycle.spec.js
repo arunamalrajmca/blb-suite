@@ -188,6 +188,12 @@ test('host-access revocation removes registrations and later grants reactivate e
   ];
 
   try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false},
+      redirectEnabled:false
+    });
     await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () =>
       (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
