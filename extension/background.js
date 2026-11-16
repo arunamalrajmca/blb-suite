@@ -195,6 +195,13 @@ async function getStudyAutoStopMinutes() {
   if (value === 0) return 0;
   return STUDY_AUTOSTOP_OPTIONS.includes(value) ? value : STUDY_AUTOSTOP_DEFAULT_MINUTES;
 }
+let studyAutoStopAlarmRefreshGeneration = 0;
+let studyAutoStopAlarmRefreshPromise = Promise.resolve();
+function scheduleStudyAutoStopAlarmRefresh() {
+  studyAutoStopAlarmRefreshGeneration++;
+  studyAutoStopAlarmRefreshPromise = refreshStudyAutoStopAlarm().catch(() => {});
+  return studyAutoStopAlarmRefreshPromise;
+}
 async function refreshStudyAutoStopAlarm(alarms = chrome.alarms) {
   const master = await isSuiteEnabled();
   await alarms.clear(STUDY_AUTOSTOP_ALARM);
@@ -7520,7 +7527,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       })
       .catch(() => {});
   }
-  if (changes.currentStudySessionId || changes.studyAutoStopMinutes || changes.masterEnabled) refreshStudyAutoStopAlarm().catch(()=>{});
+  if (changes.currentStudySessionId || changes.studyAutoStopMinutes || changes.masterEnabled) scheduleStudyAutoStopAlarmRefresh();
 });
 
 const SITE_FEATURE_PERMISSION_PENDING_TTL_MS = 5 * 60 * 1000;
@@ -7673,4 +7680,4 @@ installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastF
     }
   })
   .catch(() => {})).catch(() => {});
-refreshStudyAutoStopAlarm().catch(()=>{});
+scheduleStudyAutoStopAlarmRefresh();
