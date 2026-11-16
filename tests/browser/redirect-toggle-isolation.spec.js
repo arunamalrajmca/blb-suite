@@ -399,8 +399,7 @@ async function runRedirectMessageFailureFallback(sourcePath, kind) {
     console:{warn() {}}
   };
   vm.runInNewContext(source, context, {filename:sourcePath});
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   const target = new FakeElement();
   target.closest = selector => kind === 'scripttagger'
