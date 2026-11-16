@@ -284,16 +284,16 @@ test('open popup instances synchronize theme preference changes', async ({
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
 
-  await expect(page.locator('body')).not.toHaveClass(/\\blight\\b/);
-  await expect(secondPopup.locator('body')).not.toHaveClass(/\\blight\\b/);
+  await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
+  await expect(secondPopup.locator('body')).not.toHaveClass(/\blight\b/);
 
   await secondPopup.locator('#themeToggle').click();
-  await expect(secondPopup.locator('body')).toHaveClass(/\\blight\\b/);
-  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await expect(secondPopup.locator('body')).toHaveClass(/\blight\b/);
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
 
   await page.locator('#themeToggle').click();
-  await expect(page.locator('body')).not.toHaveClass(/\\blight\\b/);
-  await expect(secondPopup.locator('body')).not.toHaveClass(/\\blight\\b/);
+  await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
+  await expect(secondPopup.locator('body')).not.toHaveClass(/\blight\b/);
   await secondPopup.close();
 });
 
