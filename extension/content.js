@@ -4016,6 +4016,13 @@ async function refreshDoubleClickBlb() {
     }
     const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
     if (generation !== doubleClickSettingsRefreshGeneration) return;
+    // Permission revocation may occur while the storage read is pending. Recheck
+    // the gate after awaiting so a stale enabled snapshot cannot restore listeners.
+    if (!suiteEnabled || siteHostAccessRevoked) {
+      doubleClickBlbEnabled = false;
+      disableDoubleClickBlb();
+      return;
+    }
     const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
@@ -4072,7 +4079,7 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
    isSensitiveSiteUrl: isSensitiveSiteUrl,
   refreshDoubleClickBlb: refreshDoubleClickBlb,
   suiteSettingsReadyPromise: suiteSettingsReadyPromise,
-  isSuiteEnabledNow: () => suiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled && !siteHostAccessRevoked,
   makeBlbMultiVerseButtonDraggable: makeBlbMultiVerseButtonDraggable,
   getPageSelectionSiteKey: getPageSelectionSiteKey
 });
