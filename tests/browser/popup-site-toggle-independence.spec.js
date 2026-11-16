@@ -406,7 +406,11 @@ test('same-origin Show on and Double-click permission intents survive either pre
       }
       return results;
     }, order);
-    expect(prepared).toEqual([{ok:true,pending:true},{ok:true,pending:true}]);
+    expect(prepared).toEqual([
+      {ok:true,pending:true,requestId:expect.any(String)},
+      {ok:true,pending:true,requestId:expect.any(String)}
+    ]);
+    expect(prepared[0].requestId).not.toBe(prepared[1].requestId);
     const pending = await readSitePreferences(extensionWorker);
     expect(pending.pendingSiteFeatureToggles['https://example.com/*'].features).toEqual({
       [order[0]]:expect.objectContaining({requestedAt:expect.any(Number)}),
