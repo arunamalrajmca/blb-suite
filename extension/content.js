@@ -92,6 +92,10 @@ function safeRuntimeSendMessage(message, onError = null) {
 
 
 (async function () {
+// A content bundle can be reinjected into an existing document after an
+// extension reload or a failed refresh handshake. Release the prior bundle's
+// settings subscription before this instance installs its own.
+try { globalThis.__blbContentSettingsCleanup?.(); } catch (_) {}
 // Lightweight test/diagnostic marker: content-script injection is distinct from
 // whether the user's per-site double-click preference enables the listener.
 try { window.__blbSuiteContentScriptLoadedV2 = true; } catch (_) {}
@@ -4117,7 +4121,7 @@ chrome.storage.local.get({siteHostAccessRevokedSites:{}}).then(data => {
   applySiteHostAccessRevocation(revokedSites[siteHostPermissionStorageKey()] === true);
 }).catch(() => {});
 
-chrome.storage.onChanged.addListener((changes, area) => {
+function handleContentSettingsChanged(changes, area) {
   if (area !== 'local') return;
   if (changes.siteHostAccessRevokedSites) {
     siteHostAccessRevocationGeneration += 1;
@@ -4178,6 +4182,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.doubleClickBlbSites) {
     refreshDoubleClickBlb();
   }
-});
+}
+chrome.storage.onChanged.addListener(handleContentSettingsChanged);
+const contentSettingsCleanup = () => {
+  // Invalidate any storage-backed Double-click refresh still awaiting a read.
+  // Otherwise an old bundle can resume after reinjection and reclaim the
+  // document-level dblclick handler from the replacement instance.
+  doubleClickSettingsRefreshGeneration += 1;
+  disableDoubleClickBlb();
+  chrome.storage.onChanged.removeListener(handleContentSettingsChanged);
+  if (globalThis.__blbContentSettingsCleanup === contentSettingsCleanup) {
+    delete globalThis.__blbContentSettingsCleanup;
+  }
+};
+globalThis.__blbContentSettingsCleanup = contentSettingsCleanup;
 
 })();
