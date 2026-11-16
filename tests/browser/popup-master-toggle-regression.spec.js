@@ -183,3 +183,22 @@ test('a newer master ON choice wins while an older OFF waits for Study stop', as
   await expect(page.locator('#master')).toBeChecked();
   expect(await page.evaluate(() => studyState.recording)).toBe(false);
 });
+
+test('service worker serializes master-gate transitions from separate popup instances', async ({
+  extensionWorker
+}) => {
+  const order = await extensionWorker.evaluate(async () => {
+    const events = [];
+    const first = runMasterToggle(async () => {
+      events.push('off-start');
+      await new Promise(resolve => setTimeout(resolve, 30));
+      events.push('off-commit');
+    });
+    const second = runMasterToggle(async () => {
+      events.push('on-commit');
+    });
+    await Promise.all([first, second]);
+    return events;
+  });
+  expect(order).toEqual(['off-start', 'off-commit', 'on-commit']);
+});
