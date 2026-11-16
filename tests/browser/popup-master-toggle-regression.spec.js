@@ -406,11 +406,13 @@ test('Study backup restore does not overwrite topic or Notes edits made while it
   }, backup);
   await expect.poll(() => page.evaluate(() => window.__pendingStudyBackupRestore.length)).toBe(1);
 
+  const newerTopicText = originalTopic.toUpperCase();
+  await page.locator('#studyTopic').fill(newerTopicText);
+  await expect(page.locator('#studyNote')).toBeEnabled();
   await page.locator('#studyNote').fill('My newer unsaved Notes draft.');
-  await page.locator('#studyTopic').fill('My Newer Topic Edit');
   await page.evaluate(() => window.__pendingStudyBackupRestore[0]({ok:true}));
   await importing;
 
-  await expect(page.locator('#studyTopic')).toHaveValue('My Newer Topic Edit');
+  await expect(page.locator('#studyTopic')).toHaveValue(newerTopicText);
   await expect(page.locator('#studyNote')).toHaveValue('My newer unsaved Notes draft.');
 });
