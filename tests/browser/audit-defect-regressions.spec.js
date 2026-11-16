@@ -195,6 +195,7 @@ test('Study Sessions repairs a malformed top-level history value and stale curre
 
   const result = await extensionWorker.evaluate(async () => {
     const state = await getStudySessions();
+    await pendingStudyMutation;
     const stored = await chrome.storage.local.get([
       'studySessions',
       'currentStudySessionId',
