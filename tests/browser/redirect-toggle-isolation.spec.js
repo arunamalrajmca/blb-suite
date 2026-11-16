@@ -431,3 +431,45 @@ test('BibleRef range redirect falls back to the original link when runtime messa
     navigations:['https://www.bibleref.com/John/3/John-3-16.html']
   });
 });
+
+test('a stale redirect permission result in another popup cannot overwrite the latest ON choice', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  const secondPopup = await page.context().newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+  await expect.poll(() => secondPopup.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+
+  const installPermissionGate = async target => target.evaluate(() => {
+    const resolvers = [];
+    Object.defineProperty(chrome.permissions, 'request', {
+      configurable:true,
+      value:() => new Promise(resolve => resolvers.push(resolve))
+    });
+    Object.defineProperty(chrome.permissions, 'contains', {
+      configurable:true,
+      value:async ({origins = []}) => origins.includes('http://*/*') && origins.includes('https://*/*')
+    });
+    Object.defineProperty(chrome.tabs, 'query', {configurable:true, value:async () => []});
+    window.__permissionResolvers = resolvers;
+  });
+  await installPermissionGate(page);
+  await installPermissionGate(secondPopup);
+
+  const olderOn = page.evaluate(() => setRedirect(true));
+  await expect.poll(() => page.evaluate(() => window.__permissionResolvers.length)).toBe(1);
+  const newerOn = secondPopup.evaluate(() => setRedirect(true));
+  await expect.poll(() => secondPopup.evaluate(() => window.__permissionResolvers.length)).toBe(1);
+
+  await secondPopup.evaluate(() => window.__permissionResolvers[0](true));
+  await newerOn;
+  await page.evaluate(() => window.__permissionResolvers[0](false));
+  await olderOn;
+
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({redirectEnabled:false})).redirectEnabled
+  )).toBe(true);
+  await secondPopup.close();
+});
