@@ -1567,3 +1567,61 @@ test('BLB navigation modules rescan links added while the master switch is OFF',
     }), iteration)).toEqual({ verseTarget: '_blank', popupBound: '1' });
   }
 });
+
+
+test('content settings listener is replaced exactly once on repeated bundle reinjection', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached({timeout:10000});
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  for (let iteration = 1; iteration <= 3; iteration++) {
+    const wrapped = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => {
+          const cleanup = globalThis.__blbContentSettingsCleanup;
+          if (typeof cleanup !== 'function') throw new Error('Content settings cleanup was not registered');
+          globalThis.__blbContentSettingsCleanupCalls = 0;
+          globalThis.__blbContentSettingsCleanup = () => {
+            globalThis.__blbContentSettingsCleanupCalls++;
+            cleanup();
+          };
+          return true;
+        }
+      });
+      return result.result;
+    }, tabId);
+    expect(wrapped).toBe(true);
+
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({target:{tabId:id},files:BLB_CONTENT_SCRIPT_FILES});
+    }, tabId);
+
+    const state = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => ({
+          previousCleanupCalls:globalThis.__blbContentSettingsCleanupCalls,
+          replacementCleanupRegistered:typeof globalThis.__blbContentSettingsCleanup === 'function'
+        })
+      });
+      return result.result;
+    }, tabId);
+    expect(state).toEqual({previousCleanupCalls:1,replacementCleanupRegistered:true});
+    await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1);
+  }
+});
