@@ -382,12 +382,31 @@ const topicHint = document.querySelector('.topic-hint');
 let studyState = {topics:[], topicStats:{}, currentTopic:''};
 const SELECTED_TOPIC_STORAGE_KEY = 'studySelectedTopic';
 
+function createStudyTopicSelectionRequestId() {
+  return `topic-${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
+}
+
+async function beginStudyTopicSelection(requestId) {
+  try { return await chrome.runtime.sendMessage({type:'blbSuiteBeginStudyTopicSelection', requestId}); }
+  catch (_) { return {ok:false}; }
+}
+
+async function commitStudyTopicSelection(requestId, topic) {
+  try {
+    return await chrome.runtime.sendMessage({
+      type:'blbSuiteCommitStudyTopicSelection',
+      requestId,
+      topic:titleCase(topic)
+    });
+  } catch (_) { return {ok:false}; }
+}
+
 async function syncSelectedTopic(topic) {
-  // The selected topic is UI state, not Study Session state. Keep it in
-  // chrome.storage.local so every popup instance/tab sees the same selection,
-  // even when the topic has never been started.
   const value = titleCase(topic);
-  await chrome.storage.local.set({[SELECTED_TOPIC_STORAGE_KEY]: value});
+  const requestId = createStudyTopicSelectionRequestId();
+  const begun = await beginStudyTopicSelection(requestId);
+  if (!begun?.ok) return value;
+  await commitStudyTopicSelection(requestId, value);
   return value;
 }
 
@@ -430,6 +449,12 @@ function setTopicHighlight(index) {
 
 async function selectTopicValue(topic) {
   clearActionStatus();
+  const requestId = createStudyTopicSelectionRequestId();
+  const begun = await beginStudyTopicSelection(requestId);
+  if (!begun?.ok) {
+    setStatus('Unable to save the selected topic. Please try again.');
+    return;
+  }
   const previousTopic = selectedTopic();
   const recordingTopic = String(studyState.recordingTopic || '');
   const isRecording = !!studyState.recording;
@@ -448,7 +473,12 @@ async function selectTopicValue(topic) {
     }
     setStatus('Select Start to record this topic.');
   }
-  await syncSelectedTopic(topic);
+  const committed = await commitStudyTopicSelection(requestId, topic);
+  if (!committed?.ok) {
+    if (!committed?.stale) setStatus('Unable to save the selected topic. Please try again.');
+    await loadSelectedTopic();
+    return;
+  }
   // Refresh the authoritative Study state after an explicit dropdown
   // selection so Play/Stop and Download states immediately follow the topic
   // the user just selected, rather than waiting for a later storage event.
@@ -1082,15 +1112,21 @@ async function persistTopicValue(topic) {
   const value = titleCase(topic);
   if (!value) return;
   try {
+    const requestId = createStudyTopicSelectionRequestId();
+    const begun = await beginStudyTopicSelection(requestId);
+    if (!begun?.ok) {
+      setStatus('Unable to save this Study topic. Please try again.');
+      return;
+    }
     const response = await chrome.runtime.sendMessage({
       type:'blbSuiteSaveStudyTopic',
-      title:value
+      title:value,
+      requestId
     });
     if (!response?.ok) {
       setStatus('Unable to save this Study topic. Please try again.');
       return;
     }
-    await chrome.storage.local.set({[SELECTED_TOPIC_STORAGE_KEY]:value});
     await refreshStudyState();
   } catch (_) {
     setStatus('Unable to save this Study topic. Please try again.');
