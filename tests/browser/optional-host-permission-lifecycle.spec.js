@@ -189,11 +189,14 @@ test('host-access revocation removes registrations and later grants reactivate e
   ];
 
   try {
+    const cleanRevokedSites = {...(previous.siteHostAccessRevokedSites || {})};
+    delete cleanRevokedSites[pattern];
     await extensionStorage.set({
       masterEnabled:true,
       pageSelectionButtonSites:{'example.com':false},
       doubleClickBlbSites:{'example.com':false},
-      redirectEnabled:false
+      redirectEnabled:false,
+      siteHostAccessRevokedSites:cleanRevokedSites
     });
     await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () =>
