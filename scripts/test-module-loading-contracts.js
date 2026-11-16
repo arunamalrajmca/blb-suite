@@ -552,19 +552,27 @@ function activeSelectionBranchStart(type) {
   }
   return background.indexOf("if (message.type === '" + type + "'");
 }
+const senderBoundAltBHandler =
+  /async function handleOpenBibleSelectionCommand\(sender = null\) \{[\s\S]*?if \(sender\) \{\s*if \(!\(await isActiveTabContentScriptSender\(sender\)\)\)/.test(background);
+function selectionBranchIsSenderBound(type, branch) {
+  return branch.includes('isActiveTabContentScriptSender(sender)') ||
+    (type === 'blbSuiteOpenCurrentSelection' &&
+      branch.includes('handleOpenBibleSelectionCommand(sender)') &&
+      senderBoundAltBHandler);
+}
 for (const type of activeSelectionTypes) {
   const start = activeSelectionBranchStart(type);
   const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
-  if (!branch.includes('isActiveTabContentScriptSender(sender)')) {
+  if (!selectionBranchIsSenderBound(type, branch)) {
     fail('selection handoff message ' + type + ' is bound to its active sender tab');
   }
 }
 if (activeSelectionTypes.every(type => {
   const start = activeSelectionBranchStart(type);
   const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
-  return start >= 0 && background.slice(start, end < 0 ? undefined : end)
-    .includes('isActiveTabContentScriptSender(sender)');
+  const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
+  return start >= 0 && selectionBranchIsSenderBound(type, branch);
 })) {
   pass(activeSelectionTypes.length + ' selection handoff message types are bound to the active sender tab');
 }

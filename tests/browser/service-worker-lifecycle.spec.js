@@ -507,3 +507,331 @@ test('closing multiple MultiVerse tabs concurrently removes every persisted tab 
     '940099': [{book:'Acts', chapter:2, from:1, to:1}]
   });
 });
+
+
+test('content-script requests are rejected when their originating document navigates during authorization', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><body><p>BLB message lifecycle fixture</p></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+  const originalDocumentId = await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      func:() => true
+    });
+    return result.documentId;
+  }, tabId);
+  expect(originalDocumentId).toBeTruthy();
+
+  await extensionWorker.evaluate(documentId => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    globalThis.__blbMessageLifecycleTest = {
+      started:false,
+      authorizationFinished:false,
+      liveDocumentResult:null,
+      targetDocumentId:documentId,
+      recordCalls:0,
+      release,
+      originalPermissionCheck:hasSelectionActionPermissionForTab,
+      originalRecordStudyRefs:recordStudyRefs,
+      originalLiveDocumentCheck:isLiveContentScriptSenderDocument
+    };
+    hasSelectionActionPermissionForTab = async () => {
+      globalThis.__blbMessageLifecycleTest.started = true;
+      await gate;
+      globalThis.__blbMessageLifecycleTest.authorizationFinished = true;
+      return true;
+    };
+    isLiveContentScriptSenderDocument = async sender => {
+      const result = await globalThis.__blbMessageLifecycleTest.originalLiveDocumentCheck(sender);
+      if (sender.documentId === globalThis.__blbMessageLifecycleTest.targetDocumentId) {
+        globalThis.__blbMessageLifecycleTest.liveDocumentResult = result;
+      }
+      return result;
+    };
+    recordStudyRefs = async refs => {
+      globalThis.__blbMessageLifecycleTest.recordCalls += 1;
+      return refs.length;
+    };
+  }, originalDocumentId);
+
+  try {
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => {
+          void chrome.runtime.sendMessage({
+            type:'blbSuiteCaptureStudyRefs',
+            refs:[{book:'John',chapter:3,from:16,to:16}]
+          }).then(response => {
+            document.documentElement.dataset.blbStaleDocumentMessageResponse = JSON.stringify(response);
+          }).catch(error => {
+            document.documentElement.dataset.blbStaleDocumentMessageResponse = String(error);
+          });
+          return true;
+        }
+      });
+    }, tabId);
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbMessageLifecycleTest.started
+    )).toBe(true);
+
+    // Reload the same URL while the background permission check is held.
+    // The URL and tab ID remain unchanged, but the original document ID does not.
+    await page.reload({waitUntil:'domcontentloaded'});
+    await extensionWorker.evaluate(() => globalThis.__blbMessageLifecycleTest.release());
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbMessageLifecycleTest.liveDocumentResult
+    )).toBe(false);
+    const outcome = await extensionWorker.evaluate(() => ({
+      authorizationFinished:globalThis.__blbMessageLifecycleTest.authorizationFinished,
+      liveDocumentResult:globalThis.__blbMessageLifecycleTest.liveDocumentResult,
+      recordCalls:globalThis.__blbMessageLifecycleTest.recordCalls
+    }));
+    expect(outcome).toEqual({
+      authorizationFinished:true,
+      liveDocumentResult:false,
+      recordCalls:0
+    });
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const state = globalThis.__blbMessageLifecycleTest;
+      if (!state) return;
+      hasSelectionActionPermissionForTab = state.originalPermissionCheck;
+      recordStudyRefs = state.originalRecordStudyRefs;
+      isLiveContentScriptSenderDocument = state.originalLiveDocumentCheck;
+      delete globalThis.__blbMessageLifecycleTest;
+    });
+  }
+});
+
+test('content-script messages from subframes are rejected even when the frame has a live document', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><body><iframe src="https://www.blueletterbible.org/frame"></iframe></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
+  await page.waitForFunction(() => document.querySelector('iframe')?.contentDocument?.readyState === 'complete');
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  const frames = await extensionWorker.evaluate(async id =>
+    chrome.scripting.executeScript({
+      target:{tabId:id,allFrames:true},
+      func:() => ({isTop:window.top===window,href:location.href})
+    }), tabId);
+  const frame = frames.find(result => result.frameId !== 0);
+  expect(frame?.documentId).toBeTruthy();
+
+  const authorized = await extensionWorker.evaluate(async ({id,url,frameId,documentId}) =>
+    isAuthorizedContentScriptSender({
+      id:chrome.runtime.id,
+      tab:{id,url},
+      url,
+      frameId,
+      documentId
+    }), {
+      id:tabId,
+      url:'https://www.blueletterbible.org/frame',
+      frameId:frame.frameId,
+      documentId:frame.documentId
+    }
+  );
+  expect(authorized).toBe(false);
+});
+
+test('asynchronous content-script handlers keep sendResponse open until delayed work completes', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><body><p>Async response fixture</p></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+
+  await extensionWorker.evaluate(() => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    globalThis.__blbAsyncResponseTest = {
+      started:false,
+      release,
+      originalRecordStudyRefs:recordStudyRefs
+    };
+    recordStudyRefs = async refs => {
+      globalThis.__blbAsyncResponseTest.started = true;
+      await gate;
+      return refs.length;
+    };
+  });
+
+  try {
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => {
+          void chrome.runtime.sendMessage({
+            type:'blbSuiteCaptureStudyRefs',
+            refs:[{book:'John',chapter:3,from:16,to:16}]
+          }).then(response => {
+            document.documentElement.dataset.blbAsyncResponseResult = JSON.stringify(response);
+          }).catch(error => {
+            document.documentElement.dataset.blbAsyncResponseResult = String(error);
+          });
+          return true;
+        }
+      });
+    }, tabId);
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbAsyncResponseTest.started
+    )).toBe(true);
+    await page.waitForTimeout(100);
+    expect(await page.locator('html').getAttribute('data-blb-async-response-result')).toBeNull();
+
+    await extensionWorker.evaluate(() => globalThis.__blbAsyncResponseTest.release());
+    await expect.poll(() => page.locator('html').getAttribute('data-blb-async-response-result'))
+      .toBe(JSON.stringify({ok:true,added:1}));
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const state = globalThis.__blbAsyncResponseTest;
+      if (!state) return;
+      recordStudyRefs = state.originalRecordStudyRefs;
+      delete globalThis.__blbAsyncResponseTest;
+    });
+  }
+});
+
+
+test('every asynchronous message type has an explicit trusted sender category', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(() => ({
+    unclassified:Array.from(ASYNC_MESSAGE_TYPES).filter(type =>
+      !EXTENSION_PAGE_MESSAGE_SOURCES.has(type) && !CONTENT_SCRIPT_MESSAGE_TYPES.has(type)
+    ),
+    popupMessageAccepted:isAuthorizedExtensionPageMessage(
+      {type:'blbSuiteGetStudyUiState'},
+      {id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')}
+    ),
+    popupMessageRejectedFromWrongPage:isAuthorizedExtensionPageMessage(
+      {type:'blbSuiteGetStudyUiState'},
+      {id:chrome.runtime.id,url:chrome.runtime.getURL('Tutorial.html')}
+    ),
+    unregisteredMessageAccepted:isAuthorizedExtensionPageMessage(
+      {type:'blbSuiteUnregisteredMessage'},
+      {id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')}
+    )
+  }));
+
+  expect(result).toEqual({
+    unclassified:[],
+    popupMessageAccepted:true,
+    popupMessageRejectedFromWrongPage:false,
+    unregisteredMessageAccepted:false
+  });
+});
+
+
+test('content-script requests are rejected when their originating tab closes during authorization', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><body><p>Closed-tab message lifecycle fixture</p></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+
+  await extensionWorker.evaluate(() => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    globalThis.__blbClosedTabMessageTest = {
+      started:false,
+      liveDocumentResult:null,
+      recordCalls:0,
+      release,
+      originalPermissionCheck:hasSelectionActionPermissionForTab,
+      originalRecordStudyRefs:recordStudyRefs,
+      originalLiveDocumentCheck:isLiveContentScriptSenderDocument
+    };
+    hasSelectionActionPermissionForTab = async () => {
+      globalThis.__blbClosedTabMessageTest.started = true;
+      await gate;
+      return true;
+    };
+    isLiveContentScriptSenderDocument = async sender => {
+      const result = await globalThis.__blbClosedTabMessageTest.originalLiveDocumentCheck(sender);
+      globalThis.__blbClosedTabMessageTest.liveDocumentResult = result;
+      return result;
+    };
+    recordStudyRefs = async refs => {
+      globalThis.__blbClosedTabMessageTest.recordCalls += 1;
+      return refs.length;
+    };
+  });
+
+  try {
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => {
+          void chrome.runtime.sendMessage({
+            type:'blbSuiteCaptureStudyRefs',
+            refs:[{book:'John',chapter:3,from:16,to:16}]
+          }).catch(() => {});
+          return true;
+        }
+      });
+    }, tabId);
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbClosedTabMessageTest.started
+    )).toBe(true);
+    await page.close();
+    await extensionWorker.evaluate(() => globalThis.__blbClosedTabMessageTest.release());
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbClosedTabMessageTest.liveDocumentResult
+    )).toBe(false);
+    const outcome = await extensionWorker.evaluate(() => ({
+      liveDocumentResult:globalThis.__blbClosedTabMessageTest.liveDocumentResult,
+      recordCalls:globalThis.__blbClosedTabMessageTest.recordCalls
+    }));
+    expect(outcome).toEqual({liveDocumentResult:false,recordCalls:0});
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const state = globalThis.__blbClosedTabMessageTest;
+      if (!state) return;
+      hasSelectionActionPermissionForTab = state.originalPermissionCheck;
+      recordStudyRefs = state.originalRecordStudyRefs;
+      isLiveContentScriptSenderDocument = state.originalLiveDocumentCheck;
+      delete globalThis.__blbClosedTabMessageTest;
+    });
+  }
+});

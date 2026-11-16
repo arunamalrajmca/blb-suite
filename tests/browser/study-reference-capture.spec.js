@@ -278,7 +278,10 @@ test('Study capture reinjection cancels obsolete DOM-ready callbacks', async ({
   }, tabId);
 
   expect(result.cleanupInstalled).toBe(true);
-  expect(result.calls).toEqual([
+  // DOMContentLoaded is dispatched on the shared document, so unrelated
+  // content modules may also send their own runtime messages in this fixture.
+  // Assert only the messages owned by Study Reference Capture.
+  expect(result.calls.filter(type => type === 'blbSuiteStudyCaptureActive')).toEqual([
     'blbSuiteStudyCaptureActive',
     'blbSuiteStudyCaptureActive'
   ]);
