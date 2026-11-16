@@ -11,6 +11,14 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         try { cleanup(); } catch (_) {}
       }
     };
+    const addStartupListener = (eventName, listener) => {
+      document.addEventListener(eventName, listener, { once:true });
+      cleanupCallbacks.push(() => document.removeEventListener(eventName, listener));
+    };
+    const scheduleStartupRetry = (callback, delay) => {
+      const timer = setTimeout(callback, delay);
+      cleanupCallbacks.push(() => clearTimeout(timer));
+    };
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
@@ -278,12 +286,12 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
     
         const ensureSourcePageButtonWhenReady = () => ensureSourcePageMultiVerseButton().catch(() => {});
         if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", ensureSourcePageButtonWhenReady, {once:true});
+          addStartupListener("DOMContentLoaded", ensureSourcePageButtonWhenReady);
         } else {
           ensureSourcePageButtonWhenReady();
         }
-        setTimeout(ensureSourcePageButtonWhenReady, 500);
-        setTimeout(ensureSourcePageButtonWhenReady, 1500);
+        scheduleStartupRetry(ensureSourcePageButtonWhenReady, 500);
+        scheduleStartupRetry(ensureSourcePageButtonWhenReady, 1500);
     
         const sourceStorageChangeListener = (changes, areaName) => {
           if (areaName !== "local") return;
@@ -327,7 +335,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
           }
         };
         if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", startSourceBodyObserver, { once: true });
+          addStartupListener("DOMContentLoaded", startSourceBodyObserver);
         } else {
           startSourceBodyObserver();
         }
