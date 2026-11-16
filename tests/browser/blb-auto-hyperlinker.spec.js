@@ -86,6 +86,7 @@ test('BLB copy formatting resumes on the same page after the global master switc
 });
 
 
+
 test('BLB clipboard hyperlinker cancels delayed registration and restores its wrapper on reinjection', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
@@ -96,22 +97,12 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
   expect(Number.isInteger(tabId)).toBe(true);
 
   const result = await extensionWorker.evaluate(async id => {
-    const [injected] = await chrome.scripting.executeScript({
+    await chrome.scripting.executeScript({
       target: { tabId: id },
       world: 'ISOLATED',
-      func: async () => {
+      func: () => {
         const clipboard = navigator.clipboard;
         const originalDescriptor = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
-        const descriptorRestored = () => {
-          const current = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
-          if (!current || !originalDescriptor) return current === originalDescriptor;
-          return current.value === originalDescriptor.value &&
-            current.get === originalDescriptor.get &&
-            current.set === originalDescriptor.set &&
-            current.configurable === originalDescriptor.configurable &&
-            current.enumerable === originalDescriptor.enumerable &&
-            current.writable === originalDescriptor.writable;
-        };
         const originalAdd = document.addEventListener.bind(document);
         const originalRemove = document.removeEventListener.bind(document);
         const trackedCopyListeners = new Set();
@@ -126,7 +117,16 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
           if (type === 'copy') trackedCopyListeners.delete(listener);
           return originalRemove(type, listener, options);
         };
-
+        const descriptorMatches = () => {
+          const current = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
+          if (!current || !originalDescriptor) return current === originalDescriptor;
+          return current.value === originalDescriptor.value &&
+            current.get === originalDescriptor.get &&
+            current.set === originalDescriptor.set &&
+            current.configurable === originalDescriptor.configurable &&
+            current.enumerable === originalDescriptor.enumerable &&
+            current.writable === originalDescriptor.writable;
+        };
         let resolveFirstSettings;
         const pendingSettings = new Promise(resolve => { resolveFirstSettings = resolve; });
         const dependencies = {
@@ -138,37 +138,75 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
           isSuiteEnabled: async () => true,
           suiteSettingsReadyPromise: pendingSettings
         };
-
+        globalThis.__blbClipboardHyperlinkerAudit = {
+          clipboard, originalAdd, originalRemove, trackedCopyListeners, descriptorMatches
+        };
         const first = globalThis.BLBAutoHyperlinkerModule.initialize(dependencies);
         first.cleanup();
         resolveFirstSettings(true);
-        await Promise.resolve();
-        await Promise.resolve();
-        const delayedRegistrationCount = trackedCopyListeners.size;
-        const restoredAfterFirstCleanup = descriptorRestored();
-
-        const second = globalThis.BLBAutoHyperlinkerModule.initialize({
-          ...dependencies,
-          suiteSettingsReadyPromise: Promise.resolve(true)
-        });
-        await Promise.resolve();
-        await Promise.resolve();
-        const activeRegistrationCount = trackedCopyListeners.size;
-        const wrapperInstalled = clipboard.writeText !== originalWriteText;
-        second.cleanup();
-
-        Object.defineProperty(document, 'addEventListener', { configurable: true, value: originalAdd });
-        Object.defineProperty(document, 'removeEventListener', { configurable: true, value: originalRemove });
-        return {
-          delayedRegistrationCount,
-          restoredAfterFirstCleanup,
-          activeRegistrationCount,
-          wrapperInstalled,
-          restoredAfterSecondCleanup: descriptorRestored()
-        };
       }
     });
-    return injected.result;
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const [afterFirst] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => ({
+        delayedRegistrationCount: globalThis.__blbClipboardHyperlinkerAudit.trackedCopyListeners.size,
+        restoredAfterFirstCleanup: globalThis.__blbClipboardHyperlinkerAudit.descriptorMatches()
+      })
+    });
+
+    await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const audit = globalThis.__blbClipboardHyperlinkerAudit;
+        globalThis.__blbClipboardHyperlinkerSecond = globalThis.BLBAutoHyperlinkerModule.initialize({
+          BLBShared: {
+            hostnames: { blb: 'blueletterbible.org' },
+            urls: { blbHome: 'https://www.blueletterbible.org/' }
+          },
+          isSuiteEnabledNow: () => true,
+          isSuiteEnabled: async () => true,
+          suiteSettingsReadyPromise: Promise.resolve(true)
+        });
+      }
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const [afterSecond] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const audit = globalThis.__blbClipboardHyperlinkerAudit;
+        const activeRegistrationCount = audit.trackedCopyListeners.size;
+        const wrapperInstalled = !!Object.getOwnPropertyDescriptor(audit.clipboard, 'writeText')?.value;
+        globalThis.__blbClipboardHyperlinkerSecond.cleanup();
+        return { activeRegistrationCount, wrapperInstalled };
+      }
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const [afterCleanup] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const audit = globalThis.__blbClipboardHyperlinkerAudit;
+        const restoredAfterSecondCleanup = audit.descriptorMatches();
+        document.addEventListener = audit.originalAdd;
+        document.removeEventListener = audit.originalRemove;
+        delete globalThis.__blbClipboardHyperlinkerAudit;
+        delete globalThis.__blbClipboardHyperlinkerSecond;
+        return { restoredAfterSecondCleanup };
+      }
+    });
+
+    return {
+      ...afterFirst.result,
+      ...afterSecond.result,
+      ...afterCleanup.result
+    };
   }, tabId);
 
   expect(result).toEqual({
