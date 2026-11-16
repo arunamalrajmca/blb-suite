@@ -148,7 +148,9 @@ test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
   assert(popup.includes('chrome.permissions.request({origins:[currentSiteOrigin]})'), 'site-access permission request missing');
   assert(popup.includes('pinSiteFeatureChoice'), 'site-feature preference must be pinned before the permission prompt');
   assert(popup.includes('setPageButton(on)'), 'site feature enable/disable state missing');
-  assert(popup.includes('sites[state.siteKey] = !!on'), 'site feature state persistence missing');
+  assert(popup.includes('writeSiteFeaturePreference'), 'popup must delegate site preference persistence to background');
+  assert(bg.includes("message.type === 'blbSuiteSetSiteFeaturePreference'"), 'serialized site preference handler missing');
+  assert(bg.includes('serializePendingSiteFeatureToggleMutation(async () => {'), 'site preference commits must use the shared mutation queue');
 });
 test('reload/new-tab persistence and dynamic activation remain wired', () => {
   const bg = read('background.js'), content = read('content.js');
