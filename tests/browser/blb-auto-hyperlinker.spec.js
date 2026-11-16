@@ -202,7 +202,8 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
         const restoredAfterSecondCleanup = audit.descriptorMatches();
         document.addEventListener = audit.originalAdd;
         document.removeEventListener = audit.originalRemove;
-        Object.defineProperty(navigator, 'clipboard', audit.originalNavigatorClipboardDescriptor);
+        if (audit.originalNavigatorClipboardDescriptor) Object.defineProperty(navigator, 'clipboard', audit.originalNavigatorClipboardDescriptor);
+        else delete navigator.clipboard;
         delete globalThis.__blbClipboardHyperlinkerAudit;
         delete globalThis.__blbClipboardHyperlinkerSecond;
         return { restoredAfterSecondCleanup };
