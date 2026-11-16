@@ -1,6 +1,7 @@
 // Hides Suite-generated MultiVerse pages until the requested results are visible.
 (function (global) {
   function initialize({ BLBShared, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled, resolveBibleBook }) {
+    global.__blbMultiVerseHandoffCleanup?.();
     // ---------- BLB MultiVerse hand-off ----------
     // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
     // result set. Keep the document hidden until the requested reference set is
@@ -10,6 +11,17 @@
         /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search)) {
       let multiverseHandoffHidden=false;
       let multiverseRevealTimer=0;
+      let active=true;
+      let startupListener=null;
+      const pendingTimers=new Map();
+      const waitWhileActive=delay=>new Promise(resolve=>{
+        if(!active){resolve(false);return;}
+        const timer=setTimeout(()=>{
+          pendingTimers.delete(timer);
+          resolve(active);
+        },delay);
+        pendingTimers.set(timer,resolve);
+      });
     
       const revealPendingMultiVerseView=()=>{
         if (!multiverseHandoffHidden) return;
@@ -61,37 +73,39 @@
     
       async function waitForExpectedMultiVerseResults(refs){
         const started=Date.now();
-        while (Date.now()-started<10000) {
+        while (active && Date.now()-started<10000) {
           if (!isSuiteEnabledNow()) return false;
           if (hasExpectedMultiVerseResults(refs)) return true;
-          await new Promise(resolve=>setTimeout(resolve,50));
+          if (!(await waitWhileActive(50))) return false;
         }
         return false;
       }
     
       async function consumePendingMultiVerseRefs() {
         let lastError = null;
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < 2 && active; attempt++) {
           try {
             const response = await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'});
+            if (!active) return false;
             if (response?.ok === true) return true;
             lastError = new Error(response?.error || 'Unable to clear pending MultiVerse references');
           } catch (error) {
             lastError = error;
           }
-          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 100));
+          if (attempt === 0 && !(await waitWhileActive(100))) return false;
         }
+        if (!active) return false;
         throw lastError || new Error('Unable to clear pending MultiVerse references');
       }
 
       async function processPendingMultiVerseRefs() {
-        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) {
+        if (!active || !(await isSuiteEnabled()) || !active || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;
         }
         hidePendingMultiVerseView();
         const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
-        if (!isSuiteEnabledNow()) {
+        if (!active || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;
         }
@@ -106,7 +120,7 @@
     
         const started=Date.now();
         let heading=null, advancedHeading=null, verseControls=[], retrieve=null;
-        while (Date.now()-started<4000) {
+        while (active && Date.now()-started<4000) {
           if (!isSuiteEnabledNow()) {
             revealPendingMultiVerseView();
             return false;
@@ -125,7 +139,7 @@
                 (!advancedHeading || !!(advancedHeading.compareDocumentPosition(x)&Node.DOCUMENT_POSITION_PRECEDING)));
             if (verseControls.length&&retrieve) break;
           }
-          await new Promise(resolve=>setTimeout(resolve,50));
+          if (!(await waitWhileActive(50))) { revealPendingMultiVerseView(); return false; }
         }
     
         if (!verseControls.length||!retrieve) {
@@ -151,14 +165,14 @@
     
         const valueStarted=Date.now();
         let actual="";
-        while (Date.now()-valueStarted<1000) {
+        while (active && Date.now()-valueStarted<1000) {
           if (!isSuiteEnabledNow()) {
             revealPendingMultiVerseView();
             return false;
           }
           actual=String(primary.value||primary.getAttribute("value")||"").trim();
           if (actual===combined) break;
-          await new Promise(resolve=>setTimeout(resolve,25));
+          if (!(await waitWhileActive(25))) { revealPendingMultiVerseView(); return false; }
         }
         if (actual!==combined) {
           revealPendingMultiVerseView();
@@ -169,8 +183,8 @@
           revealPendingMultiVerseView();
           return false;
         }
-        await consumePendingMultiVerseRefs();
-        if (!isSuiteEnabledNow()) {
+        const consumed = await consumePendingMultiVerseRefs();
+        if (!active || !consumed || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;
         }
@@ -182,25 +196,48 @@
         // area asynchronously; reveal only after the requested references are
         // actually present, so the normal bootstrap/default verses cannot flash.
         await waitForExpectedMultiVerseResults(refs);
+        if (!active) return false;
         revealPendingMultiVerseView();
         return true;
       }
     
       let processingPromise = null;
       const tryProcess=()=>{
+        if (!active) return Promise.resolve(false);
         if (processingPromise) return processingPromise;
         processingPromise = processPendingMultiVerseRefs()
           .catch(()=>revealPendingMultiVerseView())
           .finally(()=>{ processingPromise = null; });
         return processingPromise;
       };
-      if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",tryProcess,{once:true});
-      else void tryProcess();
+      const cleanup=()=>{
+        if(!active)return;
+        active=false;
+        if(startupListener){
+          document.removeEventListener("DOMContentLoaded",startupListener);
+          startupListener=null;
+        }
+        for(const [timer,resolve] of pendingTimers){
+          clearTimeout(timer);
+          resolve(false);
+        }
+        pendingTimers.clear();
+        revealPendingMultiVerseView();
+        if(global.__blbMultiVerseHandoffCleanup===cleanup){
+          delete global.__blbMultiVerseHandoffCleanup;
+        }
+      };
+      global.__blbMultiVerseHandoffCleanup=cleanup;
+      if (document.readyState==="loading") {
+        startupListener=tryProcess;
+        document.addEventListener("DOMContentLoaded",startupListener,{once:true});
+      } else void tryProcess();
       return Object.freeze({ refresh: () => {
+        if (!active) return Promise.resolve(false);
         if (isSuiteEnabledNow()) return tryProcess();
         revealPendingMultiVerseView();
         return Promise.resolve(false);
-      } });
+      }, cleanup });
     }
     
     
