@@ -295,10 +295,10 @@ test('popup theme interaction wins over a delayed initial theme read', async ({
   await expect.poll(() => page.evaluate(() => typeof window.__resolveDelayedPopupTheme)).toBe('function');
 
   await page.locator('#themeToggle').click();
-  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
   await page.evaluate(() => window.__resolveDelayedPopupTheme({popupTheme:'dark'}));
 
-  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
   await expect(page.locator('#themeToggle')).toHaveAttribute('aria-label', 'Switch to dark theme');
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({popupTheme:'dark'})).popupTheme
