@@ -3245,27 +3245,28 @@ async function isLiveContentScriptSenderDocument(sender) {
   // Their live identity is checked through the tab URL because executeScript
   // cannot reliably target browser-owned PDF viewer documents.
   const browserManagedDocument = /^file:\/\//i.test(sender.url) || isPdfViewerTab(sender.tab);
-  if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
-    try {
-      // Target the exact document that sent the request. If it navigated or
-      // closed while permission checks were pending, Chrome rejects this
-      // targeted execution instead of accidentally addressing its successor.
+  try {
+    const liveTab = await chrome.tabs.get(sender.tab.id);
+    const liveUrl = liveTab?.pendingUrl || liveTab?.url;
+    const requestUrl = browserManagedDocument
+      ? (sender.tab?.url || sender.url)
+      : sender.url;
+    // Check the URL captured on the MessageSender itself, not sender.tab.url:
+    // Chromium may update the tab snapshot while an async message is pending.
+    // A retained/BFCache document can still be scriptable after navigation, so
+    // documentId targeting alone is not enough to prove it remains current.
+    if (!sameSenderDocumentUrl(requestUrl, liveUrl)) return false;
+
+    if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
+      // Target the exact document too. This rejects closed/replaced documents
+      // even when the tab's URL happens to be unchanged (for example, reload).
       const results = await chrome.scripting.executeScript({
         target:{tabId:sender.tab.id, documentIds:[sender.documentId]},
         func:() => true
       });
       return results?.length === 1 && results[0]?.result === true;
-    } catch (_) {
-      return false;
     }
-  }
-
-  try {
-    const liveTab = await chrome.tabs.get(sender.tab.id);
-    return sameSenderDocumentUrl(
-      sender.tab?.url || sender.url,
-      liveTab?.url || liveTab?.pendingUrl
-    );
+    return true;
   } catch (_) {
     return false;
   }
