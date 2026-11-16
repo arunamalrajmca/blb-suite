@@ -2261,11 +2261,17 @@ const SELECTION_OPEN_DEDUP_RETENTION_MS = 5000;
 const SELECTION_OPEN_DEDUP_MAX_ENTRIES = 256;
 let lastSelectionOpenDedupPruneAt = 0;
 
-function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
+function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '', documentId = '') {
   const normalizedRequestId = String(requestId || '').trim();
+  const normalizedDocumentId = String(documentId || '').trim();
+  // Request IDs are generated independently inside each content-script
+  // instance. Scope them to the originating tab and document so simultaneous
+  // actions in different tabs (or after a same-tab navigation) cannot suppress
+  // one another, while duplicate delivery from the same document is coalesced.
+  const senderIdentity = `${Number.isInteger(tabId) ? tabId : 'no-tab'}|${normalizedDocumentId || 'no-document'}`;
   const key = normalizedRequestId
-    ? `request|${normalizedRequestId}`
-    : `${Number.isInteger(tabId) ? tabId : 'no-tab'}|${String(text || '').trim().replace(/\s+/g, ' ').toLowerCase()}`;
+    ? `request|${senderIdentity}|${normalizedRequestId}`
+    : `${senderIdentity}|${String(text || '').trim().replace(/\s+/g, ' ').toLowerCase()}`;
   const now = Date.now();
   const previous = recentSelectionOpenRequests.get(key) || 0;
   if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
@@ -3631,7 +3637,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Deduplicate at the message boundary. This is intentionally generic: it
     // protects Show on BLB, Double-Click BLB, and any other future caller from
     // duplicate delivery before the request reaches tab management.
-    if (!shouldAcceptSelectionOpenRequest(sender?.tab?.id, text, message.requestId)) {
+    if (!shouldAcceptSelectionOpenRequest(sender?.tab?.id, text, message.requestId, contentScriptSenderDocumentId(sender))) {
       sendResponse({ok:true, deduplicated:true});
       return true;
     }

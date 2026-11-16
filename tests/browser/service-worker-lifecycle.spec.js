@@ -835,3 +835,31 @@ test('content-script requests are rejected when their originating tab closes dur
     });
   }
 });
+
+test('selection request deduplication is scoped to the originating tab and document', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(() => {
+    const requestId = 'cross-tab-collision-' + Date.now();
+    const firstKey = 'request|940101|document-a|' + requestId;
+    const secondKey = 'request|940102|document-b|' + requestId;
+    const replacementDocumentKey = 'request|940101|document-a-reloaded|' + requestId;
+    try {
+      return {
+        firstTab:shouldAcceptSelectionOpenRequest(940101, 'John 3:16', requestId, 'document-a'),
+        secondTab:shouldAcceptSelectionOpenRequest(940102, 'Romans 8:28', requestId, 'document-b'),
+        duplicateFirstDocument:shouldAcceptSelectionOpenRequest(940101, 'John 3:16', requestId, 'document-a'),
+        replacementDocument:shouldAcceptSelectionOpenRequest(940101, 'John 3:16', requestId, 'document-a-reloaded')
+      };
+    } finally {
+      recentSelectionOpenRequests.delete(firstKey);
+      recentSelectionOpenRequests.delete(secondKey);
+      recentSelectionOpenRequests.delete(replacementDocumentKey);
+    }
+  });
+
+  expect(result).toEqual({
+    firstTab:true,
+    secondTab:true,
+    duplicateFirstDocument:false,
+    replacementDocument:true
+  });
+});
