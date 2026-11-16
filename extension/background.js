@@ -3271,7 +3271,6 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteImportStudyTestData', 'popup.html'],
   ['blbSuiteClassifySelection', 'popup.html'],
   ['blbSuiteCancelSiteFeatureToggle', 'popup.html'],
-  ['blbSuiteSetSiteFeatureOff', 'popup.html'],
   ['blbSuiteRunBCommand', 'Tutorial.html'],
   ['blbSuiteMultiVerseHandoffTiming', 'multiverse-post.html'],
   ['blbSuiteAcquireMultiVersePostSlot', 'multiverse-post.html']
@@ -3427,7 +3426,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -4001,46 +4000,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return true;
       }).then(ok => sendResponse({ok:ok !== false}));
-    } catch (error) { sendResponse({ok:false,error:String(error)}); }
-    return true;
-  }
-
-  if (message.type === 'blbSuiteSetSiteFeatureOff') {
-    try {
-      const origin = String(message.origin || '');
-      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin);
-      const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
-      const key = normalizeSiteHostname(parsed.hostname);
-      if (!feature || !/^https?:$/.test(parsed.protocol) || !key ||
-          isSensitiveSiteHostname(parsed.hostname) || (key===BLB_HOSTNAME && feature!=='pageButton')) {
-        sendResponse({ok:false});
-        return true;
-      }
-      const permissionOrigin = parsed.origin + '/*';
-      await serializePendingSiteFeatureToggleMutation(async () => {
-        const data = await chrome.storage.local.get({
-          pendingSiteFeatureToggles:{},pageSelectionButtonSites:{},doubleClickBlbSites:{}
-        });
-        const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
-          ? {...data.pendingSiteFeatureToggles} : {};
-        const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
-        delete entries[feature];
-        const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
-        if (remaining) pending[permissionOrigin]=remaining;
-        else delete pending[permissionOrigin];
-        const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
-          ? {...data.pageSelectionButtonSites} : {};
-        const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
-          ? {...data.doubleClickBlbSites} : {};
-        if (feature==='pageButton') pageSites[key]=false;
-        else doubleSites[key]=false;
-        await chrome.storage.local.set({
-          pendingSiteFeatureToggles:pending,
-          pageSelectionButtonSites:pageSites,
-          doubleClickBlbSites:doubleSites
-        });
-      });
-      sendResponse({ok:true});
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
