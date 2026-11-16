@@ -288,8 +288,7 @@ async function runOutOfOrderRedirectRefresh(sourcePath, kind) {
   reads[0]({masterEnabled:true,redirectEnabled:false});
   await Promise.resolve();
   reads[1]({masterEnabled:true,redirectEnabled:true});
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   const target = new FakeElement();
   target.closest = selector => kind === 'scripttagger'
@@ -366,4 +365,69 @@ test('pending Study capture stops before recording after global OFF', async () =
   activeResolvers.forEach(resolve => resolve({active:true}));
   for (let i=0;i<6;i++) await Promise.resolve();
   expect(captured).toEqual([]);
+});
+
+
+async function runRedirectMessageFailureFallback(sourcePath, kind) {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension', sourcePath), 'utf8');
+  let clickHandler = null;
+  const navigations = [];
+  class FakeElement {}
+  const link = kind === 'scripttagger'
+    ? {href:'https://www.blueletterbible.org/kjv/jhn/3/16/'}
+    : {
+        href:'https://www.bibleref.com/John/3/John-3-16.html',
+        textContent:'John 3:16-17',
+        parentElement:null
+      };
+  const context = {
+    URL,
+    Element:FakeElement,
+    document:{
+      addEventListener(type, handler) {
+        if (type === 'click') clickHandler = handler;
+      }
+    },
+    chrome:{
+      storage:{
+        local:{get:async () => ({masterEnabled:true,redirectEnabled:true})},
+        onChanged:{addListener() {}}
+      },
+      runtime:{sendMessage:() => Promise.reject(new Error('simulated disconnected runtime'))}
+    },
+    window:{location:{assign(url) { navigations.push(url); }}},
+    console:{warn() {}}
+  };
+  vm.runInNewContext(source, context, {filename:sourcePath});
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  const target = new FakeElement();
+  target.closest = selector => kind === 'scripttagger'
+    ? (selector === 'a.BLBST_a[href]' ? link : null)
+    : (selector === 'a[href]' ? link : null);
+  const event = {
+    button:0, metaKey:false, ctrlKey:false, shiftKey:false, altKey:false,
+    target, defaultPrevented:false,
+    preventDefault() { this.defaultPrevented = true; },
+    stopImmediatePropagation() {}
+  };
+  clickHandler(event);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  return {defaultPrevented:event.defaultPrevented,navigations};
+}
+
+test('ScriptTagger redirect falls back to the original link when runtime messaging rejects', async () => {
+  const result = await runRedirectMessageFailureFallback('redirect-scripttagger.js','scripttagger');
+  expect(result).toEqual({
+    defaultPrevented:true,
+    navigations:['https://www.blueletterbible.org/kjv/jhn/3/16/']
+  });
+});
+
+test('BibleRef range redirect falls back to the original link when runtime messaging rejects', async () => {
+  const result = await runRedirectMessageFailureFallback('redirect-bibleref-ranges.js','bibleref');
+  expect(result).toEqual({
+    defaultPrevented:true,
+    navigations:['https://www.bibleref.com/John/3/John-3-16.html']
+  });
 });
