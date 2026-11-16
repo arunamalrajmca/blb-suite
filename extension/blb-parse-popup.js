@@ -16,11 +16,16 @@
     const listenerController = new AbortController();
     const boundLinks = new Set();
     let parsePopupObserver = null;
-    global.__blbParsePopupCleanup = () => {
-      parsePopupObserver?.disconnect(); listenerController.abort();
+    const cleanup = () => {
+      parsePopupObserver?.disconnect();
+      listenerController.abort();
       for (const link of boundLinks) delete link.dataset.blbSuitePopup;
       boundLinks.clear();
+      if (global.__blbParsePopupCleanup === cleanup) {
+        delete global.__blbParsePopupCleanup;
+      }
     };
+    global.__blbParsePopupCleanup = cleanup;
     const handleParsePopupLink = link => {
       if (!link || !link.href || !link.closest?.(".parse-popup")) return;
       if (link.dataset.blbSuitePopup) return;
@@ -60,7 +65,7 @@
     });
     parsePopupObserver.observe(document.documentElement, { childList: true, subtree: true });
     processParsePopups();
-    return Object.freeze({ refresh() { processParsePopups(); } });
+    return Object.freeze({ cleanup, refresh() { processParsePopups(); } });
   }
 
   global.BLBParsePopupModule = { initialize };

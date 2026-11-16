@@ -83,6 +83,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/multiverse-tool-view.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-handoff.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-passive-new-tab-targets.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/blb-parse-popup.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/source-page-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/source-page-button-redirect-separation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-verse-link-navigation.spec.js", "import { test } from '@playwright/test';\n");
@@ -281,7 +282,7 @@ test("MultiVerse copy changes select clipboard coverage without unrelated tab-re
     commitChange(root, "extension/multiverse-copy.js", "// changed MultiVerse clipboard behavior\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
@@ -293,7 +294,8 @@ test("parse-popup changes select popup-link coverage without unrelated tab-reuse
     commitChange(root, "extension/blb-parse-popup.js", "// changed parse popup behavior\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/blb-parse-popup\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
