@@ -584,20 +584,27 @@ test('concurrent popup preference commits preserve both host entries', async ({
     !body.classList.contains('popup-loading')
   )).toBe(true);
 
-  const responses = await page.evaluate(async () => Promise.all([
-    chrome.runtime.sendMessage({
+  const responses = await page.evaluate(async () => {
+    const intents = await Promise.all([
+      chrome.runtime.sendMessage({
+        type:'blbSuitePrepareSiteFeatureToggle',
+        origin:'https://example.com/*',
+        feature:'pageButton'
+      }),
+      chrome.runtime.sendMessage({
+        type:'blbSuitePrepareSiteFeatureToggle',
+        origin:'https://another.example/*',
+        feature:'pageButton'
+      })
+    ]);
+    return Promise.all(intents.map((intent,index) => chrome.runtime.sendMessage({
       type:'blbSuiteSetSiteFeaturePreference',
-      origin:'https://example.com/*',
+      origin:index === 0 ? 'https://example.com/*' : 'https://another.example/*',
       feature:'pageButton',
-      enabled:true
-    }),
-    chrome.runtime.sendMessage({
-      type:'blbSuiteSetSiteFeaturePreference',
-      origin:'https://another.example/*',
-      feature:'pageButton',
-      enabled:true
-    })
-  ]));
+      enabled:true,
+      requestId:intent.requestId
+    })));
+  });
   expect(responses).toEqual([{ok:true},{ok:true}]);
   const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
     pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
@@ -607,6 +614,70 @@ test('concurrent popup preference commits preserve both host entries', async ({
     'another.example':true
   });
   expect(stored.doubleClickBlbSites).toEqual({});
+  expect(stored.pendingSiteFeatureToggles).toEqual({});
+  await page.close();
+});
+
+
+test('a stale permission grant cannot override a newer OFF or ON choice', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  });
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+
+  const result = await page.evaluate(async () => {
+    const first = await chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'pageButton'
+    });
+    const turnedOff = await chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin:'https://example.com/*',
+      feature:'pageButton',
+      enabled:false
+    });
+    const second = await chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'pageButton'
+    });
+    const staleCommit = await chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin:'https://example.com/*',
+      feature:'pageButton',
+      enabled:true,
+      requestId:first.requestId
+    });
+    const latestCommit = await chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin:'https://example.com/*',
+      feature:'pageButton',
+      enabled:true,
+      requestId:second.requestId
+    });
+    return {first,turnedOff,second,staleCommit,latestCommit};
+  });
+  expect(result.first.ok).toBe(true);
+  expect(result.turnedOff.ok).toBe(true);
+  expect(result.second.ok).toBe(true);
+  expect(result.first.requestId).not.toBe(result.second.requestId);
+  expect(result.staleCommit).toEqual({ok:false});
+  expect(result.latestCommit).toEqual({ok:true});
+
+  const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(stored.pageSelectionButtonSites).toEqual({'example.com':true});
   expect(stored.pendingSiteFeatureToggles).toEqual({});
   await page.close();
 });
