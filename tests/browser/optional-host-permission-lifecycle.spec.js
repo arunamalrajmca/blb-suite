@@ -1191,6 +1191,11 @@ test('permission revocation during an in-flight registration cannot leave a pers
       globalThis.__permissionRaceRelease = releaseRegistration;
     }, {originPattern:pattern,id:registrationId,mainId:mainWorldId});
 
+    // Keep the real tab out of the activation sweep. This case isolates the
+    // registration helper's permission race using its synthetic example.com
+    // tab descriptor below, while the master-ON path separately activates real
+    // eligible tabs.
+    await page.goto('about:blank');
     await extensionWorker.evaluate(async () => {
       await chrome.storage.local.set({masterEnabled:true});
       await reconcileRuntimeContentScriptRegistrations();

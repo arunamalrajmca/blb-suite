@@ -106,3 +106,53 @@ test('Suite-created MultiVerse URLs also default to Tool View', async ({
   await page.goto(TOOL_URL + '?blbSuiteMultiVerse=1', { waitUntil: 'load' });
   await expect(page.locator('#formatButton.multiVerseResults')).toBeVisible({ timeout: 10000 });
 });
+
+async function installMultiVerseCopyFixture(context) {
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.toLowerCase() === '/tools/multiverse.cfm'
+      ? `<!doctype html><html><head><title>MultiVerse copy fixture</title></head><body>
+        <button id="formatButton" class="byVerseResults">Tool View</button>
+        <button id="copyButton" data-clipboard-text="(John 3:16)">Copy</button>
+        <a href="${VERSE_URL}">John 3:16</a>
+        <script>
+          document.querySelector("#copyButton").addEventListener("click", () => {
+            const clipboardData = new DataTransfer();
+            const event = new ClipboardEvent("copy", {bubbles:true, cancelable:true, clipboardData});
+            document.dispatchEvent(event);
+            window.__multiVerseCopyResult = {
+              prevented:event.defaultPrevented,
+              plain:clipboardData.getData("text/plain"),
+              html:clipboardData.getData("text/html")
+            };
+          });
+        </script>
+      </body></html>`
+      : '<!doctype html><html><head><title>BLB verse</title></head><body>John 3:16</body></html>';
+    return route.fulfill({status:200, contentType:'text/html; charset=utf-8', body});
+  });
+}
+
+test('MultiVerse clipboard enhancement resumes on the same page after the master switch is re-enabled', async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({masterEnabled:false});
+  await installMultiVerseCopyFixture(context);
+  await page.goto(TOOL_URL, {waitUntil:'domcontentloaded'});
+  await page.waitForTimeout(500);
+
+  await page.locator('#copyButton').click();
+  const whileOff = await page.evaluate(() => window.__multiVerseCopyResult);
+  expect(whileOff.prevented).toBe(false);
+  expect(whileOff.html).toBe('');
+
+  await extensionStorage.set({masterEnabled:true});
+  await page.waitForTimeout(150);
+
+  await page.locator('#copyButton').click();
+  const afterReenable = await page.evaluate(() => window.__multiVerseCopyResult);
+  expect(afterReenable.prevented).toBe(true);
+  expect(afterReenable.plain).toBe('(John 3:16)');
+  expect(afterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/jhn/3/16/"');
+});
