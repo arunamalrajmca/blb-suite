@@ -185,26 +185,27 @@ test('the MultiVerse POST queue preserves its minimum interval after in-memory w
 }) => {
   const result = await extensionWorker.evaluate(async () => {
     const key = MULTIVERSE_POST_LAST_SCHEDULED_KEY;
-    const previous = await chrome.storage.session.get({[key]:0});
+    const storage = MULTIVERSE_POST_SCHEDULE_STORAGE;
+    const previous = await storage.get({[key]:0});
     try {
-      await chrome.storage.session.remove(key);
+      await storage.remove(key);
       lastMultiVersePostScheduledAt = 0;
       pendingMultiVersePostSlot = Promise.resolve();
       const first = await grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, 951001);
       // Model MV3 suspension/restart: all worker globals are reconstructed,
-      // while storage.session survives for the browser session.
+      // while the selected storage area preserves the reservation across worker restarts.
       lastMultiVersePostScheduledAt = 0;
       pendingMultiVersePostSlot = Promise.resolve();
       const second = await grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, 951002);
-      const stored = await chrome.storage.session.get({[key]:0});
+      const stored = await storage.get({[key]:0});
       return {
         first:first.submitAt,
         second:second.submitAt,
         persisted:stored[key]
       };
     } finally {
-      if (previous[key]) await chrome.storage.session.set({[key]:previous[key]});
-      else await chrome.storage.session.remove(key);
+      if (previous[key]) await storage.set({[key]:previous[key]});
+      else await storage.remove(key);
     }
   });
 
