@@ -54,8 +54,12 @@ test('popup master toggle persists across reload and preserves per-site feature 
 
 test('sensitive-page popup replaces all normal controls with a brief privacy notice', async ({
   page,
-  extensionId
+  extensionId,
+  extensionStorage
 }) => {
+  // Complete install-time default writes before opening the popup so they
+  // cannot trigger a late settings refresh over the synthetic sensitive state.
+  await extensionStorage.set({ masterEnabled: true });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
   await page.evaluate(() => render({ isSensitiveSite: true }));
