@@ -416,3 +416,38 @@ test('Study backup restore does not overwrite topic or Notes edits made while it
   await expect(page.locator('#studyTopic')).toHaveValue(newerTopicText);
   await expect(page.locator('#studyNote')).toHaveValue('My newer unsaved Notes draft.');
 });
+
+
+test('a delayed Study note save does not clear a newer Notes draft', async ({
+  page, extensionId, extensionStorage
+}) => {
+  const topic = 'Delayed Note Save ' + Date.now();
+  await extensionStorage.set({studySelectedTopic:topic});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#studyTopic')).toHaveValue(topic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect(page.locator('#studyNote')).toBeEnabled();
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const pending = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: message => message?.type === 'blbSuiteAddStudyNoteToTopic'
+        ? new Promise(resolve => pending.push(resolve))
+        : originalSendMessage(message)
+    });
+    window.__pendingStudyNoteSave = pending;
+  });
+
+  await page.locator('#studyNote').fill('First note being saved.');
+  const saving = page.evaluate(() => saveStudyNote());
+  await expect.poll(() => page.evaluate(() => window.__pendingStudyNoteSave.length)).toBe(1);
+
+  await page.locator('#studyNote').fill('A newer draft typed while the first save is pending.');
+  await page.evaluate(topic => window.__pendingStudyNoteSave[0]({ok:true, topic}), topic);
+  await saving;
+
+  await expect(page.locator('#studyNote')).toHaveValue('A newer draft typed while the first save is pending.');
+});
