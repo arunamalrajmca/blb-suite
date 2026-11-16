@@ -1332,16 +1332,14 @@ async function setIndependentSiteFeature(feature, on) {
     // A later explicit OFF/newer choice wins over an older unresolved request.
     if (generation !== siteFeatureToggleGeneration[feature]) return;
     if (!granted) {
-      await cancelPendingSiteFeatureChoice(feature);
       if (feature === 'pageButton') await setPageButton(false);
       else if (feature === 'doubleClick') await setDoubleClick(false);
       render(await getState());
       return;
     }
-    // The permission may already have been granted, in which case Chrome
-    // does not emit onAdded. Clear this feature's durable intent after the
-    // popup itself has observed success; any other feature intent is retained.
-    await cancelPendingSiteFeatureChoice(feature);
+    // The final preference commit clears this feature's pending intent in the
+    // same serialized write, so closing the popup cannot strand the choice
+    // between cancellation and persistence.
   } else {
     await cancelPromise;
     if (generation !== siteFeatureToggleGeneration[feature]) return;
