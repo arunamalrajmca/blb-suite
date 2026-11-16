@@ -652,3 +652,67 @@ test("King's Bible collector recreates its button after the page replaces its bo
   });
   await expect(page.locator('#blb-suite-kingsbible-multiverse')).toBeVisible({ timeout: 10000 });
 });
+
+
+test('source-page collector reinjection cancels pending DOM-ready observer startup', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'gotquestions.org':false},
+    doubleClickBlbSites:{}
+  });
+
+  let releaseParser;
+  const parserGate = new Promise(resolve => { releaseParser = resolve; });
+  await context.route('https://www.gotquestions.org/startup-hold.js', async route => {
+    await parserGate;
+    await route.fulfill({status:200,contentType:'application/javascript',body:'window.__startupHoldReleased=true;'});
+  });
+  await context.route('https://www.gotquestions.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Collector startup lifecycle</title><script src="/startup-hold.js"></script></head><body><main>John 3:16</main></body></html>'
+  }));
+
+  try {
+    await page.goto('https://www.gotquestions.org/startup-lifecycle.html', {waitUntil:'commit'});
+    const tabId = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.find(tab => (tab.url || '').includes('/startup-lifecycle.html'))?.id;
+    });
+    expect(Number.isInteger(tabId)).toBe(true);
+
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({
+        target:{tabId:id},
+        func:() => {
+          const originalObserve = MutationObserver.prototype.observe;
+          globalThis.__blbStartupObserverCount = 0;
+          MutationObserver.prototype.observe = function(target, options) {
+            if (target === document.documentElement && options?.childList === true) {
+              globalThis.__blbStartupObserverCount += 1;
+            }
+            return originalObserve.call(this, target, options);
+          };
+        }
+      });
+      // content.js reinitializes its modules in the same isolated world while
+      // DOMContentLoaded is still pending behind the parser-blocking script.
+      await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});
+    }, tabId);
+
+    releaseParser();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible();
+
+    const observerStarts = await extensionWorker.evaluate(id => chrome.scripting.executeScript({
+      target:{tabId:id},
+      func:() => globalThis.__blbStartupObserverCount
+    }).then(results => results[0]?.result), tabId);
+    expect(observerStarts).toBe(1);
+  } finally {
+    releaseParser?.();
+  }
+});
