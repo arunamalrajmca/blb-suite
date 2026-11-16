@@ -3982,7 +3982,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
         const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
-        if (enabled && entries[feature]?.requestId !== message.requestId) return false;
+        if (enabled && entries[feature]?.requestId !== message.requestId) {
+          // The permission onAdded handler may have committed this exact
+          // pending intent before the popup's request promise resolves. Treat
+          // that already-applied ON state as success, but never overwrite OFF.
+          const existingSites = feature === 'pageButton'
+            ? data.pageSelectionButtonSites : data.doubleClickBlbSites;
+          return existingSites?.[key] === true;
+        }
         delete entries[feature];
         const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
         if (remaining) pending[permissionOrigin] = remaining;
