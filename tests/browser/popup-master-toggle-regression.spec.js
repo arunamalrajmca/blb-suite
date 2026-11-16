@@ -351,6 +351,10 @@ test('external topic selection preserves an unsaved Notes draft and its topic co
   await extensionStorage.set({studySelectedTopic:originalTopic});
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page.locator('#studyTopic')).toHaveValue(originalTopic);
+  await expect(page.locator('#startTopic')).toBeEnabled();
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect(page.locator('#studyNote')).toBeEnabled();
 
   await page.locator('#studyNote').fill('An unsaved note draft that must remain intact.');
   const secondPopup = await context.newPage();
