@@ -2716,6 +2716,21 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           };
           messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify(diagnostic));
         }
+        // An explicit verse cue followed by an out-of-range verse is a
+        // rejected reference, not an ordinary word selection. Do not let the
+        // generic block resolver fall back to an earlier valid citation in
+        // the article (for example, "Psalm 119. verses 177").
+        if (verseWordClick && Number.isInteger(followingVerse) && followingVerse !== null && !associatedVerse) {
+          messageRoot.setAttribute('data-blb-verse-context-resolution', JSON.stringify({
+            associatedVerse:null,
+            followingVerse,
+            context:null,
+            resolvedUrl:null,
+            rejectedReason:'verse-out-of-range'
+          }));
+          return null;
+        }
+
         if (verseWordClick && associatedVerse) {
           // The first number immediately following the clicked cue is the
           // verse. Do not search for other verse numbers in the post. Resolve
