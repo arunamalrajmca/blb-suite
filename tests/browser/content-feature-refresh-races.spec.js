@@ -489,6 +489,16 @@ test('a newer site-feature enable is retried when an older tab activation is alr
       pageSelectionButtonSites:{'example.com':false},
       doubleClickBlbSites:{'example.com':false}
     });
+    // A previous test may have left a persistent optional-host registration.
+    // Remove it so this fixture genuinely starts without a resident content script.
+    await extensionWorker.evaluate(async () =>
+      unregisterRuntimeContentScriptForPattern('https://example.com/*')
+    );
+    await expect.poll(() => extensionWorker.evaluate(async () =>
+      (await chrome.scripting.getRegisteredContentScripts({ids:[
+        runtimeContentScriptIdForPattern('https://example.com/*')
+      ]})).length
+    )).toBe(0);
     await page.route('https://example.com/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
