@@ -100,8 +100,8 @@ test.describe('independent site feature permissions and global redirects', () =>
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = popup.slice(start, end);
-    expect(handler).toContain("setPageButton(true)");
-    expect(handler).toContain("setDoubleClick(true)");
+    expect(handler).toContain("setPageButton(true, pinned?.requestId)");
+    expect(handler).toContain("setDoubleClick(true, pinned?.requestId)");
     expect(handler).toContain("pinSiteFeatureChoice(feature)");
 
     const pageHandlerStart = popup.indexOf('async function handlePageButtonToggle(on) {');
