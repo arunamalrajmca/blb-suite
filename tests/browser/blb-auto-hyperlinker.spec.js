@@ -84,3 +84,144 @@ test('BLB copy formatting resumes on the same page after the global master switc
   expect(copiedAfterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/John/3/16/"');
   expect(copiedAfterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/Romans/8/1-3/"');
 });
+
+
+
+test('BLB clipboard hyperlinker cancels delayed registration and restores its wrapper on reinjection', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await openBlbFixture({ page, context, extensionStorage }, true);
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/kjv/jhn/3/16/' }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const result = await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const originalNavigatorClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const clipboard = { writeText(text) { return Promise.resolve(text); } };
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: clipboard
+        });
+        const originalDescriptor = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
+        const originalAdd = document.addEventListener.bind(document);
+        const originalRemove = document.removeEventListener.bind(document);
+        const trackedCopyListeners = new Set();
+        document.addEventListener = (type, listener, options) => {
+          if (type === 'copy' && listener?.name === 'copyHandler') {
+            trackedCopyListeners.add(listener);
+            options?.signal?.addEventListener('abort', () => trackedCopyListeners.delete(listener), { once: true });
+          }
+          return originalAdd(type, listener, options);
+        };
+        document.removeEventListener = (type, listener, options) => {
+          if (type === 'copy') trackedCopyListeners.delete(listener);
+          return originalRemove(type, listener, options);
+        };
+        const descriptorMatches = () => {
+          const current = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
+          if (!current || !originalDescriptor) return current === originalDescriptor;
+          return current.value === originalDescriptor.value &&
+            current.get === originalDescriptor.get &&
+            current.set === originalDescriptor.set &&
+            current.configurable === originalDescriptor.configurable &&
+            current.enumerable === originalDescriptor.enumerable &&
+            current.writable === originalDescriptor.writable;
+        };
+        let resolveFirstSettings;
+        const pendingSettings = new Promise(resolve => { resolveFirstSettings = resolve; });
+        const dependencies = {
+          BLBShared: {
+            hostnames: { blb: 'blueletterbible.org' },
+            urls: { blbHome: 'https://www.blueletterbible.org/' }
+          },
+          isSuiteEnabledNow: () => true,
+          isSuiteEnabled: async () => true,
+          suiteSettingsReadyPromise: pendingSettings
+        };
+        globalThis.__blbClipboardHyperlinkerAudit = {
+          clipboard, originalNavigatorClipboardDescriptor, originalAdd, originalRemove,
+          trackedCopyListeners, descriptorMatches
+        };
+        const first = globalThis.BLBAutoHyperlinkerModule.initialize(dependencies);
+        first.cleanup();
+        resolveFirstSettings(true);
+      }
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const [afterFirst] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => ({
+        delayedRegistrationCount: globalThis.__blbClipboardHyperlinkerAudit.trackedCopyListeners.size,
+        restoredAfterFirstCleanup: globalThis.__blbClipboardHyperlinkerAudit.descriptorMatches()
+      })
+    });
+
+    await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const audit = globalThis.__blbClipboardHyperlinkerAudit;
+        globalThis.__blbClipboardHyperlinkerSecond = globalThis.BLBAutoHyperlinkerModule.initialize({
+          BLBShared: {
+            hostnames: { blb: 'blueletterbible.org' },
+            urls: { blbHome: 'https://www.blueletterbible.org/' }
+          },
+          isSuiteEnabledNow: () => true,
+          isSuiteEnabled: async () => true,
+          suiteSettingsReadyPromise: Promise.resolve(true)
+        });
+      }
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const [afterSecond] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const audit = globalThis.__blbClipboardHyperlinkerAudit;
+        const activeRegistrationCount = audit.trackedCopyListeners.size;
+        const wrapperInstalled = !!Object.getOwnPropertyDescriptor(audit.clipboard, 'writeText')?.value;
+        globalThis.__blbClipboardHyperlinkerSecond.cleanup();
+        return { activeRegistrationCount, wrapperInstalled };
+      }
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const [afterCleanup] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const audit = globalThis.__blbClipboardHyperlinkerAudit;
+        const restoredAfterSecondCleanup = audit.descriptorMatches();
+        document.addEventListener = audit.originalAdd;
+        document.removeEventListener = audit.originalRemove;
+        if (audit.originalNavigatorClipboardDescriptor) Object.defineProperty(navigator, 'clipboard', audit.originalNavigatorClipboardDescriptor);
+        else delete navigator.clipboard;
+        delete globalThis.__blbClipboardHyperlinkerAudit;
+        delete globalThis.__blbClipboardHyperlinkerSecond;
+        return { restoredAfterSecondCleanup };
+      }
+    });
+
+    return {
+      ...afterFirst.result,
+      ...afterSecond.result,
+      ...afterCleanup.result
+    };
+  }, tabId);
+
+  expect(result).toEqual({
+    delayedRegistrationCount: 0,
+    restoredAfterFirstCleanup: true,
+    activeRegistrationCount: 1,
+    wrapperInstalled: true,
+    restoredAfterSecondCleanup: true
+  });
+});
