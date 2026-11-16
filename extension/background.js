@@ -1198,7 +1198,7 @@ async function clearStudyTopicUnlocked(topic, clearAlarm = () => chrome.alarms.c
       console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after deleting a topic:', String(error));
     }
   }
-  return {ok:true, topic:target, alarmCleanupPending};
+  return {ok:true, topic, alarmCleanupPending};
 }
 
 async function clearStudySessionsUnlocked(clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
