@@ -507,3 +507,65 @@ test('MultiVerse handoff cleanup cancels pending asynchronous retrieval after re
     pending: null
   });
 });
+
+
+test('MultiVerse handoff retries pending-reference retrieval after a transient runtime-message failure', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Pending-reference read retry</title></head><body>
+      <h2>MultiVerse Retrieval</h2>
+      <input id="references" type="text">
+      <input id="retrieve" type="button" value="Retrieve">
+      <div id="results"></div>
+      <script>
+        window.retrieveCount = 0;
+        document.querySelector('#retrieve').addEventListener('click', () => {
+          window.retrieveCount++;
+          setTimeout(() => {
+            document.querySelector('#results').innerHTML =
+              '<a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>';
+          }, 100);
+        });
+      </script>
+    </body></html>`
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__getPendingAttempts = 0;
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+          window.__getPendingAttempts++;
+          if (window.__getPendingAttempts === 1) {
+            throw new Error('simulated transient runtime-message disconnect');
+          }
+          return {ok:true, refs:[{book:'John',chapter:3,from:16,to:16}]};
+        }
+        if (message.type === 'blbSuiteConsumePendingMultiVerseRefs') return {ok:true};
+        return {ok:true};
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: book => book === 'John' ? {urlKey:'jhn'} : null
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    getPendingAttempts:window.__getPendingAttempts,
+    retrieveCount:window.retrieveCount,
+    visibility:document.documentElement.style.visibility,
+    pending:document.documentElement.dataset.blbSuiteMultiVersePending || null,
+    expectedResultPresent:Boolean(document.querySelector('a[href*="/kjv/jhn/3/16/"]'))
+  })), {timeout:5000}).toEqual({
+    getPendingAttempts:2,
+    retrieveCount:1,
+    visibility:'',
+    pending:null,
+    expectedResultPresent:true
+  });
+});

@@ -98,13 +98,32 @@
         throw lastError || new Error('Unable to clear pending MultiVerse references');
       }
 
+      async function getPendingMultiVerseRefs() {
+        let lastError = null;
+        for (let attempt = 0; attempt < 2 && active; attempt++) {
+          try {
+            const response = await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
+            if (!active) return null;
+            // An empty refs array is a successful read; only a missing or
+            // unsuccessful response should be retried.
+            if (Array.isArray(response?.refs)) return response;
+            lastError = new Error(response?.error || 'Unable to read pending MultiVerse references');
+          } catch (error) {
+            lastError = error;
+          }
+          if (attempt === 0 && !(await waitWhileActive(100))) return null;
+        }
+        if (!active) return null;
+        throw lastError || new Error('Unable to read pending MultiVerse references');
+      }
+
       async function processPendingMultiVerseRefs() {
         if (!active || !(await isSuiteEnabled()) || !active || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;
         }
         hidePendingMultiVerseView();
-        const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
+        const response = await getPendingMultiVerseRefs();
         if (!active || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;
