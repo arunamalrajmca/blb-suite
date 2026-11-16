@@ -156,3 +156,113 @@ test('MultiVerse clipboard enhancement resumes on the same page after the master
   expect(afterReenable.plain).toBe('(John 3:16)');
   expect(afterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/jhn/3/16/"');
 });
+
+
+test('MultiVerse tool-view reinjection cancels the prior retry interval and click handler', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true });
+  await installToolViewFixture(context);
+  await page.goto(TOOL_URL, { waitUntil: 'load' });
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const originalSetInterval = window.setInterval.bind(window);
+        const originalClearInterval = window.clearInterval.bind(window);
+        const liveIntervals = new Set();
+        window.setInterval = (callback, delay, ...args) => {
+          const timer = originalSetInterval(callback, delay, ...args);
+          liveIntervals.add(timer);
+          return timer;
+        };
+        window.clearInterval = timer => {
+          liveIntervals.delete(timer);
+          return originalClearInterval(timer);
+        };
+
+        const originalAddEventListener = document.addEventListener.bind(document);
+        const activeClickHandlers = new Set();
+        document.addEventListener = (type, listener, options) => {
+          if (type === 'click' && typeof listener === 'function') {
+            activeClickHandlers.add(listener);
+            options?.signal?.addEventListener('abort', () => activeClickHandlers.delete(listener), { once: true });
+          }
+          return originalAddEventListener(type, listener, options);
+        };
+
+        document.querySelector('#formatButton')?.remove();
+        delete document.documentElement.dataset.blbSuiteDefaultToolViewApplied;
+        const dependencies = {
+          BLB_HOSTNAME: 'blueletterbible.org',
+          isSuiteEnabledNow: () => true,
+          isModifiedLinkActivation: () => false,
+          safeRuntimeSendMessage: async () => ({ ok: true })
+        };
+        globalThis.BLBMultiVerseToolViewModule.initialize(dependencies);
+        globalThis.BLBMultiVerseToolViewModule.initialize(dependencies);
+
+        return {
+          activeIntervals: liveIntervals.size,
+          activeClickHandlers: activeClickHandlers.size,
+          cleanupInstalled: typeof globalThis.__blbMultiVerseToolViewCleanup === 'function',
+          attachButton() {
+            const button = document.createElement('button');
+            button.id = 'formatButton';
+            button.className = 'byVerseResults';
+            button.textContent = 'Tool View';
+            button.addEventListener('click', () => {
+              window.__toolViewClicks = (window.__toolViewClicks || 0) + 1;
+              button.className = button.classList.contains('byVerseResults')
+                ? 'multiVerseResults'
+                : 'byVerseResults';
+            });
+            document.body.appendChild(button);
+          }
+        };
+      }
+    });
+    return injected.result;
+  }, tabId);
+
+  expect(result.activeIntervals).toBe(1);
+  expect(result.activeClickHandlers).toBe(1);
+  expect(result.cleanupInstalled).toBe(true);
+
+  await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+    target: { tabId: id },
+    world: 'ISOLATED',
+    func: () => {
+      const button = document.createElement('button');
+      button.id = 'formatButton';
+      button.className = 'byVerseResults';
+      button.addEventListener('click', () => {
+        window.__toolViewClicks = (window.__toolViewClicks || 0) + 1;
+        button.className = 'multiVerseResults';
+      });
+      document.body.appendChild(button);
+    }
+  }), tabId);
+
+  await expect(page.locator('#formatButton.multiVerseResults')).toBeVisible({ timeout: 3000 });
+  const finalState = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => ({
+        clicks: window.__toolViewClicks || 0,
+        applied: document.documentElement.dataset.blbSuiteDefaultToolViewApplied === '1'
+      })
+    });
+    return injected.result;
+  }, tabId);
+  expect(finalState).toEqual({ clicks: 1, applied: true });
+});
