@@ -7118,6 +7118,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (tab) syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
       })
       .catch(() => {});
+    // A site preference applies to every already-open tab on that host, not
+    // only whichever tab happens to be active when the popup closes. Tabs
+    // opened while the feature was OFF have no resident content script, so
+    // revisit all currently eligible tabs when either per-site setting changes.
+    if (changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+      injectConfiguredTabsAfterExtensionUpdate().catch(error => {
+        console.error('KJV Scripture Tools site-feature tab activation failed:', String(error));
+      });
+    }
     // Preference changes must not remove/recreate the global PDF menu item.
     // Reinstalling it here creates a window where the action disappears, then
     // returns after asynchronous installation/visibility synchronization.
@@ -7125,18 +7134,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       .then(async tabs => {
         if (!isCurrent()) return;
         const tab = tabs[0];
-        if (!tab) return;
-        if (tab.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
-          const key = pageSelectionSettingKeyFromTab(tab);
-          const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-            ? changes.pageSelectionButtonSites.newValue
-            : (await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites;
-          const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
-            ? changes.doubleClickBlbSites.newValue
-            : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
-          if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
-        }
-        if (isCurrent()) await syncPdfSelectionContextMenuVisibility(tab, isCurrent);
+        if (tab && isCurrent()) await syncPdfSelectionContextMenuVisibility(tab, isCurrent);
       })
       .catch(() => {});
   }
