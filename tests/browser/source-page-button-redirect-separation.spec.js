@@ -726,3 +726,45 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     await expect(button, url + ' after redirect OFF').toBeVisible();
   }
 });
+test('source Bible redirect activates on the same page when the Suite master switch is re-enabled', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const sourceUrl = 'https://www.christianity.com/bible/esv/john/3-16';
+  const destinationUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+
+  await extensionStorage.set({
+    masterEnabled:false,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://www.christianity.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Christianity passage</title></head><body><main>John 3:16</main></body></html>'
+  }));
+  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>BLB destination</title></head><body><main>John 3:16 KJV</main></body></html>'
+  }));
+
+  await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
+  await expect.poll(async () => page.evaluate(() => window.__blbSuiteContentScriptLoadedV2 === true))
+    .toBe(true);
+  await expect(page).toHaveURL(sourceUrl);
+
+  const before = await extensionWorker.evaluate(async () =>
+    chrome.tabs.query({url:'https://www.blueletterbible.org/*'})
+  );
+  expect(before).toHaveLength(0);
+
+  await extensionStorage.set({masterEnabled:true});
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(async () =>
+      chrome.tabs.query({url:'https://www.blueletterbible.org/*'})
+    );
+    return tabs.some(tab => (tab.url || tab.pendingUrl || '') === destinationUrl);
+  }, {timeout:10000}).toBe(true);
+  await expect(page).toHaveURL(sourceUrl);
+});
