@@ -1625,3 +1625,109 @@ test('content settings listener is replaced exactly once on repeated bundle rein
     await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1);
   }
 });
+
+
+test('a delayed settings callback from the replaced content bundle cannot reclaim the Double-click listener', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':false}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => {
+        const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+        let signalStarted;
+        let signalFinished;
+        let releaseRead;
+        globalThis.__blbDelayedSettingsReadStarted = new Promise(resolve => { signalStarted = resolve; });
+        globalThis.__blbDelayedSettingsReadFinished = new Promise(resolve => { signalFinished = resolve; });
+        globalThis.__blbReleaseDelayedSettingsRead = () => releaseRead?.();
+        let delayed = false;
+        chrome.storage.local.get = function(keys, callback) {
+          if (!delayed && keys && Object.keys(keys).length === 1 &&
+              Object.prototype.hasOwnProperty.call(keys, 'doubleClickBlbSites')) {
+            delayed = true;
+            signalStarted();
+            return new Promise((resolve, reject) => {
+              releaseRead = () => originalGet(keys).then(value => {
+                signalFinished();
+                resolve(value);
+              }, reject);
+            });
+          }
+          return originalGet(keys, callback);
+        };
+        globalThis.__blbRestoreSettingsGet = () => { chrome.storage.local.get = originalGet; };
+      }
+    });
+  }, tabId);
+
+  await extensionWorker.evaluate(() =>
+    chrome.storage.local.set({doubleClickBlbSites:{'example.com':true}})
+  );
+  await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},world:'ISOLATED',
+      func:async () => { await globalThis.__blbDelayedSettingsReadStarted; return true; }
+    });
+    return result.result;
+  }, tabId);
+
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({target:{tabId:id},files:BLB_CONTENT_SCRIPT_FILES});
+  }, tabId);
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},world:'ISOLATED',
+      func:() => {
+        const handler = window.__blbSuiteDoubleClickBoundV2;
+        if (typeof handler !== 'function') return false;
+        globalThis.__blbReplacementDoubleClickHandler = handler;
+        return true;
+      }
+    });
+    return result.result;
+  }, tabId)).toBe(true);
+
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target:{tabId:id},world:'ISOLATED',
+      func:async () => {
+        globalThis.__blbReleaseDelayedSettingsRead();
+        await globalThis.__blbDelayedSettingsReadFinished;
+      }
+    });
+  }, tabId);
+
+  const handlerPreserved = await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},world:'ISOLATED',
+      func:() => {
+        const preserved = window.__blbSuiteDoubleClickBoundV2 ===
+          globalThis.__blbReplacementDoubleClickHandler;
+        globalThis.__blbRestoreSettingsGet();
+        delete globalThis.__blbRestoreSettingsGet;
+        delete globalThis.__blbReleaseDelayedSettingsRead;
+        delete globalThis.__blbDelayedSettingsReadStarted;
+        delete globalThis.__blbDelayedSettingsReadFinished;
+        delete globalThis.__blbReplacementDoubleClickHandler;
+        return preserved;
+      }
+    });
+    return result.result;
+  }, tabId);
+  expect(handlerPreserved).toBe(true);
+});
