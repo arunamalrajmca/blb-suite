@@ -772,12 +772,13 @@ async function refreshStudyState() {
   const globallySelectedTopic = titleCase(selectedData[SELECTED_TOPIC_STORAGE_KEY] || '');
   // Initialization can overlap with a fast user edit. Saved state must not
   // overwrite text the user has already entered into the topic field.
-  if (!topicInputEdited && globallySelectedTopic) {
+  // An unsaved Notes draft belongs to the topic currently shown in this
+  // popup. A cross-popup topic change must not silently retarget or erase it.
+  if (!topicInputEdited && !noteInput.value.trim() && globallySelectedTopic) {
     topicInput.value = globallySelectedTopic;
-    noteInput.value = '';
-  } else if (!topicInputEdited && studyState.pausedReason === 'inactivity' && studyState.pausedTopic) {
+  } else if (!topicInputEdited && !noteInput.value.trim() &&
+      studyState.pausedReason === 'inactivity' && studyState.pausedTopic) {
     topicInput.value = titleCase(studyState.pausedTopic);
-    noteInput.value = '';
   }
   // Recording state and selected-topic state are independent. Never clear a
   // user's selection merely because recording ended in another popup/tab.
@@ -1265,10 +1266,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     void refreshPopupSettingsFromStorage();
   }
-  if (changes[SELECTED_TOPIC_STORAGE_KEY] && !topicInputEdited) {
+  if (changes[SELECTED_TOPIC_STORAGE_KEY] && !topicInputEdited && !noteInput.value.trim()) {
     clearActionStatus();
     topicInput.value = titleCase(changes[SELECTED_TOPIC_STORAGE_KEY].newValue || '');
-    noteInput.value = '';
     closeTopicMenu();
     updateStudyButtons();
   }
