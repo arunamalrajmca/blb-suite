@@ -181,22 +181,22 @@ test.describe('Study Sessions backup and restore', () => {
       studyAutoStopMinutes: 30
     };
 
-    await page.evaluate(() => {
-      window.confirm = () => true;
+    await page.evaluate(() => { window.confirm = () => true; });
+    await extensionWorker.evaluate(() => {
       const storage = chrome.storage.local;
       const originalSet = storage.set;
       storage.set = () => Promise.reject(new Error('simulated Study backup storage write failure'));
-      window.__restoreStudyBackupStorageSet = () => { storage.set = originalSet; };
+      globalThis.__restoreStudyBackupStorageSet = () => { storage.set = originalSet; };
     });
 
     try {
       await page.locator('#studyBackupFile').setInputFiles(backupFile(replacement));
-      await expect(page.locator('#studyStatus')).toContainText('Unable to read or restore this backup file.');
+      await expect(page.locator('#studyStatus')).toContainText('Unable to restore this Study backup.');
       expect(await readStudyBackupData(extensionWorker)).toEqual(before);
       await expect(page.locator('#importStudyBackup')).toBeEnabled();
       expect(await page.locator('#studyBackupFile').inputValue()).toBe('');
     } finally {
-      await page.evaluate(() => window.__restoreStudyBackupStorageSet?.());
+      await extensionWorker.evaluate(() => globalThis.__restoreStudyBackupStorageSet?.());
       await page.close();
     }
   });
@@ -231,6 +231,62 @@ test.describe('Study Sessions backup and restore', () => {
     });
     const state = await send(page, { type: 'blbSuiteGetStudyUiState' });
     expect(state.topics).toContain(normalizedTopic);
+    await page.close();
+  });
+
+
+  test('backup restore is serialized with subsequent Study mutations', async ({
+    context, extensionId, extensionWorker, extensionStorage
+  }) => {
+    await extensionStorage.clear();
+    const page = await openPopup(context, extensionId);
+    const study = await extensionWorker.evaluate(() => ({
+      studySessions:[createStudySession('Restored Topic')],
+      studyTopics:['Restored Topic'],
+      studySelectedTopic:'Restored Topic',
+      studyAutoStopMinutes:15
+    }));
+
+    // Hold the shared Study mutation queue so restore and the following save
+    // are forced to line up behind one another.
+    await extensionWorker.evaluate(() => {
+      globalThis.__studyQueueGateRelease = null;
+      globalThis.__studyQueueGateTail = null;
+      globalThis.__studyQueueGatePromise = runStudyMutation(() => new Promise(resolve => {
+        globalThis.__studyQueueGateRelease = resolve;
+      }));
+      globalThis.__studyQueueGateTail = pendingStudyMutation;
+    });
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      typeof globalThis.__studyQueueGateRelease === 'function'
+    )).toBe(true);
+
+    await page.evaluate(value => {
+      window.__restoreStudyBackupPromise = chrome.runtime.sendMessage({
+        type:'blbSuiteRestoreStudyBackup',
+        study:value
+      });
+    }, study);
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      pendingStudyMutation !== globalThis.__studyQueueGateTail
+    )).toBe(true);
+
+    await extensionWorker.evaluate(() => {
+      globalThis.__studySaveAfterRestorePromise = saveStudyTopicFromPopup('Concurrent After Restore');
+    });
+    await extensionWorker.evaluate(() => globalThis.__studyQueueGateRelease());
+
+    const restore = await page.evaluate(() => window.__restoreStudyBackupPromise);
+    expect(restore).toEqual({ok:true});
+    const saved = await extensionWorker.evaluate(() => globalThis.__studySaveAfterRestorePromise);
+    expect(saved.ok).toBe(true);
+
+    const stored = await readStudyBackupData(extensionWorker);
+    expect(stored.studyTopics).toContain('Restored Topic');
+    expect(stored.studyTopics).toContain('Concurrent After Restore');
+    expect(stored.studySessions).toEqual(expect.arrayContaining([
+      expect.objectContaining({title:'Concurrent After Restore'})
+    ]));
     await page.close();
   });
 

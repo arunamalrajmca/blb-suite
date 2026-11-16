@@ -212,19 +212,39 @@ async function ensureSiteFeatureContentScript() {
   return response?.ok === true;
 }
 
-async function setPageButton(on) {
+async function writeSiteFeaturePreference(feature, enabled, requestId) {
+  if (!currentSiteOrigin) return false;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin:currentSiteOrigin,
+      feature,
+      enabled:!!enabled,
+      ...(requestId ? {requestId} : {})
+    });
+    return response?.ok === true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function setPageButton(on, requestId) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isSensitiveSite) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
-  const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
-  sites[state.siteKey] = !!on;
-  await chrome.storage.local.set({pageSelectionButtonSites:sites});
+  if (!state.siteKey || state.isSensitiveSite) return;
+  if (!state.master) {
+    if (requestId) await writeSiteFeaturePreference('pageButton', false);
+    return;
+  }
+  if (!(await writeSiteFeaturePreference('pageButton', on, requestId))) {
+    setStatus('Unable to save Show on BLB for this page. Please try again.');
+    render(await getState());
+    return;
+  }
   if (on) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
-      sites[state.siteKey] = false;
-      await chrome.storage.local.set({pageSelectionButtonSites:sites});
+      await writeSiteFeaturePreference('pageButton', false);
       setStatus('Unable to enable Show on BLB on this page. The setting remains OFF; please try again.');
       render(await getState());
       return;
@@ -233,19 +253,23 @@ async function setPageButton(on) {
   render(await getState());
 }
 
-async function setDoubleClick(on) {
+async function setDoubleClick(on, requestId) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
-  const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
-  const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
-  sites[state.siteKey] = !!on;
-  await chrome.storage.local.set({doubleClickBlbSites:sites});
+  if (!state.siteKey || state.isBlbSite || state.isSensitiveSite) return;
+  if (!state.master) {
+    if (requestId) await writeSiteFeaturePreference('doubleClick', false);
+    return;
+  }
+  if (!(await writeSiteFeaturePreference('doubleClick', on, requestId))) {
+    setStatus('Unable to save Double-click for this page. Please try again.');
+    render(await getState());
+    return;
+  }
   if (on) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
-      sites[state.siteKey] = false;
-      await chrome.storage.local.set({doubleClickBlbSites:sites});
+      await writeSiteFeaturePreference('doubleClick', false);
       setStatus('Unable to enable Double-click on this page. The setting remains OFF; please try again.');
       render(await getState());
       return;
@@ -253,7 +277,6 @@ async function setDoubleClick(on) {
   }
   render(await getState());
 }
-
 
 let redirectToggleGeneration = 0;
 
@@ -1280,14 +1303,7 @@ async function cancelPendingSiteFeatureChoice(feature) {
 }
 
 async function persistSiteFeatureOffChoice(feature) {
-  if (!currentSiteOrigin) return;
-  try {
-    await chrome.runtime.sendMessage({
-      type:'blbSuiteSetSiteFeatureOff',
-      origin:currentSiteOrigin,
-      feature
-    });
-  } catch (_) {}
+  await writeSiteFeaturePreference(feature, false);
 }
 
 const siteFeatureToggleGeneration = Object.create(null);
@@ -1320,28 +1336,31 @@ async function setIndependentSiteFeature(feature, on) {
     return;
   }
 
+  let pinned = null;
   if (on) {
-    const [granted] = await Promise.all([accessPromise, pinPromise]);
+    const [granted, pinnedResult] = await Promise.all([accessPromise, pinPromise]);
+    pinned = pinnedResult;
     // A later explicit OFF/newer choice wins over an older unresolved request.
     if (generation !== siteFeatureToggleGeneration[feature]) return;
     if (!granted) {
-      await cancelPendingSiteFeatureChoice(feature);
-      if (feature === 'pageButton') await setPageButton(false);
-      else if (feature === 'doubleClick') await setDoubleClick(false);
+      // Clear the durable pending choice even if the master switch was turned
+      // OFF while the permission prompt was unresolved. The UI helpers return
+      // early when master is OFF, so use the background writer directly.
+      await writeSiteFeaturePreference(feature, false);
       render(await getState());
       return;
     }
-    // The permission may already have been granted, in which case Chrome
-    // does not emit onAdded. Clear this feature's durable intent after the
-    // popup itself has observed success; any other feature intent is retained.
-    await cancelPendingSiteFeatureChoice(feature);
+    // The final preference commit clears this feature's pending intent in the
+    // same serialized write, so closing the popup cannot strand the choice
+    // between cancellation and persistence.
   } else {
     await cancelPromise;
     if (generation !== siteFeatureToggleGeneration[feature]) return;
   }
 
-  if (feature === 'pageButton') await setPageButton(!!on);
-  else if (feature === 'doubleClick') await setDoubleClick(!!on);
+  if (on && feature === 'pageButton') await setPageButton(true, pinned?.requestId);
+  else if (on && feature === 'doubleClick') await setDoubleClick(true, pinned?.requestId);
+  else render(await getState());
 }
 
 async function handlePageButtonToggle(on) {
@@ -1441,7 +1460,14 @@ async function importStudyBackupFile(file) {
     for (const key of STUDY_BACKUP_KEYS) {
       if (Object.prototype.hasOwnProperty.call(summary, key)) restored[key] = summary[key];
     }
-    await chrome.storage.local.set(restored);
+    const restoreResponse = await chrome.runtime.sendMessage({
+      type:'blbSuiteRestoreStudyBackup',
+      study:restored
+    });
+    if (!restoreResponse?.ok) {
+      setStatus('Unable to restore this Study backup. Please try again.');
+      return;
+    }
     topicInput.value = String(restored.studySelectedTopic || '');
     noteInput.value = '';
     await refreshStudyState();

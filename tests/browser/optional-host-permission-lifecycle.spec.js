@@ -29,7 +29,17 @@ test('background extension-page messages reject content scripts and bind the Mul
           type: 'blbSuiteClassifySelection',
           text: 'John 3:16'
         }),
-        queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+        queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' }),
+        studyRestore: await chrome.runtime.sendMessage({
+          type: 'blbSuiteRestoreStudyBackup',
+          study: { studySessions: [], studyTopics: [] }
+        }),
+        sitePreference: await chrome.runtime.sendMessage({
+          type: 'blbSuiteSetSiteFeaturePreference',
+          origin: 'https://example.com/*',
+          feature: 'pageButton',
+          enabled: true
+        })
       })
     });
     return result.result;
@@ -37,6 +47,8 @@ test('background extension-page messages reject content scripts and bind the Mul
   expect(contentScriptResponses.studyMutation).toEqual({ ok: false, error: 'Unauthorized sender' });
   expect(contentScriptResponses.classification).toEqual({ ok: false, error: 'Unauthorized sender' });
   expect(contentScriptResponses.queueSlot).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(contentScriptResponses.studyRestore).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(contentScriptResponses.sitePreference).toEqual({ ok: false, error: 'Unauthorized sender' });
 
   const popupPage = await context.newPage();
   await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
