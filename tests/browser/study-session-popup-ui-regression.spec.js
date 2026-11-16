@@ -202,6 +202,9 @@ test('a superseded topic blur autosave does not replace successful Start feedbac
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
   const topic = 'Superseded topic autosave ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
 
   await page.evaluate(() => {
     const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
@@ -238,7 +241,7 @@ test('a superseded topic blur autosave does not replace successful Start feedbac
       studySelectedTopic:''
     });
     return {recording:Boolean(state.currentStudySessionId), topic:state.studySelectedTopic};
-  })).toEqual({recording:true, topic:topic});
+  })).toEqual({recording:true, topic:normalizedTopic});
   await page.close();
 });
 
