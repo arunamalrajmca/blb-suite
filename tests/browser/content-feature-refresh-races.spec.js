@@ -599,3 +599,89 @@ test('host permission revocation disables both site features in every open tab u
     await secondPage?.close().catch(() => {});
   }
 });
+
+
+test('content-script reinjection replaces the page-selection runtime message listener', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: {}
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Page button reinjection</title></head><body><p>John 3:16</p></body></html>'
+  }));
+  await page.goto('https://example.com/page-button-reinjection.html', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1);
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ url: 'https://example.com/page-button-reinjection.html' }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const initial = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const event = chrome.runtime.onMessage;
+        const originalAdd = event.addListener.bind(event);
+        const originalRemove = event.removeListener.bind(event);
+        const handlers = new Set();
+        Object.defineProperty(event, 'addListener', {
+          configurable: true,
+          value: listener => {
+            if (listener?.name === 'pageButtonRuntimeMessageHandler') handlers.add(listener);
+            return originalAdd(listener);
+          }
+        });
+        Object.defineProperty(event, 'removeListener', {
+          configurable: true,
+          value: listener => {
+            if (listener?.name === 'pageButtonRuntimeMessageHandler') handlers.delete(listener);
+            return originalRemove(listener);
+          }
+        });
+        globalThis.__pageButtonRuntimeListenerAudit = { handlers, originalAdd, originalRemove };
+        return handlers.size;
+      }
+    });
+    return injected.result;
+  }, tabId);
+  expect(initial).toBe(0);
+
+  for (let pass = 0; pass < 2; pass++) {
+    await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      files: ['content.js']
+    }), tabId);
+    await expect.poll(() => extensionWorker.evaluate(async id => {
+      const [injected] = await chrome.scripting.executeScript({
+        target: { tabId: id },
+        world: 'ISOLATED',
+        func: () => globalThis.__pageButtonRuntimeListenerAudit?.handlers.size ?? -1
+      });
+      return injected.result;
+    }, tabId), { timeout: 10000 }).toBe(1);
+  }
+
+  await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+    target: { tabId: id },
+    world: 'ISOLATED',
+    func: () => {
+      const audit = globalThis.__pageButtonRuntimeListenerAudit;
+      if (!audit) return;
+      Object.defineProperty(chrome.runtime.onMessage, 'addListener', {
+        configurable: true, value: audit.originalAdd
+      });
+      Object.defineProperty(chrome.runtime.onMessage, 'removeListener', {
+        configurable: true, value: audit.originalRemove
+      });
+      delete globalThis.__pageButtonRuntimeListenerAudit;
+    }
+  }), tabId);
+});

@@ -1,22 +1,55 @@
 // Captures useful BLB Bible and Strong's destinations while a named Study Topic is active.
 // Navigation/result based: no click logging, polling, or page-wide MutationObserver.
 (function (global) {
-  async function sendStudyCaptureMessage(message) {
-    let lastError = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const response = await chrome.runtime.sendMessage(message);
-        if (response?.ok !== false) return response;
-        lastError = new Error(response.error || 'Study capture request was rejected');
-      } catch (error) {
-        lastError = error;
-      }
-      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    throw lastError || new Error('Study capture message failed');
-  }
-
   function initialize({ BLB_HOSTNAME, normalizeSelectionText, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled }) {
+    global.__blbStudyReferenceCaptureCleanup?.();
+    let active = true;
+    const pendingTimers = new Map();
+    let startupListener = null;
+    const cleanup = () => {
+      if (!active) return;
+      active = false;
+      if (startupListener) {
+        document.removeEventListener('DOMContentLoaded', startupListener);
+        startupListener = null;
+      }
+      for (const [timer, resolve] of pendingTimers) {
+        clearTimeout(timer);
+        resolve(false);
+      }
+      pendingTimers.clear();
+      if (global.__blbStudyReferenceCaptureCleanup === cleanup) {
+        delete global.__blbStudyReferenceCaptureCleanup;
+      }
+    };
+    global.__blbStudyReferenceCaptureCleanup = cleanup;
+
+    const waitForRetry = () => new Promise(resolve => {
+      if (!active) { resolve(false); return; }
+      const timer = setTimeout(() => {
+        pendingTimers.delete(timer);
+        resolve(active);
+      }, 100);
+      pendingTimers.set(timer, resolve);
+    });
+
+    const sendCaptureMessage = async message => {
+      let lastError = null;
+      for (let attempt = 0; attempt < 2 && active; attempt++) {
+        try {
+          const response = await chrome.runtime.sendMessage(message);
+          if (!active) return null;
+          if (response?.ok !== false) return response;
+          lastError = new Error(response.error || 'Study capture request was rejected');
+        } catch (error) {
+          if (!active) return null;
+          lastError = error;
+        }
+        if (attempt === 0 && !(await waitForRetry())) return null;
+      }
+      if (active) throw lastError || new Error('Study capture message failed');
+      return null;
+    };
   // // ---------- Study reference capture ----------
   // Capture only useful BLB Bible/Strong's destinations while a named Study Topic
   // is active. This is deliberately navigation/result based: no click logging,
@@ -24,9 +57,9 @@
   if (location.hostname.toLowerCase().replace(/^www\./,'') === BLB_HOSTNAME) {
     const captureStudyRefs = async () => {
       try {
-        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
-        const active = await sendStudyCaptureMessage({type:'blbSuiteStudyCaptureActive'});
-        if (!active?.active || !isSuiteEnabledNow()) return;
+        if (!active || !(await isSuiteEnabled()) || !active || !isSuiteEnabledNow()) return;
+        const captureState = await sendCaptureMessage({type:'blbSuiteStudyCaptureActive'});
+        if (!captureState?.active || !active || !isSuiteEnabledNow()) return;
   
         const refs = new Map();
         const addUrl = href => {
@@ -57,31 +90,39 @@
           // History.
           if (currentUrl.searchParams.get('blbSuiteMultiVerse') === '1') return;
           const criteria = normalizeSelectionText(String(currentUrl.searchParams.get('Criteria') || '').replace(/\+/g, ' '));
-          if (criteria) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudySearchTerm', term:criteria});
+          if (criteria && active && isSuiteEnabledNow()) await sendCaptureMessage({type:'blbSuiteCaptureStudySearchTerm', term:criteria});
           return;
         }
   
         // Current Bible page / redirected Bible page only. Search and MultiVerse
         // result lists are deliberately not bulk-captured.
         addUrl(location.href);
-        if (refs.size) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudyRefs', refs:[...refs.values()]});
+        if (refs.size && active && isSuiteEnabledNow()) await sendCaptureMessage({type:'blbSuiteCaptureStudyRefs', refs:[...refs.values()]});
       } catch (_) {}
     };
   
     const captureStrong = async () => {
       try {
-        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
-        const active = await sendStudyCaptureMessage({type:'blbSuiteStudyCaptureActive'});
-        if (!active?.active || !isSuiteEnabledNow()) return;
+        if (!active || !(await isSuiteEnabled()) || !active || !isSuiteEnabledNow()) return;
+        const captureState = await sendCaptureMessage({type:'blbSuiteStudyCaptureActive'});
+        if (!captureState?.active || !active || !isSuiteEnabledNow()) return;
         const m = location.pathname.match(/\/lexicon\/(g|h)(\d+)\//i);
-        if (m) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudyStrong', value:`${m[1]}${m[2]}`});
+        if (m && active && isSuiteEnabledNow()) await sendCaptureMessage({type:'blbSuiteCaptureStudyStrong', value:`${m[1]}${m[2]}`});
       } catch (_) {}
     };
   
-    const runStudyCapture = () => { captureStudyRefs(); captureStrong(); };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',runStudyCapture,{once:true});
-    else runStudyCapture();
-    return Object.freeze({ refresh: runStudyCapture });
+    const runStudyCapture = () => {
+      if (!active) return;
+      void captureStudyRefs();
+      void captureStrong();
+    };
+    if (document.readyState === 'loading') {
+      startupListener = runStudyCapture;
+      document.addEventListener('DOMContentLoaded', startupListener, {once:true});
+    } else {
+      runStudyCapture();
+    }
+    return Object.freeze({ refresh: runStudyCapture, cleanup });
   }
   }
 

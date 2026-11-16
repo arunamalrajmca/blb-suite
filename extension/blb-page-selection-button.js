@@ -1,6 +1,7 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
   function initialize({ BLBShared, KJV_CORPUS_WORD_INDEX, isNumberedBookSuffixCandidate, getNumberedBookSuffixSearchText, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+    global.__blbPageSelectionButtonCleanup?.();
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -20,6 +21,10 @@
     let pageButtonRequestSequence = 0;
     let pageButtonDomObserver = null;
     let pageButtonDomValidationFrame = 0;
+    let pageButtonSelectionTimer = 0;
+    let pageButtonStartupTimer = 0;
+    let pageButtonStartupListener = null;
+    let pageButtonModuleActive = true;
 
     function isSingleTokenSelection(value) {
       const normalized = normalizeSelectionText(value).normalize('NFKC');
@@ -432,11 +437,13 @@
     
     function scheduleFinalBlbPageSelectionButtonUpdate() {
       if (!pageButtonMonitoring) return;
+      if (pageButtonSelectionTimer) clearTimeout(pageButtonSelectionTimer);
       if (pageButtonSelectionFrame) cancelAnimationFrame(pageButtonSelectionFrame);
       // Let the browser finish applying the selection boundary update before we
       // read document.getSelection(). This avoids validating a stale range.
-      setTimeout(() => {
-        if (!pageButtonMonitoring) return;
+      pageButtonSelectionTimer = setTimeout(() => {
+        pageButtonSelectionTimer = 0;
+        if (!pageButtonModuleActive || !pageButtonMonitoring) return;
         pageButtonSelectionFrame = requestAnimationFrame(() => {
           pageButtonSelectionFrame = 0;
           updateBlbPageSelectionButtonFromSelection().catch(()=>{});
@@ -543,7 +550,7 @@
       if (measureStage && typeof recordBlbSelectionStage === 'function') recordBlbSelectionStage('selection-clear-local', clearStartedAt);
     }
     
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    const pageButtonRuntimeMessageHandler = (message, sender, sendResponse) => {
       if (message?.type === 'blbSuiteClearPageSelection') {
         clearBlbPageSelectionAfterAction();
         sendResponse({ok:true});
@@ -602,9 +609,11 @@
         }
         return;
       }
-    });
-    
+    };
+    chrome.runtime.onMessage.addListener(pageButtonRuntimeMessageHandler);
+
     async function refreshBlbPageSelectionButton() {
+      if (!pageButtonModuleActive) return;
       const generation = ++pageButtonSettingsRefreshGeneration;
       try {
         if (isBlbPageButtonExcludedSite() || isSensitiveSiteUrl(location.href)) {
@@ -613,7 +622,7 @@
         }
         const siteKey = getPageSelectionSiteKey();
         const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
-        if (generation !== pageButtonSettingsRefreshGeneration) return;
+        if (!pageButtonModuleActive || generation !== pageButtonSettingsRefreshGeneration) return;
         const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
           ? data.pageSelectionButtonSites
           : {};
@@ -623,26 +632,64 @@
         // Keep the native context-menu item in lockstep with the exact setting that
         // controls the floating Show on BLB button.
         await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
-        if (generation !== pageButtonSettingsRefreshGeneration) return;
+        if (!pageButtonModuleActive || generation !== pageButtonSettingsRefreshGeneration) return;
         if (!isSuiteEnabledNow() || !shouldEnable) {
           disableBlbPageButtonMonitoring();
           return;
         }
         enableBlbPageButtonMonitoring();
       } catch (_) {
-        if (generation !== pageButtonSettingsRefreshGeneration) return;
+        if (!pageButtonModuleActive || generation !== pageButtonSettingsRefreshGeneration) return;
         // Fail closed if site-feature settings or defaults cannot be read.
         disableBlbPageButtonMonitoring();
         try { await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'}); } catch (_) {}
       }
     }
     
+    const cleanup = () => {
+      if (!pageButtonModuleActive) return;
+      pageButtonModuleActive = false;
+      pageButtonSettingsRefreshGeneration++;
+      pageButtonValidationToken++;
+      if (pageButtonStartupTimer) {
+        clearTimeout(pageButtonStartupTimer);
+        pageButtonStartupTimer = 0;
+      }
+      if (pageButtonSelectionTimer) {
+        clearTimeout(pageButtonSelectionTimer);
+        pageButtonSelectionTimer = 0;
+      }
+      if (pageButtonStartupListener) {
+        document.removeEventListener('DOMContentLoaded', pageButtonStartupListener);
+        pageButtonStartupListener = null;
+      }
+      if (pageButtonSelectionFrame) {
+        cancelAnimationFrame(pageButtonSelectionFrame);
+        pageButtonSelectionFrame = 0;
+      }
+      stopBlbPageSelectionDomObserver();
+      disableBlbPageButtonMonitoring();
+      chrome.runtime.onMessage.removeListener(pageButtonRuntimeMessageHandler);
+      if (global.__blbPageSelectionButtonCleanup === cleanup) {
+        delete global.__blbPageSelectionButtonCleanup;
+      }
+    };
+    global.__blbPageSelectionButtonCleanup = cleanup;
+
     if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteUrl(location.href)) {
-      suiteSettingsReadyPromise.then(refreshBlbPageSelectionButton).catch(()=>{});
+      suiteSettingsReadyPromise.then(() => {
+        if (pageButtonModuleActive) refreshBlbPageSelectionButton().catch(()=>{});
+      }).catch(()=>{});
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => { refreshBlbPageSelectionButton().catch(()=>{}); }, {once:true});
+        pageButtonStartupListener = () => {
+          if (pageButtonModuleActive) refreshBlbPageSelectionButton().catch(()=>{});
+        };
+        document.addEventListener('DOMContentLoaded', pageButtonStartupListener, {once:true});
       } else {
-        setTimeout(() => { refreshBlbPageSelectionButton().catch(()=>{}); }, 0);
+        pageButtonStartupTimer = setTimeout(() => {
+          pageButtonStartupTimer = 0;
+          if (pageButtonModuleActive) refreshBlbPageSelectionButton().catch(()=>{});
+        }, 0);
       }
     }
     

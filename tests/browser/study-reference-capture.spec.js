@@ -228,3 +228,58 @@ test('Study capture resumes on the current BLB page when the master switch is re
     })
   );
 });
+
+
+test('Study capture reinjection cancels obsolete DOM-ready callbacks', async ({
+  page, context, extensionWorker
+}) => {
+  await routeBlbFixture(context);
+  await page.goto(blbOrigin + '/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: async () => {
+        const calls = [];
+        Object.defineProperty(chrome.runtime, 'sendMessage', {
+          configurable: true,
+          value: async message => {
+            calls.push(message.type);
+            return { ok: true, active: false };
+          }
+        });
+        Object.defineProperty(document, 'readyState', {
+          configurable: true,
+          value: 'loading'
+        });
+        const dependencies = {
+          BLB_HOSTNAME: 'blueletterbible.org',
+          normalizeSelectionText: value => String(value || '').trim(),
+          isSuiteEnabled: async () => true,
+          isSuiteEnabledNow: () => true
+        };
+        globalThis.BLBStudyReferenceCaptureModule.initialize(dependencies);
+        globalThis.BLBStudyReferenceCaptureModule.initialize(dependencies);
+        document.dispatchEvent(new Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 50));
+        delete document.readyState;
+        return {
+          calls,
+          cleanupInstalled: typeof globalThis.__blbStudyReferenceCaptureCleanup === 'function'
+        };
+      }
+    });
+    return injected.result;
+  }, tabId);
+
+  expect(result.cleanupInstalled).toBe(true);
+  expect(result.calls).toEqual([
+    'blbSuiteStudyCaptureActive',
+    'blbSuiteStudyCaptureActive'
+  ]);
+});
