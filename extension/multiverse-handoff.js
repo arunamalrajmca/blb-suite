@@ -206,5 +206,5 @@
     
     
   }
-  global.BLBMultiVerseHandoffModule = Object.freeze({ initialize });
+  global.BLBMultiVerseHandoffModule = { initialize };
 })(globalThis);
