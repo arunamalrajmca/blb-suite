@@ -169,6 +169,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js",
+  "tests/browser/study-session-concurrency.spec.js",
   "tests/browser/extension-reference-actions.spec.js",
   "tests/browser/extension-lifecycle.spec.js",
   "tests/browser/known-host-extension.spec.js",
