@@ -21,6 +21,9 @@
     const listenerController = new AbortController();
     const clipboard = navigator.clipboard;
     const originalWriteText = clipboard?.writeText;
+    const originalWriteTextDescriptor = clipboard
+      ? Object.getOwnPropertyDescriptor(clipboard, "writeText")
+      : undefined;
     let wrappedWriteText = null;
 
     const cleanup = () => {
@@ -28,8 +31,17 @@
       active = false;
       listenerController.abort();
       // Restore only our own wrapper; do not overwrite a later third-party patch.
-      if (clipboard && wrappedWriteText && clipboard.writeText === wrappedWriteText) {
-        clipboard.writeText = originalWriteText;
+      if (clipboard && wrappedWriteText) {
+        const currentDescriptor = Object.getOwnPropertyDescriptor(clipboard, "writeText");
+        if (currentDescriptor?.value === wrappedWriteText) {
+          if (originalWriteTextDescriptor) {
+            Object.defineProperty(clipboard, "writeText", originalWriteTextDescriptor);
+          } else {
+            delete clipboard.writeText;
+          }
+        } else if (clipboard.writeText === wrappedWriteText) {
+          clipboard.writeText = originalWriteText;
+        }
       }
       if (global.__blbAutoHyperlinkerCleanup === cleanup) {
         delete global.__blbAutoHyperlinkerCleanup;
