@@ -712,3 +712,31 @@ test('asynchronous content-script handlers keep sendResponse open until delayed 
     });
   }
 });
+
+
+test('every asynchronous message type has an explicit trusted sender category', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(() => ({
+    unclassified:Array.from(ASYNC_MESSAGE_TYPES).filter(type =>
+      !EXTENSION_PAGE_MESSAGE_SOURCES.has(type) && !CONTENT_SCRIPT_MESSAGE_TYPES.has(type)
+    ),
+    popupMessageAccepted:isAuthorizedExtensionPageMessage(
+      {type:'blbSuiteGetStudyUiState'},
+      {id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')}
+    ),
+    popupMessageRejectedFromWrongPage:isAuthorizedExtensionPageMessage(
+      {type:'blbSuiteGetStudyUiState'},
+      {id:chrome.runtime.id,url:chrome.runtime.getURL('Tutorial.html')}
+    ),
+    unregisteredMessageAccepted:isAuthorizedExtensionPageMessage(
+      {type:'blbSuiteUnregisteredMessage'},
+      {id:chrome.runtime.id,url:chrome.runtime.getURL('popup.html')}
+    )
+  }));
+
+  expect(result).toEqual({
+    unclassified:[],
+    popupMessageAccepted:true,
+    popupMessageRejectedFromWrongPage:false,
+    unregisteredMessageAccepted:false
+  });
+});
