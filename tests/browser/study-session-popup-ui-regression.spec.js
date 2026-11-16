@@ -180,7 +180,7 @@ test('Study note autosaves from a cleared recording cannot write into a restarte
   expect(outcome.staleUpdate).toMatchObject({ok:false, reason:'stale-session'});
   expect(outcome.currentAfterStaleWrites.notes).toEqual([]);
   expect(outcome.validAdd).toMatchObject({ok:true, topic:'Cross Popup Note Race'});
-  expect(outcome.currentFinal.notes).toEqual(['Current session note']);
+  expect(outcome.currentFinal.notes).toEqual(['Current Session Note']);
 });
 
 test('Study Sessions popup pauses and restarts the selected recording without creating duplicate history', async ({
