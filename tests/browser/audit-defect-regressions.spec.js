@@ -102,6 +102,7 @@ test('Study Sessions sanitization skips malformed stored records and preserves v
 
   const result = await extensionWorker.evaluate(async () => {
     const state = await getStudySessions();
+    await pendingStudyMutation;
     const stored = await chrome.storage.local.get('studySessions');
     return { sessions: state.sessions, persisted: stored.studySessions };
   });
@@ -142,6 +143,7 @@ test('Study Sessions remains readable when persisting normalized history fails',
     };
     try {
       const state = await getStudySessions();
+      await pendingStudyMutation;
       const stored = await chrome.storage.local.get('studySessions');
       return { sessions: state.sessions, stored: stored.studySessions };
     } finally {
@@ -168,6 +170,7 @@ test('Study Sessions clears a current-session pointer when normalization removes
 
   const result = await extensionWorker.evaluate(async () => {
     const state = await getStudySessions();
+    await pendingStudyMutation;
     const stored = await chrome.storage.local.get([
       'studySessions',
       'currentStudySessionId',
