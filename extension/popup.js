@@ -308,7 +308,7 @@ async function setRedirect(on) {
   if (generation !== redirectToggleGeneration) return;
   if (!committed?.ok) {
     render(await getState());
-    setStatus('Unable to save the global redirect setting. Your previous setting is unchanged; please try again.');
+    setStatus('Unable to confirm the global redirect setting. The latest saved setting is shown; please check before retrying.');
     return;
   }
 
