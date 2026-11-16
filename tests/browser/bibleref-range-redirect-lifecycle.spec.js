@@ -110,3 +110,34 @@ test('redirectEnabled storage changes install and remove the two BLB DNR fallbac
   await extensionStorage.set({redirectEnabled:false});
   await expect.poll(readRuleIds).toEqual([]);
 });
+
+
+test('BibleRef range link falls back to its original destination when runtime messaging rejects', async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>BibleRef fallback source</title></head><body><a id="bibleref-fallback" href="https://www.bibleref.com/John/3/John-3-16.html">John 3:16-17</a></body></html>'
+  }));
+  await page.route('https://www.bibleref.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Original BibleRef destination</title></head><body>Original destination</body></html>'
+  }));
+  await page.goto('https://example.com/fallback', {waitUntil:'domcontentloaded'});
+
+  await page.evaluate(() => {
+    chrome.runtime.sendMessage = () => Promise.reject(new Error('simulated runtime message disconnect'));
+  });
+  await page.locator('#bibleref-fallback').click();
+
+  await expect(page).toHaveURL(/bibleref\.com\/John\/3\/John-3-16\.html/);
+  await expect(page).toHaveTitle('Original BibleRef destination');
+});
