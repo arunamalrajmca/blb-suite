@@ -282,7 +282,12 @@ async function setRedirect(on) {
   // Persist intent and its cross-popup generation before asking Chrome for
   // optional host access. Only this generation may later commit or roll back.
   const begun = await beginToggle();
-  if (!begun?.ok || generation !== redirectToggleGeneration) return;
+  if (generation !== redirectToggleGeneration) return;
+  if (!begun?.ok) {
+    render(await getState());
+    setStatus('Unable to start the global redirect change. Your previous setting is unchanged; please try again.');
+    return;
+  }
 
   if (on) {
     const redirectOrigins = ['http://*/*', 'https://*/*'];
@@ -301,7 +306,11 @@ async function setRedirect(on) {
 
   const committed = await commitToggle(on);
   if (generation !== redirectToggleGeneration) return;
-  if (!committed?.ok) { render(await getState()); return; }
+  if (!committed?.ok) {
+    render(await getState());
+    setStatus('Unable to confirm the global redirect setting. The latest saved setting is shown; please check before retrying.');
+    return;
+  }
 
   let refreshResponse = null;
   try { refreshResponse = await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
@@ -315,7 +324,10 @@ async function setRedirect(on) {
         if (generation !== redirectToggleGeneration) return;
         render(await getState());
         setStatus('Unable to enable global redirects. The setting remains OFF; please try again.');
-      } else { render(await getState()); }
+      } else {
+        render(await getState());
+        setStatus('Unable to enable global redirects; the OFF rollback could not be confirmed. Check the setting before retrying.');
+      }
     } else {
       render(await getState());
       setStatus('Global redirects are OFF, but the redirect rules could not be refreshed.');
@@ -327,8 +339,21 @@ async function setRedirect(on) {
     try {
       const tabs = await chrome.tabs.query({active:true,currentWindow:true});
       const tabId = tabs[0]?.id;
-      if (tabId && generation === redirectToggleGeneration) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-    } catch (_) {}
+      if (tabId && generation === redirectToggleGeneration) {
+        const activation = await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+        if (generation !== redirectToggleGeneration) return;
+        if (!activation?.ok) {
+          render(await getState());
+          setStatus('Global redirects are enabled, but this page could not be activated. Reload the page to apply them.');
+          return;
+        }
+      }
+    } catch (_) {
+      if (generation !== redirectToggleGeneration) return;
+      render(await getState());
+      setStatus('Global redirects are enabled, but this page could not be activated. Reload the page to apply them.');
+      return;
+    }
   }
   if (generation !== redirectToggleGeneration) return;
   render(await getState());
