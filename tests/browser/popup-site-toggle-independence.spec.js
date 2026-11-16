@@ -708,11 +708,7 @@ test('popup commit accepts a site preference already applied by the permission g
       origin:'https://example.com/*',
       feature:'pageButton'
     });
-    const grant = await chrome.runtime.sendMessage({
-      type:'blbSuiteImportStudyTestData',
-      data:{}
-    }).catch(() => null);
-    return {intent,grant};
+    return {intent};
   });
   expect(result.intent.ok).toBe(true);
   const committed = await extensionWorker.evaluate(() =>
