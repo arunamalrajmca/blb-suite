@@ -462,6 +462,11 @@ async function selectTopicValue(topic) {
     previousTopic.toLowerCase() !== String(topic).toLowerCase();
 
   topicInput.value = topic;
+  // An explicit dropdown choice is a completed selection, not an unfinished
+  // free-text edit. Let authoritative selections from other popup instances
+  // update this field while this selection request is in flight.
+  topicInputEditGeneration++;
+  topicInputEdited = false;
   closeTopicMenu();
 
   if (changingTopic) {
