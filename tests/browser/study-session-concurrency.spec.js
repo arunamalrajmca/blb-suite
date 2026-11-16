@@ -77,3 +77,31 @@ test('clearing a Study topic cannot be undone by an overlapping capture', async 
   expect(result.state.studyTopics).toEqual([]);
   expect(result.state.currentStudySessionId).toBeNull();
 });
+
+test('a queued Study capture refreshes activity before an overdue auto-stop decision', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Concurrent Study auto-stop ' + Date.now();
+  const result = await extensionWorker.evaluate(async value => {
+    const started = await startStudyTopicFromPopup(value);
+    if (!started.ok) throw new Error('Could not start Study topic: ' + JSON.stringify(started));
+    await chrome.storage.local.set({
+      studyAutoStopMinutes:5,
+      studyLastActivityAt:Date.now() - 10 * 60 * 1000
+    });
+
+    const outcomes = await Promise.all([
+      recordStudyStrong('H1234'),
+      checkStudyAutoStop()
+    ]);
+    const state = await chrome.storage.local.get(['studySessions','currentStudySessionId','studyLastActivityAt']);
+    const session = state.studySessions.find(item => item.id === state.currentStudySessionId);
+    return {outcomes, state, session};
+  }, topic);
+
+  expect(result.outcomes[0]).toBe(true);
+  expect(result.state.currentStudySessionId).toBeTruthy();
+  expect(result.state.studyLastActivityAt).toBeGreaterThan(Date.now() - 60 * 1000);
+  expect(result.session.strongs).toContain('H1234');
+});
