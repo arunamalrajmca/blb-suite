@@ -274,3 +274,46 @@ test('a delayed topic selection cannot overwrite a newer choice from another pop
   await expect(secondPopup.locator('#studyTopic')).toHaveValue('Newer Popup Choice');
   await secondPopup.close();
 });
+
+
+test('popup theme interaction wins over a delayed initial theme read', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({popupTheme:'dark'});
+  await page.addInitScript(() => {
+    const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    chrome.storage.local.get = keys => {
+      if (keys && typeof keys === 'object' && Object.prototype.hasOwnProperty.call(keys, 'popupTheme')) {
+        return new Promise(resolve => {
+          window.__resolveDelayedPopupTheme = value => resolve(value);
+        });
+      }
+      return originalGet(keys);
+    };
+  });
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.evaluate(() => typeof window.__resolveDelayedPopupTheme)).toBe('function');
+
+  await page.locator('#themeToggle').click();
+  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await page.evaluate(() => window.__resolveDelayedPopupTheme({popupTheme:'dark'}));
+
+  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await expect(page.locator('#themeToggle')).toHaveAttribute('aria-label', 'Switch to dark theme');
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({popupTheme:'dark'})).popupTheme
+  )).toBe('light');
+});
+
+test('external selected-topic refresh does not replace text currently being edited', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({studySelectedTopic:'Previously Saved Topic'});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#studyTopic')).toHaveValue('Previously Saved Topic');
+
+  await page.locator('#studyTopic').fill('My In-Progress Topic');
+  await extensionStorage.set({studySelectedTopic:'Selection From Another Popup'});
+
+  await expect(page.locator('#studyTopic')).toHaveValue('My In-Progress Topic');
+});
