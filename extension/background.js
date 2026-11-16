@@ -3191,9 +3191,77 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteAcquireMultiVersePostSlot', 'multiverse-post.html']
 ]);
 
+// Every async message must have an explicit source classification. Popup and
+// options-page requests are bound to their exact extension page; the remaining
+// listed requests are content-script-only and receive tab/document validation
+// in isAuthorizedContentScriptSender below.
+const CONTENT_SCRIPT_MESSAGE_TYPES = new Set([
+  'blbSuiteOpenMultiVerseVerse',
+  'blbSuiteGetPendingMultiVerseRefs',
+  'blbSuiteConsumePendingMultiVerseRefs',
+  'blbSuiteOpenWebsterMultiVerse',
+  'blbSuiteOpenCurrentSelection',
+  'blbSuiteOpenSelectionText',
+  'blbSuiteOpenDoubleClickSelectionText',
+  'blbSuiteStudyCaptureActive',
+  'blbSuiteCaptureStudyRefs',
+  'blbSuiteCaptureStudySearchTerm',
+  'blbSuiteCaptureStudyStrong',
+  'blbSuiteSyncSelectionContextMenu',
+  'blbSuiteOpenScriptTaggerUrl',
+  'blbSuiteOpenBibleRefRange',
+  'blbSuiteOpenBackgroundUrl'
+]);
+
 function isAuthorizedExtensionPageMessage(message, sender) {
-  const expectedPagePath = EXTENSION_PAGE_MESSAGE_SOURCES.get(message?.type);
-  return !expectedPagePath || isTrustedExtensionPageSender(sender, expectedPagePath);
+  const type = message?.type;
+  if (typeof type !== 'string') return false;
+  const expectedPagePath = EXTENSION_PAGE_MESSAGE_SOURCES.get(type);
+  if (expectedPagePath) return isTrustedExtensionPageSender(sender, expectedPagePath);
+  return CONTENT_SCRIPT_MESSAGE_TYPES.has(type);
+}
+
+function sameSenderDocumentUrl(left, right) {
+  try {
+    const a = new URL(String(left || ''));
+    const b = new URL(String(right || ''));
+    // Fragments can change without replacing the document. Origin, path, and
+    // query identify the top-level document for the fallback used by older
+    // Chromium versions that do not expose MessageSender.documentId.
+    return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function isLiveContentScriptSenderDocument(sender) {
+  if (!sender || !Number.isInteger(sender.tab?.id) ||
+      (Number.isInteger(sender.frameId) && sender.frameId !== 0)) return false;
+  // The manifest injects the content bundle into the top frame only. Reject
+  // subframe messages rather than treating a frame's URL as the tab's origin.
+  if (typeof sender.url !== 'string' || sender.url.startsWith(chrome.runtime.getURL(''))) return false;
+
+  if (typeof sender.documentId === 'string' && sender.documentId) {
+    try {
+      // Target the exact document that sent the request. If it navigated or
+      // closed while permission checks were pending, Chrome rejects this
+      // targeted execution instead of accidentally addressing its successor.
+      const results = await chrome.scripting.executeScript({
+        target:{tabId:sender.tab.id, documentIds:[sender.documentId]},
+        func:() => true
+      });
+      return results?.length === 1 && results[0]?.result === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  try {
+    const liveTab = await chrome.tabs.get(sender.tab.id);
+    return sameSenderDocumentUrl(sender.url, liveTab?.url || liveTab?.pendingUrl);
+  } catch (_) {
+    return false;
+  }
 }
 
 async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
@@ -3202,9 +3270,11 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
   if (sender.url.startsWith(chrome.runtime.getURL(''))) return false;
   const permissionTab = {...sender.tab, url:sender.url || sender.tab.url};
   if (!(await hasSelectionActionPermissionForTab(permissionTab))) return false;
-  if (!allowedHosts) return true;
-  const host = normalizeSiteHostname(hostnameFromTabUrl(sender.url || sender.tab.url));
-  return allowedHosts.has(host);
+  if (allowedHosts) {
+    const host = normalizeSiteHostname(hostnameFromTabUrl(sender.url || sender.tab.url));
+    if (!allowedHosts.has(host)) return false;
+  }
+  return isLiveContentScriptSenderDocument(sender);
 }
 
 async function isActiveTabContentScriptSender(sender) {
@@ -3516,7 +3586,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // its result makes the handoff deterministic for callers and regression
     // tests instead of acknowledging the message before tab creation finishes.
     try {
-      const result = await handleOpenBibleSelectionCommand();
+      const result = await openCurrentSelectionInBlb(
+        sender.tab.id,
+        sender.url,
+        sender.documentId
+      );
       sendResponse(result || {ok:false, reason:'selection-not-opened'});
     } catch (error) {
       console.error('KJV Scripture Tools Alt+B message:', error);
@@ -3675,9 +3749,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       const result = await openSharedSelectionAction({
         tabId:sender?.tab?.id,
-        tabUrl:sender?.tab?.url || '',
+        tabUrl:sender?.url || sender?.tab?.url || '',
         text,
         behavior,
+        documentId:sender?.documentId || null,
         contextualReference:contextualReference || null,
         contextualReferenceResolved: message.contextualReferenceResolved === true || !!contextualReference,
         directUrl:message.directUrl || ''
@@ -6003,7 +6078,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
   try { return await operation; } finally { pendingBlbDestinations.delete(key); }
 }
 
-async function getContextualSelectionReference(tabId, selectionText) {
+async function getContextualSelectionReference(tabId, selectionText, documentId = null) {
   if (!Number.isInteger(tabId)) return null;
   const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
   const messageStartedAt = measureStage ? performance.now() : null;
@@ -6011,7 +6086,7 @@ async function getContextualSelectionReference(tabId, selectionText) {
     const response = await chrome.tabs.sendMessage(tabId, {
       type: 'blbSuiteResolveContextualSelection',
       selectionText: String(selectionText || '')
-    });
+    }, typeof documentId === 'string' && documentId ? {documentId} : undefined);
     return response?.reference || null;
   } catch (_) {
     // Chrome/Brave PDF viewers and protected pages may reject content-script
@@ -6345,7 +6420,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   await openBlbDestination(`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
 }
 
-async function getActiveTabSelection(tabId) {
+async function getActiveTabSelection(tabId, documentId = null) {
   // Prefer the resident content script on normal web pages. This avoids a
   // scripting.executeScript round-trip and its injection/context overhead on
   // the latency-sensitive Alt+B path. Protected pages (notably PDF viewers)
@@ -6353,7 +6428,11 @@ async function getActiveTabSelection(tabId) {
   const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
   const messageStartedAt = measureStage ? performance.now() : null;
   try {
-    const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteGetActiveSelectionText'});
+    const response = await chrome.tabs.sendMessage(
+      tabId,
+      {type:'blbSuiteGetActiveSelectionText'},
+      typeof documentId === 'string' && documentId ? {documentId} : undefined
+    );
     if (response?.ok) return String(response.text || '').trim();
   } catch (_) {
   } finally {
@@ -6362,7 +6441,9 @@ async function getActiveTabSelection(tabId) {
   const fallbackStartedAt = measureStage ? performance.now() : null;
   try {
     const result = await chrome.scripting.executeScript({
-      target: {tabId},
+      target: typeof documentId === 'string' && documentId
+        ? {tabId, documentIds:[documentId]}
+        : {tabId},
       func: () => {
         const selection = window.getSelection?.();
         if (!selection || !selection.rangeCount) return '';
@@ -6419,7 +6500,8 @@ async function openSharedSelectionAction({
   behavior = {activeIfNew:true, activateExisting:true},
   contextualReference = null,
   contextualReferenceResolved = false,
-  directUrl = ''
+  directUrl = '',
+  documentId = null
 }) {
   if (normalizeSiteHostname(hostnameFromTabUrl(tabUrl)) === BLB_HOSTNAME) {
     const result = await openBlbPageSelection(text, behavior);
@@ -6457,7 +6539,7 @@ async function openSharedSelectionAction({
 
   if (numericOnlySelection && !contextualReference?.url) {
     if (!contextualReferenceResolved) {
-      const liveContext = await getContextualSelectionReference(tabId, text);
+      const liveContext = await getContextualSelectionReference(tabId, text, documentId);
       if (liveContext?.url) {
         await openSelectedPdfBibleRefs(text, behavior, liveContext);
         return {ok:true, contextual:true};
@@ -6500,7 +6582,7 @@ async function openSharedSelectionAction({
   }
 
   if (!direct && !strong && selectedRefs.length < 2 && contextualReferenceResolved !== true) {
-    const contextualRef = await getContextualSelectionReference(tabId, text);
+    const contextualRef = await getContextualSelectionReference(tabId, text, documentId);
     if (contextualRef?.url) {
       await openSelectedPdfBibleRefs(text, behavior, contextualRef);
       return {ok:true, contextual:true};
@@ -6517,14 +6599,14 @@ async function openSharedSelectionAction({
   return {ok:true};
 }
 
-async function openCurrentSelectionInBlb(tabId, tabUrl = '') {
-  const text = await getActiveTabSelection(tabId);
+async function openCurrentSelectionInBlb(tabId, tabUrl = '', documentId = null) {
+  const text = await getActiveTabSelection(tabId, documentId);
   if (!text) return {ok:false, reason:'empty-selection'};
 
   // Resolve positional DOM context while the user's live Range is still
   // available. Pass that exact result into the shared action instead of
   // relying on its later text-only fallback for a bare numeric token.
-  const contextualReference = await getContextualSelectionReference(tabId, text);
+  const contextualReference = await getContextualSelectionReference(tabId, text, documentId);
   return openSharedSelectionAction({
     tabId,
     tabUrl,
