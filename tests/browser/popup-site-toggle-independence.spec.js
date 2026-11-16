@@ -359,7 +359,7 @@ for (const feature of ['pageButton','doubleClick']) {
     await expect.poll(async () => extensionWorker.evaluate(async () =>
       (await chrome.storage.local.get({masterEnabled:true})).masterEnabled
     )).toBe(false);
-    await page.evaluate(() => window.__resolvePermission(false));
+    await page.evaluate(() => window.__resolvePermission(true));
 
     await expect.poll(async () => {
       const stored = await readSitePreferences(extensionWorker);
