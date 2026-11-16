@@ -223,3 +223,50 @@ test('open popup instances synchronize global master-setting changes', async ({
   await expect(secondPopup.locator('#master')).toBeChecked();
   await secondPopup.close();
 });
+
+
+test('a delayed topic selection cannot overwrite a newer choice from another popup', async ({
+  page, context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const originalTopic = 'Study Selection Race ' + Date.now();
+  await extensionStorage.set({studySelectedTopic:originalTopic});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.locator('#studyTopic').fill(originalTopic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+
+  const secondPopup = await context.newPage();
+  await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(secondPopup.locator('#studyTopic')).toHaveValue(originalTopic);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const pending = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: message => message?.type === 'blbSuiteStopStudyRecording'
+        ? new Promise(resolve => pending.push(resolve))
+        : originalSendMessage(message)
+    });
+    window.__pendingTopicStop = pending;
+  });
+
+  const olderSelection = page.evaluate(() => selectTopicValue('Older Delayed Choice'));
+  await expect.poll(() => page.evaluate(() => window.__pendingTopicStop.length)).toBe(1);
+
+  await secondPopup.evaluate(() => selectTopicValue('Newer Popup Choice'));
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({studySelectedTopic:''})).studySelectedTopic
+  )).toBe('Newer Popup Choice');
+
+  await page.evaluate(() => window.__pendingTopicStop[0]({ok:true}));
+  await olderSelection;
+
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({studySelectedTopic:''})).studySelectedTopic
+  )).toBe('Newer Popup Choice');
+  await expect(page.locator('#studyTopic')).toHaveValue('Newer Popup Choice');
+  await expect(secondPopup.locator('#studyTopic')).toHaveValue('Newer Popup Choice');
+  await secondPopup.close();
+});

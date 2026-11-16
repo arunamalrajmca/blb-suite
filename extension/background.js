@@ -315,8 +315,35 @@ async function getStudyUiState() {
 }
 
 
-function saveStudyTopicFromPopup(...args) {
-  return runStudyMutation(() => saveStudyTopicFromPopupUnlocked(...args));
+function saveStudyTopicFromPopup(title, requestId = '') {
+  return runStudyMutation(async () => {
+    if (requestId) {
+      const current = await chrome.storage.local.get({studySelectedTopicRequestId:''});
+      if (current.studySelectedTopicRequestId !== requestId) return {ok:false, reason:'stale-selection'};
+    }
+    return saveStudyTopicFromPopupUnlocked(title);
+  });
+}
+
+function beginStudyTopicSelection(requestId) {
+  return runStudyMutation(async () => {
+    const token = String(requestId || '').trim();
+    if (!token || token.length > 200) return {ok:false, reason:'invalid-request'};
+    await chrome.storage.local.set({studySelectedTopicRequestId:token});
+    return {ok:true};
+  });
+}
+
+function commitStudyTopicSelection(requestId, topic) {
+  return runStudyMutation(async () => {
+    const token = String(requestId || '').trim();
+    const value = String(topic || '').trim();
+    if (!token || token.length > 200 || value.length > 200) return {ok:false, reason:'invalid-request'};
+    const current = await chrome.storage.local.get({studySelectedTopicRequestId:''});
+    if (current.studySelectedTopicRequestId !== token) return {ok:false, stale:true};
+    await chrome.storage.local.set({studySelectedTopic:value});
+    return {ok:true, topic:value};
+  });
 }
 function updateStudyAutoStopMinutes(...args) {
   return runStudyMutation(() => updateStudyAutoStopMinutesUnlocked(...args));
@@ -397,6 +424,9 @@ async function restoreStudyBackupFromPopupUnlocked(study) {
     restored.studyAutoStopMinutes = value;
   }
   if (!Object.keys(restored).length) return {ok:false, reason:'empty-backup'};
+  if (Object.prototype.hasOwnProperty.call(restored, 'studySelectedTopic')) {
+    restored.studySelectedTopicRequestId = `study-backup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
   await chrome.storage.local.set(restored);
   if (Object.prototype.hasOwnProperty.call(restored, 'studyAutoStopMinutes')) {
     try { await refreshStudyAutoStopAlarm(); }
@@ -3289,6 +3319,8 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteStudyTopicMultiVerse', 'popup.html'],
   ['blbSuiteOpenStrongHistory', 'popup.html'],
   ['blbSuiteOpenHistorySearchTerms', 'popup.html'],
+  ['blbSuiteBeginStudyTopicSelection', 'popup.html'],
+  ['blbSuiteCommitStudyTopicSelection', 'popup.html'],
   ['blbSuiteSaveStudyTopic', 'popup.html'],
   ['blbSuiteImportStudyTestData', 'popup.html'],
   ['blbSuiteClassifySelection', 'popup.html'],
@@ -3448,7 +3480,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginStudyTopicSelection","blbSuiteCommitStudyTopicSelection","blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3553,8 +3585,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'blbSuiteBeginStudyTopicSelection') {
+    try { sendResponse(await beginStudyTopicSelection(message.requestId)); }
+    catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteCommitStudyTopicSelection') {
+    try { sendResponse(await commitStudyTopicSelection(message.requestId, message.topic)); }
+    catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
   if (message.type === 'blbSuiteSaveStudyTopic') {
-    try { sendResponse(await saveStudyTopicFromPopup(message.title)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    try { sendResponse(await saveStudyTopicFromPopup(message.title, message.requestId)); }
+    catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
@@ -3930,7 +3975,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const stopped = await stopStudyRecording();
         if (!stopped?.ok) return {ok:false, reason:stopped?.reason || 'study-stop-failed'};
       }
-      await chrome.storage.local.set({masterEnabled:enabled, studySelectedTopic:''});
+      await chrome.storage.local.set({
+        masterEnabled:enabled,
+        studySelectedTopic:'',
+        studySelectedTopicRequestId:`master-toggle-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      });
       return {ok:true, enabled};
     }).then(sendResponse).catch(error => sendResponse({ok:false,error:String(error)}));
     return true;
