@@ -584,8 +584,8 @@ async function refreshSourceBibleRedirect() {
     if (generation !== sourceBibleRedirectRefreshGeneration || !enabled) return;
     sourceBibleRedirectEnabled = settings.redirectEnabled === true;
     if (!sourceBibleRedirectEnabled || sourceBibleRedirectAttempted) return;
-    sourceBibleRedirectAttempted = true;
-    if (!redirectBlbNet()) redirectBibleSite();
+    const redirected = redirectBlbNet() || redirectBibleSite();
+    if (redirected) sourceBibleRedirectAttempted = true;
   } catch (_) {
     if (generation === sourceBibleRedirectRefreshGeneration) sourceBibleRedirectEnabled = false;
   }
