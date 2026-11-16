@@ -861,12 +861,15 @@ async function saveStudyNote() {
     await refreshStudyState();
     return;
   }
+  const editGeneration = noteInputEditGeneration;
   const response = await chrome.runtime.sendMessage({type:'blbSuiteAddStudyNoteToTopic', topic, sessionId, note});
   if (!response?.ok) {
     if (response?.reason === 'not-recording') setStatus('Start recording this topic before saving notes.');
     return;
   }
-  noteInput.value = '';
+  // A save may finish after the user has already started another draft.
+  // Clear only the exact draft that this request submitted.
+  if (noteInputEditGeneration === editGeneration) noteInput.value = '';
   setStatus(`Note saved to: ${response.topic}`);
   await refreshStudyState();
 }
