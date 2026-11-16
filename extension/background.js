@@ -7049,7 +7049,7 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 // site preference intact; a later re-grant can reactivate it through onAdded.
 function removedHostPermissionCoversTab(origin, tabUrl) {
   const value = String(origin || '');
-  if (value === '*://*/*') return /^https?:\\/\\//i.test(String(tabUrl || ''));
+  if (value === '*://*/*') return String(tabUrl || '').startsWith('http://') || String(tabUrl || '').startsWith('https://');
   if (value === 'https://*/*') return String(tabUrl || '').startsWith('https://');
   if (value === 'http://*/*') return String(tabUrl || '').startsWith('http://');
   return !!originPatternForUrl(tabUrl) && originPatternForUrl(tabUrl) === value;
