@@ -63,3 +63,24 @@ test('BLB copy leaves native clipboard HTML unchanged when the global master swi
   expect(copied.html).not.toContain('href="https://www.blueletterbible.org/kjv/John/3/16/"');
   expect(copied.html).not.toContain('href="https://www.blueletterbible.org/kjv/Romans/8/1-3/"');
 });
+
+test('BLB copy formatting resumes on the same page after the global master switch is re-enabled', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await openBlbFixture({ page, context, extensionStorage }, false);
+  await selectAndCopy(page, 'blb-auto-hyperlinker-reactivation-copy-off');
+  const copiedWhileOff = await readClipboard(page);
+  expect(copiedWhileOff.html).not.toContain('href="https://www.blueletterbible.org/kjv/John/3/16/"');
+
+  await extensionStorage.set({ masterEnabled: true });
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: false })).masterEnabled
+  )).toBe(true);
+  await page.waitForTimeout(150);
+
+  await selectAndCopy(page, 'blb-auto-hyperlinker-reactivation-copy-on');
+  const copiedAfterReenable = await readClipboard(page);
+  expect(copiedAfterReenable.plain).toBe('John 3:16 and Romans 8:1-3');
+  expect(copiedAfterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/John/3/16/"');
+  expect(copiedAfterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/Romans/8/1-3/"');
+});
