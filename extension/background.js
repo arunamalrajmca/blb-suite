@@ -221,7 +221,7 @@ async function updateStudyAutoStopMinutesUnlocked(value, refreshAlarm = refreshS
   }
   return {ok:true, minutes:value};
 }
-async function checkStudyAutoStop() {
+async function checkStudyAutoStopUnlocked() {
   if (!(await isSuiteEnabled())) {
     await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
     return;
@@ -237,7 +237,7 @@ async function checkStudyAutoStop() {
   if (!data.currentStudySessionId) { await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM); return; }
   const lastActivity = Number(data.studyLastActivityAt) || 0;
   if (!lastActivity) { await chrome.storage.local.set({studyLastActivityAt:Date.now()}); return; }
-  if (Date.now() - lastActivity >= minutes * 60 * 1000) await stopStudyRecording('inactivity');
+  if (Date.now() - lastActivity >= minutes * 60 * 1000) await stopStudyRecordingUnlocked('inactivity');
 }
 
 function titleCaseStudyTopic(value) {
@@ -338,6 +338,9 @@ function clearStudyTopic(...args) {
 }
 function clearStudySessions(...args) {
   return runStudyMutation(() => clearStudySessionsUnlocked(...args));
+}
+function checkStudyAutoStop(...args) {
+  return runStudyMutation(() => checkStudyAutoStopUnlocked(...args));
 }
 
 // Study mutations share one service-worker queue. Every read/modify/write
