@@ -1143,6 +1143,7 @@ async function persistTopicValue(topic, editGeneration = topicInputEditGeneratio
 
 topicInput.addEventListener('input', async () => {
   topicInputEdited = true;
+  topicInputEditGeneration++;
   clearActionStatus();
   if (!topicInput.value.trim() && studyState.recording) {
     await clearTopicSelectionInput();
