@@ -16,9 +16,9 @@ test('parse-popup reinjection owns one click handler and cleanup releases its ma
   }));
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
 
-  const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({ url: HOME_URL }))[0]?.id
-  );
+  const tabId = await extensionWorker.evaluate(async url =>
+    (await chrome.tabs.query({ url }))[0]?.id
+  , HOME_URL);
   expect(Number.isInteger(tabId)).toBe(true);
 
   const result = await extensionWorker.evaluate(async id => {
