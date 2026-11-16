@@ -681,11 +681,9 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
 
   let navigation;
   try {
-    const parserRequestStarted = new Promise(resolve => {
-      page.once('request', request => {
-        if (request.url().endsWith('/startup-hold.js')) resolve();
-      });
-    });
+    const parserRequestStarted = page.waitForRequest(request =>
+      request.url().endsWith('/startup-hold.js')
+    );
     navigation = page.goto('https://www.gotquestions.org/startup-lifecycle.html');
     await parserRequestStarted;
 
