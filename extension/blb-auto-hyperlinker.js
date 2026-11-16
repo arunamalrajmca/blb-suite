@@ -96,7 +96,12 @@
           document.removeEventListener("copy", handler, true);
         }
       };
-      clipboard.writeText = wrappedWriteText;
+      Object.defineProperty(clipboard, "writeText", {
+        configurable: true,
+        enumerable: originalWriteTextDescriptor?.enumerable ?? true,
+        writable: true,
+        value: wrappedWriteText
+      });
     }
 
     return Object.freeze({ cleanup });
