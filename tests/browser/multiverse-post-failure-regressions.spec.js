@@ -178,3 +178,36 @@ test('the real service-worker MultiVerse queue assigns simultaneous requests dis
     expect(scheduledAt[index] - scheduledAt[index - 1]).toBeGreaterThanOrEqual(1500);
   }
 });
+
+
+test('the MultiVerse POST queue preserves its minimum interval after in-memory worker state resets', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const key = MULTIVERSE_POST_LAST_SCHEDULED_KEY;
+    const previous = await chrome.storage.session.get({[key]:0});
+    try {
+      await chrome.storage.session.remove(key);
+      lastMultiVersePostScheduledAt = 0;
+      pendingMultiVersePostSlot = Promise.resolve();
+      const first = await grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, 951001);
+      // Model MV3 suspension/restart: all worker globals are reconstructed,
+      // while storage.session survives for the browser session.
+      lastMultiVersePostScheduledAt = 0;
+      pendingMultiVersePostSlot = Promise.resolve();
+      const second = await grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, 951002);
+      const stored = await chrome.storage.session.get({[key]:0});
+      return {
+        first:first.submitAt,
+        second:second.submitAt,
+        persisted:stored[key]
+      };
+    } finally {
+      if (previous[key]) await chrome.storage.session.set({[key]:previous[key]});
+      else await chrome.storage.session.remove(key);
+    }
+  });
+
+  expect(result.second - result.first).toBeGreaterThanOrEqual(1500);
+  expect(result.persisted).toBe(result.second);
+});
