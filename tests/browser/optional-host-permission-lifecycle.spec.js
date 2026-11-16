@@ -1043,6 +1043,7 @@ test('a late host-permission grant activates the original site tab even after fo
     pendingSiteFeatureToggles:{}
   }));
   let otherPage;
+  let sameOriginPage;
   try {
     await extensionStorage.set({
       masterEnabled:true,
@@ -1056,6 +1057,15 @@ test('a late host-permission grant activates the original site tab even after fo
       chrome.tabs.query({url}).then(([tab]) => tab?.id), 'https://example.com/*'
     );
     expect(Number.isInteger(originalTabId)).toBe(true);
+
+    // A second already-open tab on the same origin must also be activated by
+    // the grant, even though it is not the active tab when permission arrives.
+    sameOriginPage = await context.newPage();
+    await sameOriginPage.goto('https://example.com/second-open-tab', {waitUntil:'domcontentloaded'});
+    const secondSameOriginTabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({url:'https://example.com/second-open-tab'}).then(([tab]) => tab?.id)
+    );
+    expect(Number.isInteger(secondSameOriginTabId)).toBe(true);
 
     // Model the popup closing while its permission prompt is pending, followed
     // by the user moving focus to a different tab before Chrome reports grant.
@@ -1095,6 +1105,7 @@ test('a late host-permission grant activates the original site tab even after fo
       {origin:pattern,feature:'pageButton'}
     ]);
     expect(activation.calls).toContain(originalTabId);
+    expect(activation.calls).toContain(secondSameOriginTabId);
     expect(activation.calls).not.toContain(activeTab.id);
 
     const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
