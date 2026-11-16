@@ -181,22 +181,22 @@ test.describe('Study Sessions backup and restore', () => {
       studyAutoStopMinutes: 30
     };
 
-    await page.evaluate(() => {
-      window.confirm = () => true;
+    await page.evaluate(() => { window.confirm = () => true; });
+    await extensionWorker.evaluate(() => {
       const storage = chrome.storage.local;
       const originalSet = storage.set;
       storage.set = () => Promise.reject(new Error('simulated Study backup storage write failure'));
-      window.__restoreStudyBackupStorageSet = () => { storage.set = originalSet; };
+      globalThis.__restoreStudyBackupStorageSet = () => { storage.set = originalSet; };
     });
 
     try {
       await page.locator('#studyBackupFile').setInputFiles(backupFile(replacement));
-      await expect(page.locator('#studyStatus')).toContainText('Unable to read or restore this backup file.');
+      await expect(page.locator('#studyStatus')).toContainText('Unable to restore this Study backup.');
       expect(await readStudyBackupData(extensionWorker)).toEqual(before);
       await expect(page.locator('#importStudyBackup')).toBeEnabled();
       expect(await page.locator('#studyBackupFile').inputValue()).toBe('');
     } finally {
-      await page.evaluate(() => window.__restoreStudyBackupStorageSet?.());
+      await extensionWorker.evaluate(() => globalThis.__restoreStudyBackupStorageSet?.());
       await page.close();
     }
   });
