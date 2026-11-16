@@ -276,14 +276,39 @@ test('a delayed topic selection cannot overwrite a newer choice from another pop
 });
 
 
+test('open popup instances synchronize theme preference changes', async ({
+  page, context, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({popupTheme:'dark'});
+  const secondPopup = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+
+  await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
+  await expect(secondPopup.locator('body')).not.toHaveClass(/\blight\b/);
+
+  await secondPopup.locator('#themeToggle').click();
+  await expect(secondPopup.locator('body')).toHaveClass(/\blight\b/);
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
+
+  await page.locator('#themeToggle').click();
+  await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
+  await expect(secondPopup.locator('body')).not.toHaveClass(/\blight\b/);
+  await secondPopup.close();
+});
+
+
 test('popup theme interaction wins over a delayed initial theme read', async ({
   page, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({popupTheme:'dark'});
   await page.addInitScript(() => {
     const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    let delayedInitialThemeRead = false;
     chrome.storage.local.get = keys => {
-      if (keys && typeof keys === 'object' && Object.prototype.hasOwnProperty.call(keys, 'popupTheme')) {
+      if (!delayedInitialThemeRead && keys && typeof keys === 'object' &&
+          Object.prototype.hasOwnProperty.call(keys, 'popupTheme')) {
+        delayedInitialThemeRead = true;
         return new Promise(resolve => {
           window.__resolveDelayedPopupTheme = value => resolve(value);
         });
