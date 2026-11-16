@@ -75,6 +75,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/audit-defect-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-reference-capture.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/study-session-concurrency.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kjv-corpus-lazy-loading.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");

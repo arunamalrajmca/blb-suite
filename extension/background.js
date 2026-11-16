@@ -195,7 +195,7 @@ async function refreshStudyAutoStopAlarm(alarms = chrome.alarms) {
   await alarms.create(STUDY_AUTOSTOP_ALARM, {delayInMinutes:1, periodInMinutes:1});
 }
 
-async function updateStudyAutoStopMinutes(value, refreshAlarm = refreshStudyAutoStopAlarm) {
+async function updateStudyAutoStopMinutesUnlocked(value, refreshAlarm = refreshStudyAutoStopAlarm) {
   const previousValue = await getStudyAutoStopMinutes();
   await chrome.storage.local.set({studyAutoStopMinutes:value});
   try {
@@ -221,7 +221,7 @@ async function updateStudyAutoStopMinutes(value, refreshAlarm = refreshStudyAuto
   }
   return {ok:true, minutes:value};
 }
-async function checkStudyAutoStop() {
+async function checkStudyAutoStopUnlocked() {
   if (!(await isSuiteEnabled())) {
     await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
     return;
@@ -237,7 +237,7 @@ async function checkStudyAutoStop() {
   if (!data.currentStudySessionId) { await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM); return; }
   const lastActivity = Number(data.studyLastActivityAt) || 0;
   if (!lastActivity) { await chrome.storage.local.set({studyLastActivityAt:Date.now()}); return; }
-  if (Date.now() - lastActivity >= minutes * 60 * 1000) await stopStudyRecording('inactivity');
+  if (Date.now() - lastActivity >= minutes * 60 * 1000) await stopStudyRecordingUnlocked('inactivity');
 }
 
 function titleCaseStudyTopic(value) {
@@ -302,16 +302,59 @@ async function getStudyUiState() {
   };
 }
 
-let studyTopicSaveQueue = Promise.resolve();
 
-function saveStudyTopicFromPopup(title) {
-  const run = () => saveStudyTopicFromPopupNow(title);
-  const result = studyTopicSaveQueue.then(run, run);
-  studyTopicSaveQueue = result.catch(() => {});
+function saveStudyTopicFromPopup(...args) {
+  return runStudyMutation(() => saveStudyTopicFromPopupUnlocked(...args));
+}
+function updateStudyAutoStopMinutes(...args) {
+  return runStudyMutation(() => updateStudyAutoStopMinutesUnlocked(...args));
+}
+function startStudyTopicFromPopup(...args) {
+  return runStudyMutation(() => startStudyTopicFromPopupUnlocked(...args));
+}
+function stopStudyRecording(...args) {
+  return runStudyMutation(() => stopStudyRecordingUnlocked(...args));
+}
+function addStudyNoteToTopic(...args) {
+  return runStudyMutation(() => addStudyNoteToTopicUnlocked(...args));
+}
+function updateStudyNoteToTopic(...args) {
+  return runStudyMutation(() => updateStudyNoteToTopicUnlocked(...args));
+}
+function recordStudyRefs(...args) {
+  return runStudyMutation(() => recordStudyRefsUnlocked(...args));
+}
+function recordStudyStrong(...args) {
+  return runStudyMutation(() => recordStudyStrongUnlocked(...args));
+}
+function recordStudySearchTerm(...args) {
+  return runStudyMutation(() => recordStudySearchTermUnlocked(...args));
+}
+function recordStudyEntry(...args) {
+  return runStudyMutation(() => recordStudyEntryUnlocked(...args));
+}
+function clearStudyTopic(...args) {
+  return runStudyMutation(() => clearStudyTopicUnlocked(...args));
+}
+function clearStudySessions(...args) {
+  return runStudyMutation(() => clearStudySessionsUnlocked(...args));
+}
+function checkStudyAutoStop(...args) {
+  return runStudyMutation(() => checkStudyAutoStopUnlocked(...args));
+}
+
+// Study mutations share one service-worker queue. Every read/modify/write
+// operation must read the latest committed snapshot; otherwise concurrent
+// captures (for example a verse and a Strong's entry arriving together) can
+// each save a stale copy and silently erase the other's update.
+let pendingStudyMutation = Promise.resolve();
+function runStudyMutation(operation) {
+  const result = pendingStudyMutation.then(operation, operation);
+  pendingStudyMutation = result.then(() => undefined, () => undefined);
   return result;
 }
 
-async function saveStudyTopicFromPopupNow(title) {
+async function saveStudyTopicFromPopupUnlocked(title) {
   const topic = normalizeStudyTopic(title);
   if (!topic || topic.toLowerCase() === "uncategorized") return {ok:false, reason:"empty-or-uncategorized"};
 
@@ -338,7 +381,7 @@ async function saveStudyTopicFromPopupNow(title) {
   return {ok:true, topic};
 }
 
-async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refreshStudyAutoStopAlarm) {
+async function startStudyTopicFromPopupUnlocked(title, note = "", refreshAlarm = refreshStudyAutoStopAlarm) {
   const topic = normalizeStudyTopic(title);
   if (!topic) return {ok:false, reason:"empty"};
 
@@ -416,7 +459,7 @@ async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refresh
   return {ok:true, topic:session.title, recording:true};
 }
 
-async function stopStudyRecording(reason = 'manual', clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
+async function stopStudyRecordingUnlocked(reason = 'manual', clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   let pausedTopic = '';
   if (reason === 'inactivity') {
     const data = await getStudySessions();
@@ -442,7 +485,7 @@ async function stopStudyRecording(reason = 'manual', clearAlarm = () => chrome.a
   return {ok:true, recording:false, alarmCleanupPending, pausedReason:reason === 'inactivity' && pausedTopic ? 'inactivity' : '', pausedTopic};
 }
 
-async function addStudyNoteToTopic(topic, note) {
+async function addStudyNoteToTopicUnlocked(topic, note) {
   const value = normalizeStudyTopic(topic);
   const text = String(note || '').trim();
   if (!value || !text) return {ok:false, reason:'empty'};
@@ -458,7 +501,7 @@ async function addStudyNoteToTopic(topic, note) {
   return {ok:true, topic:current.title};
 }
 
-async function updateStudyNoteToTopic(topic, originalNote, note) {
+async function updateStudyNoteToTopicUnlocked(topic, originalNote, note) {
   const value = normalizeStudyTopic(topic);
   const oldText = String(originalNote || '').trim();
   const newText = String(note || '').trim();
@@ -921,7 +964,7 @@ function canonicalStudyRef(book, parsed, version="kjv") {
   return {book: resolved.book.name, bookNumber:Number(resolved.book.bookNumber), chapter:resolved.chapter, from:resolved.from, to:resolved.to, text:label};
 }
 
-async function recordStudyRefs(refs) {
+async function recordStudyRefsUnlocked(refs) {
   const list = Array.isArray(refs) ? refs : [];
   if (!list.length) return 0;
   const data = await getStudySessions();
@@ -963,7 +1006,7 @@ async function recordStudyRefs(refs) {
 }
 
 
-async function recordStudyStrong(entry) {
+async function recordStudyStrongUnlocked(entry) {
   const value = canonicalStoredStrong(entry);
   if (!value) return false;
   const data = await getStudySessions();
@@ -1000,7 +1043,7 @@ function parseBlbKjvUrlToStudyRef(url) {
   } catch (_) { return null; }
 }
 
-async function recordStudySearchTerm(text) {
+async function recordStudySearchTermUnlocked(text) {
   const rawTerm = String(text || '').trim().replace(/\s+/g, ' ');
   if (!rawTerm) return false;
   // Apply the same capitalization principle used by Study Notes to a single
@@ -1025,7 +1068,7 @@ async function recordStudySearchTerm(text) {
   return true;
 }
 
-async function recordStudyEntry(text, book, parsed, version="kjv") {
+async function recordStudyEntryUnlocked(text, book, parsed, version="kjv") {
   const data = await getStudySessions();
   const current = data.sessions.find(s => s.id === data.currentId);
   if (!current || String(current.title || '').trim().toLowerCase() === 'uncategorized') return false;
@@ -1128,7 +1171,7 @@ async function exportStudySessions(filterText='') {
 }
 
 
-async function clearStudyTopic(topic, clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
+async function clearStudyTopicUnlocked(topic, clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   const target = String(topic || '').trim().toLowerCase();
   if (!target) return {ok:false, reason:'no-topic'};
   const data = await getStudySessions();
@@ -1161,7 +1204,7 @@ async function clearStudyTopic(topic, clearAlarm = () => chrome.alarms.clear(STU
   return {ok:true, topic, alarmCleanupPending};
 }
 
-async function clearStudySessions(clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
+async function clearStudySessionsUnlocked(clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   await chrome.storage.local.remove(["studySessions", "currentStudySessionId", "studyTopics", "history", "studyLastActivityAt", "studyPausedTopic", "studyPauseReason"]);
   let alarmCleanupPending = false;
   try {
