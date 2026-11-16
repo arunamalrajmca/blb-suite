@@ -1186,8 +1186,10 @@ async function clearTopicSelectionInput() {
   } else if (selectionSync?.stale) {
     setStatus('A newer topic selection from another popup was preserved.');
   } else if (wasRecording) {
-    if (noteInputEditGeneration === noteEditGenerationAtStart) noteInput.value = '';
     setStatus('Select Start to record this topic.');
+  }
+  if (wasRecording) {
+    if (noteInputEditGeneration === noteEditGenerationAtStart) noteInput.value = '';
     await refreshStudyState();
   } else {
     updateStudyButtons();
