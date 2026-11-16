@@ -567,7 +567,7 @@ const REDIRECT_HOSTS = new Set([
 let sourceBibleRedirectEnabled = false;
 let sourceBibleRedirectRefreshGeneration = 0;
 let sourceBibleRedirectAttempted = false;
-if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(location.hostname.toLowerCase().replace(/^www\\./, ""))) {
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
   installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
 }
 
@@ -591,7 +591,7 @@ async function refreshSourceBibleRedirect() {
   }
 }
 
-if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\\./, ''))) {
+if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
   void refreshSourceBibleRedirect();
 }
 // The MultiVerse copy enhancement module is loaded before this content script.
@@ -4075,7 +4075,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
     sourceBibleRedirectRefreshGeneration += 1;
     if (suiteEnabled && sourceBibleRedirectEnabled &&
-        REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\\./, ''))) {
+        REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
       void refreshSourceBibleRedirect();
     }
   }
@@ -4084,7 +4084,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     suiteSettingsGeneration += 1;
     suiteEnabled = changes.masterEnabled.newValue !== false;
     sourceBibleRedirectRefreshGeneration += 1;
-    if (suiteEnabled && REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\\./, ''))) {
+    if (suiteEnabled && REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
       void refreshSourceBibleRedirect();
     }
     blbPassiveNewTabTargets?.refresh?.();
