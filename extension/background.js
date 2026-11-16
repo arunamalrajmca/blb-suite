@@ -362,6 +362,13 @@ function restoreStudyBackupFromPopup(...args) {
 // operation must read the latest committed snapshot; otherwise concurrent
 // captures (for example a verse and a Strong's entry arriving together) can
 // each save a stale copy and silently erase the other's update.
+let pendingMasterToggle = Promise.resolve();
+function runMasterToggle(operation) {
+  const result = pendingMasterToggle.then(operation, operation);
+  pendingMasterToggle = result.then(() => undefined, () => undefined);
+  return result;
+}
+
 let pendingStudyMutation = Promise.resolve();
 function runStudyMutation(operation) {
   const result = pendingStudyMutation.then(operation, operation);
@@ -3259,6 +3266,7 @@ function isTrustedExtensionPageSender(sender, expectedPagePath = '') {
 
 const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteStopStudyRecording', 'popup.html'],
+  ['blbSuiteSetMasterEnabled', 'popup.html'],
   ['blbSuitePrepareSiteFeatureToggle', 'popup.html'],
   ['blbSuiteEnsureContentScript', 'popup.html'],
   ['blbSuiteRefreshRedirectRules', 'popup.html'],
@@ -3438,7 +3446,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3910,6 +3918,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteStopStudyRecording') {
     try { sendResponse(await stopStudyRecording()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteSetMasterEnabled') {
+    const enabled = message.enabled === true;
+    runMasterToggle(async () => {
+      if (!enabled) {
+        const stopped = await stopStudyRecording();
+        if (!stopped?.ok) return {ok:false, reason:stopped?.reason || 'study-stop-failed'};
+      }
+      await chrome.storage.local.set({masterEnabled:enabled, studySelectedTopic:''});
+      return {ok:true, enabled};
+    }).then(sendResponse).catch(error => sendResponse({ok:false,error:String(error)}));
     return true;
   }
 
