@@ -366,3 +366,53 @@ test('external topic selection preserves an unsaved Notes draft and its topic co
   await expect(secondPopup.locator('#studyTopic')).toHaveValue('Topic Selected Elsewhere');
   await secondPopup.close();
 });
+
+
+test('Study backup restore does not overwrite topic or Notes edits made while it is pending', async ({
+  page, extensionId, extensionStorage
+}) => {
+  const originalTopic = 'Backup Restore Original ' + Date.now();
+  await extensionStorage.set({studySelectedTopic:originalTopic});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#studyTopic')).toHaveValue(originalTopic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect(page.locator('#studyNote')).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.confirm = () => true;
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const pending = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: message => message?.type === 'blbSuiteRestoreStudyBackup'
+        ? new Promise(resolve => pending.push(resolve))
+        : originalSendMessage(message)
+    });
+    window.__pendingStudyBackupRestore = pending;
+  });
+
+  const backup = {
+    format:'blb-suite-study-backup',
+    schemaVersion:1,
+    study:{studySelectedTopic:'Restored Backup Topic', studySessions:[], studyTopics:[]}
+  };
+  const importing = page.evaluate(async backupData => {
+    const file = {
+      size:JSON.stringify(backupData).length,
+      text:async () => JSON.stringify(backupData)
+    };
+    await importStudyBackupFile(file);
+  }, backup);
+  await expect.poll(() => page.evaluate(() => window.__pendingStudyBackupRestore.length)).toBe(1);
+
+  const newerTopicText = originalTopic.toUpperCase();
+  await page.locator('#studyTopic').fill(newerTopicText);
+  await expect(page.locator('#studyNote')).toBeEnabled();
+  await page.locator('#studyNote').fill('My newer unsaved Notes draft.');
+  await page.evaluate(() => window.__pendingStudyBackupRestore[0]({ok:true}));
+  await importing;
+
+  await expect(page.locator('#studyTopic')).toHaveValue(newerTopicText);
+  await expect(page.locator('#studyNote')).toHaveValue('My newer unsaved Notes draft.');
+});

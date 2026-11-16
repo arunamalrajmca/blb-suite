@@ -1120,6 +1120,8 @@ async function clearTopicSelectionInput() {
 // Preserve input entered while asynchronous popup initialization is still reading saved state.
 let topicInputEdited = false;
 let topicInputEditGeneration = 0;
+let noteInputEditGeneration = 0;
+noteInput.addEventListener('input', () => { noteInputEditGeneration++; });
 
 async function persistTopicValue(topic, editGeneration = topicInputEditGeneration) {
   const value = titleCase(topic);
@@ -1500,6 +1502,9 @@ function isValidStudyBackup(backup) {
 async function importStudyBackupFile(file) {
   if (!file) return;
   importStudyBackupButton.disabled = true;
+  // Start tracking as soon as import begins, including while the file is read.
+  const topicEditGenerationAtRestoreStart = topicInputEditGeneration;
+  const noteEditGenerationAtRestoreStart = noteInputEditGeneration;
   try {
     if (file.size > 25 * 1024 * 1024) {
       setStatus('Backup file is too large (maximum 25 MB).');
@@ -1521,6 +1526,9 @@ async function importStudyBackupFile(file) {
     for (const key of STUDY_BACKUP_KEYS) {
       if (Object.prototype.hasOwnProperty.call(summary, key)) restored[key] = summary[key];
     }
+    // Preserve edits made while the service worker is applying the backup.
+    // A restore replaces persisted Study data, but it must not overwrite newer
+    // text the user has entered into this popup while the request was pending.
     const restoreResponse = await chrome.runtime.sendMessage({
       type:'blbSuiteRestoreStudyBackup',
       study:restored
@@ -1529,8 +1537,12 @@ async function importStudyBackupFile(file) {
       setStatus('Unable to restore this Study backup. Please try again.');
       return;
     }
-    topicInput.value = String(restored.studySelectedTopic || '');
-    noteInput.value = '';
+    if (topicInputEditGeneration === topicEditGenerationAtRestoreStart) {
+      topicInput.value = String(restored.studySelectedTopic || '');
+      topicInputEditGeneration++;
+      topicInputEdited = false;
+    }
+    if (noteInputEditGeneration === noteEditGenerationAtRestoreStart) noteInput.value = '';
     await refreshStudyState();
     setStatus(`Study backup restored (${sessionCount} session(s)).`);
   } catch (error) {
