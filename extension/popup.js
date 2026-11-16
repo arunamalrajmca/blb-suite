@@ -1335,8 +1335,10 @@ async function setIndependentSiteFeature(feature, on) {
     // A later explicit OFF/newer choice wins over an older unresolved request.
     if (generation !== siteFeatureToggleGeneration[feature]) return;
     if (!granted) {
-      if (feature === 'pageButton') await setPageButton(false);
-      else if (feature === 'doubleClick') await setDoubleClick(false);
+      // Clear the durable pending choice even if the master switch was turned
+      // OFF while the permission prompt was unresolved. The UI helpers return
+      // early when master is OFF, so use the background writer directly.
+      await writeSiteFeaturePreference(feature, false);
       render(await getState());
       return;
     }
