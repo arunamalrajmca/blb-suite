@@ -3918,18 +3918,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       const permissionOrigin = parsed.origin + '/*';
+      let requestId = '';
       const prepared = await serializePendingSiteFeatureToggleMutation(async () => {
         const data = await chrome.storage.local.get({masterEnabled:true,pendingSiteFeatureToggles:{}});
         if (data.masterEnabled === false) return false;
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
         const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
-        entries[feature] = {requestedAt:Date.now()};
+        const requestedAt = Date.now();
+        requestId = requestedAt + '-' + Math.random().toString(36).slice(2);
+        entries[feature] = {requestedAt,requestId};
         pending[permissionOrigin] = serializePendingSiteFeatureEntries(Object.entries(entries));
         await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
         return true;
       });
-      sendResponse(prepared ? {ok:true,pending:true} : {ok:false});
+      sendResponse(prepared ? {ok:true,pending:true,requestId} : {ok:false});
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
@@ -3976,10 +3979,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           masterEnabled:true,pendingSiteFeatureToggles:{},
           pageSelectionButtonSites:{},doubleClickBlbSites:{}
         });
-        if (enabled && data.masterEnabled === false) return false;
+        if (enabled && (data.masterEnabled === false || !message.requestId)) return false;
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
         const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
+        if (enabled && entries[feature]?.requestId !== message.requestId) return false;
         delete entries[feature];
         const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
         if (remaining) pending[permissionOrigin] = remaining;
@@ -7476,7 +7480,7 @@ function serializePendingSiteFeatureEntries(entries) {
   if (!values.length) return undefined;
   if (values.length === 1) {
     const [feature, value] = values[0];
-    return {feature, requestedAt:value.requestedAt};
+    return {feature, requestedAt:value.requestedAt, ...(value.requestId ? {requestId:value.requestId} : {})};
   }
   return {features:valid};
 }
