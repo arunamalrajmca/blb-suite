@@ -740,3 +740,87 @@ test('every asynchronous message type has an explicit trusted sender category', 
     unregisteredMessageAccepted:false
   });
 });
+
+
+test('content-script requests are rejected when their originating tab closes during authorization', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><body><p>Closed-tab message lifecycle fixture</p></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+
+  await extensionWorker.evaluate(() => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    globalThis.__blbClosedTabMessageTest = {
+      started:false,
+      liveDocumentResult:null,
+      recordCalls:0,
+      release,
+      originalPermissionCheck:hasSelectionActionPermissionForTab,
+      originalRecordStudyRefs:recordStudyRefs,
+      originalLiveDocumentCheck:isLiveContentScriptSenderDocument
+    };
+    hasSelectionActionPermissionForTab = async () => {
+      globalThis.__blbClosedTabMessageTest.started = true;
+      await gate;
+      return true;
+    };
+    isLiveContentScriptSenderDocument = async sender => {
+      const result = await globalThis.__blbClosedTabMessageTest.originalLiveDocumentCheck(sender);
+      globalThis.__blbClosedTabMessageTest.liveDocumentResult = result;
+      return result;
+    };
+    recordStudyRefs = async refs => {
+      globalThis.__blbClosedTabMessageTest.recordCalls += 1;
+      return refs.length;
+    };
+  });
+
+  try {
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => {
+          void chrome.runtime.sendMessage({
+            type:'blbSuiteCaptureStudyRefs',
+            refs:[{book:'John',chapter:3,from:16,to:16}]
+          }).catch(() => {});
+          return true;
+        }
+      });
+    }, tabId);
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbClosedTabMessageTest.started
+    )).toBe(true);
+    await page.close();
+    await extensionWorker.evaluate(() => globalThis.__blbClosedTabMessageTest.release());
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbClosedTabMessageTest.liveDocumentResult
+    )).toBe(false);
+    const outcome = await extensionWorker.evaluate(() => ({
+      liveDocumentResult:globalThis.__blbClosedTabMessageTest.liveDocumentResult,
+      recordCalls:globalThis.__blbClosedTabMessageTest.recordCalls
+    }));
+    expect(outcome).toEqual({liveDocumentResult:false,recordCalls:0});
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const state = globalThis.__blbClosedTabMessageTest;
+      if (!state) return;
+      hasSelectionActionPermissionForTab = state.originalPermissionCheck;
+      recordStudyRefs = state.originalRecordStudyRefs;
+      isLiveContentScriptSenderDocument = state.originalLiveDocumentCheck;
+      delete globalThis.__blbClosedTabMessageTest;
+    });
+  }
+});
