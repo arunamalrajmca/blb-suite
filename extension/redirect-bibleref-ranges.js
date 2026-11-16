@@ -99,6 +99,12 @@
     // second redirect-created tab.
     event.preventDefault();
     event.stopImmediatePropagation();
+    const fallbackToOriginalLink = () => {
+      const originalUrl = link.href || link.getAttribute?.('href');
+      if (originalUrl) {
+        try { window.location.assign(originalUrl); } catch (_) {}
+      }
+    };
     chrome.runtime.sendMessage({
       type: 'blbSuiteOpenBibleRefRange',
       url: rangeUrl,
@@ -107,11 +113,11 @@
     }).then(response => {
       if (!response?.ok) {
         console.warn('[BLB Suite] BibleRef range redirect was rejected; opening the original link.', response);
-        window.location.assign(link.href);
+        fallbackToOriginalLink();
       }
     }).catch(error => {
       console.warn('[BLB Suite] Could not open BibleRef range; opening the original link.', error);
-      window.location.assign(link.href);
+      fallbackToOriginalLink();
     });
   }, true);
 })();
