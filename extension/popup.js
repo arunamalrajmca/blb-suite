@@ -956,9 +956,9 @@ async function clearSelectedTopic() {
 async function clearAllTopics() {
   closeClearMenu();
   closeTopicMenu();
-  if (!confirm('Delete all Study data? Export a backup first to keep a copy. Continue?')) return;
   const topicEditGenerationAtStart = topicInputEditGeneration;
   const noteEditGenerationAtStart = noteInputEditGeneration;
+  if (!confirm('Delete all Study data? Export a backup first to keep a copy. Continue?')) return;
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudy'});
   if (!response?.ok) { setStatus('Unable to clear Study Sessions.'); return; }
   clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
