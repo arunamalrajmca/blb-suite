@@ -3270,6 +3270,8 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuitePrepareSiteFeatureToggle', 'popup.html'],
   ['blbSuiteEnsureContentScript', 'popup.html'],
   ['blbSuiteRefreshRedirectRules', 'popup.html'],
+  ['blbSuiteBeginRedirectToggle', 'popup.html'],
+  ['blbSuiteCommitRedirectToggle', 'popup.html'],
   ['blbSuiteGetStudyAutoStopMinutes', 'popup.html'],
   ['blbSuiteSetStudyAutoStopMinutes', 'popup.html'],
   ['blbSuiteRestoreStudyBackup', 'popup.html'],
@@ -3446,7 +3448,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -4084,6 +4086,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     try { sendResponse({ok:await recordStudyStrong(message.value)}); }
     catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteBeginRedirectToggle') {
+    const requestId = String(message.requestId || '');
+    if (!requestId || requestId.length > 160) { sendResponse({ok:false}); return true; }
+    serializePendingSiteFeatureToggleMutation(async () => {
+      await chrome.storage.local.set({redirectToggleRequestId:requestId, redirectEnabled:message.enabled === true});
+      return true;
+    }).then(ok => sendResponse({ok:ok === true, requestId})).catch(error => sendResponse({ok:false,error:String(error)}));
+    return true;
+  }
+
+  if (message.type === 'blbSuiteCommitRedirectToggle') {
+    const requestId = String(message.requestId || '');
+    if (!requestId || requestId.length > 160) { sendResponse({ok:false}); return true; }
+    serializePendingSiteFeatureToggleMutation(async () => {
+      const state = await chrome.storage.local.get({redirectToggleRequestId:''});
+      if (state.redirectToggleRequestId !== requestId) return false;
+      await chrome.storage.local.set({redirectEnabled:message.enabled === true});
+      return true;
+    }).then(ok => sendResponse({ok:ok === true, stale:ok === false})).catch(error => sendResponse({ok:false,error:String(error)}));
     return true;
   }
 
