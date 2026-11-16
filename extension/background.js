@@ -3354,19 +3354,28 @@ const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuit
 // extension service worker: Chrome can delay worker timers dramatically under load.
 // Each handoff page waits until its reserved timestamp before submitting its POST.
 const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
+const MULTIVERSE_POST_LAST_SCHEDULED_KEY = 'blbSuiteLastMultiVersePostScheduledAt';
 let lastMultiVersePostScheduledAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
 
 // Keep queue admission in its own message listener. The general async router
 // handles many unrelated operations; isolating this timing-sensitive response
 // avoids coupling queue delivery to that router's async dispatch path.
+// Persist only the most recent reservation in storage.session so a worker
+// restart cannot reset the global submission interval between handoff tabs.
+// storage.session is cleared when the browser session ends, which is the
+// correct lifetime for this transient scheduling state.
 // All MultiVerse submissions use one shared FIFO schedule and one interval, regardless of source.
 function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
-  const slot = pendingMultiVersePostSlot.then(() => {
+  const slot = pendingMultiVersePostSlot.then(async () => {
     const queueStartedAt = Date.now();
-    const scheduledAt = Math.max(queueStartedAt, lastMultiVersePostScheduledAt + minimumIntervalMs);
+    const stored = await chrome.storage.session.get({[MULTIVERSE_POST_LAST_SCHEDULED_KEY]:0});
+    const persistedLastScheduledAt = Number(stored[MULTIVERSE_POST_LAST_SCHEDULED_KEY]) || 0;
+    const previousScheduledAt = Math.max(lastMultiVersePostScheduledAt, persistedLastScheduledAt);
+    const scheduledAt = Math.max(queueStartedAt, previousScheduledAt + minimumIntervalMs);
     const intervalWaitMs = scheduledAt - queueStartedAt;
     lastMultiVersePostScheduledAt = scheduledAt;
+    await chrome.storage.session.set({[MULTIVERSE_POST_LAST_SCHEDULED_KEY]:scheduledAt});
     console.info(
       '[BLB MV timing] stage=queue-slot-reserved' +
       ' tabId=' + tabId +
