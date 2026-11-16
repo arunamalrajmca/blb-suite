@@ -4078,23 +4078,48 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
 });
 
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === 'blbSuiteHostPermissionRevoked') {
-    siteHostAccessRevoked = true;
+function siteHostPermissionStorageKey() {
+  try {
+    const url = new URL(location.href);
+    return `${url.protocol}//${url.hostname}/*`;
+  } catch (_) {
+    return '';
+  }
+}
+
+let siteHostAccessRevocationGeneration = 0;
+function applySiteHostAccessRevocation(revoked) {
+  const next = revoked === true;
+  if (next === siteHostAccessRevoked) return;
+  siteHostAccessRevoked = next;
+  if (next) {
     blbPageSelectionButton.disable();
     doubleClickBlbEnabled = false;
     disableDoubleClickBlb();
-    sendResponse({ok:true});
-    return;
+  } else if (suiteEnabled) {
+    blbPageSelectionButton.refresh();
+    void refreshDoubleClickBlb();
   }
-  if (message?.type === 'blbSuiteHostPermissionRestored') {
-    siteHostAccessRevoked = false;
-    sendResponse({ok:true});
-  }
-});
+}
+
+const initialSiteHostAccessRevocationGeneration = siteHostAccessRevocationGeneration;
+chrome.storage.local.get({siteHostAccessRevokedSites:{}}).then(data => {
+  if (initialSiteHostAccessRevocationGeneration !== siteHostAccessRevocationGeneration) return;
+  const revokedSites = data.siteHostAccessRevokedSites && typeof data.siteHostAccessRevokedSites === 'object'
+    ? data.siteHostAccessRevokedSites : {};
+  applySiteHostAccessRevocation(revokedSites[siteHostPermissionStorageKey()] === true);
+}).catch(() => {});
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.siteHostAccessRevokedSites) {
+    siteHostAccessRevocationGeneration += 1;
+    const revokedSites = changes.siteHostAccessRevokedSites.newValue &&
+      typeof changes.siteHostAccessRevokedSites.newValue === 'object'
+      ? changes.siteHostAccessRevokedSites.newValue : {};
+    applySiteHostAccessRevocation(revokedSites[siteHostPermissionStorageKey()] === true);
+  }
+
   if (changes.redirectEnabled) {
     redirectSettingsGeneration += 1;
     sourceBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
