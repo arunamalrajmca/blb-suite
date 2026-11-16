@@ -225,6 +225,120 @@ test('failed redirect-rule refresh rolls a requested global redirect ON choice b
 });
 
 
+test('failed redirect-toggle begin reports that the saved setting is unchanged', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteBeginRedirectToggle'
+        ? Promise.resolve({ok:false, error:'simulated-begin-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.evaluate(() => setRedirect(true));
+  await expect(page.locator('#redirectEnabled')).not.toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to start the global redirect change. Your previous setting is unchanged'
+  );
+});
+
+test('failed redirect-toggle commit reports that the saved setting is unchanged', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:true});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteCommitRedirectToggle'
+        ? Promise.resolve({ok:false, error:'simulated-commit-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.evaluate(() => setRedirect(false));
+  await expect(page.locator('#redirectEnabled')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to save the global redirect setting. Your previous setting is unchanged'
+  );
+});
+
+test('failed redirect rollback reports that the OFF state could not be confirmed', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.permissions, 'request', {configurable:true, value:async () => true});
+    Object.defineProperty(chrome.permissions, 'contains', {
+      configurable:true,
+      value:async ({origins = []}) => origins.includes('http://*/*') && origins.includes('https://*/*')
+    });
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => {
+        if (message?.type === 'blbSuiteRefreshRedirectRules') return Promise.resolve({ok:false});
+        if (message?.type === 'blbSuiteCommitRedirectToggle' && message.enabled === false) {
+          return Promise.resolve({ok:false, error:'simulated-rollback-failure'});
+        }
+        return originalSendMessage(message);
+      }
+    });
+  });
+
+  await page.evaluate(() => setRedirect(true));
+  await expect(page.locator('#redirectEnabled')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'the OFF rollback could not be confirmed'
+  );
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({redirectEnabled:false})).redirectEnabled
+  )).toBe(true);
+});
+
+test('failed current-page activation reports that a reload is needed after redirects are enabled', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.permissions, 'request', {configurable:true, value:async () => true});
+    Object.defineProperty(chrome.permissions, 'contains', {
+      configurable:true,
+      value:async ({origins = []}) => origins.includes('http://*/*') && origins.includes('https://*/*')
+    });
+    Object.defineProperty(chrome.tabs, 'query', {configurable:true, value:async () => [{id:123}]});
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteEnsureContentScript'
+        ? Promise.resolve({ok:false, error:'simulated-activation-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.evaluate(() => setRedirect(true));
+  await expect(page.locator('#redirectEnabled')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Global redirects are enabled, but this page could not be activated. Reload the page'
+  );
+});
+
 test('background redirect-rule refresh reports a Dynamic Rules API failure', async ({
   extensionWorker
 }) => {
