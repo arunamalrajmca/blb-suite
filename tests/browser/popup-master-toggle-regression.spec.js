@@ -446,7 +446,7 @@ test('a delayed Study note save does not clear a newer Notes draft', async ({
   await expect.poll(() => page.evaluate(() => window.__pendingStudyNoteSave.length)).toBe(1);
 
   await page.locator('#studyNote').fill('A newer draft typed while the first save is pending.');
-  await page.evaluate(() => window.__pendingStudyNoteSave[0]({ok:true, topic}));
+  await page.evaluate(topic => window.__pendingStudyNoteSave[0]({ok:true, topic}), topic);
   await saving;
 
   await expect(page.locator('#studyNote')).toHaveValue('A newer draft typed while the first save is pending.');
