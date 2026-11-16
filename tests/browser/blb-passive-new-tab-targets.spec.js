@@ -8,7 +8,7 @@ async function serveLinks(context) {
     status: 200,
     contentType: 'text/html; charset=utf-8',
     body: `<!doctype html><html><head><title>Passive target fixture</title></head><body>
-      <a id="kjv-verse" href="${VERSE_URL}">John 3:16</a>
+      <a id="kjv-verse" target="_self" href="${VERSE_URL}">John 3:16</a>
       <a id="search-link" href="https://www.blueletterbible.org/search/?Criteria=grace">Search</a>
       <a id="chapter-link" href="https://www.blueletterbible.org/kjv/jhn/3/">John 3</a>
     </body></html>`
@@ -97,7 +97,7 @@ test('reinjection restores only the passive new-tab target owned by the previous
   }, tabId);
 
   expect(result).toEqual({
-    targetAfterReinjection: null,
+    targetAfterReinjection: '_self',
     cleanupRegistryReleased: true
   });
 });
