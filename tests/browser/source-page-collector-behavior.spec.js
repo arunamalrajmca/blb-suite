@@ -671,7 +671,7 @@ test('collector startup registrations are cancelled by reinjection cleanup', asy
       'utf8'
     );
     const helperMatch = source.match(
-      /    const addStartupListener = \(eventName, listener\) => \{[\\s\\S]*?    const scheduleStartupRetry = \(callback, delay\) => \{[\\s\\S]*?\n    \};/
+      /    const addStartupListener = \(eventName, listener\) => \{[\s\S]*?    const scheduleStartupRetry = \(callback, delay\) => \{[\s\S]*?\n    \};/
     );
     expect(helperMatch, moduleName + ' startup helpers').not.toBeNull();
 
