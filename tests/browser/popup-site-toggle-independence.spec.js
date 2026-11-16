@@ -685,3 +685,53 @@ test('a stale permission grant cannot override a newer OFF or ON choice', async 
   expect(stored.pendingSiteFeatureToggles).toEqual({});
   await page.close();
 });
+
+
+test('popup commit accepts a site preference already applied by the permission grant event', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  });
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+
+  const result = await page.evaluate(async () => {
+    const intent = await chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'pageButton'
+    });
+    const grant = await chrome.runtime.sendMessage({
+      type:'blbSuiteImportStudyTestData',
+      data:{}
+    }).catch(() => null);
+    return {intent,grant};
+  });
+  expect(result.intent.ok).toBe(true);
+  const committed = await extensionWorker.evaluate(() =>
+    commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+  );
+  expect(committed.committed).toEqual([{origin:'https://example.com/*',feature:'pageButton'}]);
+
+  const popupCommit = await page.evaluate(requestId => chrome.runtime.sendMessage({
+    type:'blbSuiteSetSiteFeaturePreference',
+    origin:'https://example.com/*',
+    feature:'pageButton',
+    enabled:true,
+    requestId
+  }), result.intent.requestId);
+  expect(popupCommit).toEqual({ok:true});
+  const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(stored.pageSelectionButtonSites).toEqual({'example.com':true});
+  expect(stored.pendingSiteFeatureToggles).toEqual({});
+  await page.close();
+});
