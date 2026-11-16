@@ -161,7 +161,7 @@ test('a newer master ON choice wins while an older OFF waits for Study stop', as
     const pending = [];
     Object.defineProperty(chrome.runtime, 'sendMessage', {
       configurable:true,
-      value: message => message?.type === 'blbSuiteSetMasterEnabled'
+      value: message => message?.type === 'blbSuiteSetMasterEnabled' && message.enabled === false
         ? new Promise(resolve => pending.push(resolve))
         : originalSendMessage(message)
     });
