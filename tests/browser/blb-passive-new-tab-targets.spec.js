@@ -69,9 +69,9 @@ test('reinjection restores only the passive new-tab target owned by the previous
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#kjv-verse')).toHaveAttribute('target', '_blank');
 
-  const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({ url: HOME_URL }))[0]?.id
-  );
+  const tabId = await extensionWorker.evaluate(async url =>
+    (await chrome.tabs.query({ url }))[0]?.id
+  , HOME_URL);
   expect(Number.isInteger(tabId)).toBe(true);
 
   const [result] = await extensionWorker.evaluate(async id => {
