@@ -1328,8 +1328,10 @@ async function setIndependentSiteFeature(feature, on) {
     return;
   }
 
+  let pinned = null;
   if (on) {
-    const [granted, pinned] = await Promise.all([accessPromise, pinPromise]);
+    const [granted, pinnedResult] = await Promise.all([accessPromise, pinPromise]);
+    pinned = pinnedResult;
     // A later explicit OFF/newer choice wins over an older unresolved request.
     if (generation !== siteFeatureToggleGeneration[feature]) return;
     if (!granted) {
