@@ -406,8 +406,8 @@ test('Study backup restore does not overwrite topic or Notes edits made while it
   }, backup);
   await expect.poll(() => page.evaluate(() => window.__pendingStudyBackupRestore.length)).toBe(1);
 
-  await page.locator('#studyTopic').fill('My Newer Topic Edit');
   await page.locator('#studyNote').fill('My newer unsaved Notes draft.');
+  await page.locator('#studyTopic').fill('My Newer Topic Edit');
   await page.evaluate(() => window.__pendingStudyBackupRestore[0]({ok:true}));
   await importing;
 
