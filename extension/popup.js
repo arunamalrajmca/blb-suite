@@ -270,69 +270,66 @@ let redirectToggleGeneration = 0;
 
 async function setRedirect(on) {
   const generation = ++redirectToggleGeneration;
-  const state = await getState();
-  if (generation !== redirectToggleGeneration || !state.master) return;
+  const requestId = `${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
+  const sendToggle = async (type, enabled) => {
+    try { return await chrome.runtime.sendMessage({type, requestId, enabled}); }
+    catch (_) { return {ok:false}; }
+  };
+
+  // Persist intent and its cross-popup generation before asking Chrome for
+  // optional host access. Only this generation may later commit or roll back.
+  const begun = await sendToggle('blbSuiteBeginRedirectToggle', on);
+  if (!begun?.ok || generation !== redirectToggleGeneration) return;
 
   if (on) {
-    // ScriptTagger references can appear on any website. Global redirects
-    // request optional HTTP(S) access, without enabling the per-site features.
     const redirectOrigins = ['http://*/*', 'https://*/*'];
-
-    // Persist the user's intent before the permission prompt. Chrome may
-    // interrupt/recreate the action popup while that prompt is shown, so
-    // waiting until after permissions.request() can lose the toggle state.
-    await chrome.storage.local.set({redirectEnabled:true});
+    const granted = await chrome.permissions.request({origins:redirectOrigins}).catch(() => false);
     if (generation !== redirectToggleGeneration) return;
-
-    const granted = await chrome.permissions.request({origins: redirectOrigins}).catch(() => false);
-    if (generation !== redirectToggleGeneration) return;
-    const hasRedirectAccess = granted && await chrome.permissions.contains({origins: redirectOrigins}).catch(() => false);
+    const hasRedirectAccess = granted && await chrome.permissions.contains({origins:redirectOrigins}).catch(() => false);
     if (generation !== redirectToggleGeneration) return;
     if (!hasRedirectAccess) {
-      await chrome.storage.local.set({redirectEnabled:false});
+      const rolledBack = await sendToggle('blbSuiteCommitRedirectToggle', false);
       if (generation !== redirectToggleGeneration) return;
+      if (rolledBack?.ok) { try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {} }
       render(await getState());
       return;
     }
-  } else {
-    await chrome.storage.local.set({redirectEnabled:false});
-    if (generation !== redirectToggleGeneration) return;
   }
 
+  const committed = await sendToggle('blbSuiteCommitRedirectToggle', on);
   if (generation !== redirectToggleGeneration) return;
+  if (!committed?.ok) { render(await getState()); return; }
+
   let refreshResponse = null;
-  try {
-    refreshResponse = await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'});
-  } catch (_) {}
+  try { refreshResponse = await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
   if (generation !== redirectToggleGeneration) return;
   if (!refreshResponse?.ok) {
     if (on) {
-      await chrome.storage.local.set({redirectEnabled:false});
+      const rolledBack = await sendToggle('blbSuiteCommitRedirectToggle', false);
       if (generation !== redirectToggleGeneration) return;
-      // Best-effort reconciliation after rolling back the persisted ON choice.
-      try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
-      if (generation !== redirectToggleGeneration) return;
-      render(await getState());
-      setStatus('Unable to enable global redirects. The setting remains OFF; please try again.');
+      if (rolledBack?.ok) {
+        try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+        if (generation !== redirectToggleGeneration) return;
+        render(await getState());
+        setStatus('Unable to enable global redirects. The setting remains OFF; please try again.');
+      } else { render(await getState()); }
     } else {
       render(await getState());
       setStatus('Global redirects are OFF, but the redirect rules could not be refreshed.');
     }
     return;
   }
+
   if (on) {
     try {
       const tabs = await chrome.tabs.query({active:true,currentWindow:true});
       const tabId = tabs[0]?.id;
-      if (tabId && generation === redirectToggleGeneration) {
-        await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-      }
+      if (tabId && generation === redirectToggleGeneration) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
     } catch (_) {}
   }
   if (generation !== redirectToggleGeneration) return;
   render(await getState());
-}
-function titleCase(value) {
+}function titleCase(value) {
   return String(value || '').trim().replace(/\s+/g,' ').split(' ').filter(Boolean)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
