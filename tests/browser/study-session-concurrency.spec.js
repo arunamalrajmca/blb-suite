@@ -105,3 +105,60 @@ test('a queued Study capture refreshes activity before an overdue auto-stop deci
   expect(result.state.studyLastActivityAt).toBeGreaterThan(Date.now() - 60 * 1000);
   expect(result.session.strongs).toContain('H1234');
 });
+
+test('Study read-side normalization waits for queued mutations and rechecks the latest snapshot', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const result = await extensionWorker.evaluate(async () => {
+    const original = {
+      id:'legacy-study-session',
+      title:'Legacy Study',
+      strongs:['H0001'],
+      refs:[],
+      searchTerms:[],
+      notes:[]
+    };
+    await chrome.storage.local.set({
+      studySessions:[original],
+      currentStudySessionId:original.id
+    });
+
+    let releaseMutation;
+    let signalMutationStarted;
+    const mutationGate = new Promise(resolve => { releaseMutation = resolve; });
+    const mutationStarted = new Promise(resolve => { signalMutationStarted = resolve; });
+    const blocker = runStudyMutation(async () => {
+      signalMutationStarted();
+      await mutationGate;
+      await chrome.storage.local.set({
+        studySessions:[{
+          id:'newer-study-session',
+          title:'Newer Study',
+          strongs:['H2'],
+          refs:[],
+          searchTerms:[],
+          notes:[]
+        }],
+        currentStudySessionId:'newer-study-session'
+      });
+    });
+    await mutationStarted;
+
+    const read = await getStudySessions();
+    const persistedWhileBlocked = await chrome.storage.local.get(['studySessions','currentStudySessionId']);
+    releaseMutation();
+    await blocker;
+    await pendingStudyMutation;
+    const finalState = await chrome.storage.local.get(['studySessions','currentStudySessionId']);
+    return {read, persistedWhileBlocked, finalState};
+  });
+
+  expect(result.read.sessions[0].strongs).toEqual(['H1']);
+  expect(result.persistedWhileBlocked.studySessions[0].strongs).toEqual(['H0001']);
+  expect(result.finalState.studySessions).toEqual([expect.objectContaining({
+    id:'newer-study-session',
+    strongs:['H2']
+  })]);
+  expect(result.finalState.currentStudySessionId).toBe('newer-study-session');
+});
