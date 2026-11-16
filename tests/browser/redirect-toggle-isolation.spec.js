@@ -288,8 +288,7 @@ async function runOutOfOrderRedirectRefresh(sourcePath, kind) {
   reads[0]({masterEnabled:true,redirectEnabled:false});
   await Promise.resolve();
   reads[1]({masterEnabled:true,redirectEnabled:true});
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   const target = new FakeElement();
   target.closest = selector => kind === 'scripttagger'
@@ -414,8 +413,7 @@ async function runRedirectMessageFailureFallback(sourcePath, kind) {
     stopImmediatePropagation() {}
   };
   clickHandler(event);
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   return {defaultPrevented:event.defaultPrevented,navigations};
 }
 
