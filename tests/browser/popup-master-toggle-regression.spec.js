@@ -342,3 +342,27 @@ test('external selected-topic refresh does not replace text currently being edit
 
   await expect(page.locator('#studyTopic')).toHaveValue('My In-Progress Topic');
 });
+
+
+test('external topic selection preserves an unsaved Notes draft and its topic context', async ({
+  page, context, extensionId, extensionStorage
+}) => {
+  const originalTopic = 'Notes Draft Context ' + Date.now();
+  await extensionStorage.set({studySelectedTopic:originalTopic});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#studyTopic')).toHaveValue(originalTopic);
+  await expect(page.locator('#startTopic')).toBeEnabled();
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect(page.locator('#studyNote')).toBeEnabled();
+
+  await page.locator('#studyNote').fill('An unsaved note draft that must remain intact.');
+  const secondPopup = await context.newPage();
+  await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await secondPopup.evaluate(() => syncSelectedTopic('Topic Selected Elsewhere'));
+
+  await expect(page.locator('#studyTopic')).toHaveValue(originalTopic);
+  await expect(page.locator('#studyNote')).toHaveValue('An unsaved note draft that must remain intact.');
+  await expect(secondPopup.locator('#studyTopic')).toHaveValue('Topic Selected Elsewhere');
+  await secondPopup.close();
+});
