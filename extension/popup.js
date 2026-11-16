@@ -230,7 +230,11 @@ async function writeSiteFeaturePreference(feature, enabled, requestId) {
 
 async function setPageButton(on, requestId) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isSensitiveSite) return;
+  if (!state.siteKey || state.isSensitiveSite) return;
+  if (!state.master) {
+    if (requestId) await writeSiteFeaturePreference('pageButton', false);
+    return;
+  }
   if (!(await writeSiteFeaturePreference('pageButton', on, requestId))) {
     setStatus('Unable to save Show on BLB for this page. Please try again.');
     render(await getState());
@@ -251,7 +255,11 @@ async function setPageButton(on, requestId) {
 
 async function setDoubleClick(on, requestId) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
+  if (!state.siteKey || state.isBlbSite || state.isSensitiveSite) return;
+  if (!state.master) {
+    if (requestId) await writeSiteFeaturePreference('doubleClick', false);
+    return;
+  }
   if (!(await writeSiteFeaturePreference('doubleClick', on, requestId))) {
     setStatus('Unable to save Double-click for this page. Please try again.');
     render(await getState());
