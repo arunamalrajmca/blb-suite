@@ -123,7 +123,7 @@ test('master OFF stays ON and reports failure when an active Study recording can
     const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
     Object.defineProperty(chrome.runtime, 'sendMessage', {
       configurable:true,
-      value: async message => message?.type === 'blbSuiteStopStudyRecording'
+      value: async message => message?.type === 'blbSuiteSetMasterEnabled'
         ? {ok:false, reason:'simulated-stop-failure'}
         : originalSendMessage(message)
     });
@@ -161,7 +161,7 @@ test('a newer master ON choice wins while an older OFF waits for Study stop', as
     const pending = [];
     Object.defineProperty(chrome.runtime, 'sendMessage', {
       configurable:true,
-      value: message => message?.type === 'blbSuiteStopStudyRecording'
+      value: message => message?.type === 'blbSuiteSetMasterEnabled'
         ? new Promise(resolve => pending.push(resolve))
         : originalSendMessage(message)
     });
