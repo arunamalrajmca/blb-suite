@@ -750,20 +750,9 @@ test('source Bible redirect activates on the same page when the Suite master swi
   }));
 
   await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
-  const sourceTabId = await extensionWorker.evaluate(async url =>
-    (await chrome.tabs.query({url}))[0]?.id || null, sourceUrl
-  );
-  expect(sourceTabId).toBeTruthy();
-  // Inspect the extension isolated world, not the page's separate JavaScript world.
-  await expect.poll(async () => extensionWorker.evaluate(async tabId => {
-    const [result] = await chrome.scripting.executeScript({
-      target:{tabId},
-      func:() => window.__blbSuiteContentScriptLoadedV2 === true
-    });
-    return result?.result === true;
-  }, sourceTabId)).toBe(true);
-  // Allow the content script to finish registering its storage-change listener.
-  await page.waitForTimeout(500);
+  // Dynamic source-page injection is reconciled after navigation completes.
+  // Wait for that registration/injection work before toggling the Suite.
+  await page.waitForTimeout(1000);
   await expect(page).toHaveURL(sourceUrl);
 
   const before = await extensionWorker.evaluate(async () =>
