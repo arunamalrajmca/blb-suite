@@ -333,6 +333,7 @@ async function setRedirect(on) {
   }
   if (generation !== redirectToggleGeneration) return;
   render(await getState());
+}
 
 function titleCase(value) {
   return String(value || '').trim().replace(/\s+/g,' ').split(' ').filter(Boolean)
