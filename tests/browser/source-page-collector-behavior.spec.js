@@ -679,8 +679,16 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
     });
   });
 
+  let navigation;
   try {
-    await page.goto('https://www.gotquestions.org/startup-lifecycle.html', {waitUntil:'commit'});
+    const parserRequestStarted = new Promise(resolve => {
+      page.once('request', request => {
+        if (request.url().endsWith('/startup-hold.js')) resolve();
+      });
+    });
+    navigation = page.goto('https://www.gotquestions.org/startup-lifecycle.html');
+    await parserRequestStarted;
+
     const tabId = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       return tabs.find(tab => (tab.url || '').includes('/startup-lifecycle.html'))?.id;
@@ -701,13 +709,12 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
           };
         }
       });
-      // content.js reinitializes its modules in the same isolated world while
-      // DOMContentLoaded is still pending behind the parser-blocking script.
+      // Reinitialize while the parser-blocking script still holds DOMContentLoaded.
       await chrome.scripting.executeScript({target:{tabId:id},files:['content.js']});
     }, tabId);
 
     releaseParser();
-    await page.waitForLoadState('domcontentloaded');
+    await navigation;
     await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible();
 
     const observerStarts = await extensionWorker.evaluate(id => chrome.scripting.executeScript({
@@ -717,5 +724,6 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
     expect(observerStarts).toBe(1);
   } finally {
     releaseParser?.();
+    await navigation?.catch(() => {});
   }
 });
