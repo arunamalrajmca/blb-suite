@@ -7074,7 +7074,10 @@ async function updateRevokedSiteHostAccess(origins, revoked) {
     const map = current.siteHostAccessRevokedSites && typeof current.siteHostAccessRevokedSites === 'object'
       ? current.siteHostAccessRevokedSites : {};
     for (const pattern of Object.keys(map)) {
-      if (values.some(origin => hostPermissionCoversSitePattern(origin, pattern))) patterns.add(pattern);
+      if (!values.some(origin => hostPermissionCoversSitePattern(origin, pattern))) continue;
+      // A grant event is authoritative, but keep this helper fail-closed if
+      // invoked directly or raced with a later revocation.
+      if (await chrome.permissions.contains({origins:[pattern]})) patterns.add(pattern);
     }
   }
 
