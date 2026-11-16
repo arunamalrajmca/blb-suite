@@ -271,14 +271,18 @@ let redirectToggleGeneration = 0;
 async function setRedirect(on) {
   const generation = ++redirectToggleGeneration;
   const requestId = `${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
-  const sendToggle = async (type, enabled) => {
-    try { return await chrome.runtime.sendMessage({type, requestId, enabled}); }
+  const beginToggle = async () => {
+    try { return await chrome.runtime.sendMessage({type:'blbSuiteBeginRedirectToggle', requestId, enabled:on}); }
+    catch (_) { return {ok:false}; }
+  };
+  const commitToggle = async enabled => {
+    try { return await chrome.runtime.sendMessage({type:'blbSuiteCommitRedirectToggle', requestId, enabled}); }
     catch (_) { return {ok:false}; }
   };
 
   // Persist intent and its cross-popup generation before asking Chrome for
   // optional host access. Only this generation may later commit or roll back.
-  const begun = await sendToggle('blbSuiteBeginRedirectToggle', on);
+  const begun = await beginToggle();
   if (!begun?.ok || generation !== redirectToggleGeneration) return;
 
   if (on) {
@@ -288,7 +292,7 @@ async function setRedirect(on) {
     const hasRedirectAccess = granted && await chrome.permissions.contains({origins:redirectOrigins}).catch(() => false);
     if (generation !== redirectToggleGeneration) return;
     if (!hasRedirectAccess) {
-      const rolledBack = await sendToggle('blbSuiteCommitRedirectToggle', false);
+      const rolledBack = await commitToggle(false);
       if (generation !== redirectToggleGeneration) return;
       if (rolledBack?.ok) { try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {} }
       render(await getState());
@@ -296,7 +300,7 @@ async function setRedirect(on) {
     }
   }
 
-  const committed = await sendToggle('blbSuiteCommitRedirectToggle', on);
+  const committed = await commitToggle(on);
   if (generation !== redirectToggleGeneration) return;
   if (!committed?.ok) { render(await getState()); return; }
 
@@ -305,7 +309,7 @@ async function setRedirect(on) {
   if (generation !== redirectToggleGeneration) return;
   if (!refreshResponse?.ok) {
     if (on) {
-      const rolledBack = await sendToggle('blbSuiteCommitRedirectToggle', false);
+      const rolledBack = await commitToggle(false);
       if (generation !== redirectToggleGeneration) return;
       if (rolledBack?.ok) {
         try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
@@ -329,7 +333,8 @@ async function setRedirect(on) {
   }
   if (generation !== redirectToggleGeneration) return;
   render(await getState());
-}function titleCase(value) {
+
+function titleCase(value) {
   return String(value || '').trim().replace(/\s+/g,' ').split(' ').filter(Boolean)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
