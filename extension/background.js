@@ -149,7 +149,7 @@ async function saveStudySessions(sessions, extra = {}) {
 }
 
 async function getStudySessions() {
-  const data = await chrome.storage.local.get({studySessions:[], currentStudySessionId:null});
+  const data = await chrome.storage.local.get({studySessions:[], studyTopics:[], currentStudySessionId:null});
   const cleaned = sanitizeStudySessions(data.studySessions);
   const storedCurrentId = data.currentStudySessionId || null;
   const currentIdIsStale = !!storedCurrentId &&
