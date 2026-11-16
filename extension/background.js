@@ -3070,7 +3070,8 @@ async function ensureContentScriptInTab(tabId) {
       // inject the current bundle and then refresh the newly installed gates.
       if (files.includes('content.js')) {
         try {
-          const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+          await chrome.tabs.sendMessage(tabId, {type:'blbSuiteHostPermissionRestored'}).catch(() => {});
+            const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
           if (response?.ok === true) {
             if (files.includes('redirect-scripttagger.js')) {
               try {
@@ -3113,6 +3114,7 @@ async function ensureContentScriptInTab(tabId) {
         // verified activation.
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
+            await chrome.tabs.sendMessage(tabId, {type:'blbSuiteHostPermissionRestored'}).catch(() => {});
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
               if (files.includes('redirect-scripttagger.js')) {
@@ -7045,19 +7047,47 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 // persisted registrations immediately so a site no longer retains a runtime
 // content-script registration after its grant is removed. Keep the explicit
 // site preference intact; a later re-grant can reactivate it through onAdded.
-async function handleHostPermissionsRemoved() {
+function removedHostPermissionCoversTab(origin, tabUrl) {
+  const value = String(origin || '');
+  if (value === '*://*/*') return /^https?:\\/\\//i.test(String(tabUrl || ''));
+  if (value === 'https://*/*') return String(tabUrl || '').startsWith('https://');
+  if (value === 'http://*/*') return String(tabUrl || '').startsWith('http://');
+  return !!originPatternForUrl(tabUrl) && originPatternForUrl(tabUrl) === value;
+}
+
+async function deactivateSiteFeaturesForRevokedOrigins(origins) {
+  const removed = Array.isArray(origins) ? origins.map(String) : [];
+  if (!removed.length) return {notifiedTabIds:[]};
+  const tabs = await chrome.tabs.query({});
+  const affected = [];
+  for (const tab of tabs) {
+    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (!removed.some(origin => removedHostPermissionCoversTab(origin, tab.url))) continue;
+    if (await hasHostAccessForTab(tab)) continue;
+    affected.push(tab);
+  }
+  const outcomes = await Promise.all(affected.map(async tab => {
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, {type:'blbSuiteHostPermissionRevoked'});
+      return {tabId:tab.id, notified:response?.ok === true};
+    } catch (_) {
+      return {tabId:tab.id, notified:false};
+    }
+  }));
+  return {notifiedTabIds:outcomes.filter(item => item.notified).map(item => item.tabId)};
+}
+
+async function handleHostPermissionsRemoved(origins = []) {
   try {
+    await deactivateSiteFeaturesForRevokedOrigins(origins);
     await reconcileRuntimeContentScriptRegistrations();
   } finally {
-    // Permission loss changes the eligibility of the active tab even when
-    // its URL and focus do not change. Refresh both global selection menus
-    // immediately so a revoked site's right-click action is not left visible.
     await syncSelectionMenusForFocusedWindow();
   }
 }
 
-chrome.permissions?.onRemoved?.addListener(() => {
-  handleHostPermissionsRemoved().catch(error => {
+chrome.permissions?.onRemoved?.addListener(permissions => {
+  handleHostPermissionsRemoved(permissions?.origins || []).catch(error => {
     console.warn('KJV Scripture Tools permission-revocation reconciliation failed:', String(error));
   });
 });
