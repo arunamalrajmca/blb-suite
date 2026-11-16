@@ -155,17 +155,29 @@ async function getStudySessions() {
   const currentIdIsStale = !!storedCurrentId &&
     !cleaned.sessions.some(session => session.id === storedCurrentId);
   if (cleaned.changed || currentIdIsStale) {
-    try {
-      await chrome.storage.local.set({
-        studySessions:cleaned.sessions,
-        ...(currentIdIsStale ? {currentStudySessionId:null, studyLastActivityAt:0} : {})
+    // A read may discover legacy data while a Study mutation is already
+    // queued. Never persist this read's snapshot: it can become stale before
+    // the write and overwrite a newer capture. Queue the repair and re-read
+    // the latest committed state inside the same mutation queue.
+    void runStudyMutation(async () => {
+      const latest = await chrome.storage.local.get({
+        studySessions:[],
+        currentStudySessionId:null
       });
-    } catch (error) {
+      const latestCleaned = sanitizeStudySessions(latest.studySessions);
+      const latestCurrentId = latest.currentStudySessionId || null;
+      const latestCurrentIdIsStale = !!latestCurrentId &&
+        !latestCleaned.sessions.some(session => session.id === latestCurrentId);
+      if (!latestCleaned.changed && !latestCurrentIdIsStale) return;
+      await chrome.storage.local.set({
+        studySessions:latestCleaned.sessions,
+        ...(latestCurrentIdIsStale ? {currentStudySessionId:null, studyLastActivityAt:0} : {})
+      });
+    }).catch(error => {
       // A failed best-effort repair must not make otherwise readable Study
-      // history unavailable. Return the sanitized in-memory view; the next
-      // read can retry persisting the cleanup.
+      // history unavailable. The next read can retry the cleanup.
       console.warn('KJV Scripture Tools could not persist normalized Study history:', String(error));
-    }
+    });
   }
   return {
     sessions:cleaned.sessions,
