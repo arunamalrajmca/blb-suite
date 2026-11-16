@@ -7054,6 +7054,7 @@ function hostPermissionCoversSitePattern(origin, sitePattern) {
 }
 
 async function updateRevokedSiteHostAccess(origins, revoked) {
+  return serializePendingSiteFeatureToggleMutation(async () => {
   const patterns = new Set();
   const values = Array.isArray(origins) ? origins.map(String) : [];
   if (!values.length) return {changedPatterns:[]};
@@ -7087,6 +7088,7 @@ async function updateRevokedSiteHostAccess(origins, revoked) {
   }
   await chrome.storage.local.set({siteHostAccessRevokedSites:map});
   return {changedPatterns:[...patterns]};
+  });
 }
 async function handleHostPermissionsRemoved(origins = []) {
   try {
