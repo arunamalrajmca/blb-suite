@@ -523,14 +523,23 @@ test('content-script requests are rejected when their originating document navig
     (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
   );
   expect(Number.isInteger(tabId)).toBe(true);
+  const originalDocumentId = await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      func:() => true
+    });
+    return result.documentId;
+  }, tabId);
+  expect(originalDocumentId).toBeTruthy();
 
-  await extensionWorker.evaluate(() => {
+  await extensionWorker.evaluate(documentId => {
     let release;
     const gate = new Promise(resolve => { release = resolve; });
     globalThis.__blbMessageLifecycleTest = {
       started:false,
       authorizationFinished:false,
       liveDocumentResult:null,
+      targetDocumentId:documentId,
       recordCalls:0,
       release,
       originalPermissionCheck:hasSelectionActionPermissionForTab,
@@ -545,14 +554,16 @@ test('content-script requests are rejected when their originating document navig
     };
     isLiveContentScriptSenderDocument = async sender => {
       const result = await globalThis.__blbMessageLifecycleTest.originalLiveDocumentCheck(sender);
-      globalThis.__blbMessageLifecycleTest.liveDocumentResult = result;
+      if (sender.documentId === globalThis.__blbMessageLifecycleTest.targetDocumentId) {
+        globalThis.__blbMessageLifecycleTest.liveDocumentResult = result;
+      }
       return result;
     };
     recordStudyRefs = async refs => {
       globalThis.__blbMessageLifecycleTest.recordCalls += 1;
       return refs.length;
     };
-  });
+  }, originalDocumentId);
 
   try {
     await extensionWorker.evaluate(async id => {
