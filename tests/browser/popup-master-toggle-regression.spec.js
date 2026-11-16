@@ -451,3 +451,63 @@ test('a delayed Study note save does not clear a newer Notes draft', async ({
 
   await expect(page.locator('#studyNote')).toHaveValue('A newer draft typed while the first save is pending.');
 });
+
+
+test('delayed Study stop actions preserve topic and Notes edits made while stopping', async ({
+  page, extensionId, extensionStorage
+}) => {
+  const topic = 'Delayed Stop Draft ' + Date.now();
+  await extensionStorage.set({studySelectedTopic:topic});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#studyTopic')).toHaveValue(topic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  await expect(page.locator('#studyNote')).toBeEnabled();
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const pending = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: message => message?.type === 'blbSuiteStopStudyRecording'
+        ? new Promise(resolve => pending.push(resolve))
+        : originalSendMessage(message)
+    });
+    window.__pendingStudyStops = pending;
+    window.__resolveStudyStop = async index => {
+      const result = await originalSendMessage({type:'blbSuiteStopStudyRecording'});
+      pending[index](result);
+    };
+  });
+
+  const stopping = page.evaluate(() => stopTopic());
+  await expect.poll(() => page.evaluate(() => window.__pendingStudyStops.length)).toBe(1);
+  await page.evaluate(() => {
+    topicInput.value = 'A newer topic typed during stop';
+    topicInput.dispatchEvent(new Event('input', {bubbles:true}));
+    noteInput.value = 'A newer Notes draft typed during stop.';
+    noteInput.dispatchEvent(new Event('input', {bubbles:true}));
+  });
+  await page.evaluate(() => window.__resolveStudyStop(0));
+  await stopping;
+
+  await expect(page.locator('#studyTopic')).toHaveValue('A newer topic typed during stop');
+  await expect(page.locator('#studyNote')).toHaveValue('A newer Notes draft typed during stop.');
+  await expect(page.locator('#studyStatus')).toContainText('Last Recording Stopped');
+
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  const clearing = page.locator('#clearSelectedTopicInput').click();
+  await expect.poll(() => page.evaluate(() => window.__pendingStudyStops.length)).toBe(2);
+  await page.evaluate(() => {
+    topicInput.value = 'A topic typed during clear-selection stop';
+    topicInput.dispatchEvent(new Event('input', {bubbles:true}));
+    noteInput.value = 'A Notes draft typed during clear-selection stop.';
+    noteInput.dispatchEvent(new Event('input', {bubbles:true}));
+  });
+  await page.evaluate(() => window.__resolveStudyStop(1));
+  await clearing;
+
+  await expect(page.locator('#studyTopic')).toHaveValue('A topic typed during clear-selection stop');
+  await expect(page.locator('#studyNote')).toHaveValue('A Notes draft typed during clear-selection stop.');
+});
