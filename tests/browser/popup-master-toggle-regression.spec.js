@@ -304,8 +304,11 @@ test('popup theme interaction wins over a delayed initial theme read', async ({
   await extensionStorage.set({popupTheme:'dark'});
   await page.addInitScript(() => {
     const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    let delayedInitialThemeRead = false;
     chrome.storage.local.get = keys => {
-      if (keys && typeof keys === 'object' && Object.prototype.hasOwnProperty.call(keys, 'popupTheme')) {
+      if (!delayedInitialThemeRead && keys && typeof keys === 'object' &&
+          Object.prototype.hasOwnProperty.call(keys, 'popupTheme')) {
+        delayedInitialThemeRead = true;
         return new Promise(resolve => {
           window.__resolveDelayedPopupTheme = value => resolve(value);
         });
