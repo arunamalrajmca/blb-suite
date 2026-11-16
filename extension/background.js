@@ -7045,19 +7045,70 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 // persisted registrations immediately so a site no longer retains a runtime
 // content-script registration after its grant is removed. Keep the explicit
 // site preference intact; a later re-grant can reactivate it through onAdded.
-async function handleHostPermissionsRemoved() {
+function hostPermissionCoversSitePattern(origin, sitePattern) {
+  const value = String(origin || '');
+  if (value === '*://*/*') return sitePattern.startsWith('http://') || sitePattern.startsWith('https://');
+  if (value === 'https://*/*') return sitePattern.startsWith('https://');
+  if (value === 'http://*/*') return sitePattern.startsWith('http://');
+  return value === sitePattern;
+}
+
+async function updateRevokedSiteHostAccess(origins, revoked) {
+  return serializePendingSiteFeatureToggleMutation(async () => {
+  const patterns = new Set();
+  const values = Array.isArray(origins) ? origins.map(String) : [];
+  if (!values.length) return {changedPatterns:[]};
+
+  if (revoked) {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+      const pattern = originPatternForUrl(tab.url);
+      if (!pattern || !values.some(origin => hostPermissionCoversSitePattern(origin, pattern))) continue;
+      // Another remaining grant (or a required manifest permission) may still
+      // authorize this tab. Only mark origins whose access is actually gone.
+      if (!(await hasHostAccessForTab(tab))) patterns.add(pattern);
+    }
+  } else {
+    const current = await chrome.storage.local.get({siteHostAccessRevokedSites:{}});
+    const map = current.siteHostAccessRevokedSites && typeof current.siteHostAccessRevokedSites === 'object'
+      ? current.siteHostAccessRevokedSites : {};
+    for (const pattern of Object.keys(map)) {
+      if (!values.some(origin => hostPermissionCoversSitePattern(origin, pattern))) continue;
+      // A grant event is authoritative, but keep this helper fail-closed if
+      // invoked directly or raced with a later revocation.
+      if (await chrome.permissions.contains({origins:[pattern]})) patterns.add(pattern);
+    }
+  }
+
+  if (!patterns.size) return {changedPatterns:[]};
+  const current = await chrome.storage.local.get({siteHostAccessRevokedSites:{}});
+  const map = current.siteHostAccessRevokedSites && typeof current.siteHostAccessRevokedSites === 'object'
+    ? {...current.siteHostAccessRevokedSites} : {};
+  for (const pattern of patterns) {
+    if (revoked) map[pattern] = true;
+    else delete map[pattern];
+  }
+  await chrome.storage.local.set({siteHostAccessRevokedSites:map});
+  return {changedPatterns:[...patterns]};
+  });
+}
+async function handleHostPermissionsRemoved(origins = []) {
   try {
+    try {
+      await updateRevokedSiteHostAccess(origins, true);
+    } catch (error) {
+      console.warn('KJV Scripture Tools revoked-site feature state update failed:', String(error));
+    }
+    // Registration cleanup must still run even if the storage broadcast fails.
     await reconcileRuntimeContentScriptRegistrations();
   } finally {
-    // Permission loss changes the eligibility of the active tab even when
-    // its URL and focus do not change. Refresh both global selection menus
-    // immediately so a revoked site's right-click action is not left visible.
     await syncSelectionMenusForFocusedWindow();
   }
 }
 
-chrome.permissions?.onRemoved?.addListener(() => {
-  handleHostPermissionsRemoved().catch(error => {
+chrome.permissions?.onRemoved?.addListener(permissions => {
+  handleHostPermissionsRemoved(permissions?.origins || []).catch(error => {
     console.warn('KJV Scripture Tools permission-revocation reconciliation failed:', String(error));
   });
 });
@@ -7241,6 +7292,7 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
 async function handleGrantedHostPermissions(origins) {
   const grantedOrigins = Array.isArray(origins) ? origins.map(String) : [];
   if (!grantedOrigins.length) return {committed:[],expired:[]};
+  await updateRevokedSiteHostAccess(grantedOrigins, false);
   const result = await commitPendingSiteFeatureTogglesForGrantedOrigins(grantedOrigins);
   await injectEnabledTabsForGrantedOrigins(grantedOrigins);
   return result;

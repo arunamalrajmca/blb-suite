@@ -472,3 +472,130 @@ test('per-site feature changes activate every already-open tab on the matching h
     await secondPage?.close().catch(() => {});
   }
 });
+
+
+
+
+test('host permission revocation disables both site features in every open tab until access is restored', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false,
+    siteHostAccessRevokedSites:{}
+  }));
+  let secondPage;
+  try {
+    const cleanRevokedSites = {...(previous.siteHostAccessRevokedSites || {})};
+    delete cleanRevokedSites[pattern];
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false},
+      redirectEnabled:false,
+      siteHostAccessRevokedSites:cleanRevokedSites
+    });
+    await extensionWorker.evaluate(async originPattern =>
+      unregisterRuntimeContentScriptForPattern(originPattern), pattern
+    );
+    await expect.poll(() => extensionWorker.evaluate(async originPattern =>
+      (await chrome.scripting.getRegisteredContentScripts({
+        ids:[runtimeContentScriptIdForPattern(originPattern)]
+      })).length
+    , pattern)).toBe(0);
+
+    const fixture = '<!doctype html><html><head><title>Permission revoke</title></head><body><p>John 3:16</p></body></html>';
+    await page.route('https://example.com/**', route => route.fulfill({
+      status:200, contentType:'text/html; charset=utf-8', body:fixture
+    }));
+    await page.goto('https://example.com/permission-revoke-first.html', {waitUntil:'domcontentloaded'});
+    secondPage = await context.newPage();
+    await secondPage.route('https://example.com/**', route => route.fulfill({
+      status:200, contentType:'text/html; charset=utf-8', body:fixture
+    }));
+    await secondPage.goto('https://example.com/permission-revoke-second.html', {waitUntil:'domcontentloaded'});
+
+    const tabIds = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.filter(tab => /^https:\/\/example\.com\/permission-revoke-/.test(tab.url || ''))
+        .map(tab => tab.id);
+    });
+    expect(tabIds).toHaveLength(2);
+    for (const tabId of tabIds) {
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toEqual({
+        floatingButtonPresent:false,
+        doubleClickEnabled:false
+      });
+    }
+
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    for (const tabId of tabIds) {
+      const injected = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
+      expect(injected).toBe(true);
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId), {timeout:15000}).toEqual({
+        floatingButtonPresent:true,
+        doubleClickEnabled:true
+      });
+    }
+
+    await extensionWorker.evaluate(async originPattern => {
+      const originalContains = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(originPattern) ? false : originalContains(details);
+      try {
+        await handleHostPermissionsRemoved([originPattern]);
+        // Changes to either site preference while access is revoked must not
+        // reactivate controls in an already-running document.
+        await chrome.storage.local.set({
+          pageSelectionButtonSites:{'example.com':false},
+          doubleClickBlbSites:{'example.com':false}
+        });
+        await chrome.storage.local.set({
+          pageSelectionButtonSites:{'example.com':true},
+          doubleClickBlbSites:{'example.com':true}
+        });
+      } finally {
+        chrome.permissions.contains = originalContains;
+      }
+    }, pattern);
+
+    const disabled = {floatingButtonPresent:false,doubleClickEnabled:false};
+    for (const tabId of tabIds) {
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId), {timeout:15000}).toEqual(disabled);
+    }
+    const revokedState = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      siteHostAccessRevokedSites:{},
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{}
+    }));
+    expect(revokedState.siteHostAccessRevokedSites[pattern]).toBe(true);
+    expect(revokedState.pageSelectionButtonSites['example.com']).toBe(true);
+    expect(revokedState.doubleClickBlbSites['example.com']).toBe(true);
+
+    await extensionWorker.evaluate(originPattern =>
+      handleGrantedHostPermissions([originPattern]), pattern
+    );
+    for (const tabId of tabIds) {
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId), {timeout:15000}).toEqual({
+        floatingButtonPresent:true,
+        doubleClickEnabled:true
+      });
+    }
+    const restoredState = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      siteHostAccessRevokedSites:{}
+    }));
+    expect(restoredState.siteHostAccessRevokedSites[pattern]).toBeUndefined();
+  } finally {
+    await extensionWorker.evaluate(async ({originPattern,settings}) => {
+      await unregisterRuntimeContentScriptForPattern(originPattern);
+      await chrome.storage.local.set(settings);
+    }, {originPattern:pattern,settings:previous});
+    await secondPage?.close().catch(() => {});
+  }
+});

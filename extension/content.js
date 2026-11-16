@@ -105,6 +105,7 @@ const BLB_HOSTNAME = BLBShared.hostnames.blb;
 
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
+let siteHostAccessRevoked = false;
 let suiteSettingsReady = false;
 let suiteSettingsGeneration = 0;
 
@@ -4008,13 +4009,20 @@ async function refreshDoubleClickBlb() {
   const generation = ++doubleClickSettingsRefreshGeneration;
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || !siteKey) {
+    if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || siteHostAccessRevoked || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
     }
     const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
     if (generation !== doubleClickSettingsRefreshGeneration) return;
+    // Permission revocation may occur while the storage read is pending. Recheck
+    // the gate after awaiting so a stale enabled snapshot cannot restore listeners.
+    if (!suiteEnabled || siteHostAccessRevoked) {
+      doubleClickBlbEnabled = false;
+      disableDoubleClickBlb();
+      return;
+    }
     const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
@@ -4071,14 +4079,54 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
    isSensitiveSiteUrl: isSensitiveSiteUrl,
   refreshDoubleClickBlb: refreshDoubleClickBlb,
   suiteSettingsReadyPromise: suiteSettingsReadyPromise,
-  isSuiteEnabledNow: () => suiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled && !siteHostAccessRevoked,
   makeBlbMultiVerseButtonDraggable: makeBlbMultiVerseButtonDraggable,
   getPageSelectionSiteKey: getPageSelectionSiteKey
 });
 
 
+function siteHostPermissionStorageKey() {
+  try {
+    const url = new URL(location.href);
+    return `${url.protocol}//${url.hostname}/*`;
+  } catch (_) {
+    return '';
+  }
+}
+
+let siteHostAccessRevocationGeneration = 0;
+function applySiteHostAccessRevocation(revoked) {
+  const next = revoked === true;
+  if (next === siteHostAccessRevoked) return;
+  siteHostAccessRevoked = next;
+  if (next) {
+    blbPageSelectionButton.disable();
+    doubleClickBlbEnabled = false;
+    disableDoubleClickBlb();
+  } else if (suiteEnabled) {
+    blbPageSelectionButton.refresh();
+    void refreshDoubleClickBlb();
+  }
+}
+
+const initialSiteHostAccessRevocationGeneration = siteHostAccessRevocationGeneration;
+chrome.storage.local.get({siteHostAccessRevokedSites:{}}).then(data => {
+  if (initialSiteHostAccessRevocationGeneration !== siteHostAccessRevocationGeneration) return;
+  const revokedSites = data.siteHostAccessRevokedSites && typeof data.siteHostAccessRevokedSites === 'object'
+    ? data.siteHostAccessRevokedSites : {};
+  applySiteHostAccessRevocation(revokedSites[siteHostPermissionStorageKey()] === true);
+}).catch(() => {});
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.siteHostAccessRevokedSites) {
+    siteHostAccessRevocationGeneration += 1;
+    const revokedSites = changes.siteHostAccessRevokedSites.newValue &&
+      typeof changes.siteHostAccessRevokedSites.newValue === 'object'
+      ? changes.siteHostAccessRevokedSites.newValue : {};
+    applySiteHostAccessRevocation(revokedSites[siteHostPermissionStorageKey()] === true);
+  }
+
   if (changes.redirectEnabled) {
     redirectSettingsGeneration += 1;
     sourceBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
@@ -4115,14 +4163,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
       blbPageSelectionButton.disable();
     } else {
       if (location.hostname === 'webstersdictionary1828.com') globalThis.BLBWebsterCollector?.ensureButton?.();
-      blbPageSelectionButton.refresh();
+      if (siteHostAccessRevoked) blbPageSelectionButton.disable();
+      else blbPageSelectionButton.refresh();
     }
     // The global master switch gates the independent per-site Double-click feature too.
     void refreshDoubleClickBlb();
   }
 
   if (changes.pageSelectionButtonSites && suiteEnabled) {
-    blbPageSelectionButton.refresh();
+    if (siteHostAccessRevoked) blbPageSelectionButton.disable();
+    else blbPageSelectionButton.refresh();
   }
 
   if (changes.doubleClickBlbSites) {
