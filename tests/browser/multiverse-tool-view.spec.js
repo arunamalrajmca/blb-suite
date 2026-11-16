@@ -214,19 +214,6 @@ test('MultiVerse tool-view reinjection cancels the prior retry interval and clic
           activeIntervals: liveIntervals.size,
           activeClickHandlers: activeClickHandlers.size,
           cleanupInstalled: typeof globalThis.__blbMultiVerseToolViewCleanup === 'function',
-          attachButton() {
-            const button = document.createElement('button');
-            button.id = 'formatButton';
-            button.className = 'byVerseResults';
-            button.textContent = 'Tool View';
-            button.addEventListener('click', () => {
-              window.__toolViewClicks = (window.__toolViewClicks || 0) + 1;
-              button.className = button.classList.contains('byVerseResults')
-                ? 'multiVerseResults'
-                : 'byVerseResults';
-            });
-            document.body.appendChild(button);
-          }
         };
       }
     });
