@@ -258,7 +258,7 @@ test('host-access revocation removes registrations and later grants reactivate e
 
       // Simulate the permission API reporting that the optional origin was revoked,
       // then exercise the same deactivation and registration reconciliation used by onRemoved.
-      await extensionWorker.evaluate(async originPattern => {
+      await extensionWorker.evaluate(async ({originPattern,pageButton,doubleClick}) => {
         const originalContains = chrome.permissions.contains;
         chrome.permissions.contains = async details =>
           details?.origins?.includes(originPattern)
@@ -266,10 +266,20 @@ test('host-access revocation removes registrations and later grants reactivate e
             : originalContains(details);
         try {
           await handleHostPermissionsRemoved([originPattern]);
+          // Even if another setting changes while access is revoked, the
+          // existing document must not recreate either site-specific control.
+          await chrome.storage.local.set({
+            pageSelectionButtonSites:{'example.com':!pageButton},
+            doubleClickBlbSites:{'example.com':!doubleClick}
+          });
+          await chrome.storage.local.set({
+            pageSelectionButtonSites:{'example.com':pageButton},
+            doubleClickBlbSites:{'example.com':doubleClick}
+          });
         } finally {
           chrome.permissions.contains = originalContains;
         }
-      }, pattern);
+      }, {originPattern:pattern,pageButton:scenario.pageButton,doubleClick:scenario.doubleClick});
 
       await expect.poll(registrationExists, {timeout:10000}).toBe(false);
       const disabledFeatures = {floatingButtonPresent:false,doubleClickEnabled:false};
