@@ -3364,10 +3364,10 @@ let pendingMultiVersePostSlot = Promise.resolve();
 // Keep queue admission in its own message listener. The general async router
 // handles many unrelated operations; isolating this timing-sensitive response
 // avoids coupling queue delivery to that router's async dispatch path.
-// Persist only the most recent reservation in storage.session so a worker
-// restart cannot reset the global submission interval between handoff tabs.
-// storage.session is cleared when the browser session ends, which is the
-// correct lifetime for this transient scheduling state.
+// Persist only the most recent reservation outside worker memory so a restart
+// cannot reset the global submission interval between handoff tabs. Prefer
+// session storage; the local-storage fallback is safe because expired timestamps
+// do not delay later submissions.
 // All MultiVerse submissions use one shared FIFO schedule and one interval, regardless of source.
 function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
   const slot = pendingMultiVersePostSlot.then(async () => {
