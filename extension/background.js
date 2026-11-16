@@ -3275,6 +3275,11 @@ async function isLiveContentScriptSenderDocument(sender) {
   }
 }
 
+function contentScriptSenderDocumentId(sender) {
+  if (!sender || /^file:\/\//i.test(sender.url || '') || isPdfViewerTab(sender.tab)) return null;
+  return typeof sender.documentId === 'string' && sender.documentId ? sender.documentId : null;
+}
+
 async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
   if (!sender || sender.id !== chrome.runtime.id ||
       !Number.isInteger(sender.tab?.id) || typeof sender.url !== 'string') return false;
@@ -3754,7 +3759,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         tabUrl:sender?.url || sender?.tab?.url || '',
         text,
         behavior,
-        documentId:sender?.documentId || null,
+        documentId:contentScriptSenderDocumentId(sender),
         contextualReference:contextualReference || null,
         contextualReferenceResolved: message.contextualReferenceResolved === true || !!contextualReference,
         directUrl:message.directUrl || ''
@@ -7035,7 +7040,7 @@ async function handleOpenBibleSelectionCommand(sender = null) {
       return {ok:false, reason:'stale-sender-document'};
     }
 
-    const documentId = sender?.documentId || null;
+    const documentId = contentScriptSenderDocumentId(sender);
     if (siteKey === BLB_HOSTNAME) {
       const selectedText = await getActiveTabSelection(tab.id, documentId);
       if (!selectedText) return {ok:false, reason:'empty-selection'};
