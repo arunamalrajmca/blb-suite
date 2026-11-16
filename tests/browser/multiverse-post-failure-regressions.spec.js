@@ -150,32 +150,30 @@ test('MultiVerse post handoff stops after the second dropped message channel', a
 
 
 test('the real service-worker MultiVerse queue assigns simultaneous requests distinct FIFO slots', async ({
-  page, extensionWorker
+  context, extensionWorker
 }) => {
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
-  );
-  expect(Number.isInteger(tabId)).toBe(true);
-
-  const responses = await extensionWorker.evaluate(async id => {
-    const [execution] = await chrome.scripting.executeScript({
-      target: { tabId: id },
-      world: 'ISOLATED',
-      func: async () => Promise.all(Array.from({ length: 4 }, () =>
-        chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+  const extensionUrl = await extensionWorker.evaluate(() => chrome.runtime.getURL('multiverse-post.html'));
+  const extensionPage = await context.newPage();
+  try {
+    // The queue intentionally accepts requests only from its own extension
+    // handoff page, not from an arbitrary content-script sender.
+    await extensionPage.goto(extensionUrl, {waitUntil:'domcontentloaded'});
+    const responses = await extensionPage.evaluate(async () =>
+      Promise.all(Array.from({length:4}, () =>
+        chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'})
       ))
-    });
-    return execution?.result || [];
-  }, tabId);
+    );
 
-  expect(responses).toHaveLength(4);
-  expect(responses.every(response => response?.ok === true), JSON.stringify(responses)).toBe(true);
-  const scheduledAt = responses.map(response => response.submitAt);
-  expect(scheduledAt.every(Number.isFinite)).toBe(true);
-  for (let index = 1; index < scheduledAt.length; index++) {
-    expect(scheduledAt[index]).toBeGreaterThan(scheduledAt[index - 1]);
-    expect(scheduledAt[index] - scheduledAt[index - 1]).toBeGreaterThanOrEqual(1500);
+    expect(responses).toHaveLength(4);
+    expect(responses.every(response => response?.ok === true), JSON.stringify(responses)).toBe(true);
+    const scheduledAt = responses.map(response => response.submitAt);
+    expect(scheduledAt.every(Number.isFinite)).toBe(true);
+    for (let index = 1; index < scheduledAt.length; index++) {
+      expect(scheduledAt[index]).toBeGreaterThan(scheduledAt[index - 1]);
+      expect(scheduledAt[index] - scheduledAt[index - 1]).toBeGreaterThanOrEqual(1500);
+    }
+  } finally {
+    await extensionPage.close();
   }
 });
 
