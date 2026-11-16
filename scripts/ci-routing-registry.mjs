@@ -36,7 +36,8 @@ export const featureSpecs = [
       "tests/browser/site-registration-opt-out-race.spec.js",
       "tests/browser/optional-host-permission-lifecycle.spec.js",
       "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
-      "tests/browser/omnibox-dictionary-routing.spec.js"
+      "tests/browser/omnibox-dictionary-routing.spec.js",
+      "tests/browser/study-session-concurrency.spec.js"
     ]
   },
   {
@@ -217,7 +218,8 @@ export const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reu
 export const studySessionSpecs = new Set(["tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
-  "tests/browser/study-session-popup-ui-regression.spec.js"
+  "tests/browser/study-session-popup-ui-regression.spec.js",
+  "tests/browser/study-session-concurrency.spec.js"
 ]);
 
 
