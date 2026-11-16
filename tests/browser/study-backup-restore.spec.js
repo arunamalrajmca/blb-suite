@@ -240,12 +240,12 @@ test.describe('Study Sessions backup and restore', () => {
   }) => {
     await extensionStorage.clear();
     const page = await openPopup(context, extensionId);
-    const study = {
-      studySessions:[],
+    const study = await extensionWorker.evaluate(() => ({
+      studySessions:[createStudySession('Restored Topic')],
       studyTopics:['Restored Topic'],
       studySelectedTopic:'Restored Topic',
       studyAutoStopMinutes:15
-    };
+    }));
 
     // Hold the shared Study mutation queue so restore and the following save
     // are forced to line up behind one another.
