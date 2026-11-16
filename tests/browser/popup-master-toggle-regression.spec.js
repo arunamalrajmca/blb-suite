@@ -123,7 +123,7 @@ test('master OFF stays ON and reports failure when an active Study recording can
     const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
     Object.defineProperty(chrome.runtime, 'sendMessage', {
       configurable:true,
-      value: async message => message?.type === 'blbSuiteStopStudyRecording'
+      value: async message => message?.type === 'blbSuiteSetMasterEnabled'
         ? {ok:false, reason:'simulated-stop-failure'}
         : originalSendMessage(message)
     });
@@ -161,7 +161,7 @@ test('a newer master ON choice wins while an older OFF waits for Study stop', as
     const pending = [];
     Object.defineProperty(chrome.runtime, 'sendMessage', {
       configurable:true,
-      value: message => message?.type === 'blbSuiteStopStudyRecording'
+      value: message => message?.type === 'blbSuiteSetMasterEnabled' && message.enabled === false
         ? new Promise(resolve => pending.push(resolve))
         : originalSendMessage(message)
     });
@@ -182,4 +182,23 @@ test('a newer master ON choice wins while an older OFF waits for Study stop', as
   )).toBe(true);
   await expect(page.locator('#master')).toBeChecked();
   expect(await page.evaluate(() => studyState.recording)).toBe(false);
+});
+
+test('service worker serializes master-gate transitions from separate popup instances', async ({
+  extensionWorker
+}) => {
+  const order = await extensionWorker.evaluate(async () => {
+    const events = [];
+    const first = runMasterToggle(async () => {
+      events.push('off-start');
+      await new Promise(resolve => setTimeout(resolve, 30));
+      events.push('off-commit');
+    });
+    const second = runMasterToggle(async () => {
+      events.push('on-commit');
+    });
+    await Promise.all([first, second]);
+    return events;
+  });
+  expect(order).toEqual(['off-start', 'off-commit', 'on-commit']);
 });

@@ -150,45 +150,33 @@ let masterToggleGeneration = 0;
 
 async function setMaster(on) {
   const generation = ++masterToggleGeneration;
-  // Toggling the Suite gate is also a hard boundary for the current Study
-  // Topic selection. Never carry a selected topic across OFF/ON. If a topic
-  // is recording when the Suite is turned off, stop that recording first so
-  // the UI cannot end up with a hidden active recording and no selection.
-  if (!on && studyState.recording) {
-    try {
-      const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
-      if (!response?.ok) throw new Error(response?.error || response?.reason || 'stop-rejected');
-    } catch (_) {
-      if (generation !== masterToggleGeneration) return;
-      // Keep the global gate ON when the active Study recording could not be
-      // stopped. Otherwise it would become hidden and could resume on re-enable.
-      document.getElementById('master').checked = true;
-      setStatus('Unable to stop recording. The Suite remains ON. Please try again.');
-      return;
-    }
+  // The service worker serializes global-gate changes across popup instances.
+  // It stops Study recording before committing OFF, preventing a stale OFF
+  // request from racing a newer ON request issued by another popup.
+  let response;
+  try {
+    response = await chrome.runtime.sendMessage({type:'blbSuiteSetMasterEnabled', enabled:on});
+  } catch (_) {
+    response = {ok:false};
   }
-  // A newer explicit toggle wins while stopping an active Study recording.
   if (generation !== masterToggleGeneration) {
-    // The in-flight stop may have changed Study state after the newer toggle
-    // refreshed the popup. Re-read once so its UI reflects the completed stop.
     await refreshStudyState().catch(() => {});
     return;
   }
-  await chrome.storage.local.set({masterEnabled:on, [SELECTED_TOPIC_STORAGE_KEY]: ''});
-  if (generation !== masterToggleGeneration) return;
+  if (!response?.ok) {
+    document.getElementById('master').checked = true;
+    setStatus('Unable to stop recording. The Suite remains ON. Please try again.');
+    return;
+  }
   topicInput.value = '';
   noteInput.value = '';
   setStatus('Select a topic and start recording');
   render(await getState());
-
   await refreshStudyState();
-  // refreshStudyState intentionally never auto-selects from stored history.
   topicInput.value = '';
   noteInput.value = '';
   updateStudyButtons();
-}
-
-async function pinSiteFeatureChoice(feature) {
+}async function pinSiteFeatureChoice(feature) {
   // Hand the preference to the service worker before opening Chrome's host
   // permission prompt. The popup may be destroyed while that prompt is shown;
   // the background can finish the durable write and inject after permission.

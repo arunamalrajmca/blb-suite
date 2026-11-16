@@ -65,7 +65,9 @@ try {
   has(popup, /type:\s*['"]blbSuitePrepareSiteFeatureToggle['"]/, 'popup routes per-site toggles through the background policy');
   has(background, /message\.type === ['"]blbSuitePrepareSiteFeatureToggle['"]/, 'background validates per-site toggle requests');
   has(background, /isSensitiveSiteHostname\(originHost\)/, 'background blocks sensitive-site feature opt-ins');
-  has(popup, /masterEnabled:on/, 'popup persists the global master switch');
+  has(popup, /type:\s*['"]blbSuiteSetMasterEnabled['"]/, 'popup delegates global master transitions to the service worker');
+  has(background, /message\.type === ['"]blbSuiteSetMasterEnabled['"]/, 'background serializes global master transitions across popup instances');
+  has(background, /function runMasterToggle\(operation\)/, 'global master transitions share a service-worker queue');
 
   // Study Sessions are shared through message APIs; backup must remain scoped
   // to Study data, never silently restoring global/site settings.
