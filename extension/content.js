@@ -4182,7 +4182,7 @@ function handleContentSettingsChanged(changes, area) {
   if (changes.doubleClickBlbSites) {
     refreshDoubleClickBlb();
   }
-});
+}
 chrome.storage.onChanged.addListener(handleContentSettingsChanged);
 const contentSettingsCleanup = () => {
   chrome.storage.onChanged.removeListener(handleContentSettingsChanged);
