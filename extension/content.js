@@ -105,6 +105,7 @@ const BLB_HOSTNAME = BLBShared.hostnames.blb;
 
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
+let siteHostAccessRevoked = false;
 let suiteSettingsReady = false;
 let suiteSettingsGeneration = 0;
 
@@ -4008,7 +4009,7 @@ async function refreshDoubleClickBlb() {
   const generation = ++doubleClickSettingsRefreshGeneration;
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || !siteKey) {
+    if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || siteHostAccessRevoked || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
@@ -4077,6 +4078,21 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
 });
 
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'blbSuiteHostPermissionRevoked') {
+    siteHostAccessRevoked = true;
+    blbPageSelectionButton.disable();
+    doubleClickBlbEnabled = false;
+    disableDoubleClickBlb();
+    sendResponse({ok:true});
+    return;
+  }
+  if (message?.type === 'blbSuiteHostPermissionRestored') {
+    siteHostAccessRevoked = false;
+    sendResponse({ok:true});
+  }
+});
+
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.redirectEnabled) {
@@ -4115,14 +4131,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
       blbPageSelectionButton.disable();
     } else {
       if (location.hostname === 'webstersdictionary1828.com') globalThis.BLBWebsterCollector?.ensureButton?.();
-      blbPageSelectionButton.refresh();
+      if (siteHostAccessRevoked) blbPageSelectionButton.disable();
+      else blbPageSelectionButton.refresh();
     }
     // The global master switch gates the independent per-site Double-click feature too.
     void refreshDoubleClickBlb();
   }
 
   if (changes.pageSelectionButtonSites && suiteEnabled) {
-    blbPageSelectionButton.refresh();
+    if (siteHostAccessRevoked) blbPageSelectionButton.disable();
+    else blbPageSelectionButton.refresh();
   }
 
   if (changes.doubleClickBlbSites) {
