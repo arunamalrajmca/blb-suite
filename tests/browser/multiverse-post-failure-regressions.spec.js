@@ -170,7 +170,7 @@ test('the real service-worker MultiVerse queue assigns simultaneous requests dis
   }, tabId);
 
   expect(responses).toHaveLength(4);
-  expect(responses.every(response => response?.ok === true)).toBe(true);
+  expect(responses.every(response => response?.ok === true), JSON.stringify(responses)).toBe(true);
   const scheduledAt = responses.map(response => response.submitAt);
   expect(scheduledAt.every(Number.isFinite)).toBe(true);
   for (let index = 1; index < scheduledAt.length; index++) {
