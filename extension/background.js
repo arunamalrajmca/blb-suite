@@ -7094,6 +7094,14 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.redirectEnabled?.newValue === true) {
     injectRedirectEnabledTabs().catch(() => {});
   }
+  if (changes.masterEnabled?.newValue === true) {
+    // Tabs opened while the Suite was OFF may have no resident content script.
+    // Revisit all currently eligible tabs when the master switch turns ON;
+    // registration reconciliation alone only sees scripts already registered.
+    injectConfiguredTabsAfterExtensionUpdate().catch(error => {
+      console.error('KJV Scripture Tools master-switch tab activation failed:', String(error));
+    });
+  }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     const isCurrent = beginSelectionMenuContextSync();
     reconcileRuntimeContentScriptRegistrations().catch(error => {
