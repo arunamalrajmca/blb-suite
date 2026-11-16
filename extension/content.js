@@ -3989,9 +3989,17 @@ function enableDoubleClickBlb() {
 }
 
 function disableDoubleClickBlb() {
-  if (!doubleClickBound) return;
+  // removeEventListener is idempotent; always run it so a stale registration
+  // cannot survive an earlier partial initialization or reactivation race.
   document.removeEventListener('dblclick', handleDoubleClickBlb, true);
   doubleClickBound = false;
+  // The window guard is also used to retire an older handler during reinjection.
+  // Clear our own marker when disabled so it cannot advertise a removed listener
+  // or retain an obsolete content-script closure for the lifetime of the page.
+  if (window[DOUBLE_CLICK_WINDOW_GUARD] === handleDoubleClickBlb) {
+    try { delete window[DOUBLE_CLICK_WINDOW_GUARD]; }
+    catch (_) { window[DOUBLE_CLICK_WINDOW_GUARD] = undefined; }
+  }
 }
 
 async function refreshDoubleClickBlb() {
