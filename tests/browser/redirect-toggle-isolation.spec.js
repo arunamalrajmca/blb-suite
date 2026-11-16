@@ -249,8 +249,8 @@ test('failed redirect-toggle begin reports that the saved setting is unchanged',
   );
 });
 
-test('failed redirect-toggle commit reports that the saved setting is unchanged', async ({
-  page, extensionId, extensionStorage
+test('failed redirect-toggle commit reports the latest saved setting', async ({
+  page, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({masterEnabled:true, redirectEnabled:true});
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -267,10 +267,16 @@ test('failed redirect-toggle commit reports that the saved setting is unchanged'
   });
 
   await page.evaluate(() => setRedirect(false));
-  await expect(page.locator('#redirectEnabled')).toBeChecked();
+  // Begin persists the newest intent before commit. A failed/stale commit
+  // must therefore show the latest stored value, not claim the prior value
+  // was preserved.
+  await expect(page.locator('#redirectEnabled')).not.toBeChecked();
   await expect(page.locator('#studyStatus')).toContainText(
-    'Unable to save the global redirect setting. Your previous setting is unchanged'
+    'Unable to confirm the global redirect setting. The latest saved setting is shown'
   );
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({redirectEnabled:true})).redirectEnabled
+  )).toBe(false);
 });
 
 test('failed redirect rollback reports that the OFF state could not be confirmed', async ({
