@@ -120,6 +120,80 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   await page.close();
 });
 
+test('Study recording does not start when selected-topic synchronization fails', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  const topic = 'Topic sync failure ' + Date.now();
+  await page.locator('#studyTopic').fill(topic);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteCommitStudyTopicSelection'
+        ? Promise.resolve({ok:false, error:'simulated-topic-commit-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to save the selected topic. Recording was not started'
+  );
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({currentStudySessionId:null})).currentStudySessionId
+  )).toBeNull();
+  await page.close();
+});
+
+test('Study stop reports when the selected topic could not be cleared', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Stopped topic sync failure';
+  await extensionWorker.evaluate(async value => {
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:0,
+      studySelectedTopic:value
+    });
+    const result = await startStudyTopicFromPopup(value);
+    if (!result?.ok) throw new Error('Could not start fixture Study recording');
+  }, topic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await expect(page.locator('#stopTopic')).toBeEnabled();
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteBeginStudyTopicSelection'
+        ? Promise.resolve({ok:false, error:'simulated-topic-begin-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.locator('#stopTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Recording stopped, but the selected topic could not be cleared'
+  );
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get({
+      currentStudySessionId:null,
+      studySelectedTopic:''
+    });
+    return state;
+  })).toMatchObject({currentStudySessionId:null, studySelectedTopic:topic});
+  await page.close();
+});
+
 test('Study note autosaves from a cleared recording cannot write into a restarted topic', async ({
   extensionStorage, extensionWorker
 }) => {
