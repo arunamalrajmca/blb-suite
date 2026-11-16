@@ -684,7 +684,8 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
     const parserRequestStarted = page.waitForRequest(request =>
       request.url().endsWith('/startup-hold.js')
     );
-    navigation = page.goto('https://www.gotquestions.org/startup-lifecycle.html');
+    navigation = page.goto('https://www.gotquestions.org/startup-lifecycle.html', { waitUntil: 'commit' });
+    await navigation;
     await parserRequestStarted;
 
     const tabId = await extensionWorker.evaluate(async () => {
