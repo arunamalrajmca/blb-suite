@@ -3078,20 +3078,58 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
 
 async function unregisterRuntimeContentScriptForPattern(pattern) {
   const id = runtimeContentScriptIdForPattern(pattern);
-  try {
-    if (chrome.scripting?.getRegisteredContentScripts && chrome.scripting?.unregisterContentScripts) {
-      // A site can have an isolated-world registration, an optional MAIN-world
-      // registration, or both. Chrome rejects an unregister request containing
-      // an ID that is not registered, so remove only the IDs that actually exist.
-      const registered = await chrome.scripting.getRegisteredContentScripts({
+  if (!chrome.scripting?.getRegisteredContentScripts || !chrome.scripting?.unregisterContentScripts) {
+    return false;
+  }
+
+  // Registration can complete after an opt-out reconciliation has already
+  // inspected the registry. Re-read after each removal and verify that both
+  // worlds are actually gone instead of silently treating an API rejection
+  // or a late-visible registration as a successful cleanup.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let registered;
+    try {
+      registered = await chrome.scripting.getRegisteredContentScripts({
         ids:[id, id + '-main-world']
       });
-      const registeredIds = registered.map(script => script.id).filter(Boolean);
-      if (registeredIds.length) {
-        await chrome.scripting.unregisterContentScripts({ids:registeredIds});
+    } catch (error) {
+      console.warn('KJV Scripture Tools could not inspect runtime registrations during opt-out cleanup:', JSON.stringify({
+        originPattern:pattern,
+        attempt:attempt + 1,
+        ...describeScriptInjectionError(error)
+      }));
+      return false;
+    }
+
+    const registeredIds = registered.map(script => script.id).filter(Boolean);
+    if (!registeredIds.length) return true;
+
+    try {
+      await chrome.scripting.unregisterContentScripts({ids:registeredIds});
+    } catch (error) {
+      if (attempt === 2) {
+        console.warn('KJV Scripture Tools could not remove runtime registrations after opt-out:', JSON.stringify({
+          originPattern:pattern,
+          registrationIds:registeredIds,
+          ...describeScriptInjectionError(error)
+        }));
       }
     }
-  } catch (_) {}
+  }
+
+  try {
+    const remaining = await chrome.scripting.getRegisteredContentScripts({
+      ids:[id, id + '-main-world']
+    });
+    if (!remaining.length) return true;
+    console.error('KJV Scripture Tools runtime registrations remained after opt-out cleanup:', JSON.stringify({
+      originPattern:pattern,
+      registrationIds:remaining.map(script => script.id)
+    }));
+  } catch (error) {
+    console.warn('KJV Scripture Tools could not verify runtime registration cleanup:', String(error));
+  }
+  return false;
 }
 
 async function reconcileRuntimeContentScriptRegistrationsNow() {
