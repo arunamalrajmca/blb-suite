@@ -3258,13 +3258,16 @@ async function isLiveContentScriptSenderDocument(sender) {
     if (!sameSenderDocumentUrl(requestUrl, liveUrl)) return false;
 
     if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
-      // Target the exact document too. This rejects closed/replaced documents
-      // even when the tab's URL happens to be unchanged (for example, reload).
+      // Read the current top-frame document identity and compare it with the
+      // request's sender document. Targeting the old document ID could still
+      // succeed for a BFCache-retained page after a navigation.
       const results = await chrome.scripting.executeScript({
-        target:{tabId:sender.tab.id, documentIds:[sender.documentId]},
-        func:() => true
+        target:{tabId:sender.tab.id, frameIds:[0]},
+        func:() => location.href
       });
-      return results?.length === 1 && results[0]?.result === true;
+      return results?.length === 1 &&
+        results[0]?.documentId === sender.documentId &&
+        sameSenderDocumentUrl(sender.url, results[0]?.result);
     }
     return true;
   } catch (_) {
