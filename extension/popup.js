@@ -720,10 +720,12 @@ function toggleDownloadMenu() {
   downloadMenu.classList.toggle('open');
 }
 
+let studyAutoStopRefreshGeneration = 0;
 async function refreshStudyAutoStop() {
+  const generation = ++studyAutoStopRefreshGeneration;
   try {
     const response = await chrome.runtime.sendMessage({type:'blbSuiteGetStudyAutoStopMinutes'});
-    if (!response?.ok || !studyAutoStop) return false;
+    if (!response?.ok || !studyAutoStop || generation !== studyAutoStopRefreshGeneration) return false;
     studyAutoStop.value = String(response.minutes);
     return true;
   } catch (_) {
@@ -1111,8 +1113,9 @@ async function clearTopicSelectionInput() {
 
 // Preserve input entered while asynchronous popup initialization is still reading saved state.
 let topicInputEdited = false;
+let topicInputEditGeneration = 0;
 
-async function persistTopicValue(topic) {
+async function persistTopicValue(topic, editGeneration = topicInputEditGeneration) {
   const value = titleCase(topic);
   if (!value) return;
   try {
@@ -1131,6 +1134,7 @@ async function persistTopicValue(topic) {
       setStatus('Unable to save this Study topic. Please try again.');
       return;
     }
+    if (editGeneration === topicInputEditGeneration) topicInputEdited = false;
     await refreshStudyState();
   } catch (_) {
     setStatus('Unable to save this Study topic. Please try again.');
@@ -1173,7 +1177,7 @@ topicInput.addEventListener('focus', () => {
 topicInput.addEventListener('blur', () => {
   const topic = titleCase(topicInput.value);
   if (!topic) return;
-  void persistTopicValue(topic);
+  void persistTopicValue(topic, topicInputEditGeneration);
 });
 
 
@@ -1255,13 +1259,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     void refreshPopupSettingsFromStorage();
   }
-  if (changes[SELECTED_TOPIC_STORAGE_KEY]) {
+  if (changes[SELECTED_TOPIC_STORAGE_KEY] && !topicInputEdited) {
     clearActionStatus();
     topicInput.value = titleCase(changes[SELECTED_TOPIC_STORAGE_KEY].newValue || '');
     noteInput.value = '';
     closeTopicMenu();
     updateStudyButtons();
   }
+  if (changes.studyAutoStopMinutes) void refreshStudyAutoStop();
   if (changes.studySessions || changes.studyTopics || changes.currentStudySessionId) {
     refreshStudyState();
   }
@@ -1288,7 +1293,11 @@ historyVerseRefsButton.addEventListener('click', openHistoryVerseRefs);
 historyStrongsButton.addEventListener('click', openHistoryStrongs);
 historySearchTermsButton.addEventListener('click', openHistorySearchTerms);
 resumeStudyButton?.addEventListener('click', () => startTopic());
-studyAutoStop?.addEventListener('change', saveStudyAutoStop);
+studyAutoStop?.addEventListener('change', () => {
+  // Invalidate an initialization/external refresh before the save begins.
+  studyAutoStopRefreshGeneration++;
+  void saveStudyAutoStop();
+});
 // Submenus are temporary hover/click menus: close only after the pointer
 // has actually left the complete wrapper. A disabled submenu button can
 // suppress mouse events in Chromium, so use a short deferred :hover check
@@ -1604,6 +1613,7 @@ document.addEventListener('click', event => {
   const icon = document.getElementById('themeToggleIcon');
   if (!button || !icon) return;
 
+  let themeInteractionGeneration = 0;
   const sunIcon = '<path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.42 1.42M16.94 16.94l1.42 1.42M18.36 5.64l-1.42 1.42M7.06 16.94l-1.42 1.42"/><circle cx="12" cy="12" r="4"/>';
   const moonIcon = '<path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z"/>';
 
@@ -1616,11 +1626,16 @@ document.addEventListener('click', event => {
   }
 
   applyTheme('dark');
+  const initialThemeGeneration = themeInteractionGeneration;
   chrome.storage.local.get({popupTheme: 'dark'}).then(({popupTheme}) => {
+    if (themeInteractionGeneration !== initialThemeGeneration) return;
     applyTheme(popupTheme === 'light' ? 'light' : 'dark');
-  }).catch(() => applyTheme('dark'));
+  }).catch(() => {
+    if (themeInteractionGeneration === initialThemeGeneration) applyTheme('dark');
+  });
 
   button.addEventListener('click', async () => {
+    themeInteractionGeneration++;
     const nextTheme = document.body.classList.contains('light') ? 'dark' : 'light';
     applyTheme(nextTheme);
     try {
