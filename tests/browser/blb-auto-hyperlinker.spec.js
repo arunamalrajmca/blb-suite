@@ -101,7 +101,12 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
       target: { tabId: id },
       world: 'ISOLATED',
       func: () => {
-        const clipboard = navigator.clipboard;
+        const originalNavigatorClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+        const clipboard = { writeText(text) { return Promise.resolve(text); } };
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: clipboard
+        });
         const originalDescriptor = Object.getOwnPropertyDescriptor(clipboard, 'writeText');
         const originalAdd = document.addEventListener.bind(document);
         const originalRemove = document.removeEventListener.bind(document);
@@ -139,7 +144,8 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
           suiteSettingsReadyPromise: pendingSettings
         };
         globalThis.__blbClipboardHyperlinkerAudit = {
-          clipboard, originalAdd, originalRemove, trackedCopyListeners, descriptorMatches
+          clipboard, originalNavigatorClipboardDescriptor, originalAdd, originalRemove,
+          trackedCopyListeners, descriptorMatches
         };
         const first = globalThis.BLBAutoHyperlinkerModule.initialize(dependencies);
         first.cleanup();
@@ -196,6 +202,7 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
         const restoredAfterSecondCleanup = audit.descriptorMatches();
         document.addEventListener = audit.originalAdd;
         document.removeEventListener = audit.originalRemove;
+        Object.defineProperty(navigator, 'clipboard', audit.originalNavigatorClipboardDescriptor);
         delete globalThis.__blbClipboardHyperlinkerAudit;
         delete globalThis.__blbClipboardHyperlinkerSecond;
         return { restoredAfterSecondCleanup };
