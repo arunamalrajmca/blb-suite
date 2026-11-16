@@ -447,3 +447,63 @@ test('MultiVerse handoff resumes pending retrieval when the master switch is re-
     pending: null
   });
 });
+
+
+test('MultiVerse handoff cleanup cancels pending asynchronous retrieval after reinjection', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Cancelled MultiVerse handoff</title></head><body>
+      <h2>MultiVerse Retrieval</h2>
+      <input id="references" type="text">
+      <input id="retrieve" type="button" value="Retrieve">
+      <div id="results"></div>
+      <script>
+        window.retrieveCount = 0;
+        document.querySelector('#retrieve').addEventListener('click', () => window.retrieveCount++);
+      </script>
+    </body></html>`
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__handoffStarted = false;
+    let resolvePending;
+    window.__resolvePendingHandoff = value => resolvePending(value);
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+          window.__handoffStarted = true;
+          return new Promise(resolve => { resolvePending = resolve; });
+        }
+        return { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    isSuiteEnabledNow: () => true,
+    resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+  }));
+
+  await expect.poll(() => page.evaluate(() => window.__handoffStarted)).toBe(true);
+  await page.evaluate(() => globalThis.__blbMultiVerseHandoffCleanup());
+  await page.evaluate(() => window.__resolvePendingHandoff({
+    ok: true,
+    refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }]
+  }));
+  await page.waitForTimeout(100);
+
+  await expect(page.locator('#retrieve')).toHaveJSProperty('value', 'Retrieve');
+  expect(await page.evaluate(() => ({
+    retrieveCount: window.retrieveCount,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null
+  }))).toEqual({
+    retrieveCount: 0,
+    visibility: '',
+    pending: null
+  });
+});
