@@ -212,14 +212,15 @@ async function ensureSiteFeatureContentScript() {
   return response?.ok === true;
 }
 
-async function writeSiteFeaturePreference(feature, enabled) {
+async function writeSiteFeaturePreference(feature, enabled, requestId) {
   if (!currentSiteOrigin) return false;
   try {
     const response = await chrome.runtime.sendMessage({
       type:'blbSuiteSetSiteFeaturePreference',
       origin:currentSiteOrigin,
       feature,
-      enabled:!!enabled
+      enabled:!!enabled,
+      ...(requestId ? {requestId} : {})
     });
     return response?.ok === true;
   } catch (_) {
@@ -227,10 +228,10 @@ async function writeSiteFeaturePreference(feature, enabled) {
   }
 }
 
-async function setPageButton(on) {
+async function setPageButton(on, requestId) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isSensitiveSite) return;
-  if (!(await writeSiteFeaturePreference('pageButton', on))) {
+  if (!(await writeSiteFeaturePreference('pageButton', on, requestId))) {
     setStatus('Unable to save Show on BLB for this page. Please try again.');
     render(await getState());
     return;
@@ -248,10 +249,10 @@ async function setPageButton(on) {
   render(await getState());
 }
 
-async function setDoubleClick(on) {
+async function setDoubleClick(on, requestId) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
-  if (!(await writeSiteFeaturePreference('doubleClick', on))) {
+  if (!(await writeSiteFeaturePreference('doubleClick', on, requestId))) {
     setStatus('Unable to save Double-click for this page. Please try again.');
     render(await getState());
     return;
@@ -1328,7 +1329,7 @@ async function setIndependentSiteFeature(feature, on) {
   }
 
   if (on) {
-    const [granted] = await Promise.all([accessPromise, pinPromise]);
+    const [granted, pinned] = await Promise.all([accessPromise, pinPromise]);
     // A later explicit OFF/newer choice wins over an older unresolved request.
     if (generation !== siteFeatureToggleGeneration[feature]) return;
     if (!granted) {
@@ -1345,8 +1346,8 @@ async function setIndependentSiteFeature(feature, on) {
     if (generation !== siteFeatureToggleGeneration[feature]) return;
   }
 
-  if (on && feature === 'pageButton') await setPageButton(true);
-  else if (on && feature === 'doubleClick') await setDoubleClick(true);
+  if (on && feature === 'pageButton') await setPageButton(true, pinned?.requestId);
+  else if (on && feature === 'doubleClick') await setDoubleClick(true, pinned?.requestId);
   else render(await getState());
 }
 
