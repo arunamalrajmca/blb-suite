@@ -1219,6 +1219,10 @@ async function persistTopicValue(topic, editGeneration = topicInputEditGeneratio
       requestId
     });
     if (!response?.ok) {
+      // A newer explicit selection (for example, Start) may supersede this
+      // blur autosave while it is pending. That is not a save failure and
+      // must not replace feedback from the newer action.
+      if (response?.reason === 'stale-selection') return;
       setStatus('Unable to save this Study topic. Please try again.');
       return;
     }
