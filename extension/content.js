@@ -4185,6 +4185,11 @@ function handleContentSettingsChanged(changes, area) {
 }
 chrome.storage.onChanged.addListener(handleContentSettingsChanged);
 const contentSettingsCleanup = () => {
+  // Invalidate any storage-backed Double-click refresh still awaiting a read.
+  // Otherwise an old bundle can resume after reinjection and reclaim the
+  // document-level dblclick handler from the replacement instance.
+  doubleClickSettingsRefreshGeneration += 1;
+  disableDoubleClickBlb();
   chrome.storage.onChanged.removeListener(handleContentSettingsChanged);
   if (globalThis.__blbContentSettingsCleanup === contentSettingsCleanup) {
     delete globalThis.__blbContentSettingsCleanup;
