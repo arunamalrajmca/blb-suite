@@ -342,6 +342,9 @@ function clearStudySessions(...args) {
 function checkStudyAutoStop(...args) {
   return runStudyMutation(() => checkStudyAutoStopUnlocked(...args));
 }
+function restoreStudyBackupFromPopup(...args) {
+  return runStudyMutation(() => restoreStudyBackupFromPopupUnlocked(...args));
+}
 
 // Study mutations share one service-worker queue. Every read/modify/write
 // operation must read the latest committed snapshot; otherwise concurrent
@@ -352,6 +355,38 @@ function runStudyMutation(operation) {
   const result = pendingStudyMutation.then(operation, operation);
   pendingStudyMutation = result.then(() => undefined, () => undefined);
   return result;
+}
+
+async function restoreStudyBackupFromPopupUnlocked(study) {
+  if (!study || typeof study !== 'object' || Array.isArray(study)) return {ok:false, reason:'invalid-backup'};
+  const restored = {};
+  if (Object.prototype.hasOwnProperty.call(study, 'studySessions')) {
+    if (!Array.isArray(study.studySessions)) return {ok:false, reason:'invalid-backup'};
+    restored.studySessions = sanitizeStudySessions(study.studySessions).sessions;
+  }
+  if (Object.prototype.hasOwnProperty.call(study, 'studyTopics')) {
+    if (!Array.isArray(study.studyTopics)) return {ok:false, reason:'invalid-backup'};
+    restored.studyTopics = study.studyTopics;
+  }
+  if (Object.prototype.hasOwnProperty.call(study, 'studySelectedTopic')) {
+    if (typeof study.studySelectedTopic !== 'string') return {ok:false, reason:'invalid-backup'};
+    restored.studySelectedTopic = study.studySelectedTopic;
+  }
+  if (Object.prototype.hasOwnProperty.call(study, 'studyAutoStopMinutes')) {
+    const value = study.studyAutoStopMinutes;
+    if (!Number.isInteger(value) || value < 0 || value > 120) return {ok:false, reason:'invalid-backup'};
+    restored.studyAutoStopMinutes = value;
+  }
+  if (!Object.keys(restored).length) return {ok:false, reason:'empty-backup'};
+  await chrome.storage.local.set(restored);
+  if (Object.prototype.hasOwnProperty.call(restored, 'studyAutoStopMinutes')) {
+    try { await refreshStudyAutoStopAlarm(); }
+    catch (error) {
+      console.warn('KJV Scripture Tools restored Study auto-stop preference but could not refresh its alarm:', String(error));
+    }
+  }
+  void notifyStudyUiChanged();
+  return {ok:true};
 }
 
 async function saveStudyTopicFromPopupUnlocked(title) {
@@ -3217,6 +3252,8 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteRefreshRedirectRules', 'popup.html'],
   ['blbSuiteGetStudyAutoStopMinutes', 'popup.html'],
   ['blbSuiteSetStudyAutoStopMinutes', 'popup.html'],
+  ['blbSuiteRestoreStudyBackup', 'popup.html'],
+  ['blbSuiteSetSiteFeaturePreference', 'popup.html'],
   ['blbSuiteGetStudyUiState', 'popup.html'],
   ['blbSuiteStartStudyTopic', 'popup.html'],
   ['blbSuiteDownloadStudyTopic', 'popup.html'],
@@ -3486,6 +3523,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteGetStudyUiState') {
     try { sendResponse({ok:true, ...(await getStudyUiState())}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteRestoreStudyBackup') {
+    try { sendResponse(await restoreStudyBackupFromPopup(message.study)); }
+    catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
@@ -3910,6 +3953,50 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
       });
       sendResponse({ok:true});
+    } catch (error) { sendResponse({ok:false,error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteSetSiteFeaturePreference') {
+    try {
+      const origin = String(message.origin || '');
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin);
+      const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
+      const enabled = message.enabled === true;
+      const key = normalizeSiteHostname(parsed.hostname);
+      if (!feature || typeof message.enabled !== 'boolean' || !/^https?:$/.test(parsed.protocol) ||
+          !key || isSensitiveSiteHostname(parsed.hostname) ||
+          (key === BLB_HOSTNAME && feature !== 'pageButton')) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const permissionOrigin = parsed.origin + '/*';
+      await serializePendingSiteFeatureToggleMutation(async () => {
+        const data = await chrome.storage.local.get({
+          masterEnabled:true,pendingSiteFeatureToggles:{},
+          pageSelectionButtonSites:{},doubleClickBlbSites:{}
+        });
+        if (enabled && data.masterEnabled === false) return false;
+        const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+          ? {...data.pendingSiteFeatureToggles} : {};
+        const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
+        delete entries[feature];
+        const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
+        if (remaining) pending[permissionOrigin] = remaining;
+        else delete pending[permissionOrigin];
+        const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+          ? {...data.pageSelectionButtonSites} : {};
+        const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+          ? {...data.doubleClickBlbSites} : {};
+        if (feature === 'pageButton') pageSites[key] = enabled;
+        else doubleSites[key] = enabled;
+        await chrome.storage.local.set({
+          pendingSiteFeatureToggles:pending,
+          pageSelectionButtonSites:pageSites,
+          doubleClickBlbSites:doubleSites
+        });
+        return true;
+      }).then(ok => sendResponse({ok:ok !== false}));
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
