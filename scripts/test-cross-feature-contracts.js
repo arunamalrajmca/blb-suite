@@ -65,6 +65,10 @@ try {
   has(popup, /type:\s*['"]blbSuitePrepareSiteFeatureToggle['"]/, 'popup routes per-site toggles through the background policy');
   has(background, /message\.type === ['"]blbSuitePrepareSiteFeatureToggle['"]/, 'background validates per-site toggle requests');
   has(background, /isSensitiveSiteHostname\(originHost\)/, 'background blocks sensitive-site feature opt-ins');
+  has(popup, /blbSuiteBeginRedirectToggle/, 'popup persists redirect intent through the worker before requesting access');
+  has(popup, /blbSuiteCommitRedirectToggle/, 'popup conditionally commits redirect permission outcomes');
+  has(background, /message\.type === ['"]blbSuiteBeginRedirectToggle['"]/, 'background records cross-popup redirect intent generations');
+  has(background, /message\.type === ['"]blbSuiteCommitRedirectToggle['"]/, 'background rejects stale redirect permission outcomes');
   has(popup, /type:\s*['"]blbSuiteSetMasterEnabled['"]/, 'popup delegates global master transitions to the service worker');
   has(background, /message\.type === ['"]blbSuiteSetMasterEnabled['"]/, 'background serializes global master transitions across popup instances');
   has(background, /function runMasterToggle\(operation\)/, 'global master transitions share a service-worker queue');
