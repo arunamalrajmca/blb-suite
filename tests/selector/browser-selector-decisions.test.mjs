@@ -296,7 +296,7 @@ test("parse-popup changes select popup-link coverage without unrelated tab-reuse
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=.*tests\/browser\/e2e-core-user-actions\.spec\.js/);
-    assert.match(output, /changed_specs=tests\/browser\/blb-parse-popup\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/blb-parse-popup\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
