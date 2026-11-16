@@ -317,7 +317,7 @@ async function getStudyUiState() {
     currentTopic: current && String(current.title || '').toLowerCase() !== 'uncategorized' ? current.title : '',
     recording: !!current && String(current.title || '').toLowerCase() !== 'uncategorized',
     recordingTopic: current && String(current.title || '').toLowerCase() !== 'uncategorized' ? current.title : '',
-    currentSession: current ? {topic:current.title, date:current.dateLabel || current.date || '', refs:(current.refs || []).length, strongs:(current.strongs || []).length, notes:(current.notes || []).length} : null
+    currentSession: current ? {id:current.id, topic:current.title, date:current.dateLabel || current.date || '', refs:(current.refs || []).length, strongs:(current.strongs || []).length, notes:(current.notes || []).length} : null
   };
 }
 
@@ -576,7 +576,7 @@ async function stopStudyRecordingUnlocked(reason = 'manual', clearAlarm = () => 
   return {ok:true, recording:false, alarmCleanupPending, pausedReason:reason === 'inactivity' && pausedTopic ? 'inactivity' : '', pausedTopic};
 }
 
-async function addStudyNoteToTopicUnlocked(topic, note) {
+async function addStudyNoteToTopicUnlocked(topic, note, expectedSessionId = '') {
   const value = normalizeStudyTopic(topic);
   const text = String(note || '').trim();
   if (!value || !text) return {ok:false, reason:'empty'};
@@ -585,6 +585,7 @@ async function addStudyNoteToTopicUnlocked(topic, note) {
   if (!current || String(current.title || '').trim().toLowerCase() !== value.toLowerCase()) {
     return {ok:false, reason:'not-recording'};
   }
+  if (expectedSessionId && current.id !== String(expectedSessionId)) return {ok:false, reason:'stale-session'};
   await chrome.storage.local.set({studyLastActivityAt:Date.now()});
   if (!Array.isArray(current.notes)) current.notes = [];
   current.notes.push(text);
@@ -592,7 +593,7 @@ async function addStudyNoteToTopicUnlocked(topic, note) {
   return {ok:true, topic:current.title};
 }
 
-async function updateStudyNoteToTopicUnlocked(topic, originalNote, note) {
+async function updateStudyNoteToTopicUnlocked(topic, originalNote, note, expectedSessionId = '') {
   const value = normalizeStudyTopic(topic);
   const oldText = String(originalNote || '').trim();
   const newText = String(note || '').trim();
@@ -600,6 +601,7 @@ async function updateStudyNoteToTopicUnlocked(topic, originalNote, note) {
   const data = await getStudySessions();
   const current = data.sessions.find(s => s.id === data.currentId);
   if (!current || String(current.title || '').trim().toLowerCase() !== value.toLowerCase()) return {ok:false, reason:'not-recording'};
+  if (expectedSessionId && current.id !== String(expectedSessionId)) return {ok:false, reason:'stale-session'};
   let found = false;
   const oldKey = normalizeStudyNoteKey(oldText);
   for (const session of data.sessions) {
@@ -3654,13 +3656,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteAddStudyNoteToTopic') {
-    try { sendResponse(await addStudyNoteToTopic(message.topic, message.note)); }
+    try { sendResponse(await addStudyNoteToTopic(message.topic, message.note, message.sessionId)); }
     catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteUpdateStudyNoteToTopic') {
-    try { sendResponse(await updateStudyNoteToTopic(message.topic, message.originalNote, message.note)); }
+    try { sendResponse(await updateStudyNoteToTopic(message.topic, message.originalNote, message.note, message.sessionId)); }
     catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
