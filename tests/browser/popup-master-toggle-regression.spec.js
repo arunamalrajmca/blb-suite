@@ -202,3 +202,24 @@ test('service worker serializes master-gate transitions from separate popup inst
   });
   expect(order).toEqual(['off-start', 'off-commit', 'on-commit']);
 });
+
+test('open popup instances synchronize global master-setting changes', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  const secondPopup = await page.context().newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#master')).toBeChecked();
+  await expect(secondPopup.locator('#master')).toBeChecked();
+
+  await secondPopup.locator('label.master-switch .slider').click();
+  await expect(secondPopup.locator('#master')).not.toBeChecked();
+  await expect(page.locator('#master')).not.toBeChecked();
+  await expect(page.locator('#redirectEnabled')).toBeDisabled();
+
+  await page.locator('label.master-switch .slider').click();
+  await expect(page.locator('#master')).toBeChecked();
+  await expect(secondPopup.locator('#master')).toBeChecked();
+  await secondPopup.close();
+});
