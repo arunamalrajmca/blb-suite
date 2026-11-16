@@ -7092,7 +7092,12 @@ async function updateRevokedSiteHostAccess(origins, revoked) {
 }
 async function handleHostPermissionsRemoved(origins = []) {
   try {
-    await updateRevokedSiteHostAccess(origins, true);
+    try {
+      await updateRevokedSiteHostAccess(origins, true);
+    } catch (error) {
+      console.warn('KJV Scripture Tools revoked-site feature state update failed:', String(error));
+    }
+    // Registration cleanup must still run even if the storage broadcast fails.
     await reconcileRuntimeContentScriptRegistrations();
   } finally {
     await syncSelectionMenusForFocusedWindow();
