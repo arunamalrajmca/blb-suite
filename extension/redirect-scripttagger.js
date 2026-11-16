@@ -59,6 +59,12 @@
     if (!target) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    const fallbackToOriginalLink = () => {
+      const originalUrl = link.href || link.getAttribute?.('href');
+      if (originalUrl) {
+        try { window.location.assign(originalUrl); } catch (_) {}
+      }
+    };
     try {
       const pending = chrome.runtime.sendMessage({
         type:'blbSuiteOpenScriptTaggerUrl',
@@ -66,7 +72,15 @@
         activeIfNew:true,
         activateExisting:true
       });
-      if (pending && typeof pending.catch === 'function') pending.catch(() => {});
-    } catch (_) {}
+      if (pending && typeof pending.then === 'function') {
+        pending.then(response => {
+          if (!response?.ok) fallbackToOriginalLink();
+        }).catch(() => fallbackToOriginalLink());
+      } else {
+        fallbackToOriginalLink();
+      }
+    } catch (_) {
+      fallbackToOriginalLink();
+    }
   }, true);
 })();
