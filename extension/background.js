@@ -3070,7 +3070,6 @@ async function ensureContentScriptInTab(tabId) {
       // inject the current bundle and then refresh the newly installed gates.
       if (files.includes('content.js')) {
         try {
-          await chrome.tabs.sendMessage(tabId, {type:'blbSuiteHostPermissionRestored'}).catch(() => {});
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
           if (response?.ok === true) {
             if (files.includes('redirect-scripttagger.js')) {
@@ -3114,7 +3113,6 @@ async function ensureContentScriptInTab(tabId) {
         // verified activation.
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
-            await chrome.tabs.sendMessage(tabId, {type:'blbSuiteHostPermissionRestored'}).catch(() => {});
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
               if (files.includes('redirect-scripttagger.js')) {
@@ -7047,39 +7045,52 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 // persisted registrations immediately so a site no longer retains a runtime
 // content-script registration after its grant is removed. Keep the explicit
 // site preference intact; a later re-grant can reactivate it through onAdded.
-function removedHostPermissionCoversTab(origin, tabUrl) {
+function hostPermissionCoversSitePattern(origin, sitePattern) {
   const value = String(origin || '');
-  if (value === '*://*/*') return String(tabUrl || '').startsWith('http://') || String(tabUrl || '').startsWith('https://');
-  if (value === 'https://*/*') return String(tabUrl || '').startsWith('https://');
-  if (value === 'http://*/*') return String(tabUrl || '').startsWith('http://');
-  return !!originPatternForUrl(tabUrl) && originPatternForUrl(tabUrl) === value;
+  if (value === '*://*/*') return sitePattern.startsWith('http://') || sitePattern.startsWith('https://');
+  if (value === 'https://*/*') return sitePattern.startsWith('https://');
+  if (value === 'http://*/*') return sitePattern.startsWith('http://');
+  return value === sitePattern;
 }
 
-async function deactivateSiteFeaturesForRevokedOrigins(origins) {
-  const removed = Array.isArray(origins) ? origins.map(String) : [];
-  if (!removed.length) return {notifiedTabIds:[]};
-  const tabs = await chrome.tabs.query({});
-  const affected = [];
-  for (const tab of tabs) {
-    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
-    if (!removed.some(origin => removedHostPermissionCoversTab(origin, tab.url))) continue;
-    if (await hasHostAccessForTab(tab)) continue;
-    affected.push(tab);
-  }
-  const outcomes = await Promise.all(affected.map(async tab => {
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, {type:'blbSuiteHostPermissionRevoked'});
-      return {tabId:tab.id, notified:response?.ok === true};
-    } catch (_) {
-      return {tabId:tab.id, notified:false};
+async function updateRevokedSiteHostAccess(origins, revoked) {
+  const patterns = new Set();
+  const values = Array.isArray(origins) ? origins.map(String) : [];
+  if (!values.length) return {changedPatterns:[]};
+
+  if (revoked) {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+      const pattern = originPatternForUrl(tab.url);
+      if (!pattern || !values.some(origin => hostPermissionCoversSitePattern(origin, pattern))) continue;
+      // Another remaining grant (or a required manifest permission) may still
+      // authorize this tab. Only mark origins whose access is actually gone.
+      if (!(await hasHostAccessForTab(tab))) patterns.add(pattern);
     }
-  }));
-  return {notifiedTabIds:outcomes.filter(item => item.notified).map(item => item.tabId)};
-}
+  } else {
+    const current = await chrome.storage.local.get({siteHostAccessRevokedSites:{}});
+    const map = current.siteHostAccessRevokedSites && typeof current.siteHostAccessRevokedSites === 'object'
+      ? current.siteHostAccessRevokedSites : {};
+    for (const pattern of Object.keys(map)) {
+      if (values.some(origin => hostPermissionCoversSitePattern(origin, pattern))) patterns.add(pattern);
+    }
+  }
 
+  if (!patterns.size) return {changedPatterns:[]};
+  const current = await chrome.storage.local.get({siteHostAccessRevokedSites:{}});
+  const map = current.siteHostAccessRevokedSites && typeof current.siteHostAccessRevokedSites === 'object'
+    ? {...current.siteHostAccessRevokedSites} : {};
+  for (const pattern of patterns) {
+    if (revoked) map[pattern] = true;
+    else delete map[pattern];
+  }
+  await chrome.storage.local.set({siteHostAccessRevokedSites:map});
+  return {changedPatterns:[...patterns]};
+}
 async function handleHostPermissionsRemoved(origins = []) {
   try {
-    await deactivateSiteFeaturesForRevokedOrigins(origins);
+    await updateRevokedSiteHostAccess(origins, true);
     await reconcileRuntimeContentScriptRegistrations();
   } finally {
     await syncSelectionMenusForFocusedWindow();
@@ -7271,6 +7282,7 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
 async function handleGrantedHostPermissions(origins) {
   const grantedOrigins = Array.isArray(origins) ? origins.map(String) : [];
   if (!grantedOrigins.length) return {committed:[],expired:[]};
+  await updateRevokedSiteHostAccess(grantedOrigins, false);
   const result = await commitPendingSiteFeatureTogglesForGrantedOrigins(grantedOrigins);
   await injectEnabledTabsForGrantedOrigins(grantedOrigins);
   return result;
