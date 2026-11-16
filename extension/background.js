@@ -7434,7 +7434,10 @@ function pendingSiteFeatureEntries(intent) {
         (feature === 'pageButton' || feature === 'doubleClick') && value && typeof value === 'object');
   }
   if (intent?.feature === 'pageButton' || intent?.feature === 'doubleClick') {
-    return [[intent.feature, {requestedAt:intent.requestedAt}]];
+    return [[intent.feature, {
+      requestedAt:intent.requestedAt,
+      ...(intent.requestId ? {requestId:intent.requestId} : {})
+    }]];
   }
   return [];
 }
