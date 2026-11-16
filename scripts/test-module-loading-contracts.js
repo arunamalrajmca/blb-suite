@@ -560,20 +560,29 @@ function activeSelectionBranchStart(type) {
   }
   return background.indexOf("if (message.type === '" + type + "'");
 }
-for (const type of activeSelectionTypes) {
+const activeSelectionBranchHasSenderGuard = (type) => {
   const start = activeSelectionBranchStart(type);
   const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
-  if (!branch.includes('isActiveTabContentScriptSender(sender)')) {
+  if (branch.includes('isActiveTabContentScriptSender(sender)')) return true;
+  // Alt+B selection dispatch deliberately delegates to the shared command
+  // handler, which performs the same active-tab and sender authorization
+  // checks before reading or clearing the originating document's selection.
+  if (type === 'blbSuiteOpenCurrentSelection' &&
+      branch.includes('handleOpenBibleSelectionCommand(sender)')) {
+    const handlerStart = background.indexOf('async function handleOpenBibleSelectionCommand(sender = null)');
+    const handlerEnd = handlerStart < 0 ? -1 : background.indexOf('\n}', handlerStart);
+    const handler = handlerStart < 0 ? '' : background.slice(handlerStart, handlerEnd < 0 ? undefined : handlerEnd);
+    return handler.includes('isActiveTabContentScriptSender(sender)');
+  }
+  return false;
+};
+for (const type of activeSelectionTypes) {
+  if (!activeSelectionBranchHasSenderGuard(type)) {
     fail('selection handoff message ' + type + ' is bound to its active sender tab');
   }
 }
-if (activeSelectionTypes.every(type => {
-  const start = activeSelectionBranchStart(type);
-  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
-  return start >= 0 && background.slice(start, end < 0 ? undefined : end)
-    .includes('isActiveTabContentScriptSender(sender)');
-})) {
+if (activeSelectionTypes.every(activeSelectionBranchHasSenderGuard)) {
   pass(activeSelectionTypes.length + ' selection handoff message types are bound to the active sender tab');
 }
 
