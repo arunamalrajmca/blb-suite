@@ -577,9 +577,9 @@ test('content-script requests are rejected when their originating document navig
       globalThis.__blbMessageLifecycleTest.started
     )).toBe(true);
 
-    // Navigate the same tab while the background permission check is held.
-    // The old sender's tab ID remains valid, but its document ID no longer does.
-    await page.goto('https://www.blueletterbible.org/search/', {waitUntil:'domcontentloaded'});
+    // Reload the same URL while the background permission check is held.
+    // The URL and tab ID remain unchanged, but the original document ID does not.
+    await page.reload({waitUntil:'domcontentloaded'});
     await extensionWorker.evaluate(() => globalThis.__blbMessageLifecycleTest.release());
 
     await expect.poll(() => extensionWorker.evaluate(() =>
