@@ -113,9 +113,14 @@ test('a delayed activation failure cannot roll back a newer preference from anot
         ? Promise.resolve([{id:987654,url:'https://example.com/',title:'Example'}])
         : originalQuery(queryInfo)
     });
+    window.__permissionRequested = false;
+    window.__grantPermission = null;
     Object.defineProperty(chrome.permissions, 'request', {
       configurable:true,
-      value:async () => true
+      value:() => new Promise(resolve => {
+        window.__permissionRequested = true;
+        window.__grantPermission = resolve;
+      })
     });
     const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
     Object.defineProperty(chrome.runtime, 'sendMessage', {
@@ -132,14 +137,22 @@ test('a delayed activation failure cannot roll back a newer preference from anot
     pageSelectionButtonSites:{[SITE]:false}
   });
   await secondPopup.locator('#pageSetting .slider').click();
+  await expect.poll(() => secondPopup.evaluate(() => window.__permissionRequested)).toBe(true);
   await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
-    pageSelectionButtonSites:{[SITE]:true},
-    pendingSiteFeatureToggles:{}
+    pageSelectionButtonSites:{[SITE]:false},
+    pendingSiteFeatureToggles:{'https://example.com/*':{feature:'pageButton'}}
   });
 
-  // The older activation now fails. Its rollback carries Popup A's request
-  // identity and must not overwrite Popup B's newer ON choice.
+  // Popup B has claimed the newer pending ON intent, but its permission
+  // prompt has not resolved. Popup A's older activation failure must not
+  // cancel or roll back that newer intent.
   await page.evaluate(() => window.__resolveActivation?.({ok:false}));
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:false},
+    pendingSiteFeatureToggles:{'https://example.com/*':{feature:'pageButton'}}
+  });
+
+  await secondPopup.evaluate(() => window.__grantPermission?.(true));
   await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
     pageSelectionButtonSites:{[SITE]:true},
     pendingSiteFeatureToggles:{}
