@@ -1068,16 +1068,20 @@ async function sendStudyPopupMessage(message) {
 async function getSelectedTopicHistory() {
   const topic = selectedTopic();
   if (!topic) return {topic:'', sessions:[], refs:[], strongs:[], searchTerms:[], notes:[]};
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteStudyTopicHistory', topic});
-  return response?.ok ? response : {topic, sessions:[], refs:[], strongs:[], searchTerms:[], notes:[]};
+  const response = await sendStudyPopupMessage({type:'blbSuiteStudyTopicHistory', topic});
+  return response?.ok ? response : {
+    topic, sessions:[], refs:[], strongs:[], searchTerms:[], notes:[],
+    error:response?.reason === 'runtime-error' ? 'runtime-error' : 'request-failed'
+  };
 }
 
 async function openHistoryVerseRefs() {
   closeHistoryMenu();
   const topic = selectedTopic();
   if (!topic) return;
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteStudyTopicMultiVerse', topic});
+  const response = await sendStudyPopupMessage({type:'blbSuiteStudyTopicMultiVerse', topic});
   if (response?.ok) setStatus(`Opening ${response.count} references in MultiVerse...`);
+  else if (response?.reason === 'runtime-error') setStatus('Unable to communicate with Study Sessions. Please try again.');
   else if (response?.reason === 'not-enough-references') setStatus('Need 2+ verse references.');
   else setStatus('Topic not found.');
 }
@@ -1085,6 +1089,12 @@ async function openHistoryVerseRefs() {
 async function openHistoryStrongs() {
   closeHistoryMenu();
   const history = await getSelectedTopicHistory();
+  if (history.error) {
+    setStatus(history.error === 'runtime-error'
+      ? 'Unable to communicate with Study Sessions. Please try again.'
+      : 'Unable to load this topic history. Please try again.');
+    return;
+  }
   const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\d+$/.test(v)))];
   if (!values.length) { setStatus("No KJV Strong's entries in this topic."); return; }
 
@@ -1131,6 +1141,12 @@ function formatHistorySearchTerm(value) {
 async function openHistorySearchTerms() {
   closeHistoryMenu();
   const history = await getSelectedTopicHistory();
+  if (history.error) {
+    setStatus(history.error === 'runtime-error'
+      ? 'Unable to communicate with Study Sessions. Please try again.'
+      : 'Unable to load this topic history. Please try again.');
+    return;
+  }
   const RANGE_CODES = [
     ['ot','1'], ['torah','2'], ['hb','3'], ['pb','4'], ['wl','5'], ['pp','6'],
     ['maj','7'], ['min','8'], ['nt','9'], ['mmlj','10'], ['lkep','11'],
@@ -1174,19 +1190,19 @@ async function openHistorySearchTerms() {
   if (!groups.size) { setStatus('No search terms in this topic.'); return; }
 
   let opened = 0;
-  try {
-    for (const group of groups.values()) {
-      const criteria = group.terms.join(' OR ');
-      let url = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteria).replace(/%20/g, '+')}&t=KJV`;
-      if (group.csr) url += `&csr=${group.csr}#s=s_primary_0_1`;
-      const response = await chrome.runtime.sendMessage({type:'blbSuiteOpenHistorySearchTerms', url});
-      if (response?.ok) opened++;
-    }
-    const rangeCount = groups.size;
-    setStatus(`Opened ${opened} Criteria Search ${opened === 1 ? 'tab' : 'tabs'} for ${rangeCount} ${rangeCount === 1 ? 'range' : 'ranges'}.`);
-  } catch (_) {
-    setStatus('Unable to open the Criteria Search tabs.');
+  let failed = 0;
+  for (const group of groups.values()) {
+    const criteria = group.terms.join(' OR ');
+    let url = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteria).replace(/%20/g, '+')}&t=KJV`;
+    if (group.csr) url += `&csr=${group.csr}#s=s_primary_0_1`;
+    const response = await sendStudyPopupMessage({type:'blbSuiteOpenHistorySearchTerms', url});
+    if (response?.ok) opened++;
+    else failed++;
   }
+  const rangeCount = groups.size;
+  if (failed && opened) setStatus(`Opened ${opened} of ${rangeCount} Criteria Search tabs. Please retry the missing tabs.`);
+  else if (failed) setStatus('Unable to open the Criteria Search tabs. Please try again.');
+  else setStatus(`Opened ${opened} Criteria Search ${opened === 1 ? 'tab' : 'tabs'} for ${rangeCount} ${rangeCount === 1 ? 'range' : 'ranges'}.`);
 }
 
 async function clearTopicSelectionInput() {
@@ -1538,8 +1554,15 @@ async function setIndependentSiteFeature(feature, on) {
     // same serialized write, so closing the popup cannot strand the choice
     // between cancellation and persistence.
   } else {
-    await cancelPromise;
+    const saved = await cancelPromise;
     if (generation !== siteFeatureToggleGeneration[feature]) return;
+    if (!saved) {
+      render(await getState());
+      setStatus(feature === 'pageButton'
+        ? 'Unable to turn Show on BLB OFF for this page. The saved setting was not changed; please try again.'
+        : 'Unable to turn Double-click OFF for this page. The saved setting was not changed; please try again.');
+      return;
+    }
   }
 
   if (on && feature === 'pageButton') await setPageButton(true, pinned?.requestId);
@@ -1797,6 +1820,7 @@ document.addEventListener('click', event => {
       await chrome.storage.local.set({popupTheme: nextTheme});
     } catch (error) {
       console.error('Could not save popup theme preference:', error);
+      setStatus('Theme changed for this popup, but could not be saved. It may reset when the popup is reopened.');
     }
   });
 })();
