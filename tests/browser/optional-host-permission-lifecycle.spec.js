@@ -1626,3 +1626,79 @@ test('worker-start recovery commits only pending site opt-ins whose host permiss
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
   }
 });
+
+
+test('an explicit feature OFF wins against a late grant while overlapping same-origin feature prompts remain independent', async ({
+  context, extensionWorker, extensionStorage, extensionId
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},
+    siteFeaturePreferenceRequestIds:{}
+  }));
+  const origin = 'https://overlapping-prompts.example/*';
+  const pageRequestId = 'overlap-page-request';
+  const doubleRequestId = 'overlap-double-request';
+  const popup = await context.newPage();
+  try {
+    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    for (const ordering of ['off-before-grant','grant-before-off']) {
+      await extensionStorage.set({
+        masterEnabled:true,
+        pageSelectionButtonSites:{'overlapping-prompts.example':false},
+        doubleClickBlbSites:{'overlapping-prompts.example':false},
+        pendingSiteFeatureToggles:{
+          [origin]:{features:{
+            pageButton:{requestedAt:Date.now(),requestId:pageRequestId},
+            doubleClick:{requestedAt:Date.now(),requestId:doubleRequestId}
+          }}
+        },
+        siteFeaturePreferenceRequestIds:{
+          [origin + '|pageButton']:pageRequestId,
+          [origin + '|doubleClick']:doubleRequestId
+        }
+      });
+
+      const turnPageButtonOff = async () => popup.evaluate(async ({origin,requestId}) =>
+        chrome.runtime.sendMessage({
+          type:'blbSuiteSetSiteFeaturePreference',
+          origin,
+          feature:'pageButton',
+          enabled:false,
+          requestId
+        }), {origin,requestId:'explicit-page-off-' + ordering}
+      );
+
+      if (ordering === 'off-before-grant') {
+        expect((await turnPageButtonOff()).ok).toBe(true);
+        const grant = await extensionWorker.evaluate(value =>
+          commitPendingSiteFeatureTogglesForGrantedOrigins([value]), origin
+        );
+        expect(grant.committed).toEqual([{origin,feature:'doubleClick'}]);
+      } else {
+        const grant = await extensionWorker.evaluate(value =>
+          commitPendingSiteFeatureTogglesForGrantedOrigins([value]), origin
+        );
+        expect(grant.committed).toEqual([
+          {origin,feature:'pageButton'},
+          {origin,feature:'doubleClick'}
+        ]);
+        expect((await turnPageButtonOff()).ok).toBe(true);
+      }
+
+      const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        pendingSiteFeatureToggles:{}
+      }));
+      expect(saved.pageSelectionButtonSites['overlapping-prompts.example']).toBe(false);
+      expect(saved.doubleClickBlbSites['overlapping-prompts.example']).toBe(true);
+      expect(saved.pendingSiteFeatureToggles[origin]).toBeUndefined();
+    }
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+    await popup.close().catch(() => {});
+  }
+});
