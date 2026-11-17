@@ -931,24 +931,19 @@ test('a terminated worker reconciles stale host registrations and expires pendin
       return current.some(target => target.targetId===originalWorker.targetId);
     },{timeout:5000}).toBe(false);
 
-    // A real extension-page message wakes Chromium's new worker instance.
+    // Playwright's serviceworker event identifies a genuinely new worker
+    // instance; CDP target IDs can be reused by Chromium across worker restarts.
+    const restartedWorkerPromise = context.waitForEvent('serviceworker',{timeout:15000});
     observer = await context.newPage();
     await observer.goto(`chrome-extension://${extensionId}/popup.html`);
     const response = await observer.evaluate(() =>
       chrome.runtime.sendMessage({type:'blbSuiteGetStudyUiState'})
     );
     expect(response?.ok).toBe(true);
+    const restartedWorker = await restartedWorkerPromise;
+    expect(restartedWorker.url()).toBe(originalWorker.url);
 
-    await expect.poll(async () => {
-      const {targetInfos:current} = await cdp.send('Target.getTargets');
-      return current.some(target =>
-        target.type==='service_worker' &&
-        target.url.startsWith(`chrome-extension://${extensionId}/`) &&
-        target.targetId!==originalWorker.targetId
-      );
-    },{timeout:15000,intervals:[100,200,500,1000]}).toBe(true);
-
-    await expect.poll(() => observer.evaluate(async ({id}) => {
+    await expect.poll(() => restartedWorker.evaluate(async ({id}) => {
       const [registered] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
       const saved = await chrome.storage.local.get({
         pageSelectionButtonSites:{},
