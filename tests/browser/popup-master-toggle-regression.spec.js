@@ -511,3 +511,55 @@ test('delayed Study stop actions preserve topic and Notes edits made while stopp
   await expect(page.locator('#studyTopic')).toHaveValue('A topic typed during clear-selection stop');
   await expect(page.locator('#studyNote')).toHaveValue('A Notes draft typed during clear-selection stop.');
 });
+
+
+test('popup reports when a theme preference cannot be persisted', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({popupTheme:'dark'});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#themeToggle')).toHaveAttribute('aria-label', 'Switch to light theme');
+
+  await page.evaluate(() => {
+    const originalSet = chrome.storage.local.set.bind(chrome.storage.local);
+    Object.defineProperty(chrome.storage.local, 'set', {
+      configurable:true,
+      value:items => Object.prototype.hasOwnProperty.call(items || {}, 'popupTheme')
+        ? Promise.reject(new Error('simulated storage failure'))
+        : originalSet(items)
+    });
+  });
+  await page.locator('#themeToggle').click();
+
+  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Theme changed for this popup, but could not be saved.'
+  );
+  await expect.poll(async () => extensionStorage.get({popupTheme:'dark'}).then(v => v.popupTheme)).toBe('dark');
+});
+
+
+test('history actions report runtime failures instead of treating history as empty', async ({
+  page, extensionId
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.locator('#studyTopic').fill('History Failure Topic');
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => ['blbSuiteStudyTopicHistory','blbSuiteStudyTopicMultiVerse'].includes(message?.type)
+        ? Promise.reject(new Error('simulated runtime failure'))
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.evaluate(() => openHistorySearchTerms());
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to communicate with Study Sessions.'
+  );
+  await page.evaluate(() => openHistoryVerseRefs());
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to communicate with Study Sessions.'
+  );
+});
