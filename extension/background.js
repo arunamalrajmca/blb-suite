@@ -7919,20 +7919,22 @@ async function recoverPendingSiteFeatureTogglesAfterWorkerStart() {
 chrome.permissions.onAdded.addListener(permissions => {
   handleGrantedHostPermissions(permissions?.origins || []).catch(() => {});
 });
-recoverPendingSiteFeatureTogglesAfterWorkerStart().catch(error => {
-  console.warn('KJV Scripture Tools pending site permission recovery failed:', String(error));
-});
-
-// Dynamic content-script registrations persist across worker and browser
-// restarts. A revocation/settings cleanup may have been interrupted while the
-// worker was suspended, so reconcile the persisted set on every cold start,
-// even when there are no pending permission intents to trigger grant recovery.
+// Resolve durable permission intents before reconciling persisted registrations.
+// Running these recoveries concurrently can let the registration pass observe
+// pre-commit preferences, remove a registration for a newly granted valid
+// intent, and then miss recreating it because reconciliation only scans
+// registrations that still exist.
 async function recoverRuntimeContentScriptRegistrationsAfterWorkerStart() {
   await reconcileRuntimeContentScriptRegistrations();
 }
-recoverRuntimeContentScriptRegistrationsAfterWorkerStart().catch(error => {
-  console.warn('KJV Scripture Tools worker-start runtime registration recovery failed:', String(error));
-});
+recoverPendingSiteFeatureTogglesAfterWorkerStart()
+  .catch(error => {
+    console.warn('KJV Scripture Tools pending site permission recovery failed:', String(error));
+  })
+  .then(() => recoverRuntimeContentScriptRegistrationsAfterWorkerStart())
+  .catch(error => {
+    console.warn('KJV Scripture Tools worker-start runtime registration recovery failed:', String(error));
+  });
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === STUDY_AUTOSTOP_ALARM) checkStudyAutoStop().catch(()=>{});
