@@ -7826,7 +7826,17 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
       if (!grantedOrigins.has(origin)) continue;
       let parsed;
       try { parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin); }
-      catch (_) { delete pending[origin]; expired.push(origin); continue; }
+      catch (_) {
+        for (const [feature, featureIntent] of Object.entries(entries)) {
+          const requestKey = origin + '|' + feature;
+          if (featureIntent?.requestId && requestIds[requestKey] === featureIntent.requestId) {
+            delete requestIds[requestKey];
+          }
+        }
+        delete pending[origin];
+        expired.push(origin);
+        continue;
+      }
       const key = normalizeSiteHostname(parsed.hostname);
       for (const [feature, featureIntent] of Object.entries(entries)) {
         const requestedAt = Number(featureIntent?.requestedAt);
@@ -7834,6 +7844,10 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
             now<requestedAt || data.masterEnabled===false || !key ||
             isSensitiveSiteHostname(parsed.hostname) || (key===BLB_HOSTNAME && feature!=='pageButton')) {
           delete entries[feature];
+          const requestKey = origin + '|' + feature;
+          if (featureIntent?.requestId && requestIds[requestKey] === featureIntent.requestId) {
+            delete requestIds[requestKey];
+          }
           if (!expired.includes(origin)) expired.push(origin);
           continue;
         }

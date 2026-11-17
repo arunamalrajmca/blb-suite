@@ -1841,3 +1841,56 @@ test('cleanup alarm scheduling re-reads the newest pending intents instead of ap
     await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
   }
 });
+
+
+test('grant-time expiry removes only the matching expired permission request token', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+  }));
+  const origin = 'https://grant-time-expiry.example/*';
+  const expiredRequestId = 'expired-page-button-request';
+  const currentRequestId = 'current-double-click-request';
+  const now = Date.now() + 5 * 60 * 1000 + 100;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{
+        [origin]:{features:{
+          pageButton:{requestedAt:now - 5 * 60 * 1000 - 10,requestId:expiredRequestId},
+          doubleClick:{requestedAt:now - 1000,requestId:currentRequestId}
+        }}
+      },
+      siteFeaturePreferenceRequestIds:{
+        [origin + '|pageButton']:expiredRequestId,
+        [origin + '|doubleClick']:currentRequestId
+      }
+    });
+
+    const result = await extensionWorker.evaluate(({value,at}) =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([value],at), {value:origin,at:now});
+    expect(result).toEqual({
+      committed:[{origin,feature:'doubleClick'}],
+      expired:[origin]
+    });
+
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+    }));
+    expect(saved.pendingSiteFeatureToggles[origin]).toBeUndefined();
+    expect(saved.pageSelectionButtonSites['grant-time-expiry.example']).toBeUndefined();
+    expect(saved.doubleClickBlbSites['grant-time-expiry.example']).toBe(true);
+    expect(saved.siteFeaturePreferenceRequestIds[origin + '|pageButton']).toBeUndefined();
+    // The committed feature keeps its token so a delayed failure rollback can
+    // still be fenced against a newer explicit preference.
+    expect(saved.siteFeaturePreferenceRequestIds[origin + '|doubleClick']).toBe(currentRequestId);
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings),previous);
+    await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
+  }
+});
