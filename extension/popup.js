@@ -507,9 +507,7 @@ async function selectTopicValue(topic) {
   if (changingTopic) {
     const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
     if (!response?.ok) {
-      setStatus(response?.reason === 'runtime-error'
-        ? 'Unable to communicate with Study Sessions. The recording was not stopped; the topic selection was kept.'
-        : 'Unable to stop recording.');
+      setStatus('Unable to stop recording.');
       await refreshStudyState();
       return;
     }
@@ -1204,7 +1202,9 @@ async function clearTopicSelectionInput() {
         topicInputEditGeneration++;
         topicInputEdited = false;
       }
-      setStatus('Unable to stop recording.');
+      setStatus(response?.reason === 'runtime-error'
+        ? 'Unable to communicate with Study Sessions. The recording was not stopped; the topic selection was kept.'
+        : 'Unable to stop recording.');
       await refreshStudyState();
       return;
     }
