@@ -3185,14 +3185,21 @@ async function reconcileRuntimeContentScriptRegistrationsNow() {
   for (const hostname of configuredHosts) {
     const normalized = normalizeSiteHostname(hostname);
     if (!normalized) continue;
-    for (const protocol of ['https:', 'http:']) {
-      try {
-        const tab = {url:protocol + '//' + normalized + '/'};
-        if (!(await hasHostAccessForTab(tab))) continue;
-        if (!(await shouldInjectContentScriptForTab(tab, data))) continue;
-        patterns.add(originPatternForUrl(tab.url));
-      } catch (_) {
-        // Invalid or unsupported saved host keys must not block other sites.
+    // Preferences use canonical hostnames without "www.", while Chrome host
+    // grants are origin-specific. A user may have granted only the www origin,
+    // so consider both forms and let the permission API select the authorized
+    // candidate rather than silently losing that registration on restart.
+    const hostCandidates = new Set([normalized, 'www.' + normalized]);
+    for (const candidate of hostCandidates) {
+      for (const protocol of ['https:', 'http:']) {
+        try {
+          const tab = {url:protocol + '//' + candidate + '/'};
+          if (!(await hasHostAccessForTab(tab))) continue;
+          if (!(await shouldInjectContentScriptForTab(tab, data))) continue;
+          patterns.add(originPatternForUrl(tab.url));
+        } catch (_) {
+          // Invalid or unsupported saved host keys must not block other sites.
+        }
       }
     }
   }
