@@ -297,8 +297,7 @@ test('a real MV3 service-worker termination is recovered by the actual Floating 
       target.type==='service_worker' &&
       target.url.startsWith(`chrome-extension://${extensionId}/`)
     );
-    expect(recoveredWorker,'Floating Show on BLB must wake the extension service worker').toBeTruthy();
-  } finally {
+    expect(recoveredWorker,'Floating Show on BLB must wake the extension service worker').toBeTruthy();  } finally {
     await cdp.detach();
   }
 });
@@ -597,8 +596,7 @@ test('content-script requests are rejected when their originating document navig
       globalThis.__blbMessageLifecycleTest.liveDocumentResult
     )).toBe(false);
     const outcome = await extensionWorker.evaluate(() => ({
-      authorizationFinished:globalThis.__blbMessageLifecycleTest.authorizationFinished,
-      liveDocumentResult:globalThis.__blbMessageLifecycleTest.liveDocumentResult,
+      authorizationFinished:globalThis.__blbMessageLifecycleTest.authorizationFinished,      liveDocumentResult:globalThis.__blbMessageLifecycleTest.liveDocumentResult,
       recordCalls:globalThis.__blbMessageLifecycleTest.recordCalls
     }));
     expect(outcome).toEqual({
@@ -862,4 +860,217 @@ test('selection request deduplication is scoped to the originating tab and docum
     duplicateFirstDocument:false,
     replacementDocument:true
   });
+});
+
+test('a terminated worker reconciles stale host registrations and expires pending intents on its next real activation', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  const pattern = 'https://example.com/*';
+  const pendingOrigin = 'https://no-permission.example/*';
+  const requestId = 'worker-restart-expired-intent-' + Date.now();
+  const requestKey = pendingOrigin + '|pageButton';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},
+    siteFeaturePreferenceRequestIds:{},
+    siteHostAccessRevokedSites:{}
+  }));
+  let observer;
+  let cdp;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{
+        [pendingOrigin]:{
+          feature:'pageButton',
+          requestedAt:Date.now()-6*60*1000,
+          requestId
+        }
+      },
+      siteFeaturePreferenceRequestIds:{[requestKey]:requestId}
+    });
+    const registrationId = await extensionWorker.evaluate(async value => {      const id = runtimeContentScriptIdForPattern(value);
+      await chrome.scripting.registerContentScripts([{
+        id,
+        matches:[value],
+        js:['content.js'],
+        runAt:'document_start',
+        persistAcrossSessions:true
+      }]);
+      return id;
+    }, pattern);
+    await expect.poll(() => extensionWorker.evaluate(async id =>
+      (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 1,
+      registrationId
+    )).toBe(true);
+
+    const browser = context.browser();
+    expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
+    cdp = await browser.newBrowserCDPSession();
+    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    const {targetInfos} = await cdp.send('Target.getTargets');
+    const originalWorker = targetInfos.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(originalWorker,'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed = await cdp.send('Target.closeTarget',{targetId:originalWorker.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:current} = await cdp.send('Target.getTargets');
+      return current.some(target => target.targetId===originalWorker.targetId);
+    },{timeout:5000}).toBe(false);
+
+    // A successful response to a real extension-page message proves that
+    // Chromium started a worker after the original target was confirmed closed.
+    // Do not depend on Playwright's serviceworker event: Chromium can omit that
+    // event for a restarted worker in an already-running persistent context.
+    observer = await context.newPage();
+    await observer.goto(`chrome-extension://${extensionId}/popup.html`);
+    const response = await observer.evaluate(() =>
+      chrome.runtime.sendMessage({type:'blbSuiteGetStudyUiState'})
+    );
+    expect(response?.ok).toBe(true);
+
+    // Observe cleanup through the extension page after the real runtime message
+    // has woken the worker; this verifies startup recovery without calling its
+    // helper directly or relying on a Playwright worker-event notification.
+    await expect.poll(() => observer.evaluate(async id => {
+      const [registered] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+      const saved = await chrome.storage.local.get({
+        pageSelectionButtonSites:{},
+        pendingSiteFeatureToggles:{},
+        siteFeaturePreferenceRequestIds:{}
+      });
+      return {
+        registrationPresent:Boolean(registered),
+        pagePreference:saved.pageSelectionButtonSites['example.com'],
+        pending:saved.pendingSiteFeatureToggles,
+        requestIds:saved.siteFeaturePreferenceRequestIds
+      };
+    },registrationId),{timeout:10000,intervals:[100,250,500,1000]}).toEqual({
+      registrationPresent:false,
+      pagePreference:false,
+      pending:{},
+      requestIds:{}
+    });
+  } finally {
+    if (observer) {
+      await observer.evaluate(async ({origin,settings}) => {
+        const id = runtimeContentScriptIdForPattern(origin);
+        await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
+        await chrome.storage.local.set(settings);
+        await chrome.alarms.clear('site-feature-permission-pending-cleanup');
+      },{origin:pattern,settings:previous}).catch(() => {});
+      await observer.close().catch(() => {});
+    } else if (extensionWorker.isClosed?.() !== true) {
+      await extensionWorker.evaluate(settings => chrome.storage.local.set(settings),previous).catch(() => {});
+    }
+    await cdp?.detach().catch(() => {});
+  }
+});
+
+
+test('browser restart reconciles persisted host registrations and pending permission intents using the same profile', async ({
+  extensionPath
+}) => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const {chromium} = require('@playwright/test');
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(),'blb-worker-browser-restart-'));
+  const launch = () => chromium.launchPersistentContext(profilePath,{
+    channel:'chromium',
+    headless:true,
+    args:[
+      '--headless=new',
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check'
+    ]
+  });
+  let browserContext;
+  let restartedContext;
+  try {
+    browserContext = await launch();
+    let [worker] = browserContext.serviceWorkers();
+    if (!worker) worker = await browserContext.waitForEvent('serviceworker');
+    const extensionId = worker.url().split('/')[2];
+    const pattern = 'https://example.com/*';
+    const pendingOrigin = 'https://no-permission.example/*';
+    const requestId = 'browser-restart-expired-intent-' + Date.now();
+    const requestKey = pendingOrigin + '|pageButton';
+
+    const registrationId = await worker.evaluate(async ({value,request,tokenKey,token}) => {
+      await chrome.storage.local.set({
+        masterEnabled:true,
+        redirectEnabled:false,
+        pageSelectionButtonSites:{'example.com':false},
+        doubleClickBlbSites:{},
+        pendingSiteFeatureToggles:{
+          [request]:{
+            feature:'pageButton',
+            requestedAt:Date.now()-6*60*1000,
+            requestId:token
+          }
+        },
+        siteFeaturePreferenceRequestIds:{[tokenKey]:token}
+      });
+      const id = runtimeContentScriptIdForPattern(value);
+      await chrome.scripting.registerContentScripts([{
+        id,
+        matches:[value],
+        js:['content.js'],
+        runAt:'document_start',
+        persistAcrossSessions:true
+      }]);
+      return id;
+    },{value:pattern,request:pendingOrigin,tokenKey:requestKey,token:requestId});
+    await expect.poll(() => worker.evaluate(async id =>
+      (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length===1,
+      registrationId
+    )).toBe(true);
+
+    // Close the whole browser context, not just its worker. The explicit user
+    // data directory is reused below to exercise persisted Chrome state.
+    await browserContext.close();
+    browserContext = null;
+
+    restartedContext = await launch();
+    let [restartedWorker] = restartedContext.serviceWorkers();
+    if (!restartedWorker) restartedWorker = await restartedContext.waitForEvent('serviceworker');
+    expect(restartedWorker.url().split('/')[2]).toBe(extensionId);
+
+    await expect.poll(() => restartedWorker.evaluate(async id => {
+      const [registered] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+      const saved = await chrome.storage.local.get({
+        pageSelectionButtonSites:{},
+        pendingSiteFeatureToggles:{},
+        siteFeaturePreferenceRequestIds:{}
+      });
+      return {
+        registrationPresent:Boolean(registered),
+        pagePreference:saved.pageSelectionButtonSites['example.com'],
+        pending:saved.pendingSiteFeatureToggles,
+        requestIds:saved.siteFeaturePreferenceRequestIds
+      };
+    },registrationId),{timeout:15000,intervals:[100,250,500,1000]}).toEqual({
+      registrationPresent:false,
+      pagePreference:false,
+      pending:{},
+      requestIds:{}
+    });
+  } finally {
+    await restartedContext?.close().catch(() => {});
+    await browserContext?.close().catch(() => {});
+    fs.rmSync(profilePath,{recursive:true,force:true});
+  }
 });
