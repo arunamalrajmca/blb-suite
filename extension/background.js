@@ -7807,8 +7807,33 @@ async function handleGrantedHostPermissions(origins) {
   return result;
 }
 
+
+async function recoverPendingSiteFeatureTogglesAfterWorkerStart() {
+  const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+  const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+    ? data.pendingSiteFeatureToggles : {};
+  const grantedOrigins = [];
+  for (const origin of Object.keys(pending)) {
+    try {
+      if (await chrome.permissions.contains({origins:[origin]})) grantedOrigins.push(origin);
+    } catch (_) {
+      // A transient permission API failure must leave the durable intent
+      // untouched so a later worker activation can retry recovery.
+    }
+  }
+  if (!grantedOrigins.length) return {committed:[],expired:[],checked:Object.keys(pending).length};
+  const result = await handleGrantedHostPermissions(grantedOrigins);
+  return {...result,checked:Object.keys(pending).length};
+}
+
+// MV3 workers can be suspended after Chrome grants access but before the
+// onAdded handler finishes. The event is not replayed on worker restart, so
+// recover durable, still-valid intents whenever this worker instance starts.
 chrome.permissions.onAdded.addListener(permissions => {
   handleGrantedHostPermissions(permissions?.origins || []).catch(() => {});
+});
+recoverPendingSiteFeatureTogglesAfterWorkerStart().catch(error => {
+  console.warn('KJV Scripture Tools pending site permission recovery failed:', String(error));
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
