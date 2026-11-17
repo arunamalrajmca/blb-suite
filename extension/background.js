@@ -3541,7 +3541,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginStudyTopicSelection","blbSuiteCommitStudyTopicSelection","blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginStudyTopicSelection","blbSuiteCommitStudyTopicSelection","blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenStrongHistoryBatch","blbSuiteOpenHistorySearchTerms","blbSuiteOpenHistorySearchTermsBatch","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3783,6 +3783,56 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const result = await openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting);
       sendResponse({ok:true, value:canonicalStrongValue(message.value), tabId:result?.id ?? result?.tab?.id ?? null});
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteOpenStrongHistoryBatch') {
+    const values = Array.isArray(message.values)
+      ? [...new Set(message.values.map(value => canonicalStrongValue(value)).filter(Boolean))]
+      : [];
+    if (!values.length || values.length > 200) {
+      sendResponse({ok:false, reason:values.length > 200 ? 'too-many-destinations' : 'empty'});
+      return true;
+    }
+    const failures = [];
+    let opened = 0;
+    for (const value of values) {
+      const url = resolveStrongDestinationUrl(value);
+      if (!url) { failures.push({value, reason:'invalid-strong'}); continue; }
+      try {
+        const result = await openBlbDestination(url, true, true);
+        if (result?.id != null || result?.tab?.id != null) opened++;
+        else failures.push({value, reason:'tab-open-failed'});
+      } catch (error) {
+        failures.push({value, reason:'tab-open-failed', error:String(error)});
+      }
+    }
+    sendResponse({ok:failures.length === 0, opened, total:values.length, failures});
+    return true;
+  }
+
+  if (message.type === 'blbSuiteOpenHistorySearchTermsBatch') {
+    const urls = Array.isArray(message.urls) ? [...new Set(message.urls.map(value => String(value || '').trim()).filter(Boolean))] : [];
+    if (!urls.length || urls.length > 200) {
+      sendResponse({ok:false, reason:urls.length > 200 ? 'too-many-destinations' : 'empty'});
+      return true;
+    }
+    const failures = [];
+    let opened = 0;
+    for (const url of urls) {
+      if (!/^https:\\/\\/www\\.blueletterbible\\.org\\/search\\/search\\.cfm\\?/.test(url)) {
+        failures.push({url, reason:'invalid-url'});
+        continue;
+      }
+      try {
+        const result = await openBlbDestination(url, true, true);
+        if (result?.id != null || result?.tab?.id != null) opened++;
+        else failures.push({url, reason:'tab-open-failed'});
+      } catch (error) {
+        failures.push({url, reason:'tab-open-failed', error:String(error)});
+      }
+    }
+    sendResponse({ok:failures.length === 0, opened, total:urls.length, failures});
     return true;
   }
 
