@@ -95,7 +95,7 @@ test('replacement recovery does not inject when the replacement tab closes durin
 
     await page.close();
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.release());
-    await recovery;
+    await extensionWorker.evaluate(async () => { await globalThis.__replacementRecoveryPromise; delete globalThis.__replacementRecoveryPromise; });
 
     expect(await extensionWorker.evaluate(() => globalThis.__replacementActivationResult)).toBe(false);
   } finally {
