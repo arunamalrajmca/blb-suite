@@ -660,8 +660,8 @@ for (const feature of ['pageButton', 'doubleClick']) {
     await expect(page.locator(feature === 'pageButton' ? '#pageButton' : '#doubleClick')).not.toBeChecked();
     await expect(page.locator('#studyStatus')).toContainText(
       feature === 'pageButton'
-        ? 'Unable to enable Show on BLB on this page'
-        : 'Unable to enable Double-click on this page'
+        ? 'Show on BLB activation failed'
+        : 'Double-click activation failed'
     );
   });
 }
