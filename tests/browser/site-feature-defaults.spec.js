@@ -163,11 +163,12 @@ test('a denied site-feature permission request cancels its pending opt-in', asyn
       otherFeatureEnabled:false
     }));
     expect(prepared).toMatchObject({ok:true,pending:true});
-    const cancelled = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+    const cancelled = await messagePage.evaluate(requestId => chrome.runtime.sendMessage({
       type:'blbSuiteCancelSiteFeatureToggle',
       origin:'https://example.com/*',
-      feature:'doubleClick'
-    }));
+      feature:'doubleClick',
+      requestId
+    }), prepared.requestId);
     expect(cancelled).toMatchObject({ok:true});
     const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
       pageSelectionButtonSites:{},
