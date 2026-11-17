@@ -506,7 +506,6 @@ test('original source tab closing during replacement migration preserves destina
   const destinationPage = await context.newPage();
   const logicalKey = 'replacement-source-close|logical';
   const scriptKey = 'replacement-source-close|script';
-  let restoreMigration;
   let sourceTabId;
   let destinationTabId;
   try {
