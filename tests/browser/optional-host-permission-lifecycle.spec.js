@@ -1802,3 +1802,42 @@ test('abandoned permission intents expire and lose their request token after the
     await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
   }
 });
+
+
+test('cleanup alarm scheduling re-reads the newest pending intents instead of applying a stale snapshot', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+  }));
+  const origin = 'https://newer-alarm-intent.example/*';
+  const requestedAt = Date.now();
+  try {
+    await extensionStorage.set({
+      pendingSiteFeatureToggles:{
+        [origin]:{feature:'pageButton',requestedAt,requestId:'newer-alarm-request'}
+      },
+      siteFeaturePreferenceRequestIds:{
+        [origin + '|pageButton']:'newer-alarm-request'
+      }
+    });
+
+    // A cleanup operation may finish with an older empty snapshot just as a
+    // second popup creates a new intent. Scheduling must always re-read the
+    // serialized latest storage state rather than trusting that old snapshot.
+    await extensionWorker.evaluate(async () => {
+      await schedulePendingSiteFeatureToggleCleanup({});
+    });
+    const alarm = await extensionWorker.evaluate(() =>
+      chrome.alarms.get(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM)
+    );
+    expect(alarm).toBeTruthy();
+    expect(alarm.scheduledTime).toBeGreaterThan(requestedAt);
+    expect(alarm.scheduledTime).toBeLessThanOrEqual(
+      requestedAt + SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 2000
+    );
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings),previous);
+    await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
+  }
+});
