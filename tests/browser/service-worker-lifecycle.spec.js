@@ -386,11 +386,18 @@ test('a replaced MV3 tab migrates extension-owned destination and MultiVerse sta
     const previousIntentional = intentionalNewBlbTabs.has(removedTabId);
     const previousScriptTagger = scriptTaggerDestinationTabs.get(scriptTaggerKey);
     const hadScriptTagger = scriptTaggerDestinationTabs.has(scriptTaggerKey);
+    const previousGetLiveTabById = getLiveTabById;
 
     const currentRef = {book:'John', chapter:3, from:16, to:16};
     const retainedRef = {book:'Acts', chapter:2, from:1, to:1};
     const migratedRef = {book:'Romans', chapter:8, from:1, to:2};
     try {
+      // This test uses synthetic tab IDs to exercise state migration without
+      // opening browser tabs. Treat the destination as live for the new
+      // post-migration liveness guard.
+      getLiveTabById = async tabId => tabId === addedTabId
+        ? {id:addedTabId,url:'https://example.com/'}
+        : previousGetLiveTabById(tabId);
       blbLogicalTabRegistry.set(logicalKey, removedTabId);
       intentionalNewBlbTabs.add(removedTabId);
       scriptTaggerDestinationTabs.set(scriptTaggerKey, removedTabId);
@@ -417,6 +424,7 @@ test('a replaced MV3 tab migrates extension-owned destination and MultiVerse sta
         return intentionalNewBlbTabs.has(addedTabId) && !intentionalNewBlbTabs.has(removedTabId);
       }
     } finally {
+      getLiveTabById = previousGetLiveTabById;
       if (hadLogical) blbLogicalTabRegistry.set(logicalKey, previousLogical);
       else blbLogicalTabRegistry.delete(logicalKey);
       if (previousIntentional) intentionalNewBlbTabs.add(removedTabId);
