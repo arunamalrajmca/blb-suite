@@ -297,8 +297,7 @@ test('a real MV3 service-worker termination is recovered by the actual Floating 
       target.type==='service_worker' &&
       target.url.startsWith(`chrome-extension://${extensionId}/`)
     );
-    expect(recoveredWorker,'Floating Show on BLB must wake the extension service worker').toBeTruthy();
-  } finally {
+    expect(recoveredWorker,'Floating Show on BLB must wake the extension service worker').toBeTruthy();  } finally {
     await cdp.detach();
   }
 });
@@ -597,8 +596,7 @@ test('content-script requests are rejected when their originating document navig
       globalThis.__blbMessageLifecycleTest.liveDocumentResult
     )).toBe(false);
     const outcome = await extensionWorker.evaluate(() => ({
-      authorizationFinished:globalThis.__blbMessageLifecycleTest.authorizationFinished,
-      liveDocumentResult:globalThis.__blbMessageLifecycleTest.liveDocumentResult,
+      authorizationFinished:globalThis.__blbMessageLifecycleTest.authorizationFinished,      liveDocumentResult:globalThis.__blbMessageLifecycleTest.liveDocumentResult,
       recordCalls:globalThis.__blbMessageLifecycleTest.recordCalls
     }));
     expect(outcome).toEqual({
@@ -897,8 +895,7 @@ test('a terminated worker reconciles stale host registrations and expires pendin
       },
       siteFeaturePreferenceRequestIds:{[requestKey]:requestId}
     });
-    const registrationId = await extensionWorker.evaluate(async value => {
-      const id = runtimeContentScriptIdForPattern(value);
+    const registrationId = await extensionWorker.evaluate(async value => {      const id = runtimeContentScriptIdForPattern(value);
       await chrome.scripting.registerContentScripts([{
         id,
         matches:[value],
@@ -931,19 +928,21 @@ test('a terminated worker reconciles stale host registrations and expires pendin
       return current.some(target => target.targetId===originalWorker.targetId);
     },{timeout:5000}).toBe(false);
 
-    // Playwright's serviceworker event identifies a genuinely new worker
-    // instance; CDP target IDs can be reused by Chromium across worker restarts.
-    const restartedWorkerPromise = context.waitForEvent('serviceworker',{timeout:15000});
+    // A successful response to a real extension-page message proves that
+    // Chromium started a worker after the original target was confirmed closed.
+    // Do not depend on Playwright's serviceworker event: Chromium can omit that
+    // event for a restarted worker in an already-running persistent context.
     observer = await context.newPage();
     await observer.goto(`chrome-extension://${extensionId}/popup.html`);
     const response = await observer.evaluate(() =>
       chrome.runtime.sendMessage({type:'blbSuiteGetStudyUiState'})
     );
     expect(response?.ok).toBe(true);
-    const restartedWorker = await restartedWorkerPromise;
-    expect(restartedWorker.url()).toBe(originalWorker.url);
 
-    await expect.poll(() => restartedWorker.evaluate(async ({id}) => {
+    // Observe cleanup through the extension page after the real runtime message
+    // has woken the worker; this verifies startup recovery without calling its
+    // helper directly or relying on a Playwright worker-event notification.
+    await expect.poll(() => observer.evaluate(async id => {
       const [registered] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
       const saved = await chrome.storage.local.get({
         pageSelectionButtonSites:{},
@@ -956,7 +955,7 @@ test('a terminated worker reconciles stale host registrations and expires pendin
         pending:saved.pendingSiteFeatureToggles,
         requestIds:saved.siteFeaturePreferenceRequestIds
       };
-    },{id:registrationId}),{timeout:10000,intervals:[100,250,500,1000]}).toEqual({
+    },registrationId),{timeout:10000,intervals:[100,250,500,1000]}).toEqual({
       registrationPresent:false,
       pagePreference:false,
       pending:{},
