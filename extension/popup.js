@@ -1491,13 +1491,14 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
   }
 });
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function cancelPendingSiteFeatureChoice(feature) {
-  if (!currentSiteOrigin) return;
+async function cancelPendingSiteFeatureChoice(feature, requestId) {
+  if (!currentSiteOrigin || !requestId) return;
   try {
     await chrome.runtime.sendMessage({
       type:'blbSuiteCancelSiteFeatureToggle',
       origin:currentSiteOrigin,
-      feature
+      feature,
+      requestId
     });
   } catch (_) {}
 }
@@ -1530,7 +1531,7 @@ async function setIndependentSiteFeature(feature, on) {
       (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
     if (on) {
       await pinPromise;
-      if (generation === siteFeatureToggleGeneration[feature]) await cancelPendingSiteFeatureChoice(feature);
+      if (generation === siteFeatureToggleGeneration[feature]) await cancelPendingSiteFeatureChoice(feature, pinned?.requestId);
     } else await cancelPromise;
     render(state);
     return;
@@ -1546,7 +1547,7 @@ async function setIndependentSiteFeature(feature, on) {
       // Clear the durable pending choice even if the master switch was turned
       // OFF while the permission prompt was unresolved. The UI helpers return
       // early when master is OFF, so use the background writer directly.
-      await writeSiteFeaturePreference(feature, false);
+      await cancelPendingSiteFeatureChoice(feature, pinned?.requestId);
       render(await getState());
       return;
     }
