@@ -1702,3 +1702,103 @@ test('an explicit feature OFF wins against a late grant while overlapping same-o
     await popup.close().catch(() => {});
   }
 });
+
+
+test('closing and reopening the popup fences an older permission response behind the newer OFF choice', async ({
+  context, extensionWorker, extensionStorage, extensionId
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+  }));
+  const origin = 'https://popup-reopen-race.example/*';
+  let firstPopup;
+  let reopenedPopup;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'popup-reopen-race.example':false},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{},
+      siteFeaturePreferenceRequestIds:{}
+    });
+    firstPopup = await context.newPage();
+    await firstPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+    const prepared = await firstPopup.evaluate(async origin => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',origin,feature:'pageButton'
+    }),origin);
+    expect(prepared).toMatchObject({ok:true,pending:true});
+    await firstPopup.close();
+    firstPopup = null;
+
+    reopenedPopup = await context.newPage();
+    await reopenedPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+    const off = await reopenedPopup.evaluate(async origin => chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeaturePreference',
+      origin,feature:'pageButton',enabled:false,
+      requestId:'reopened-popup-explicit-off'
+    }),origin);
+    expect(off.ok).toBe(true);
+
+    // Simulate the first popup's permission request resolving after the
+    // replacement popup has already made a newer explicit OFF choice.
+    const lateGrant = await extensionWorker.evaluate(value =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([value]),origin);
+    expect(lateGrant.committed).toEqual([]);
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+    }));
+    expect(saved.pageSelectionButtonSites['popup-reopen-race.example']).toBe(false);
+    expect(saved.pendingSiteFeatureToggles[origin]).toBeUndefined();
+    expect(saved.siteFeaturePreferenceRequestIds[origin + '|pageButton']).toBe('reopened-popup-explicit-off');
+  } finally {
+    await firstPopup?.close().catch(() => {});
+    await reopenedPopup?.close().catch(() => {});
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings),previous);
+    await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
+  }
+});
+
+test('abandoned permission intents expire and lose their request token after the popup closes', async ({
+  context, extensionWorker, extensionStorage, extensionId
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+  }));
+  const origin = 'https://abandoned-popup-intent.example/*';
+  let popup;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+    });
+    popup = await context.newPage();
+    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    const prepared = await popup.evaluate(async origin => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',origin,feature:'doubleClick'
+    }),origin);
+    expect(prepared.ok).toBe(true);
+    await popup.close();
+    popup = null;
+
+    const cleanup = await extensionWorker.evaluate(() =>
+      pruneExpiredPendingSiteFeatureToggles(Date.now()+SITE_FEATURE_PERMISSION_PENDING_TTL_MS+10)
+    );
+    expect(cleanup.expired).toContain(origin);
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{},doubleClickBlbSites:{}
+    }));
+    expect(saved.pendingSiteFeatureToggles[origin]).toBeUndefined();
+    expect(saved.siteFeaturePreferenceRequestIds[origin + '|doubleClick']).toBeUndefined();
+    expect(saved.doubleClickBlbSites['abandoned-popup-intent.example']).toBeUndefined();
+
+    const lateGrant = await extensionWorker.evaluate(value =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([value]),origin);
+    expect(lateGrant.committed).toEqual([]);
+  } finally {
+    await popup?.close().catch(() => {});
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings),previous);
+    await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
+  }
+});
