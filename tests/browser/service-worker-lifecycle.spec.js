@@ -1129,7 +1129,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     // host_permissions. The final origin is intentionally absent from that
     // list so its still-valid permission intent must remain pending.
     const validPattern = 'https://www.dailyverses.net/*';
-    const expiredPattern = 'https://example.com/*';
+    const expiredPattern = 'https://www.gotquestions.org/*';
     const stalePatternTwo = 'https://www.facebook.com/*';
     const stalePatternThree = 'https://www.supplyofgrace.com/*';
     const missingPermissionPattern = 'https://no-permission-startup.invalid/*';
@@ -1318,3 +1318,153 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
   }
 });
 
+
+
+test('startup registration reconciliation remains correct when tabs open and navigate across mixed permission states', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  const permittedPattern = 'https://example.com/*';
+  const deniedPattern = 'https://www.wikipedia.org/*';
+  const permittedUrl = 'https://example.com/';
+  const deniedUrl = 'https://www.wikipedia.org/';
+  const registrationId = await extensionWorker.evaluate(pattern => runtimeContentScriptIdForPattern(pattern), permittedPattern);
+
+  // example.com is a required fixture permission; wikipedia.org is
+  // deliberately outside its optional host grants, giving this test a real
+  // no-permission tab without attempting to remove a required permission.
+  expect(await extensionWorker.evaluate(async pattern =>
+    chrome.permissions.contains({origins:[pattern]})
+  , permittedPattern)).toBe(true);
+  expect(await extensionWorker.evaluate(async pattern =>
+    chrome.permissions.contains({origins:[pattern]})
+  , deniedPattern)).toBe(false);
+
+  // Prevent the preference write's ordinary storage listener from completing
+  // activation before the test installs its registration gate.
+  await extensionWorker.evaluate(async () => {
+    globalThis.__multiTabStartupOriginalReconcile = reconcileRuntimeContentScriptRegistrations;
+    globalThis.__multiTabStartupOriginalInject = injectConfiguredTabsAfterExtensionUpdate;
+    reconcileRuntimeContentScriptRegistrations = async () => {};
+    injectConfiguredTabsAfterExtensionUpdate = async () => ({eligibleTabIds:[],activatedTabIds:[],failedTabIds:[]});
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{
+        'example.com':true
+      },
+      doubleClickBlbSites:{}
+    });
+    reconcileRuntimeContentScriptRegistrations = globalThis.__multiTabStartupOriginalReconcile;
+    injectConfiguredTabsAfterExtensionUpdate = globalThis.__multiTabStartupOriginalInject;
+    delete globalThis.__multiTabStartupOriginalReconcile;
+    delete globalThis.__multiTabStartupOriginalInject;
+    await unregisterRuntimeContentScriptForPattern('https://example.com/*');
+  });
+
+  let firstPage;
+  let secondPage;
+  let deniedPage;
+  try {
+    firstPage = await context.newPage();
+    secondPage = await context.newPage();
+    deniedPage = await context.newPage();
+
+    await extensionWorker.evaluate(pattern => {
+      const api = chrome.scripting;
+      const original = api.registerContentScripts;
+      let release;
+      let entered;
+      const gate = new Promise(resolve => { release = resolve; });
+      const started = new Promise(resolve => { entered = resolve; });
+      api.registerContentScripts = async function(scripts) {
+        if ((scripts || []).some(script => (script.matches || []).includes(pattern))) {
+          entered();
+          await gate;
+        }
+        return original.call(api, scripts);
+      };
+      globalThis.__multiTabStartupRegistrationGate = {
+        started, release:() => release(), restore:() => { api.registerContentScripts = original; }
+      };
+    }, permittedPattern);
+
+    // Explicitly begin the startup-style reconciliation and pause its
+    // registration operation. Navigations in both already-open and newly
+    // opened tabs must queue behind that operation instead of racing it.
+    const reconciliationStarted = await extensionWorker.evaluate(() => {
+      globalThis.__multiTabStartupRecoveryPromise = recoverConfiguredTabsOnStartup().catch(error => {
+        globalThis.__multiTabStartupReconciliationError = String(error);
+        throw error;
+      });
+      return true;
+    });
+    expect(reconciliationStarted).toBe(true);
+    await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.started);
+
+    await Promise.all([
+      firstPage.goto(permittedUrl, {waitUntil:'domcontentloaded'}),
+      secondPage.goto(permittedUrl, {waitUntil:'domcontentloaded'}),
+      deniedPage.goto(deniedUrl, {waitUntil:'domcontentloaded'}).catch(() => {})
+    ]);
+
+    await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.release());
+    await extensionWorker.evaluate(async () => {
+      // Await the startup recovery that was started before the tab
+      // navigations, so the registration gate overlaps the real orchestration.
+      await globalThis.__multiTabStartupRecoveryPromise;
+      delete globalThis.__multiTabStartupRecoveryPromise;
+      if (globalThis.__multiTabStartupReconciliationError) {
+        throw new Error(globalThis.__multiTabStartupReconciliationError);
+      }
+    });
+
+    const state = await extensionWorker.evaluate(async ({registrationId,permittedPattern,deniedPattern}) => {
+      const registrations = await chrome.scripting.getRegisteredContentScripts();
+      const tabs = await chrome.tabs.query({});
+      const inspect = async tab => {
+        if (!tab?.id || !/^https?:/.test(tab.url || '')) return null;
+        try {
+          const [{result}] = await chrome.scripting.executeScript({
+            target:{tabId:tab.id},
+            world:'ISOLATED',
+            func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
+          });
+          return {url:tab.url,loaded:result === true};
+        } catch (_) {
+          return {url:tab.url,loaded:false};
+        }
+      };
+      const inspected = await Promise.all(tabs.filter(tab =>
+        tab.url?.startsWith('https://example.com/') || tab.url?.startsWith('https://www.wikipedia.org/')
+      ).map(inspect));
+      return {
+        registration:registrations.find(entry => entry.id === registrationId) || null,
+        permitted:await chrome.permissions.contains({origins:[permittedPattern]}),
+        denied:await chrome.permissions.contains({origins:[deniedPattern]}),
+        tabs:inspected
+      };
+    }, {registrationId,permittedPattern,deniedPattern});
+
+    expect(state.permitted).toBe(true);
+    expect(state.denied).toBe(false);
+    expect(state.registration?.matches).toContain(permittedPattern);
+    expect(state.tabs.filter(tab => tab?.url?.startsWith(permittedUrl) && tab.loaded).length).toBeGreaterThanOrEqual(2);
+    expect(state.tabs.filter(tab => tab?.url?.startsWith(deniedUrl) && tab.loaded)).toEqual([]);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const gate = globalThis.__multiTabStartupRegistrationGate;
+      gate?.release();
+      gate?.restore();
+      delete globalThis.__multiTabStartupRegistrationGate;
+    }).catch(() => {});
+    await Promise.all([firstPage,secondPage,deniedPage].filter(Boolean).map(page => page.close().catch(() => {})));
+    await extensionWorker.evaluate(async pattern => {
+      await chrome.storage.local.set({
+        pageSelectionButtonSites:{'example.com':false},
+        doubleClickBlbSites:{}
+      });
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(pattern).catch(() => {});
+    }, permittedPattern).catch(() => {});
+  }
+});
