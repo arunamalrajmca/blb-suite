@@ -1425,8 +1425,12 @@ test('startup registration reconciliation remains correct when tabs open and nav
       const inspect = async tab => {
         if (!tab?.id || !/^https?:/.test(tab.url || '')) return null;
         try {
-          const response = await chrome.tabs.sendMessage(tab.id, {type:'blbSuiteRefreshSiteFeatures'});
-          return {url:tab.url,loaded:response?.ok === true};
+          const [{result}] = await chrome.scripting.executeScript({
+            target:{tabId:tab.id},
+            world:'ISOLATED',
+            func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
+          });
+          return {url:tab.url,loaded:result === true};
         } catch (_) {
           return {url:tab.url,loaded:false};
         }
