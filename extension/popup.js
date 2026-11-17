@@ -199,15 +199,17 @@ async function ensureSiteFeatureContentScript() {
   return response?.ok === true;
 }
 
-async function writeSiteFeaturePreference(feature, enabled, requestId) {
+async function writeSiteFeaturePreference(feature, enabled, requestId, conditionalRollback = false) {
   if (!currentSiteOrigin) return false;
+  const writeRequestId = requestId || `${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
   try {
     const response = await chrome.runtime.sendMessage({
       type:'blbSuiteSetSiteFeaturePreference',
       origin:currentSiteOrigin,
       feature,
       enabled:!!enabled,
-      ...(requestId ? {requestId} : {})
+      requestId:writeRequestId,
+      ...(conditionalRollback ? {conditionalRollback:true} : {})
     });
     return response?.ok === true;
   } catch (_) {
@@ -231,7 +233,7 @@ async function setPageButton(on, requestId) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
-      await writeSiteFeaturePreference('pageButton', false);
+      await writeSiteFeaturePreference('pageButton', false, requestId, true);
       setStatus('Unable to enable Show on BLB on this page. The setting remains OFF; please try again.');
       render(await getState());
       return;
@@ -256,7 +258,7 @@ async function setDoubleClick(on, requestId) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
-      await writeSiteFeaturePreference('doubleClick', false);
+      await writeSiteFeaturePreference('doubleClick', false, requestId, true);
       setStatus('Unable to enable Double-click on this page. The setting remains OFF; please try again.');
       render(await getState());
       return;
