@@ -531,11 +531,13 @@ test('popup reports when a theme preference cannot be persisted', async ({
   });
   await page.locator('#themeToggle').click();
 
-  await expect(page.locator('body')).toHaveClass(/\\blight\\b/);
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
   await expect(page.locator('#studyStatus')).toContainText(
     'Theme changed for this popup, but could not be saved.'
   );
-  await expect.poll(async () => extensionWorker.evaluate(async () =>\n    (await chrome.storage.local.get({popupTheme:'dark'})).popupTheme\n  )).toBe('dark');
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({popupTheme:'dark'})).popupTheme
+  )).toBe('dark');
 });
 
 
