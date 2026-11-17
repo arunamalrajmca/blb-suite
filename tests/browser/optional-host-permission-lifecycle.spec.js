@@ -1472,3 +1472,92 @@ test('host permission revocation immediately hides both global selection menus',
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
   }
 });
+
+
+test('permission revocation invalidates only matching pending popup opt-ins and preserves saved preferences', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},
+    siteFeaturePreferenceRequestIds:{},
+    siteHostAccessRevokedSites:{}
+  }));
+  const revokedOrigin = 'https://example.com/*';
+  const unrelatedOrigin = 'https://other.example/*';
+  const revokedRequestId = 'popup-a-pending-request';
+  const unrelatedRequestId = 'popup-b-unrelated-request';
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false,'other.example':true},
+      doubleClickBlbSites:{'example.com':true,'other.example':false},
+      pendingSiteFeatureToggles:{
+        [revokedOrigin]:{feature:'pageButton',requestedAt:Date.now(),requestId:revokedRequestId},
+        [unrelatedOrigin]:{feature:'doubleClick',requestedAt:Date.now(),requestId:unrelatedRequestId}
+      },
+      siteFeaturePreferenceRequestIds:{
+        [revokedOrigin + '|pageButton']:revokedRequestId,
+        [unrelatedOrigin + '|doubleClick']:unrelatedRequestId
+      }
+    });
+
+    // Model Chrome reporting the permission as revoked while a second popup's
+    // permissions.request promise is still unresolved.
+    await extensionWorker.evaluate(async origin => {
+      const contains = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(origin) ? false : contains(details);
+      try {
+        await updateRevokedSiteHostAccess([origin], true);
+      } finally {
+        chrome.permissions.contains = contains;
+      }
+    }, revokedOrigin);
+
+    const afterRevocation = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{},
+      siteFeaturePreferenceRequestIds:{}
+    }));
+    expect(afterRevocation.pageSelectionButtonSites).toMatchObject({
+      'example.com':false,'other.example':true
+    });
+    expect(afterRevocation.doubleClickBlbSites).toMatchObject({
+      'example.com':true,'other.example':false
+    });
+    expect(afterRevocation.pendingSiteFeatureToggles[revokedOrigin]).toBeUndefined();
+    expect(afterRevocation.pendingSiteFeatureToggles[unrelatedOrigin]).toMatchObject({
+      feature:'doubleClick',requestId:unrelatedRequestId
+    });
+    expect(afterRevocation.siteFeaturePreferenceRequestIds[revokedOrigin + '|pageButton']).toBeUndefined();
+    expect(afterRevocation.siteFeaturePreferenceRequestIds[unrelatedOrigin + '|doubleClick']).toBe(unrelatedRequestId);
+
+    // A delayed grant callback from the revoked popup cannot resurrect its
+    // stale request. An unrelated site's pending intent remains eligible.
+    const lateGrant = await extensionWorker.evaluate(origin =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([origin]), revokedOrigin
+    );
+    expect(lateGrant.committed).toEqual([]);
+    const unrelatedGrant = await extensionWorker.evaluate(origin =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([origin]), unrelatedOrigin
+    );
+    expect(unrelatedGrant.committed).toEqual([{origin:unrelatedOrigin,feature:'doubleClick'}]);
+
+    const finalState = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    expect(finalState.pageSelectionButtonSites['example.com']).toBe(false);
+    expect(finalState.doubleClickBlbSites['example.com']).toBe(true);
+    expect(finalState.doubleClickBlbSites['other.example']).toBe(true);
+    expect(finalState.pendingSiteFeatureToggles[revokedOrigin]).toBeUndefined();
+    expect(finalState.pendingSiteFeatureToggles[unrelatedOrigin]).toBeUndefined();
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
