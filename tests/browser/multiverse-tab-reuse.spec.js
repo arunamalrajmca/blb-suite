@@ -887,7 +887,7 @@ test('MultiVerse recovers when a matching destination closes during activation',
   ];
   const first = await openMultiVerse(extensionWorker, refs);
   expect(first?.ok).toBe(true);
-  const oldTabId = first.tabId;
+  const oldTabId = first.tabIds[0];
 
   const recovered = await extensionWorker.evaluate(async ({refs, oldTabId}) => {
     const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
@@ -905,8 +905,9 @@ test('MultiVerse recovers when a matching destination closes during activation',
     });
     try {
       const result = await openBlbMultiVerseRefs(refs, true);
-      const liveTab = result?.tabId != null
-        ? await chrome.tabs.get(result.tabId).catch(() => null)
+      const recoveredTabId = result?.tabIds?.[0] ?? null;
+      const liveTab = recoveredTabId != null
+        ? await chrome.tabs.get(recoveredTabId).catch(() => null)
         : null;
       return {result, closedDuringActivation, liveTabId:liveTab?.id ?? null};
     } finally {
@@ -916,8 +917,8 @@ test('MultiVerse recovers when a matching destination closes during activation',
 
   expect(recovered.closedDuringActivation).toBe(true);
   expect(recovered.result?.ok, JSON.stringify(recovered.result)).toBe(true);
-  expect(recovered.result.tabId).not.toBe(oldTabId);
-  expect(recovered.liveTabId).toBe(recovered.result.tabId);
+  expect(recovered.result.tabIds[0]).not.toBe(oldTabId);
+  expect(recovered.liveTabId).toBe(recovered.result.tabIds[0]);
 });
 
 test('MultiVerse does not report success when a reused live tab cannot be activated', async ({
@@ -950,7 +951,7 @@ test('MultiVerse does not report success when a reused live tab cannot be activa
     } finally {
       chrome.tabs.update = originalUpdate;
     }
-  }, {refs, tabId:first.tabId});
+  }, {refs, tabId:first.tabIds[0]});
 
   expect(failed.stillLive).toBe(true);
   expect(failed.result?.ok).toBe(false);
