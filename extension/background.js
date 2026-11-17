@@ -4159,21 +4159,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await serializePendingSiteFeatureToggleMutation(async () => {
         const data = await chrome.storage.local.get({
           masterEnabled:true,pendingSiteFeatureToggles:{},
-          pageSelectionButtonSites:{},doubleClickBlbSites:{}
+          pageSelectionButtonSites:{},doubleClickBlbSites:{},siteFeaturePreferenceRequestIds:{}
         });
         if (enabled && (data.masterEnabled === false || !message.requestId)) return false;
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
         const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
-        if (enabled && entries[feature]?.requestId !== message.requestId) {
+        const requestIds = data.siteFeaturePreferenceRequestIds && typeof data.siteFeaturePreferenceRequestIds === 'object'
+          ? {...data.siteFeaturePreferenceRequestIds} : {};
+        const requestKey = permissionOrigin + '|' + feature;
+        if (message.conditionalRollback === true) {
+          // A failed activation may undo only the exact ON request that started
+          // it. A newer popup write replaces this token, making stale rollback
+          // an acknowledged no-op rather than an overwrite.
+          if (!message.requestId || requestIds[requestKey] !== message.requestId) return true;
+          delete entries[feature];
+          delete requestIds[requestKey];
+        } else if (enabled && entries[feature]?.requestId !== message.requestId) {
           // The permission onAdded handler may have committed this exact
           // pending intent before the popup's request promise resolves. Treat
-          // that already-applied ON state as success, but never overwrite OFF.
+          // that already-applied ON state as success, but never overwrite OFF
+          // or a newer preference write from another popup.
           const existingSites = feature === 'pageButton'
             ? data.pageSelectionButtonSites : data.doubleClickBlbSites;
-          return existingSites?.[key] === true;
+          return existingSites?.[key] === true && requestIds[requestKey] === message.requestId;
+        } else {
+          delete entries[feature];
+          if (message.requestId) requestIds[requestKey] = message.requestId;
+          else delete requestIds[requestKey];
         }
-        delete entries[feature];
         const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
         if (remaining) pending[permissionOrigin] = remaining;
         else delete pending[permissionOrigin];
@@ -4186,7 +4200,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await chrome.storage.local.set({
           pendingSiteFeatureToggles:pending,
           pageSelectionButtonSites:pageSites,
-          doubleClickBlbSites:doubleSites
+          doubleClickBlbSites:doubleSites,
+          siteFeaturePreferenceRequestIds:requestIds
         });
         return true;
       }).then(ok => sendResponse({ok:ok !== false}));
@@ -7664,7 +7679,7 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
   if (!grantedOrigins.size) return {committed:[], expired:[]};
   return serializePendingSiteFeatureToggleMutation(async () => {
     const data = await chrome.storage.local.get({
-      masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
+      masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
     });
     const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
       ? {...data.pendingSiteFeatureToggles} : {};
@@ -7672,6 +7687,8 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
       ? {...data.pageSelectionButtonSites} : {};
     const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
       ? {...data.doubleClickBlbSites} : {};
+    const requestIds = data.siteFeaturePreferenceRequestIds && typeof data.siteFeaturePreferenceRequestIds === 'object'
+      ? {...data.siteFeaturePreferenceRequestIds} : {};
     const committed = [];
     const expired = [];
 
@@ -7700,6 +7717,8 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
           pageSites[key]=true;
           if (key===BLB_HOSTNAME) doubleSites[key]=false;
         } else doubleSites[key]=true;
+        const requestKey = origin + '|' + feature;
+        if (featureIntent?.requestId) requestIds[requestKey] = featureIntent.requestId;
         delete entries[feature];
         committed.push({origin,feature});
       }
@@ -7711,7 +7730,8 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
       await chrome.storage.local.set({
         pendingSiteFeatureToggles:pending,
         pageSelectionButtonSites:pageSites,
-        doubleClickBlbSites:doubleSites
+        doubleClickBlbSites:doubleSites,
+        siteFeaturePreferenceRequestIds:requestIds
       });
     }
     return {committed,expired};
