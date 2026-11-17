@@ -1931,12 +1931,20 @@ test('worker-start recovery removes stale persisted host registrations even when
     });
     expect(tab).toBeTruthy();
 
-    const registered = await extensionWorker.evaluate(async value =>
-      registerRuntimeContentScriptForPattern(value, BLB_CONTENT_SCRIPT_FILES, async () => true),
-      tab
-    );
-    expect(registered).toBe(true);
-    const registrationId = await extensionWorker.evaluate(value => runtimeContentScriptIdForPattern(value), pattern);
+    // Seed the Chrome-persisted registration directly. This fixture represents
+    // a registration left behind by an interrupted cleanup; it should not
+    // depend on the normal registration eligibility path or a live tab grant.
+    const registrationId = await extensionWorker.evaluate(async value => {
+      const id = runtimeContentScriptIdForPattern(value);
+      await chrome.scripting.registerContentScripts([{
+        id,
+        matches:[value],
+        js:['content.js'],
+        runAt:'document_start',
+        persistAcrossSessions:true
+      }]);
+      return id;
+    }, pattern);
     await expect.poll(() => extensionWorker.evaluate(async id =>
       (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 1,
       registrationId
