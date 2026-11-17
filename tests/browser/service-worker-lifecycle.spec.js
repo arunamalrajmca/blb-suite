@@ -1393,8 +1393,9 @@ test('startup registration reconciliation remains correct when tabs open and nav
     // registration operation. Navigations in both already-open and newly
     // opened tabs must queue behind that operation instead of racing it.
     const reconciliationStarted = await extensionWorker.evaluate(() => {
-      reconcileRuntimeContentScriptRegistrations().catch(error => {
+      globalThis.__multiTabStartupRecoveryPromise = recoverConfiguredTabsOnStartup().catch(error => {
         globalThis.__multiTabStartupReconciliationError = String(error);
+        throw error;
       });
       return true;
     });
@@ -1409,10 +1410,10 @@ test('startup registration reconciliation remains correct when tabs open and nav
 
     await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.release());
     await extensionWorker.evaluate(async () => {
-      // Exercise the same orchestration registered for chrome.runtime.onStartup:
-      // finish persistent registration reconciliation, then activate tabs
-      // whose documents completed navigation while registration was gated.
-      await recoverConfiguredTabsOnStartup();
+      // Await the startup recovery that was started before the tab
+      // navigations, so the registration gate overlaps the real orchestration.
+      await globalThis.__multiTabStartupRecoveryPromise;
+      delete globalThis.__multiTabStartupRecoveryPromise;
       if (globalThis.__multiTabStartupReconciliationError) {
         throw new Error(globalThis.__multiTabStartupReconciliationError);
       }
