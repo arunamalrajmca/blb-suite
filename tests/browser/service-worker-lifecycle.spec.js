@@ -1128,7 +1128,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     // The browser fixture adds these hosts to the test extension's granted
     // host_permissions. The final origin is intentionally absent from that
     // list so its still-valid permission intent must remain pending.
-    const validPattern = 'https://www.dailyverses.net/*';
+    const validPattern = 'https://example.com/*';
     const expiredPattern = 'https://example.com/*';
     const stalePatternTwo = 'https://www.facebook.com/*';
     const stalePatternThree = 'https://www.supplyofgrace.com/*';
@@ -1323,13 +1323,13 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
 test('startup registration reconciliation remains correct when tabs open and navigate across mixed permission states', async ({
   context, extensionStorage, extensionWorker
 }) => {
-  const permittedPattern = 'https://www.dailyverses.net/*';
+  const permittedPattern = 'https://example.com/*';
   const deniedPattern = 'https://www.wikipedia.org/*';
-  const permittedUrl = 'https://www.dailyverses.net/';
+  const permittedUrl = 'https://example.com/';
   const deniedUrl = 'https://www.wikipedia.org/';
   const registrationId = await extensionWorker.evaluate(pattern => runtimeContentScriptIdForPattern(pattern), permittedPattern);
 
-  // dailyverses.net is granted by the browser fixture; wikipedia.org is
+  // example.com is a required fixture permission; wikipedia.org is
   // deliberately outside its optional host grants, giving this test a real
   // no-permission tab without attempting to remove a required permission.
   expect(await extensionWorker.evaluate(async pattern =>
@@ -1350,7 +1350,6 @@ test('startup registration reconciliation remains correct when tabs open and nav
       masterEnabled:true,
       redirectEnabled:false,
       pageSelectionButtonSites:{
-        'dailyverses.net':true,
         'example.com':true
       },
       doubleClickBlbSites:{}
@@ -1359,7 +1358,7 @@ test('startup registration reconciliation remains correct when tabs open and nav
     injectConfiguredTabsAfterExtensionUpdate = globalThis.__multiTabStartupOriginalInject;
     delete globalThis.__multiTabStartupOriginalReconcile;
     delete globalThis.__multiTabStartupOriginalInject;
-    await unregisterRuntimeContentScriptForPattern('https://www.dailyverses.net/*');
+    await unregisterRuntimeContentScriptForPattern('https://example.com/*');
   });
 
   let firstPage;
@@ -1436,7 +1435,7 @@ test('startup registration reconciliation remains correct when tabs open and nav
         }
       };
       const inspected = await Promise.all(tabs.filter(tab =>
-        tab.url?.startsWith('https://www.dailyverses.net/') || tab.url?.startsWith('https://www.wikipedia.org/')
+        tab.url?.startsWith('https://example.com/') || tab.url?.startsWith('https://www.wikipedia.org/')
       ).map(inspect));
       return {
         registration:registrations.find(entry => entry.id === registrationId) || null,
@@ -1461,7 +1460,7 @@ test('startup registration reconciliation remains correct when tabs open and nav
     await Promise.all([firstPage,secondPage,deniedPage].filter(Boolean).map(page => page.close().catch(() => {})));
     await extensionWorker.evaluate(async pattern => {
       await chrome.storage.local.set({
-        pageSelectionButtonSites:{'dailyverses.net':false,'example.com':false},
+        pageSelectionButtonSites:{'example.com':false},
         doubleClickBlbSites:{}
       });
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
