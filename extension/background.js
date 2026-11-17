@@ -7885,6 +7885,11 @@ async function handleGrantedHostPermissions(origins) {
   if (!grantedOrigins.length) return {committed:[],expired:[]};
   await updateRevokedSiteHostAccess(grantedOrigins, false);
   const result = await commitPendingSiteFeatureTogglesForGrantedOrigins(grantedOrigins);
+  // A revocation callback may already have captured a no-access snapshot and
+  // be waiting to remove this origin's persistent registration. Drain that
+  // reconciliation before activating the newly granted host, otherwise its
+  // delayed unregister can remove the registration created by this grant.
+  await reconcileRuntimeContentScriptRegistrations();
   await injectEnabledTabsForGrantedOrigins(grantedOrigins);
   return result;
 }
