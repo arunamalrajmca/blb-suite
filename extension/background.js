@@ -841,28 +841,43 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
 // lookup/creation steps; locking and activation policy stay centralized.
 const pendingBlbDestinationOperations = new Map();
 
+async function activateOrRecoverBlbDestination(result, create) {
+  if (result?.tab?.id == null) return {tab:await create(), reused:false};
+  const tabId = result.tab.id;
+  try {
+    await chrome.tabs.update(tabId, {active:true});
+    const liveTab = await chrome.tabs.get(tabId);
+    if (liveTab?.id == null) return {tab:await create(), reused:false};
+    if (liveTab.windowId != null) {
+      await chrome.windows.update(liveTab.windowId, {focused:true});
+    }
+    return {...result, tab:liveTab};
+  } catch (error) {
+    // A matching destination may disappear between lookup and activation.
+    // Recover only when Chrome confirms that the tab is gone; preserve genuine
+    // activation/focus errors for a still-live tab so callers do not report success.
+    const liveTab = await getLiveTabById(tabId);
+    if (!liveTab) return {tab:await create(), reused:false};
+    throw error;
+  }
+}
+
 async function openBlbDestinationByIdentity({key, active = false, findExisting, create}) {
   const identity = String(key || '');
   if (!identity) throw new Error('A BLB destination identity is required');
   const pending = pendingBlbDestinationOperations.get(identity);
   if (pending) {
     const result = await pending;
-    if (active && result?.tab?.id != null) {
-      await chrome.tabs.update(result.tab.id, {active:true}).catch(()=>{});
-      if (result.tab.windowId != null) await chrome.windows.update(result.tab.windowId, {focused:true}).catch(()=>{});
-    }
-    return result;
+    return active ? activateOrRecoverBlbDestination(result, create) : result;
   }
   const operation = (async () => {
     const existing = await findExisting();
-    if (existing?.id != null) {
-      if (active) {
-        await chrome.tabs.update(existing.id, {active:true}).catch(()=>{});
-        if (existing.windowId != null) await chrome.windows.update(existing.windowId, {focused:true}).catch(()=>{});
-      }
-      return {tab:existing, reused:true};
-    }
-    return {tab:await create(), reused:false};
+    const result = existing?.id != null
+      ? {tab:existing, reused:true}
+      : {tab:await create(), reused:false};
+    return active && result.reused
+      ? activateOrRecoverBlbDestination(result, create)
+      : result;
   })();
   pendingBlbDestinationOperations.set(identity, operation);
   try { return await operation; }
