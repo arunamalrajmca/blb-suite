@@ -234,7 +234,7 @@ async function setPageButton(on, requestId) {
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
       await writeSiteFeaturePreference('pageButton', false, requestId, true);
-      setStatus('Unable to enable Show on BLB on this page. The setting remains OFF; please try again.');
+      setStatus('Show on BLB activation failed. The latest saved preference was preserved; please try again.');
       render(await getState());
       return;
     }
@@ -259,7 +259,7 @@ async function setDoubleClick(on, requestId) {
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
       await writeSiteFeaturePreference('doubleClick', false, requestId, true);
-      setStatus('Unable to enable Double-click on this page. The setting remains OFF; please try again.');
+      setStatus('Double-click activation failed. The latest saved preference was preserved; please try again.');
       render(await getState());
       return;
     }
