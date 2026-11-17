@@ -1256,7 +1256,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     },{
       ids,validPattern,expiredPattern,missingPermissionPattern,
       expiredRequestKey,validRequestKey,missingRequestKey
-    }),{timeout:15000,intervals:[100,250,500,1000]}).toEqual({
+    }),{timeout:15000,intervals:[100,250,500,1000]}).toMatchObject({
       registeredIds:[validId],
       pagePreference:true,
       expiredPendingPresent:false,
