@@ -786,8 +786,8 @@ test("Study history tab batches finish after the popup closes and reopens", asyn
     const tabs = await chrome.tabs.query({});
     const urls = tabs.flatMap(tab => [tab.url, tab.pendingUrl]).filter(Boolean);
     return {
-      h430:urls.some(url => /\\/lexicon\\/h430\\/kjv\\/wlc\\/0-1\\//i.test(url)),
-      h3068:urls.some(url => /\\/lexicon\\/h3068\\/kjv\\/wlc\\/0-1\\//i.test(url))
+      h430:urls.some(url => url.toLowerCase().includes('/lexicon/h430/kjv/wlc/0-1/')),
+      h3068:urls.some(url => url.toLowerCase().includes('/lexicon/h3068/kjv/wlc/0-1/'))
     };
   }), {timeout:15000}).toEqual({h430:true,h3068:true});
 
