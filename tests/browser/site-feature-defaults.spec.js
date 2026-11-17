@@ -182,6 +182,59 @@ test('a denied site-feature permission request cancels its pending opt-in', asyn
     await messagePage.close();
   }
 });
+test('an older popup cannot cancel a newer pending permission intent for the same site feature', async ({ context, extensionId, extensionWorker }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  try {
+    await extensionWorker.evaluate(() => chrome.storage.local.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    const first = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick'
+    }));
+    const second = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick'
+    }));
+    expect(first).toMatchObject({ok:true,pending:true});
+    expect(second).toMatchObject({ok:true,pending:true});
+    expect(second.requestId).not.toBe(first.requestId);
+
+    const staleCancel = await messagePage.evaluate(requestId => chrome.runtime.sendMessage({
+      type:'blbSuiteCancelSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick',
+      requestId
+    }), first.requestId);
+    expect(staleCancel).toMatchObject({ok:true});
+
+    const beforeGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pendingSiteFeatureToggles:{},
+      siteFeaturePreferenceRequestIds:{}
+    }));
+    expect(beforeGrant.pendingSiteFeatureToggles['https://example.com/*'].requestId).toBe(second.requestId);
+    expect(beforeGrant.siteFeaturePreferenceRequestIds['https://example.com/*|doubleClick']).toBe(second.requestId);
+
+    const committed = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+    );
+    expect(committed.committed).toEqual([{origin:'https://example.com/*',feature:'doubleClick'}]);
+    const afterGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    expect(afterGrant.doubleClickBlbSites['example.com']).toBe(true);
+    expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await messagePage.close();
+  }
+});
+
 test('closing the popup leaves a pending site opt-in that the matching permission grant can commit', async ({ context, extensionId, extensionWorker }) => {
   const messagePage = await createExtensionMessagePage(context, extensionId);
   await extensionWorker.evaluate(() => chrome.storage.local.set({
