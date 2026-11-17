@@ -1397,7 +1397,7 @@ test('startup registration reconciliation remains correct when tabs open and nav
     // Explicitly begin the startup-style reconciliation and pause its
     // registration operation. Navigations in both already-open and newly
     // opened tabs must queue behind that operation instead of racing it.
-    const reconciliation = extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+    const reconciliationStarted = await extensionWorker.evaluate(() => {\n      reconcileRuntimeContentScriptRegistrations().catch(error => {\n        globalThis.__multiTabStartupReconciliationError = String(error);\n      });\n      return true;\n    });\n    expect(reconciliationStarted).toBe(true);
     await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.started);
 
     await Promise.all([
