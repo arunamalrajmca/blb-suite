@@ -725,6 +725,76 @@ test("Study Sessions History reports partial Strong's destination failures", asy
   await page.close();
 });
 
+test("Study history tab batches finish after the popup closes and reopens", async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Popup history batch lifetime ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyTopics:[value],
+      studySelectedTopic:value,
+      studySessions:[{
+        id:'popup-history-batch-lifetime',
+        title:value,
+        date,
+        dateLabel:date,
+        refs:[],
+        strongs:['H430','H3068'],
+        searchTerms:[],
+        notes:[]
+      }]
+    });
+    const originalCreate = chrome.tabs.create.bind(chrome.tabs);
+    let signalStarted;
+    let releaseFirstCreate;
+    globalThis.__studyHistoryBatchStarted = new Promise(resolve => { signalStarted = resolve; });
+    globalThis.__releaseStudyHistoryBatchCreate = () => releaseFirstCreate?.();
+    let first = true;
+    chrome.tabs.create = async (...args) => {
+      if (first) {
+        first = false;
+        signalStarted();
+        await new Promise(resolve => { releaseFirstCreate = resolve; });
+      }
+      return originalCreate(...args);
+    };
+  }, normalizedTopic);
+
+  const firstPopup = await context.newPage();
+  await firstPopup.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(firstPopup);
+  await firstPopup.locator('#multiView').click();
+  await firstPopup.locator('#historyStrongs').click();
+
+  await extensionWorker.evaluate(() => globalThis.__studyHistoryBatchStarted);
+  await firstPopup.close();
+
+  const reopenedPopup = await context.newPage();
+  await reopenedPopup.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(reopenedPopup);
+  await expect(reopenedPopup.locator('#studyTopic')).toHaveValue(normalizedTopic);
+
+  await extensionWorker.evaluate(() => globalThis.__releaseStudyHistoryBatchCreate());
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    const urls = tabs.flatMap(tab => [tab.url, tab.pendingUrl]).filter(Boolean);
+    return {
+      h430:urls.some(url => /\\/lexicon\\/h430\\/kjv\\/wlc\\/0-1\\//i.test(url)),
+      h3068:urls.some(url => /\\/lexicon\\/h3068\\/kjv\\/wlc\\/0-1\\//i.test(url))
+    };
+  }), {timeout:15000}).toEqual({h430:true,h3068:true});
+
+  await expect(reopenedPopup.locator('#studyTopic')).toHaveValue(normalizedTopic);
+  await reopenedPopup.close();
+});
+
 test('Study Sessions popup exposes whole-study and date-filtered PDF downloads', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
