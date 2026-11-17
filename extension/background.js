@@ -4135,7 +4135,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!feature || !/^https?:$/.test(parsed.protocol)) { sendResponse({ok:false}); return true; }
       const permissionOrigin = parsed.origin + '/*';
       await serializePendingSiteFeatureToggleMutation(async () => {
-        const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+        const data = await chrome.storage.local.get({
+          pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+        });
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
         const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
