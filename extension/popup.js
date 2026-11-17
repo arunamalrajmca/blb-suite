@@ -1099,29 +1099,24 @@ async function openHistoryStrongs() {
   if (!values.length) { setStatus("No KJV Strong's entries in this topic."); return; }
 
   let opened = 0;
-  let lastTabId = null;
-  for (const value of values) {
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    const activate = index === values.length - 1;
     try {
-      const result = await chrome.runtime.sendMessage({type:'blbSuiteOpenStrongHistory', value, activeIfNew:false});
-      if (result?.ok && result.tabId != null) {
-        opened++;
-        lastTabId = result.tabId;
-      }
+      const result = await chrome.runtime.sendMessage({
+        type:'blbSuiteOpenStrongHistory',
+        value,
+        activeIfNew:activate,
+        activateExisting:activate
+      });
+      if (result?.ok && result.tabId != null) opened++;
     } catch (_) {
       // Continue so one failed destination does not prevent later entries opening.
     }
   }
 
-  let activationFailed = false;
-  if (lastTabId != null) {
-    try { await chrome.tabs.update(lastTabId, {active:true}); }
-    catch (_) { activationFailed = true; }
-  }
-
-  if (opened === values.length && !activationFailed) {
+  if (opened === values.length) {
     setStatus(`Opened ${opened} KJV Strong's ${opened === 1 ? 'entry' : 'entries'}.`);
-  } else if (opened === values.length && activationFailed) {
-    setStatus(`Opened all ${opened} KJV Strong's entries, but could not activate the last tab. Please check the opened tabs.`);
   } else if (opened > 0) {
     setStatus(`Opened ${opened} of ${values.length} KJV Strong's entries. Please retry the missing entries.`);
   } else {
@@ -1482,12 +1477,21 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
       await chrome.tabs.update(tab.id, { url });
       return;
     }
-  } catch (_) {}
+  } catch (_) {
+    // The current tab may have closed or started navigating; use the options
+    // page fallback rather than silently abandoning the navigation.
+  }
   try {
     // Tutorial.html is the configured options page; this uses Chrome's options action.
     await chrome.runtime.openOptionsPage();
+    return;
   } catch (_) {
-    try { await chrome.tabs.create({ url, active: true }); } catch (_) {}
+    try {
+      await chrome.tabs.create({ url, active: true });
+      return;
+    } catch (_) {
+      setStatus('Unable to open the tutorial page. Please try again.');
+    }
   }
 });
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
