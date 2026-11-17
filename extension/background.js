@@ -3820,7 +3820,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const failures = [];
     let opened = 0;
     for (const url of urls) {
-      if (!/^https:\\/\\/www\\.blueletterbible\\.org\\/search\\/search\\.cfm\\?/.test(url)) {
+      let validSearchUrl = false;
+      try {
+        const parsed = new URL(url);
+        validSearchUrl = parsed.origin === 'https://www.blueletterbible.org' &&
+          parsed.pathname === '/search/search.cfm' && !!parsed.search;
+      } catch (_) {}
+      if (!validSearchUrl) {
         failures.push({url, reason:'invalid-url'});
         continue;
       }
