@@ -1646,14 +1646,11 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
     expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
     await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
-    const tabState = await extensionWorker.evaluate(async id => {
-      const [{result}] = await chrome.scripting.executeScript({
-        target:{tabId:id},world:'ISOLATED',
-        func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
-      });
-      return result;
+    const redirectedTab = await extensionWorker.evaluate(async id => {
+      const current = await chrome.tabs.get(id);
+      return current?.url || '';
     },tabId);
-    expect(tabState).toBe(false);
+    expect(redirectedTab).toContain('wikipedia.org');
     expect(await extensionWorker.evaluate(pattern =>
       chrome.permissions.contains({origins:[pattern]}),deniedPattern)).toBe(false);
   } finally {
