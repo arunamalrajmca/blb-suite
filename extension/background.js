@@ -2548,6 +2548,28 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
     }
     delete map[String(removedTabId)];
   });
+
+  // A prerendered replacement can become the live tab after the original
+  // document's startup activation pass has already enumerated its tabs. The
+  // replacement may have loaded before a persistent registration was ready,
+  // so explicitly reconcile the surviving document as well.
+  try {
+    const tab = await chrome.tabs.get(addedTabId);
+    if (!isHttpPageUrl(tab?.url)) return;
+    const data = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    if (data.masterEnabled === false ||
+        !(await shouldInjectContentScriptForTab(tab, data))) return;
+    await ensureContentScriptInTab(addedTabId);
+  } catch (error) {
+    if (!isTabUnavailableError(error)) {
+      console.warn('KJV Scripture Tools replaced-tab content-script recovery failed:', String(error));
+    }
+  }
 }
 
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
