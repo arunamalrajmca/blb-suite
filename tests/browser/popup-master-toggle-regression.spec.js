@@ -567,7 +567,7 @@ test('history actions report runtime failures instead of treating history as emp
 });
 
 
-test('Study Strong history activates the final destination through the background request', async ({
+test('Study Strong history dispatches one background-owned batch without popup tab activation', async ({
   page, extensionId
 }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -580,13 +580,9 @@ test('Study Strong history activates the final destination through the backgroun
     Object.defineProperty(chrome.runtime, 'sendMessage', {
       configurable:true,
       value:message => {
-        if (message?.type === 'blbSuiteOpenStrongHistory') {
-          window.__strongHistoryRequests.push({
-            value:message.value,
-            activeIfNew:message.activeIfNew,
-            activateExisting:message.activateExisting
-          });
-          return Promise.resolve({ok:true,tabId:message.value === 'G1' ? 91001 : 91002});
+        if (message?.type === 'blbSuiteOpenStrongHistoryBatch') {
+          window.__strongHistoryRequests.push(message.values);
+          return Promise.resolve({ok:true,opened:2,total:2,failures:[]});
         }
         return originalSend(message);
       }
@@ -605,10 +601,7 @@ test('Study Strong history activates the final destination through the backgroun
     requests:window.__strongHistoryRequests,
     directTabActivations:window.__tabActivationCalls
   }));
-  expect(result.requests).toEqual([
-    {value:'G1',activeIfNew:false,activateExisting:false},
-    {value:'H2',activeIfNew:true,activateExisting:true}
-  ]);
+  expect(result.requests).toEqual([['G1','H2']]);
   expect(result.directTabActivations).toEqual([]);
   await expect(page.locator('#studyStatus')).toContainText("Opened 2 KJV Strong's entries.");
 });
