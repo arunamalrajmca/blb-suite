@@ -1896,6 +1896,87 @@ test('grant-time expiry removes only the matching expired permission request tok
 });
 
 
+test('worker-start recovery removes stale persisted host registrations even when no permission intent is pending', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},
+    siteFeaturePreferenceRequestIds:{},
+    siteHostAccessRevokedSites:{}
+  }));
+  let originalContains;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{},
+      siteFeaturePreferenceRequestIds:{}
+    });
+    originalContains = await extensionWorker.evaluate(() => {
+      const original = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes('https://example.com/*') ? true : original(details);
+      return true;
+    });
+    await page.goto('https://example.com/worker-start-registration-recovery', {waitUntil:'domcontentloaded'});
+    const tab = await extensionWorker.evaluate(async () => {
+      const [value] = await chrome.tabs.query({url:'https://example.com/worker-start-registration-recovery'});
+      return value ? {id:value.id,url:value.url} : null;
+    });
+    expect(tab).toBeTruthy();
+
+    const registered = await extensionWorker.evaluate(async value =>
+      registerRuntimeContentScriptForPattern(value, BLB_CONTENT_SCRIPT_FILES, async () => true),
+      tab
+    );
+    expect(registered).toBe(true);
+    const registrationId = await extensionWorker.evaluate(value => runtimeContentScriptIdForPattern(value), pattern);
+    await expect.poll(() => extensionWorker.evaluate(async id =>
+      (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 1,
+      registrationId
+    )).toBe(true);
+
+    await extensionWorker.evaluate(async origin => {
+      const original = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(origin) ? false : original(details);
+      try {
+        // Simulates a cold worker activation after the revocation callback
+        // failed or was interrupted; there is deliberately no pending intent.
+        await recoverRuntimeContentScriptRegistrationsAfterWorkerStart();
+      } finally {
+        chrome.permissions.contains = original;
+      }
+    }, pattern);
+
+    await expect.poll(() => extensionWorker.evaluate(async id =>
+      (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 0,
+      registrationId
+    )).toBe(true);
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+    }));
+    expect(saved.pageSelectionButtonSites['example.com']).toBe(true);
+    expect(saved.pendingSiteFeatureToggles).toEqual({});
+    expect(saved.siteFeaturePreferenceRequestIds).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(async ({origin,settings}) => {
+      const id = runtimeContentScriptIdForPattern(origin);
+      await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
+      await chrome.storage.local.set(settings);
+    }, {origin:pattern,settings:previous});
+    await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
+  }
+});
+
+
 test('an immediate host-permission regrant waits for an older revocation reconciliation before reactivating the site', async ({
   page, extensionWorker, extensionStorage
 }) => {
