@@ -1561,3 +1561,68 @@ test('permission revocation invalidates only matching pending popup opt-ins and 
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
   }
 });
+
+
+test('worker-start recovery commits only pending site opt-ins whose host permission is still granted', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{},
+    siteFeaturePreferenceRequestIds:{},
+    siteHostAccessRevokedSites:{}
+  }));
+  const grantedOrigin = 'https://recovered.example/*';
+  const revokedOrigin = 'https://still-revoked.example/*';
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{
+        [grantedOrigin]:{feature:'pageButton',requestedAt:Date.now(),requestId:'restart-granted'},
+        [revokedOrigin]:{feature:'doubleClick',requestedAt:Date.now(),requestId:'restart-revoked'}
+      },
+      siteFeaturePreferenceRequestIds:{
+        [grantedOrigin + '|pageButton']:'restart-granted',
+        [revokedOrigin + '|doubleClick']:'restart-revoked'
+      }
+    });
+
+    const recovered = await extensionWorker.evaluate(async ({granted,revoked}) => {
+      const originalContains = chrome.permissions.contains;
+      chrome.permissions.contains = async details => {
+        if (details?.origins?.includes(granted)) return true;
+        if (details?.origins?.includes(revoked)) return false;
+        return originalContains(details);
+      };
+      try {
+        return await recoverPendingSiteFeatureTogglesAfterWorkerStart();
+      } finally {
+        chrome.permissions.contains = originalContains;
+      }
+    }, {granted:grantedOrigin,revoked:revokedOrigin});
+
+    expect(recovered).toMatchObject({
+      committed:[{origin:grantedOrigin,feature:'pageButton'}],
+      checked:2
+    });
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{},
+      siteFeaturePreferenceRequestIds:{}
+    }));
+    expect(saved.pageSelectionButtonSites['recovered.example']).toBe(true);
+    expect(saved.doubleClickBlbSites['still-revoked.example']).toBeUndefined();
+    expect(saved.pendingSiteFeatureToggles[grantedOrigin]).toBeUndefined();
+    expect(saved.pendingSiteFeatureToggles[revokedOrigin]).toMatchObject({
+      feature:'doubleClick',requestId:'restart-revoked'
+    });
+    expect(saved.siteFeaturePreferenceRequestIds[revokedOrigin + '|doubleClick']).toBe('restart-revoked');
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
