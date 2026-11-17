@@ -1010,29 +1010,52 @@ test('browser restart reconciles persisted host registrations and pending permis
     const requestKey = pendingOrigin + '|pageButton';
 
     const registrationId = await worker.evaluate(async ({value,request,tokenKey,token}) => {
-      await chrome.storage.local.set({
-        masterEnabled:true,
-        redirectEnabled:false,
-        pageSelectionButtonSites:{'example.com':false},
-        doubleClickBlbSites:{},
-        pendingSiteFeatureToggles:{
-          [request]:{
-            feature:'pageButton',
-            requestedAt:Date.now()-6*60*1000,
-            requestId:token
-          }
-        },
-        siteFeaturePreferenceRequestIds:{[tokenKey]:token}
+      // This fixture deliberately seeds a stale registration for an opted-out
+      // host. Suppress the production storage-change reconciliation only while
+      // constructing that persisted pre-restart state; otherwise the normal
+      // listener correctly removes the registration before the restart test
+      // can exercise startup reconciliation.
+      const originalReconcile = reconcileRuntimeContentScriptRegistrations;
+      let resolveSeedStorageChange;
+      const seedStorageChange = new Promise(resolve => {
+        resolveSeedStorageChange = resolve;
       });
-      const id = runtimeContentScriptIdForPattern(value);
-      await chrome.scripting.registerContentScripts([{
-        id,
-        matches:[value],
-        js:['content.js'],
-        runAt:'document_start',
-        persistAcrossSessions:true
-      }]);
-      return id;
+      const observeSeedStorageChange = (changes, area) => {
+        if (area !== 'local' || !changes.pageSelectionButtonSites) return;
+        chrome.storage.onChanged.removeListener(observeSeedStorageChange);
+        resolveSeedStorageChange();
+      };
+      reconcileRuntimeContentScriptRegistrations = () => Promise.resolve();
+      chrome.storage.onChanged.addListener(observeSeedStorageChange);
+      try {
+        await chrome.storage.local.set({
+          masterEnabled:true,
+          redirectEnabled:false,
+          pageSelectionButtonSites:{'example.com':false},
+          doubleClickBlbSites:{},
+          pendingSiteFeatureToggles:{
+            [request]:{
+              feature:'pageButton',
+              requestedAt:Date.now()-6*60*1000,
+              requestId:token
+            }
+          },
+          siteFeaturePreferenceRequestIds:{[tokenKey]:token}
+        });
+        await seedStorageChange;
+        const id = runtimeContentScriptIdForPattern(value);
+        await chrome.scripting.registerContentScripts([{
+          id,
+          matches:[value],
+          js:['content.js'],
+          runAt:'document_start',
+          persistAcrossSessions:true
+        }]);
+        return id;
+      } finally {
+        chrome.storage.onChanged.removeListener(observeSeedStorageChange);
+        reconcileRuntimeContentScriptRegistrations = originalReconcile;
+      }
     },{value:pattern,request:pendingOrigin,tokenKey:requestKey,token:requestId});
     await expect.poll(() => worker.evaluate(async id =>
       (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length===1,
