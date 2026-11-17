@@ -433,9 +433,11 @@ async function syncSelectedTopic(topic) {
   return await commitStudyTopicSelection(requestId, value) || {ok:false};
 }
 
+let selectedTopicLoadGeneration = 0;
 async function loadSelectedTopic() {
+  const generation = ++selectedTopicLoadGeneration;
   const data = await chrome.storage.local.get({[SELECTED_TOPIC_STORAGE_KEY]: ''});
-  if (topicInputEdited) return;
+  if (generation !== selectedTopicLoadGeneration || topicInputEdited) return;
   topicInput.value = titleCase(data[SELECTED_TOPIC_STORAGE_KEY] || '');
 }
 
@@ -1391,6 +1393,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     void refreshPopupSettingsFromStorage();
   }
+  if (changes[SELECTED_TOPIC_STORAGE_KEY]) selectedTopicLoadGeneration++;
   if (changes[SELECTED_TOPIC_STORAGE_KEY] && !topicInputEdited && !noteInput.value.trim()) {
     clearActionStatus();
     topicInput.value = titleCase(changes[SELECTED_TOPIC_STORAGE_KEY].newValue || '');
@@ -1724,10 +1727,18 @@ document.addEventListener('click', event => {
   // Sensitive pages get a minimal explanation instead of any extension controls.
   // Keep the normal popup available if initialization fails on an ordinary page.
   let isSensitivePopup = false;
+  const initialSettingsGeneration = popupSettingsRefreshGeneration;
   try {
-    render(await getState());
+    const initialState = await getState();
+    // A storage/permission event may have completed a newer settings refresh
+    // while the initial tab/permission inspection was pending. Do not let the
+    // initial snapshot overwrite that newer render.
+    if (initialSettingsGeneration === popupSettingsRefreshGeneration) render(initialState);
     isSensitivePopup = document.body.classList.contains('sensitive-restricted');
   } catch (error) {
+    if (initialSettingsGeneration !== popupSettingsRefreshGeneration) {
+      isSensitivePopup = document.body.classList.contains('sensitive-restricted');
+    } else {
     console.error('KJV Scripture Tools popup initialization failed:', error);
     // If live tab/permission inspection fails, keep the popup usable without
     // presenting unchecked HTML defaults as if every saved toggle was turned off.
@@ -1753,6 +1764,7 @@ document.addEventListener('click', event => {
     } catch (fallbackError) {
       console.error('KJV Scripture Tools popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+    }
     }
   } finally {
     document.body.classList.remove('popup-loading');

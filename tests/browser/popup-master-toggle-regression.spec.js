@@ -1,5 +1,41 @@
 const { test, expect } = require('./fixtures');
 
+test('popup registers only its two distinct storage listeners on each opening', async ({
+  page, extensionId
+}) => {
+  await page.addInitScript(() => {
+    const event = chrome.storage.onChanged;
+    const originalAddListener = event.addListener.bind(event);
+    window.__popupStorageListenerRegistrations = 0;
+    Object.defineProperty(event, 'addListener', {
+      configurable:true,
+      value:listener => {
+        window.__popupStorageListenerRegistrations++;
+        return originalAddListener(listener);
+      }
+    });
+  });
+
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+  await expect.poll(() => page.evaluate(() =>
+    window.__popupStorageListenerRegistrations
+  )).toBe(2);
+
+  // A fresh popup document gets its own two listeners; the prior document's
+  // listeners must not be re-registered or carried into this context.
+  await page.reload();
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+  await expect.poll(() => page.evaluate(() =>
+    window.__popupStorageListenerRegistrations
+  )).toBe(2);
+});
+
+
 test('popup master toggle persists across reload and preserves per-site feature preferences', async ({
   page,
   extensionId,
@@ -329,6 +365,75 @@ test('popup theme interaction wins over a delayed initial theme read', async ({
     (await chrome.storage.local.get({popupTheme:'dark'})).popupTheme
   )).toBe('light');
 });
+
+test('a delayed initial popup settings read cannot overwrite a newer storage refresh', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await page.addInitScript(() => {
+    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    let delayFirstQuery = true;
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable:true,
+      value:(...args) => {
+        if (delayFirstQuery) {
+          delayFirstQuery = false;
+          return new Promise(resolve => {
+            window.__releaseInitialPopupTabQuery = () => originalQuery(...args).then(resolve);
+          });
+        }
+        return originalQuery(...args);
+      }
+    });
+  });
+
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.evaluate(() =>
+    typeof window.__releaseInitialPopupTabQuery
+  )).toBe('function');
+
+  // The initial getState() has already captured ON, but is waiting for the
+  // delayed tab query. The storage listener must win with the newer OFF value.
+  await extensionStorage.set({masterEnabled:false});
+  await expect(page.locator('#master')).not.toBeChecked();
+
+  await page.evaluate(() => window.__releaseInitialPopupTabQuery());
+  await expect(page.locator('#master')).not.toBeChecked();
+});
+
+
+test('a delayed initial topic load cannot overwrite a newer storage-change selection', async ({
+  page, extensionId, extensionStorage
+}) => {
+  const oldTopic = 'Initial Topic Snapshot';
+  const newTopic = 'Newer External Topic';
+  await extensionStorage.set({studySelectedTopic:oldTopic});
+  await page.addInitScript(() => {
+    const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+    let delayedTopicRead = false;
+    chrome.storage.local.get = keys => {
+      if (!delayedTopicRead && keys && typeof keys === 'object' &&
+          Object.prototype.hasOwnProperty.call(keys, 'studySelectedTopic')) {
+        delayedTopicRead = true;
+        return new Promise(resolve => {
+          window.__resolveDelayedInitialTopic = () => resolve({studySelectedTopic:'Initial Topic Snapshot'});
+        });
+      }
+      return originalGet(keys);
+    };
+  });
+
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.evaluate(() =>
+    typeof window.__resolveDelayedInitialTopic
+  )).toBe('function');
+
+  await extensionStorage.set({studySelectedTopic:newTopic});
+  await expect(page.locator('#studyTopic')).toHaveValue(newTopic);
+  await page.evaluate(() => window.__resolveDelayedInitialTopic());
+  await expect(page.locator('#studyTopic')).toHaveValue(newTopic);
+});
+
 
 test('external selected-topic refresh does not replace text currently being edited', async ({
   page, extensionId, extensionStorage
