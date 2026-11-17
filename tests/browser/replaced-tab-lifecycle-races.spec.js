@@ -160,6 +160,14 @@ test('overlapping chained replacements migrate tab-owned state to the final tab'
   const logicalKey = 'replacement-chain-test|logical';
   const scriptKey = 'replacement-chain-test|script';
   try {
+    // These IDs model tabs in a deterministic migration-only test. Keep B and
+    // C logically live so the production liveness guard does not treat the
+    // synthetic identities as genuinely closed browser tabs.
+    await extensionWorker.evaluate(({b,c}) => {
+      globalThis.__replacementSyntheticGetLiveTabById = getLiveTabById;
+      getLiveTabById = async id => [b,c].includes(id)
+        ? {id,url:'https://example.com/'} : globalThis.__replacementSyntheticGetLiveTabById(id);
+    }, ids);
     await extensionWorker.evaluate(async ({a,b}) => {
       await updateTrackedMultiVerseTabs(map => { map[String(a)] = {marker:'chain-tracked'}; });
       await updatePendingMultiVerseRefsByTab(map => {
@@ -210,6 +218,10 @@ test('overlapping chained replacements migrate tab-owned state to the final tab'
     expect(result.pendingB).toBeUndefined();
   } finally {
     await extensionWorker.evaluate(async ({a,b,c}) => {
+      if (globalThis.__replacementSyntheticGetLiveTabById) {
+        getLiveTabById = globalThis.__replacementSyntheticGetLiveTabById;
+        delete globalThis.__replacementSyntheticGetLiveTabById;
+      }
       blbLogicalTabRegistry.delete('replacement-chain-test|logical');
       scriptTaggerDestinationTabs.delete('replacement-chain-test|script');
       intentionalNewBlbTabs.delete(a);
