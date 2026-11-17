@@ -882,8 +882,9 @@ async function downloadTopic() {
   closeDownloadMenu();
   const topic = selectedTopic();
   if (!topic) return;
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteDownloadStudyTopic', topic});
+  const response = await sendStudyPopupMessage({type:'blbSuiteDownloadStudyTopic', topic});
   if (response?.ok) setStatus(`PDF downloaded: ${topic}`);
+  else if (response?.reason === 'runtime-error') setStatus('Unable to communicate with Study Sessions. The topic PDF was not downloaded. Please try again.');
   else setStatus('Topic not found.');
 }
 
@@ -896,10 +897,12 @@ async function saveStudyNote() {
   // that happens to reuse the same topic name after a clear/restart.
   const sessionId = studyState.currentSession?.id || '';
   if (editingNoteOriginal) {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteUpdateStudyNoteToTopic', topic, sessionId, originalNote:editingNoteOriginal, note});
+    const response = await sendStudyPopupMessage({type:'blbSuiteUpdateStudyNoteToTopic', topic, sessionId, originalNote:editingNoteOriginal, note});
     if (!response?.ok) {
-      if (response?.reason === 'not-recording') setStatus('Start recording this topic before updating notes.');
+      if (response?.reason === 'runtime-error') setStatus('Unable to communicate with Study Sessions. Your note was not updated; please try again.');
+      else if (response?.reason === 'not-recording') setStatus('Start recording this topic before updating notes.');
       else if (response?.reason === 'note-not-found') setStatus('Original note was not found.');
+      else setStatus('Unable to update this Study note. Please try again.');
       return;
     }
     editingNoteOriginal = '';
@@ -909,9 +912,11 @@ async function saveStudyNote() {
     return;
   }
   const editGeneration = noteInputEditGeneration;
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteAddStudyNoteToTopic', topic, sessionId, note});
+  const response = await sendStudyPopupMessage({type:'blbSuiteAddStudyNoteToTopic', topic, sessionId, note});
   if (!response?.ok) {
-    if (response?.reason === 'not-recording') setStatus('Start recording this topic before saving notes.');
+    if (response?.reason === 'runtime-error') setStatus('Unable to communicate with Study Sessions. Your note was not saved; please try again.');
+    else if (response?.reason === 'not-recording') setStatus('Start recording this topic before saving notes.');
+    else setStatus('Unable to save this Study note. Please try again.');
     return;
   }
   // A save may finish after the user has already started another draft.
@@ -924,8 +929,10 @@ async function saveStudyNote() {
 
 async function downloadWholeStudy() {
   closeDownloadMenu();
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteDownloadStudyWhole'});
-  setStatus(response?.ok ? 'Whole study PDF downloaded.' : 'Nothing to download.');
+  const response = await sendStudyPopupMessage({type:'blbSuiteDownloadStudyWhole'});
+  if (response?.ok) setStatus('Whole study PDF downloaded.');
+  else if (response?.reason === 'runtime-error') setStatus('Unable to communicate with Study Sessions. The whole-study PDF was not downloaded. Please try again.');
+  else setStatus('Nothing to download.');
 }
 
 function localIsoDateOffset(days) {
@@ -938,8 +945,10 @@ function localIsoDateOffset(days) {
 async function downloadStudyDateValue(date) {
   closeDateQuickMenu();
   if (!date) return;
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteDownloadStudyDate', date});
-  setStatus(response?.ok ? `Date PDF downloaded: ${formatDisplayDate(date)}` : 'No study found for that date.');
+  const response = await sendStudyPopupMessage({type:'blbSuiteDownloadStudyDate', date});
+  if (response?.ok) setStatus(`Date PDF downloaded: ${formatDisplayDate(date)}`);
+  else if (response?.reason === 'runtime-error') setStatus('Unable to communicate with Study Sessions. The date PDF was not downloaded. Please try again.');
+  else setStatus('No study found for that date.');
 }
 
 function chooseDateStudy() {
@@ -976,13 +985,23 @@ async function clearSelectedTopic() {
   const noteEditGenerationAtStart = noteInputEditGeneration;
   if (isRecordingSelected) {
     if (!confirm(`“${topic}” is recording. Export a Study backup to keep its notes and references. Stop and delete?`)) return;
-    const stopResponse = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
-    if (!stopResponse?.ok) { setStatus('Unable to stop recording.'); return; }
+    const stopResponse = await sendStudyPopupMessage({type:'blbSuiteStopStudyRecording'});
+    if (!stopResponse?.ok) {
+      setStatus(stopResponse?.reason === 'runtime-error'
+        ? 'Unable to communicate with Study Sessions. The recording was not stopped or deleted. Please try again.'
+        : 'Unable to stop recording.');
+      return;
+    }
   } else {
     if (!confirm(`Delete “${topic}”? Export a Study backup first to keep its notes and references. Continue?`)) return;
   }
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudyTopic', topic});
-  if (!response?.ok) { setStatus('Unable to clear the selected topic.'); return; }
+  const response = await sendStudyPopupMessage({type:'blbSuiteClearStudyTopic', topic});
+  if (!response?.ok) {
+    setStatus(response?.reason === 'runtime-error'
+      ? 'Unable to communicate with Study Sessions. The selected topic was not deleted. Please try again.'
+      : 'Unable to clear the selected topic.');
+    return;
+  }
   clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
   const selectionSync = await syncSelectedTopic('');
   if (!selectionSync?.ok && !selectionSync?.stale) {
@@ -1001,8 +1020,13 @@ async function clearAllTopics() {
   const topicEditGenerationAtStart = topicInputEditGeneration;
   const noteEditGenerationAtStart = noteInputEditGeneration;
   if (!confirm('Delete all Study data? Export a backup first to keep a copy. Continue?')) return;
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudy'});
-  if (!response?.ok) { setStatus('Unable to clear Study Sessions.'); return; }
+  const response = await sendStudyPopupMessage({type:'blbSuiteClearStudy'});
+  if (!response?.ok) {
+    setStatus(response?.reason === 'runtime-error'
+      ? 'Unable to communicate with Study Sessions. Study data was not cleared. Please try again.'
+      : 'Unable to clear Study Sessions.');
+    return;
+  }
   clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
   const selectionSync = await syncSelectedTopic('');
   if (!selectionSync?.ok && !selectionSync?.stale) {
@@ -1027,6 +1051,17 @@ function toggleHistoryMenu() {
   if (open) {
     historyMenu.classList.add('open');
     multiViewButton.setAttribute('aria-expanded', 'true');
+  }
+}
+
+async function sendStudyPopupMessage(message) {
+  try {
+    const response = await chrome.runtime.sendMessage(message);
+    return response === undefined
+      ? {ok:false, reason:'runtime-error'}
+      : response;
+  } catch (error) {
+    return {ok:false, reason:'runtime-error', error:String(error)};
   }
 }
 
@@ -1160,14 +1195,16 @@ async function clearTopicSelectionInput() {
   const wasRecording = !!studyState.recording;
   const topicToRestore = selectedTopic() || String(studyState.recordingTopic || '').trim();
   if (wasRecording) {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
+    const response = await sendStudyPopupMessage({type:'blbSuiteStopStudyRecording'});
     if (!response?.ok) {
       if (topicInputEditGeneration === topicEditGenerationAtStart) {
         topicInput.value = topicToRestore;
         topicInputEditGeneration++;
         topicInputEdited = false;
       }
-      setStatus('Unable to stop recording.');
+      setStatus(response?.reason === 'runtime-error'
+        ? 'Unable to communicate with Study Sessions. The recording was not stopped; the topic selection was kept.'
+        : 'Unable to stop recording.');
       await refreshStudyState();
       return;
     }

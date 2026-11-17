@@ -120,6 +120,167 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   await page.close();
 });
 
+test('Study note save reports runtime messaging failure and preserves the draft', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Note message failure ' + Date.now();
+  const note = 'Draft must remain available after a failed message';
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyTopics:[value],
+      studySelectedTopic:value,
+      currentStudySessionId:'note-message-failure-session',
+      studySessions:[{
+        id:'note-message-failure-session', title:value, date, dateLabel:date,
+        refs:[], strongs:[], searchTerms:[], notes:[]
+      }]
+    });
+  }, normalizedTopic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteAddStudyNoteToTopic'
+        ? Promise.reject(new Error('simulated service worker unavailable'))
+        : original(message)
+    });
+  });
+  await page.locator('#studyNote').fill(note);
+  await page.locator('#studyNote').press('Control+Enter');
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to communicate with Study Sessions. Your note was not saved'
+  );
+  await expect(page.locator('#studyNote')).toHaveValue(note);
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get({studySessions:[]});
+    return state.studySessions.find(item => item.id === 'note-message-failure-session')?.notes || [];
+  })).toEqual([]);
+  await page.close();
+});
+
+test('Study PDF downloads distinguish runtime messaging failures from empty data', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Download message failure ' + Date.now();
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyTopics:[value],
+      studySelectedTopic:value,
+      studySessions:[{
+        id:'download-message-failure-session', title:value, date, dateLabel:date,
+        refs:[{book:'John',bookNumber:43,chapter:3,from:16,to:16,version:'kjv',text:'3:16'}],
+        strongs:[], searchTerms:[], notes:['Download failure fixture']
+      }]
+    });
+  }, topic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const types = new Set([
+      'blbSuiteDownloadStudyTopic',
+      'blbSuiteDownloadStudyWhole',
+      'blbSuiteDownloadStudyDate'
+    ]);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => types.has(message?.type)
+        ? Promise.reject(new Error('simulated service worker unavailable'))
+        : original(message)
+    });
+  });
+
+  await page.locator('#downloadMenuButton').click();
+  await page.locator('#downloadTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('The topic PDF was not downloaded');
+  await page.locator('#downloadMenuButton').click();
+  await page.locator('#downloadWhole').click();
+  await expect(page.locator('#studyStatus')).toContainText('The whole-study PDF was not downloaded');
+  await page.locator('#downloadMenuButton').click();
+  await page.locator('#downloadDate').click();
+  await page.locator('#dateToday').click();
+  await expect(page.locator('#studyStatus')).toContainText('The date PDF was not downloaded');
+  await expect.poll(async () => extensionWorker.evaluate(() => new Promise(resolve =>
+    chrome.downloads.search({}, items => resolve((items || []).filter(item =>
+      item.state === 'in_progress' || item.state === 'complete'
+    ).length))
+  ))).toBe(0);
+  await page.close();
+});
+
+test('Study clear actions report runtime messaging failures without deleting data', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Clear message failure ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyTopics:[value],
+      studySelectedTopic:value,
+      currentStudySessionId:null,
+      studySessions:[{
+        id:'clear-message-failure-session', title:value, date, dateLabel:date,
+        refs:[], strongs:[], searchTerms:[], notes:['Preserve me']
+      }]
+    });
+  }, normalizedTopic);
+
+  const page = await context.newPage();
+  page.on('dialog', dialog => dialog.accept());
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const types = new Set(['blbSuiteClearStudyTopic','blbSuiteClearStudy']);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => types.has(message?.type)
+        ? Promise.reject(new Error('simulated service worker unavailable'))
+        : original(message)
+    });
+  });
+
+  await page.locator('#clearStudy').click();
+  await page.locator('#clearSelectedTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('The selected topic was not deleted');
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get({studyTopics:[], studySessions:[]});
+    return {topics:state.studyTopics.length, sessions:state.studySessions.length};
+  })).toEqual({topics:1,sessions:1});
+
+  await page.locator('#clearStudy').click();
+  await page.locator('#clearAllTopics').click();
+  await expect(page.locator('#studyStatus')).toContainText('Study data was not cleared');
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get({studyTopics:[], studySessions:[]});
+    return {topics:state.studyTopics.length, sessions:state.studySessions.length};
+  })).toEqual({topics:1,sessions:1});
+  await page.close();
+});
+
 test('Study recording does not start when selected-topic synchronization fails', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
