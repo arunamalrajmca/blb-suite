@@ -7527,6 +7527,40 @@ async function updateRevokedSiteHostAccess(origins, revoked) {
   if (!values.length) return {changedPatterns:[]};
 
   if (revoked) {
+    // A permission removal invalidates any still-pending opt-in for the
+    // affected host. Otherwise a delayed permissions.request/onAdded path
+    // from another popup could commit that old intent after revocation.
+    // Preserve committed site preferences so a deliberate later re-grant can
+    // reactivate them, and preserve unrelated origins/features.
+    const pendingData = await chrome.storage.local.get({
+      pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+    });
+    const pending = pendingData.pendingSiteFeatureToggles && typeof pendingData.pendingSiteFeatureToggles === 'object'
+      ? {...pendingData.pendingSiteFeatureToggles} : {};
+    const requestIds = pendingData.siteFeaturePreferenceRequestIds && typeof pendingData.siteFeaturePreferenceRequestIds === 'object'
+      ? {...pendingData.siteFeaturePreferenceRequestIds} : {};
+    let pendingChanged = false;
+    for (const [pendingOrigin, intent] of Object.entries(pending)) {
+      if (!values.some(origin => hostPermissionCoversSitePattern(origin, pendingOrigin))) continue;
+      let stillGranted = false;
+      try { stillGranted = await chrome.permissions.contains({origins:[pendingOrigin]}); } catch (_) {}
+      if (stillGranted) continue;
+      for (const [feature, featureIntent] of pendingSiteFeatureEntries(intent)) {
+        const requestKey = pendingOrigin + '|' + feature;
+        if (featureIntent?.requestId && requestIds[requestKey] === featureIntent.requestId) {
+          delete requestIds[requestKey];
+        }
+      }
+      delete pending[pendingOrigin];
+      pendingChanged = true;
+    }
+    if (pendingChanged) {
+      await chrome.storage.local.set({
+        pendingSiteFeatureToggles:pending,
+        siteFeaturePreferenceRequestIds:requestIds
+      });
+    }
+
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
       if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
