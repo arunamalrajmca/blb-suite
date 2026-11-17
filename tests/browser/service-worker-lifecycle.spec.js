@@ -1123,40 +1123,62 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
       });
       if (hasMissingPermission) throw new Error('The missing-permission test origin unexpectedly has host access');
 
-      await chrome.storage.local.set({
-        masterEnabled:true,
-        redirectEnabled:false,
-        pageSelectionButtonSites:{
-          'www.gov.scot':false,
-          'example.com':false,
-          'www.facebook.com':false,
-          'www.dailyverses.net':false
-        },
-        doubleClickBlbSites:{},
-        pendingSiteFeatureToggles:{
-          [values.validPattern]:{
-            feature:'pageButton',
-            requestedAt:Date.now(),
-            requestId:values.validRequestId
-          },
-          [values.expiredPattern]:{
-            feature:'doubleClick',
-            requestedAt:Date.now()-6*60*1000,
-            requestId:values.expiredRequestId
-          },
-          [values.missingPermissionPattern]:{
-            feature:'pageButton',
-            requestedAt:Date.now(),
-            requestId:values.missingRequestId
+      // The storage-change listener normally reconciles registrations as
+      // soon as these opt-out settings are written. Suppress only that
+      // pre-restart notification while constructing the persisted legacy
+      // state; restore the real reconciler before closing and restarting Chrome.
+      const originalReconcile = reconcileRuntimeContentScriptRegistrations;
+      let observeStorageChange;
+      const storageChangeObserved = new Promise(resolve => {
+        observeStorageChange = (changes, area) => {
+          if (area === 'local' && changes.pageSelectionButtonSites) {
+            chrome.storage.onChanged.removeListener(observeStorageChange);
+            resolve();
           }
-        },
-        siteFeaturePreferenceRequestIds:{
-          [values.validRequestKey]:values.validRequestId,
-          [values.expiredRequestKey]:values.expiredRequestId,
-          [values.missingRequestKey]:values.missingRequestId
-        },
-        siteHostAccessRevokedSites:{}
+        };
+        chrome.storage.onChanged.addListener(observeStorageChange);
       });
+      reconcileRuntimeContentScriptRegistrations = async () => {};
+      try {
+        await chrome.storage.local.set({
+          masterEnabled:true,
+          redirectEnabled:false,
+          pageSelectionButtonSites:{
+            'www.gov.scot':false,
+            'example.com':false,
+            'www.facebook.com':false,
+            'www.dailyverses.net':false
+          },
+          doubleClickBlbSites:{},
+          pendingSiteFeatureToggles:{
+            [values.validPattern]:{
+              feature:'pageButton',
+              requestedAt:Date.now(),
+              requestId:values.validRequestId
+            },
+            [values.expiredPattern]:{
+              feature:'doubleClick',
+              requestedAt:Date.now()-6*60*1000,
+              requestId:values.expiredRequestId
+            },
+            [values.missingPermissionPattern]:{
+              feature:'pageButton',
+              requestedAt:Date.now(),
+              requestId:values.missingRequestId
+            }
+          },
+          siteFeaturePreferenceRequestIds:{
+            [values.validRequestKey]:values.validRequestId,
+            [values.expiredRequestKey]:values.expiredRequestId,
+            [values.missingRequestKey]:values.missingRequestId
+          },
+          siteHostAccessRevokedSites:{}
+        });
+        await storageChangeObserved;
+      } finally {
+        reconcileRuntimeContentScriptRegistrations = originalReconcile;
+        chrome.storage.onChanged.removeListener(observeStorageChange);
+      }
 
       const patterns = [
         values.validPattern,
