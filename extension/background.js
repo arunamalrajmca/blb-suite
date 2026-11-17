@@ -2964,7 +2964,7 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, hasHostAccess = hasHostAccessForTab) {
+async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, permissionCheck = hasHostAccessForTab) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -3030,7 +3030,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
       redirectEnabled:false
     });
     const stillEligible = latestSettings.masterEnabled !== false &&
-      await hasHostAccess(tab) &&
+      await permissionCheck(tab) &&
       await shouldInjectContentScriptForTab(tab, latestSettings);
     if (!stillEligible) {
       await unregisterRuntimeContentScriptForPattern(pattern);
