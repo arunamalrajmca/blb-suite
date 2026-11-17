@@ -26,9 +26,9 @@ async function cleanupReplacementActivationGate(extensionWorker, extensionStorag
   await extensionWorker.evaluate(() => {
     globalThis.__replacementActivationGate?.release();
     globalThis.__replacementActivationGate?.restore();
-    if (globalThis.__replacementPermissionContains) {
-      chrome.permissions.contains = globalThis.__replacementPermissionContains;
-      delete globalThis.__replacementPermissionContains;
+    if (globalThis.__replacementHostAccessCheck) {
+      hasHostAccessForTab = globalThis.__replacementHostAccessCheck;
+      delete globalThis.__replacementHostAccessCheck;
     }
     delete globalThis.__replacementActivationGate;
     delete globalThis.__replacementActivationResult;
@@ -132,11 +132,12 @@ test('replacement recovery does not inject after host permission is revoked duri
 
     // Simulate permission revocation after replacement eligibility passed but
     // before ensureContentScriptInTab performs its own authoritative recheck.
-    await extensionWorker.evaluate(() => {
-      globalThis.__replacementPermissionContains = chrome.permissions.contains;
-      chrome.permissions.contains = async () => false;
+    await extensionWorker.evaluate(id => {
+      globalThis.__replacementHostAccessCheck = hasHostAccessForTab;
+      const original = globalThis.__replacementHostAccessCheck;
+      hasHostAccessForTab = async tab => tab?.id === id ? false : original(tab);
       globalThis.__replacementActivationGate.release();
-    });
+    }, tabId);
     await extensionWorker.evaluate(async () => { await globalThis.__replacementRecoveryPromise; delete globalThis.__replacementRecoveryPromise; });
 
     expect(await extensionWorker.evaluate(() => globalThis.__replacementActivationResult)).toBe(false);
