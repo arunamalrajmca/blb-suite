@@ -1105,10 +1105,10 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     // The browser fixture adds these hosts to the test extension's granted
     // host_permissions. The final origin is intentionally absent from that
     // list so its still-valid permission intent must remain pending.
-    const validPattern = 'https://www.gov.scot/*';
+    const validPattern = 'https://www.dailyverses.net/*';
     const expiredPattern = 'https://example.com/*';
     const stalePatternTwo = 'https://www.facebook.com/*';
-    const stalePatternThree = 'https://www.dailyverses.net/*';
+    const stalePatternThree = 'https://www.supplyofgrace.com/*';
     const missingPermissionPattern = 'https://no-permission-startup.invalid/*';
     const validRequestId = 'startup-valid-' + Date.now();
     const expiredRequestId = 'startup-expired-' + Date.now();
@@ -1144,10 +1144,10 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
           masterEnabled:true,
           redirectEnabled:false,
           pageSelectionButtonSites:{
-            'www.gov.scot':false,
+            'dailyverses.net':false,
             'example.com':false,
-            'www.facebook.com':false,
-            'www.dailyverses.net':false
+            'facebook.com':false,
+            'supplyofgrace.com':false
           },
           doubleClickBlbSites:{},
           pendingSiteFeatureToggles:{
@@ -1240,7 +1240,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
       });
       return {
         registeredIds:registrations.filter(entry => values.ids.includes(entry.id)).map(entry => entry.id).sort(),
-        pagePreference:saved.pageSelectionButtonSites['www.gov.scot'],
+        pagePreference:saved.pageSelectionButtonSites['dailyverses.net'],
         expiredPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.expiredPattern),
         validPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.validPattern),
         missingPending:saved.pendingSiteFeatureToggles[values.missingPermissionPattern],
