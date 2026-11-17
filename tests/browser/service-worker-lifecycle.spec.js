@@ -1238,8 +1238,13 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
         pendingSiteFeatureToggles:{},
         siteFeaturePreferenceRequestIds:{}
       });
+      const validTab = {url:values.validPattern.replace(/\\*$/, '')};
       return {
         registeredIds:registrations.filter(entry => values.ids.includes(entry.id)).map(entry => entry.id).sort(),
+        validHostPermission:await chrome.permissions.contains({origins:[values.validPattern]}),
+        validEligible:await shouldInjectContentScriptForTab(validTab,saved),
+        validFiles:contentScriptFilesForTab(validTab,saved),
+        allRuntimeRegistrations:registrations.filter(entry => entry.id.startsWith('blb-suite-runtime-')).map(entry => ({id:entry.id,matches:entry.matches})),
         pagePreference:saved.pageSelectionButtonSites['dailyverses.net'],
         expiredPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.expiredPattern),
         validPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.validPattern),
