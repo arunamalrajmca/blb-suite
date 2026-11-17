@@ -3786,6 +3786,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // A history batch is owned by the service worker once accepted. Popup closure
+  // must not interrupt later destinations in the same user-requested batch.
   if (message.type === 'blbSuiteOpenStrongHistoryBatch') {
     const values = Array.isArray(message.values)
       ? [...new Set(message.values.map(value => canonicalStrongValue(value)).filter(Boolean))]
@@ -3796,11 +3798,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     const failures = [];
     let opened = 0;
-    for (const value of values) {
+    for (let index = 0; index < values.length; index++) {
+      const value = values[index];
       const url = resolveStrongDestinationUrl(value);
       if (!url) { failures.push({value, reason:'invalid-strong'}); continue; }
+      const activate = index === values.length - 1;
       try {
-        const result = await openBlbDestination(url, true, true);
+        const result = await openBlbDestination(url, activate, activate);
         if (result?.id != null || result?.tab?.id != null) opened++;
         else failures.push({value, reason:'tab-open-failed'});
       } catch (error) {
