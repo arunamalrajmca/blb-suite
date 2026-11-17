@@ -514,7 +514,7 @@ test('delayed Study stop actions preserve topic and Notes edits made while stopp
 
 
 test('popup reports when a theme preference cannot be persisted', async ({
-  page, extensionId, extensionStorage
+  page, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({popupTheme:'dark'});
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -535,7 +535,7 @@ test('popup reports when a theme preference cannot be persisted', async ({
   await expect(page.locator('#studyStatus')).toContainText(
     'Theme changed for this popup, but could not be saved.'
   );
-  await expect.poll(async () => extensionStorage.get({popupTheme:'dark'}).then(v => v.popupTheme)).toBe('dark');
+  await expect.poll(async () => extensionWorker.evaluate(async () =>\n    (await chrome.storage.local.get({popupTheme:'dark'})).popupTheme\n  )).toBe('dark');
 });
 
 
