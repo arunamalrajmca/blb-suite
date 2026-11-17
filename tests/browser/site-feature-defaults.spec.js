@@ -182,33 +182,40 @@ test('a denied site-feature permission request cancels its pending opt-in', asyn
     await messagePage.close();
   }
 });
-test('an older popup cannot cancel a newer pending permission intent for the same site feature', async ({ context, extensionId, extensionWorker }) => {
+test('an older popup cannot cancel a newer pending permission intent or erase another site request identity', async ({ context, extensionId, extensionWorker }) => {
   const messagePage = await createExtensionMessagePage(context, extensionId);
   try {
     await extensionWorker.evaluate(() => chrome.storage.local.set({
       masterEnabled:true,
       pageSelectionButtonSites:{},
       doubleClickBlbSites:{},
-      pendingSiteFeatureToggles:{}
+      pendingSiteFeatureToggles:{},
+      siteFeaturePreferenceRequestIds:{}
     }));
     const first = await messagePage.evaluate(() => chrome.runtime.sendMessage({
       type:'blbSuitePrepareSiteFeatureToggle',
       origin:'https://example.com/*',
-      feature:'doubleClick'
+      feature:'pageButton'
     }));
     const second = await messagePage.evaluate(() => chrome.runtime.sendMessage({
       type:'blbSuitePrepareSiteFeatureToggle',
       origin:'https://example.com/*',
+      feature:'pageButton'
+    }));
+    const otherSite = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://other.example/*',
       feature:'doubleClick'
     }));
     expect(first).toMatchObject({ok:true,pending:true});
     expect(second).toMatchObject({ok:true,pending:true});
+    expect(otherSite).toMatchObject({ok:true,pending:true});
     expect(second.requestId).not.toBe(first.requestId);
 
     const staleCancel = await messagePage.evaluate(requestId => chrome.runtime.sendMessage({
       type:'blbSuiteCancelSiteFeatureToggle',
       origin:'https://example.com/*',
-      feature:'doubleClick',
+      feature:'pageButton',
       requestId
     }), first.requestId);
     expect(staleCancel).toMatchObject({ok:true});
@@ -218,17 +225,24 @@ test('an older popup cannot cancel a newer pending permission intent for the sam
       siteFeaturePreferenceRequestIds:{}
     }));
     expect(beforeGrant.pendingSiteFeatureToggles['https://example.com/*'].requestId).toBe(second.requestId);
-    expect(beforeGrant.siteFeaturePreferenceRequestIds['https://example.com/*|doubleClick']).toBe(second.requestId);
+    expect(beforeGrant.pendingSiteFeatureToggles['https://other.example/*'].requestId).toBe(otherSite.requestId);
+    expect(beforeGrant.siteFeaturePreferenceRequestIds['https://example.com/*|pageButton']).toBe(second.requestId);
+    expect(beforeGrant.siteFeaturePreferenceRequestIds['https://other.example/*|doubleClick']).toBe(otherSite.requestId);
 
     const committed = await extensionWorker.evaluate(() =>
-      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*','https://other.example/*'])
     );
-    expect(committed.committed).toEqual([{origin:'https://example.com/*',feature:'doubleClick'}]);
+    expect(committed.committed).toEqual([
+      {origin:'https://example.com/*',feature:'pageButton'},
+      {origin:'https://other.example/*',feature:'doubleClick'}
+    ]);
     const afterGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},
       doubleClickBlbSites:{},
       pendingSiteFeatureToggles:{}
     }));
-    expect(afterGrant.doubleClickBlbSites['example.com']).toBe(true);
+    expect(afterGrant.pageSelectionButtonSites['example.com']).toBe(true);
+    expect(afterGrant.doubleClickBlbSites['other.example']).toBe(true);
     expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
   } finally {
     await messagePage.close();
