@@ -1894,3 +1894,142 @@ test('grant-time expiry removes only the matching expired permission request tok
     await extensionWorker.evaluate(() => chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM));
   }
 });
+
+
+test('an immediate host-permission regrant waits for an older revocation reconciliation before reactivating the site', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    siteHostAccessRevokedSites:{}
+  }));
+  let instrumentationInstalled = false;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{}
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    const tabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
+    );
+    expect(Number.isInteger(tabId)).toBe(true);
+    expect(await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId)).toBe(true);
+
+    const registrationId = await extensionWorker.evaluate(value =>
+      runtimeContentScriptIdForPattern(value), pattern
+    );
+    const isRegistered = () => extensionWorker.evaluate(async id =>
+      (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 1,
+      registrationId
+    );
+    await expect.poll(isRegistered, {timeout:10000}).toBe(true);
+
+    await extensionWorker.evaluate(({originPattern,id}) => {
+      const originalContains = chrome.permissions.contains;
+      const originalUnregister = chrome.scripting.unregisterContentScripts;
+      const originalUpdateRevoked = updateRevokedSiteHostAccess;
+      const originalInjectGranted = injectEnabledTabsForGrantedOrigins;
+      let signalUnregisterStarted;
+      let signalGrantStateUpdated;
+      let signalInjectionStarted;
+      let releaseUnregister;
+      const unregisterStarted = new Promise(resolve => { signalUnregisterStarted = resolve; });
+      const grantStateUpdated = new Promise(resolve => { signalGrantStateUpdated = resolve; });
+      const injectionStarted = new Promise(resolve => { signalInjectionStarted = resolve; });
+      const unregisterGate = new Promise(resolve => { releaseUnregister = resolve; });
+
+      globalThis.__permissionRegrantRace = {
+        unregisterStarted,
+        grantStateUpdated,
+        injectionStarted,
+        releaseUnregister,
+        originalContains,
+        originalUnregister,
+        originalUpdateRevoked,
+        originalInjectGranted
+      };
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(originPattern) ? false : originalContains(details);
+      chrome.scripting.unregisterContentScripts = async details => {
+        if (details?.ids?.includes(id)) {
+          signalUnregisterStarted();
+          await unregisterGate;
+        }
+        return originalUnregister.call(chrome.scripting, details);
+      };
+      globalThis.updateRevokedSiteHostAccess = async (origins, revoked) => {
+        const result = await originalUpdateRevoked(origins, revoked);
+        if (revoked === false) signalGrantStateUpdated();
+        return result;
+      };
+      globalThis.injectEnabledTabsForGrantedOrigins = async origins => {
+        signalInjectionStarted();
+        return originalInjectGranted(origins);
+      };
+    }, {originPattern:pattern,id:registrationId});
+    instrumentationInstalled = true;
+
+    // Start the real revocation handler and pause its registration removal
+    // after it has observed the old no-permission state.
+    await extensionWorker.evaluate(originPattern => {
+      globalThis.__permissionRegrantRace.revocationPromise =
+        handleHostPermissionsRemoved([originPattern]);
+    }, pattern);
+    await extensionWorker.evaluate(() => globalThis.__permissionRegrantRace.unregisterStarted);
+
+    // Chrome reports the same host as granted again while the older removal
+    // callback is still waiting to unregister its stale snapshot.
+    await extensionWorker.evaluate(originPattern => {
+      const race = globalThis.__permissionRegrantRace;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(originPattern) ? true : race.originalContains(details);
+      race.grantPromise = handleGrantedHostPermissions([originPattern]);
+    }, pattern);
+    await extensionWorker.evaluate(() => globalThis.__permissionRegrantRace.grantStateUpdated);
+
+    const injectedBeforeRevocationCleanup = await extensionWorker.evaluate(() =>
+      Promise.race([
+        globalThis.__permissionRegrantRace.injectionStarted.then(() => true),
+        new Promise(resolve => setTimeout(() => resolve(false), 100))
+      ])
+    );
+    expect(injectedBeforeRevocationCleanup).toBe(false);
+
+    // Once the older cleanup finishes, the regrant handler must reconcile
+    // against current permission state and activate the saved site preference.
+    await extensionWorker.evaluate(() => globalThis.__permissionRegrantRace.releaseUnregister());
+    await extensionWorker.evaluate(async () => {
+      const race = globalThis.__permissionRegrantRace;
+      await race.revocationPromise;
+      await race.grantPromise;
+    });
+    await expect.poll(isRegistered, {timeout:10000}).toBe(true);
+  } finally {
+    if (instrumentationInstalled) {
+      await extensionWorker.evaluate(async () => {
+        const race = globalThis.__permissionRegrantRace;
+        if (!race) return;
+        race.releaseUnregister();
+        await Promise.allSettled([race.revocationPromise, race.grantPromise].filter(Boolean));
+        chrome.permissions.contains = race.originalContains;
+        chrome.scripting.unregisterContentScripts = race.originalUnregister;
+        globalThis.updateRevokedSiteHostAccess = race.originalUpdateRevoked;
+        globalThis.injectEnabledTabsForGrantedOrigins = race.originalInjectGranted;
+        delete globalThis.__permissionRegrantRace;
+      }).catch(() => {});
+    }
+    await extensionWorker.evaluate(async ({originPattern,settings}) => {
+      await chrome.storage.local.set(settings);
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern).catch(() => {});
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+    }, {originPattern:pattern,settings:previous});
+  }
+});
