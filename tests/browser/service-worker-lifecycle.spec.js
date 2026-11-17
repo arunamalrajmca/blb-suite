@@ -1253,33 +1253,38 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     const validId = seeded.registrations.find(entry => entry.pattern===validPattern).id;
     const staleIds = seeded.registrations.filter(entry => entry.pattern!==validPattern).map(entry => entry.id);
 
-    await expect.poll(() => restartedWorker.evaluate(async values => {
-      const registrations = await chrome.scripting.getRegisteredContentScripts();
-      const saved = await chrome.storage.local.get({
-        pageSelectionButtonSites:{},
-        doubleClickBlbSites:{},
-        pendingSiteFeatureToggles:{},
-        siteFeaturePreferenceRequestIds:{}
-      });
-      const validTab = {url:values.validPattern.replace(/\\*$/, '')};
-      return {
-        registeredIds:registrations.filter(entry => values.ids.includes(entry.id)).map(entry => entry.id).sort(),
-        validHostPermission:await chrome.permissions.contains({origins:[values.validPattern]}),
-        validEligible:await shouldInjectContentScriptForTab(validTab,saved),
-        validFiles:contentScriptFilesForTab(validTab,saved),
-        allRuntimeRegistrations:registrations.filter(entry => entry.id.startsWith('blb-suite-runtime-')).map(entry => ({id:entry.id,matches:entry.matches})),
-        pagePreference:saved.pageSelectionButtonSites['dailyverses.net'],
-        expiredPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.expiredPattern),
-        validPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.validPattern),
-        missingPending:saved.pendingSiteFeatureToggles[values.missingPermissionPattern],
-        expiredRequestPresent:Object.prototype.hasOwnProperty.call(saved.siteFeaturePreferenceRequestIds,values.expiredRequestKey),
-        validRequestId:saved.siteFeaturePreferenceRequestIds[values.validRequestKey],
-        missingRequestId:saved.siteFeaturePreferenceRequestIds[values.missingRequestKey]
-      };
-    },{
-      ids,validPattern,expiredPattern,missingPermissionPattern,
-      expiredRequestKey,validRequestKey,missingRequestKey
-    }),{timeout:15000,intervals:[100,250,500,1000]}).toMatchObject({
+    let lastStartupSnapshot = null;
+    try {
+      await expect.poll(async () => {
+        lastStartupSnapshot = await restartedWorker.evaluate(async values => {
+          const registrations = await chrome.scripting.getRegisteredContentScripts();
+          const saved = await chrome.storage.local.get({
+            pageSelectionButtonSites:{},
+            doubleClickBlbSites:{},
+            pendingSiteFeatureToggles:{},
+            siteFeaturePreferenceRequestIds:{}
+          });
+          const validTab = {url:values.validPattern.replace(/\\*$/, '')};
+          return {
+            registeredIds:registrations.filter(entry => values.ids.includes(entry.id)).map(entry => entry.id).sort(),
+            validHostPermission:await chrome.permissions.contains({origins:[values.validPattern]}),
+            validEligible:await shouldInjectContentScriptForTab(validTab,saved),
+            validFiles:contentScriptFilesForTab(validTab,saved),
+            allRuntimeRegistrations:registrations.filter(entry => entry.id.startsWith('blb-suite-runtime-')).map(entry => ({id:entry.id,matches:entry.matches})),
+            pagePreference:saved.pageSelectionButtonSites['dailyverses.net'],
+            expiredPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.expiredPattern),
+            validPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.validPattern),
+            missingPending:saved.pendingSiteFeatureToggles[values.missingPermissionPattern],
+            expiredRequestPresent:Object.prototype.hasOwnProperty.call(saved.siteFeaturePreferenceRequestIds,values.expiredRequestKey),
+            validRequestId:saved.siteFeaturePreferenceRequestIds[values.validRequestKey],
+            missingRequestId:saved.siteFeaturePreferenceRequestIds[values.missingRequestKey]
+          };
+        },{
+          ids,validPattern,expiredPattern,missingPermissionPattern,
+          expiredRequestKey,validRequestKey,missingRequestKey
+        });
+        return lastStartupSnapshot;
+      },{timeout:15000,intervals:[100,250,500,1000]}).toMatchObject({
       registeredIds:[validId],
       pagePreference:true,
       expiredPendingPresent:false,
@@ -1292,7 +1297,11 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
       expiredRequestPresent:false,
       validRequestId,
       missingRequestId
-    });
+      });
+    } catch (error) {
+      console.log('Mixed permission startup diagnostics: ' + JSON.stringify(lastStartupSnapshot));
+      throw error;
+    }
 
     const finalRegistrations = await restartedWorker.evaluate(async idsToCheck => {
       const registered = await chrome.scripting.getRegisteredContentScripts();
