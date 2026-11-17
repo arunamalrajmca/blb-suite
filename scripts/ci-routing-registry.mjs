@@ -323,6 +323,7 @@ export const referenceDelegatedSpecs = new Set([
   "tests/browser/right-panel-default-expanded.spec.js",
   "tests/browser/selection-phase-performance.spec.js",
   "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/replaced-tab-lifecycle-races.spec.js",
   "tests/browser/kjv-corpus-lazy-loading.spec.js",
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/multiverse-contiguous-range-routing.spec.js",
