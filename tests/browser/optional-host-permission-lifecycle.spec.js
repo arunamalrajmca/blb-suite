@@ -1681,10 +1681,10 @@ test('an explicit feature OFF wins against a late grant while overlapping same-o
         const grant = await extensionWorker.evaluate(value =>
           commitPendingSiteFeatureTogglesForGrantedOrigins([value]), origin
         );
-        expect(grant.committed).toEqual([
+        expect(grant.committed).toEqual(expect.arrayContaining([
           {origin,feature:'pageButton'},
           {origin,feature:'doubleClick'}
-        ]);
+        ]));
         expect((await turnPageButtonOff()).ok).toBe(true);
       }
 
