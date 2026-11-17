@@ -1967,6 +1967,12 @@ test('worker-start recovery removes stale persisted host registrations even when
     expect(saved.pendingSiteFeatureToggles).toEqual({});
     expect(saved.siteFeaturePreferenceRequestIds).toEqual({});
   } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__workerStartRecoveryOriginalContains) {
+        chrome.permissions.contains = globalThis.__workerStartRecoveryOriginalContains;
+      }
+      delete globalThis.__workerStartRecoveryOriginalContains;
+    });
     await extensionWorker.evaluate(async ({origin,settings}) => {
       const id = runtimeContentScriptIdForPattern(origin);
       await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
