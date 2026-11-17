@@ -565,3 +565,74 @@ test('history actions report runtime failures instead of treating history as emp
     'Unable to communicate with Study Sessions.'
   );
 });
+
+
+test('Study Strong history activates the final destination through the background request', async ({
+  page, extensionId
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.evaluate(() => {
+    window.getSelectedTopicHistory = async () => ({ok:true, strongs:['G1','H2']});
+    const originalSend = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
+    window.__strongHistoryRequests = [];
+    window.__tabActivationCalls = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => {
+        if (message?.type === 'blbSuiteOpenStrongHistory') {
+          window.__strongHistoryRequests.push({
+            value:message.value,
+            activeIfNew:message.activeIfNew,
+            activateExisting:message.activateExisting
+          });
+          return Promise.resolve({ok:true,tabId:message.value === 'G1' ? 91001 : 91002});
+        }
+        return originalSend(message);
+      }
+    });
+    Object.defineProperty(chrome.tabs, 'update', {
+      configurable:true,
+      value:(...args) => {
+        window.__tabActivationCalls.push(args);
+        return originalUpdate(...args);
+      }
+    });
+  });
+  await page.evaluate(() => openHistoryStrongs());
+
+  const result = await page.evaluate(() => ({
+    requests:window.__strongHistoryRequests,
+    directTabActivations:window.__tabActivationCalls
+  }));
+  expect(result.requests).toEqual([
+    {value:'G1',activeIfNew:false,activateExisting:false},
+    {value:'H2',activeIfNew:true,activateExisting:true}
+  ]);
+  expect(result.directTabActivations).toEqual([]);
+  await expect(page.locator('#studyStatus')).toContainText("Opened 2 KJV Strong's entries.");
+});
+
+test('tutorial navigation failure is reported when tab and options fallbacks both fail', async ({
+  page, extensionId
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.evaluate(() => {
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable:true,
+      value:() => Promise.reject(new Error('simulated query failure'))
+    });
+    Object.defineProperty(chrome.runtime, 'openOptionsPage', {
+      configurable:true,
+      value:() => Promise.reject(new Error('simulated options failure'))
+    });
+    Object.defineProperty(chrome.tabs, 'create', {
+      configurable:true,
+      value:() => Promise.reject(new Error('simulated tab creation failure'))
+    });
+  });
+  await page.locator('#extensionVersion').click();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to open the tutorial page. Please try again.'
+  );
+});
