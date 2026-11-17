@@ -1370,8 +1370,6 @@ test('startup registration reconciliation remains correct when tabs open and nav
     secondPage = await context.newPage();
     deniedPage = await context.newPage();
 
-    let releaseRegistration;
-    let registrationEntered;
     await extensionWorker.evaluate(pattern => {
       const api = chrome.scripting;
       const original = api.registerContentScripts;
@@ -1413,6 +1411,12 @@ test('startup registration reconciliation remains correct when tabs open and nav
     await extensionWorker.evaluate(async () => {
       await runtimeContentScriptReconciliationQueue;
       await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
+      // Startup/update recovery must also activate tabs whose navigation
+      // completed before the persistent registration became available.
+      await injectConfiguredTabsAfterExtensionUpdate();
+      if (globalThis.__multiTabStartupReconciliationError) {
+        throw new Error(globalThis.__multiTabStartupReconciliationError);
+      }
     });
 
     const state = await extensionWorker.evaluate(async ({registrationId,permittedPattern,deniedPattern}) => {
