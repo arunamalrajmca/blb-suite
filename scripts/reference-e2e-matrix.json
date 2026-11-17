@@ -105,5 +105,10 @@
     "group": "source-page-button-redirect-refresh",
     "file": "tests/browser/source-page-button-redirect-separation.spec.js",
     "grep": ".*"
+  },
+  {
+    "group": "replaced-tab-lifecycle-races",
+    "file": "tests/browser/replaced-tab-lifecycle-races.spec.js",
+    "grep": ".*"
   }
 ]
