@@ -884,7 +884,7 @@ test('a terminated worker reconciles stale host registrations and expires pendin
     await extensionStorage.set({
       masterEnabled:true,
       redirectEnabled:false,
-      pageSelectionButtonSites:{'www.wikipedia.org':false},
+      pageSelectionButtonSites:{'example.com':false},
       doubleClickBlbSites:{},
       pendingSiteFeatureToggles:{
         [pendingOrigin]:{
