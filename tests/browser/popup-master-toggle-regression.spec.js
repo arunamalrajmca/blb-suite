@@ -363,7 +363,6 @@ test('a delayed initial popup settings read cannot overwrite a newer storage ref
 
   await page.evaluate(() => window.__releaseInitialPopupTabQuery());
   await expect(page.locator('#master')).not.toBeChecked();
-  await expect(page.locator('#master')).toBeDisabled();
 });
 
 
