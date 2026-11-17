@@ -731,3 +731,32 @@ test('popup commit accepts a site preference already applied by the permission g
   expect(stored.pendingSiteFeatureToggles).toEqual({});
   await page.close();
 });
+
+
+test('failed popup site-feature OFF persistence is reported and does not pretend the setting changed', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await preparePopup(page, extensionId, extensionStorage, extensionWorker, {
+    pageButton:true,
+    doubleClick:false
+  });
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteSetSiteFeaturePreference' && message.enabled === false
+        ? Promise.resolve({ok:false, reason:'simulated-storage-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.locator('#pageSetting .slider').click();
+  await expect(page.locator('#pageButton')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to turn Show on BLB OFF for this page.'
+  );
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:true},
+    doubleClickBlbSites:{[SITE]:false}
+  });
+});
