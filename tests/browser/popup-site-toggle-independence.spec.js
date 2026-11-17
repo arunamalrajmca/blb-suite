@@ -62,9 +62,103 @@ async function readSitePreferences(extensionWorker) {
   return extensionWorker.evaluate(() => chrome.storage.local.get({
     pageSelectionButtonSites: {},
     doubleClickBlbSites: {},
-    pendingSiteFeatureToggles: {}
+    pendingSiteFeatureToggles: {},
+    siteFeaturePreferenceRequestIds: {}
   }));
 }
+
+test('a delayed activation failure cannot roll back a newer preference from another popup', async ({
+  page, context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await preparePopup(page, extensionId, extensionStorage, extensionWorker, {
+    pageButton:false,
+    doubleClick:false
+  });
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    window.__activationStarted = false;
+    window.__resolveActivation = null;
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteEnsureContentScript'
+        ? new Promise(resolve => {
+            window.__activationStarted = true;
+            window.__resolveActivation = resolve;
+          })
+        : originalSendMessage(message)
+    });
+  });
+
+  // Popup A commits ON, then remains suspended while content-script
+  // activation is pending.
+  await page.locator('#pageSetting .slider').click();
+  await expect.poll(() => page.evaluate(() => window.__activationStarted)).toBe(true);
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:true}
+  });
+
+  // Popup B observes the shared preference, changes it OFF, then ON again.
+  // Its second ON request is now the latest durable user intent.
+  const secondPopup = await context.newPage();
+  await secondPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => secondPopup.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+  await secondPopup.evaluate(async () => {
+    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable:true,
+      value:queryInfo => queryInfo?.active
+        ? Promise.resolve([{id:987654,url:'https://example.com/',title:'Example'}])
+        : originalQuery(queryInfo)
+    });
+    window.__permissionRequested = false;
+    window.__grantPermission = null;
+    Object.defineProperty(chrome.permissions, 'request', {
+      configurable:true,
+      value:() => new Promise(resolve => {
+        window.__permissionRequested = true;
+        window.__grantPermission = resolve;
+      })
+    });
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteEnsureContentScript'
+        ? Promise.resolve({ok:true})
+        : originalSendMessage(message)
+    });
+    render(await getState());
+  });
+  await expect(secondPopup.locator('#pageButton')).toBeChecked();
+  await secondPopup.locator('#pageSetting .slider').click();
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:false}
+  });
+  await secondPopup.locator('#pageSetting .slider').click();
+  await expect.poll(() => secondPopup.evaluate(() => window.__permissionRequested)).toBe(true);
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:false},
+    pendingSiteFeatureToggles:{'https://example.com/*':{feature:'pageButton'}}
+  });
+
+  // Popup B has claimed the newer pending ON intent, but its permission
+  // prompt has not resolved. Popup A's older activation failure must not
+  // cancel or roll back that newer intent.
+  await page.evaluate(() => window.__resolveActivation?.({ok:false}));
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:false},
+    pendingSiteFeatureToggles:{'https://example.com/*':{feature:'pageButton'}}
+  });
+
+  await secondPopup.evaluate(() => window.__grantPermission?.(true));
+  await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+    pageSelectionButtonSites:{[SITE]:true},
+    pendingSiteFeatureToggles:{}
+  });
+  await secondPopup.close();
+});
 
 for (const otherState of ['on', 'off', 'unset']) {
   test(`popup Show on grant preserves Double-click when its prior state is ${otherState}`, async ({
@@ -566,8 +660,8 @@ for (const feature of ['pageButton', 'doubleClick']) {
     await expect(page.locator(feature === 'pageButton' ? '#pageButton' : '#doubleClick')).not.toBeChecked();
     await expect(page.locator('#studyStatus')).toContainText(
       feature === 'pageButton'
-        ? 'Unable to enable Show on BLB on this page'
-        : 'Unable to enable Double-click on this page'
+        ? 'Show on BLB activation failed'
+        : 'Double-click activation failed'
     );
   });
 }

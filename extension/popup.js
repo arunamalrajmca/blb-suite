@@ -199,15 +199,17 @@ async function ensureSiteFeatureContentScript() {
   return response?.ok === true;
 }
 
-async function writeSiteFeaturePreference(feature, enabled, requestId) {
+async function writeSiteFeaturePreference(feature, enabled, requestId, conditionalRollback = false) {
   if (!currentSiteOrigin) return false;
+  const writeRequestId = requestId || `${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
   try {
     const response = await chrome.runtime.sendMessage({
       type:'blbSuiteSetSiteFeaturePreference',
       origin:currentSiteOrigin,
       feature,
       enabled:!!enabled,
-      ...(requestId ? {requestId} : {})
+      requestId:writeRequestId,
+      ...(conditionalRollback ? {conditionalRollback:true} : {})
     });
     return response?.ok === true;
   } catch (_) {
@@ -231,8 +233,8 @@ async function setPageButton(on, requestId) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
-      await writeSiteFeaturePreference('pageButton', false);
-      setStatus('Unable to enable Show on BLB on this page. The setting remains OFF; please try again.');
+      await writeSiteFeaturePreference('pageButton', false, requestId, true);
+      setStatus('Show on BLB activation failed. The latest saved preference was preserved; please try again.');
       render(await getState());
       return;
     }
@@ -256,8 +258,8 @@ async function setDoubleClick(on, requestId) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
-      await writeSiteFeaturePreference('doubleClick', false);
-      setStatus('Unable to enable Double-click on this page. The setting remains OFF; please try again.');
+      await writeSiteFeaturePreference('doubleClick', false, requestId, true);
+      setStatus('Double-click activation failed. The latest saved preference was preserved; please try again.');
       render(await getState());
       return;
     }
@@ -1489,13 +1491,14 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
   }
 });
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function cancelPendingSiteFeatureChoice(feature) {
-  if (!currentSiteOrigin) return;
+async function cancelPendingSiteFeatureChoice(feature, requestId) {
+  if (!currentSiteOrigin || !requestId) return;
   try {
     await chrome.runtime.sendMessage({
       type:'blbSuiteCancelSiteFeatureToggle',
       origin:currentSiteOrigin,
-      feature
+      feature,
+      requestId
     });
   } catch (_) {}
 }
@@ -1527,8 +1530,10 @@ async function setIndependentSiteFeature(feature, on) {
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
       (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
     if (on) {
-      await pinPromise;
-      if (generation === siteFeatureToggleGeneration[feature]) await cancelPendingSiteFeatureChoice(feature);
+      const pendingChoice = await pinPromise;
+      if (generation === siteFeatureToggleGeneration[feature]) {
+        await cancelPendingSiteFeatureChoice(feature, pendingChoice?.requestId);
+      }
     } else await cancelPromise;
     render(state);
     return;
@@ -1544,7 +1549,7 @@ async function setIndependentSiteFeature(feature, on) {
       // Clear the durable pending choice even if the master switch was turned
       // OFF while the permission prompt was unresolved. The UI helpers return
       // early when master is OFF, so use the background writer directly.
-      await writeSiteFeaturePreference(feature, false);
+      await cancelPendingSiteFeatureChoice(feature, pinned?.requestId);
       render(await getState());
       return;
     }
