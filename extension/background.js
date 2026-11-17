@@ -4102,7 +4102,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const permissionOrigin = parsed.origin + '/*';
       let requestId = '';
       const prepared = await serializePendingSiteFeatureToggleMutation(async () => {
-        const data = await chrome.storage.local.get({masterEnabled:true,pendingSiteFeatureToggles:{}});
+        const data = await chrome.storage.local.get({
+          masterEnabled:true,pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+        });
         if (data.masterEnabled === false) return false;
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
