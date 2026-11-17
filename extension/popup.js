@@ -1098,29 +1098,19 @@ async function openHistoryStrongs() {
   const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\d+$/.test(v)))];
   if (!values.length) { setStatus("No KJV Strong's entries in this topic."); return; }
 
-  let opened = 0;
-  for (let index = 0; index < values.length; index++) {
-    const value = values[index];
-    const activate = index === values.length - 1;
-    try {
-      const result = await chrome.runtime.sendMessage({
-        type:'blbSuiteOpenStrongHistory',
-        value,
-        activeIfNew:activate,
-        activateExisting:activate
-      });
-      if (result?.ok && result.tabId != null) opened++;
-    } catch (_) {
-      // Continue so one failed destination does not prevent later entries opening.
-    }
-  }
-
-  if (opened === values.length) {
+  const response = await sendStudyPopupMessage({
+    type:'blbSuiteOpenStrongHistoryBatch',
+    values
+  });
+  const opened = Number(response?.opened || 0);
+  if (response?.ok && opened === values.length) {
     setStatus(`Opened ${opened} KJV Strong's ${opened === 1 ? 'entry' : 'entries'}.`);
   } else if (opened > 0) {
     setStatus(`Opened ${opened} of ${values.length} KJV Strong's entries. Please retry the missing entries.`);
   } else {
-    setStatus("Unable to open the KJV Strong's entries. Please try again.");
+    setStatus(response?.reason === 'runtime-error'
+      ? "Unable to communicate with Study Sessions. Please try again."
+      : "Unable to open the KJV Strong's entries. Please try again.");
   }
 }
 
@@ -1184,19 +1174,20 @@ async function openHistorySearchTerms() {
 
   if (!groups.size) { setStatus('No search terms in this topic.'); return; }
 
-  let opened = 0;
-  let failed = 0;
-  for (const group of groups.values()) {
+  const urls = [...groups.values()].map(group => {
     const criteria = group.terms.join(' OR ');
     let url = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteria).replace(/%20/g, '+')}&t=KJV`;
     if (group.csr) url += `&csr=${group.csr}#s=s_primary_0_1`;
-    const response = await sendStudyPopupMessage({type:'blbSuiteOpenHistorySearchTerms', url});
-    if (response?.ok) opened++;
-    else failed++;
-  }
+    return url;
+  });
+  const response = await sendStudyPopupMessage({
+    type:'blbSuiteOpenHistorySearchTermsBatch',
+    urls
+  });
+  const opened = Number(response?.opened || 0);
   const rangeCount = groups.size;
-  if (failed && opened) setStatus(`Opened ${opened} of ${rangeCount} Criteria Search tabs. Please retry the missing tabs.`);
-  else if (failed) setStatus('Unable to open the Criteria Search tabs. Please try again.');
+  if (opened > 0 && opened < rangeCount) setStatus(`Opened ${opened} of ${rangeCount} Criteria Search tabs. Please retry the missing tabs.`);
+  else if (!response?.ok) setStatus('Unable to open the Criteria Search tabs. Please try again.');
   else setStatus(`Opened ${opened} Criteria Search ${opened === 1 ? 'tab' : 'tabs'} for ${rangeCount} ${rangeCount === 1 ? 'range' : 'ranges'}.`);
 }
 

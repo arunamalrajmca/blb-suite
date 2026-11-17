@@ -3378,8 +3378,8 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteClearStudy', 'popup.html'],
   ['blbSuiteStudyTopicHistory', 'popup.html'],
   ['blbSuiteStudyTopicMultiVerse', 'popup.html'],
-  ['blbSuiteOpenStrongHistory', 'popup.html'],
-  ['blbSuiteOpenHistorySearchTerms', 'popup.html'],
+  ['blbSuiteOpenStrongHistoryBatch', 'popup.html'],
+  ['blbSuiteOpenHistorySearchTermsBatch', 'popup.html'],
   ['blbSuiteBeginStudyTopicSelection', 'popup.html'],
   ['blbSuiteCommitStudyTopicSelection', 'popup.html'],
   ['blbSuiteSaveStudyTopic', 'popup.html'],
@@ -3541,7 +3541,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginStudyTopicSelection","blbSuiteCommitStudyTopicSelection","blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteBeginStudyTopicSelection","blbSuiteCommitStudyTopicSelection","blbSuiteBeginRedirectToggle","blbSuiteCommitRedirectToggle","blbSuiteSetMasterEnabled","blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeaturePreference","blbSuiteRestoreStudyBackup","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistoryBatch","blbSuiteOpenHistorySearchTermsBatch","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3776,25 +3776,63 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'blbSuiteOpenStrongHistory') {
-    const url = resolveStrongDestinationUrl(message.value);
-    if (!url) { sendResponse({ok:false, reason:'invalid-strong'}); return true; }
-    try {
-      const result = await openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting);
-      sendResponse({ok:true, value:canonicalStrongValue(message.value), tabId:result?.id ?? result?.tab?.id ?? null});
-    } catch (error) { sendResponse({ok:false, error:String(error)}); }
+  // A history batch is owned by the service worker once accepted. Popup closure
+  // must not interrupt later destinations in the same user-requested batch.
+  if (message.type === 'blbSuiteOpenStrongHistoryBatch') {
+    const values = Array.isArray(message.values)
+      ? [...new Set(message.values.map(value => canonicalStrongValue(value)).filter(Boolean))]
+      : [];
+    if (!values.length || values.length > 200) {
+      sendResponse({ok:false, reason:values.length > 200 ? 'too-many-destinations' : 'empty'});
+      return true;
+    }
+    const failures = [];
+    let opened = 0;
+    for (let index = 0; index < values.length; index++) {
+      const value = values[index];
+      const url = resolveStrongDestinationUrl(value);
+      if (!url) { failures.push({value, reason:'invalid-strong'}); continue; }
+      const activate = index === values.length - 1;
+      try {
+        const result = await openBlbDestination(url, activate, activate);
+        if (result?.id != null || result?.tab?.id != null) opened++;
+        else failures.push({value, reason:'tab-open-failed'});
+      } catch (error) {
+        failures.push({value, reason:'tab-open-failed', error:String(error)});
+      }
+    }
+    sendResponse({ok:failures.length === 0, opened, total:values.length, failures});
     return true;
   }
 
-  if (message.type === 'blbSuiteOpenHistorySearchTerms') {
-    const url = String(message.url || '').trim();
-    if (!/^https:\/\/www\.blueletterbible\.org\/search\/search\.cfm\?/.test(url)) {
-      sendResponse({ok:false, reason:'invalid-url'}); return true;
+  if (message.type === 'blbSuiteOpenHistorySearchTermsBatch') {
+    const urls = Array.isArray(message.urls) ? [...new Set(message.urls.map(value => String(value || '').trim()).filter(Boolean))] : [];
+    if (!urls.length || urls.length > 200) {
+      sendResponse({ok:false, reason:urls.length > 200 ? 'too-many-destinations' : 'empty'});
+      return true;
     }
-    try {
-      const result = await openBlbDestination(url, true, true);
-      sendResponse({ok:true, tabId:result?.tab?.id ?? null});
-    } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    const failures = [];
+    let opened = 0;
+    for (const url of urls) {
+      let validSearchUrl = false;
+      try {
+        const parsed = new URL(url);
+        validSearchUrl = parsed.origin === 'https://www.blueletterbible.org' &&
+          parsed.pathname === '/search/search.cfm' && !!parsed.search;
+      } catch (_) {}
+      if (!validSearchUrl) {
+        failures.push({url, reason:'invalid-url'});
+        continue;
+      }
+      try {
+        const result = await openBlbDestination(url, true, true);
+        if (result?.id != null || result?.tab?.id != null) opened++;
+        else failures.push({url, reason:'tab-open-failed'});
+      } catch (error) {
+        failures.push({url, reason:'tab-open-failed', error:String(error)});
+      }
+    }
+    sendResponse({ok:failures.length === 0, opened, total:urls.length, failures});
     return true;
   }
 
