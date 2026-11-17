@@ -1909,7 +1909,6 @@ test('worker-start recovery removes stale persisted host registrations even when
     siteFeaturePreferenceRequestIds:{},
     siteHostAccessRevokedSites:{}
   }));
-  let originalContains;
   try {
     await extensionStorage.set({
       masterEnabled:true,
@@ -1919,11 +1918,11 @@ test('worker-start recovery removes stale persisted host registrations even when
       pendingSiteFeatureToggles:{},
       siteFeaturePreferenceRequestIds:{}
     });
-    originalContains = await extensionWorker.evaluate(() => {
-      const original = chrome.permissions.contains;
+    await extensionWorker.evaluate(() => {
+      globalThis.__workerStartRecoveryOriginalContains = chrome.permissions.contains;
+      const original = globalThis.__workerStartRecoveryOriginalContains;
       chrome.permissions.contains = async details =>
         details?.origins?.includes('https://example.com/*') ? true : original(details);
-      return true;
     });
     await page.goto('https://example.com/worker-start-registration-recovery', {waitUntil:'domcontentloaded'});
     const tab = await extensionWorker.evaluate(async () => {
@@ -1944,7 +1943,7 @@ test('worker-start recovery removes stale persisted host registrations even when
     )).toBe(true);
 
     await extensionWorker.evaluate(async origin => {
-      const original = chrome.permissions.contains;
+      const original = globalThis.__workerStartRecoveryOriginalContains;
       chrome.permissions.contains = async details =>
         details?.origins?.includes(origin) ? false : original(details);
       try {
@@ -1953,6 +1952,7 @@ test('worker-start recovery removes stale persisted host registrations even when
         await recoverRuntimeContentScriptRegistrationsAfterWorkerStart();
       } finally {
         chrome.permissions.contains = original;
+        delete globalThis.__workerStartRecoveryOriginalContains;
       }
     }, pattern);
 
