@@ -4124,6 +4124,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         return true;
       });
+      if (prepared) await schedulePendingSiteFeatureToggleCleanup();
       sendResponse(prepared ? {ok:true,pending:true,requestId} : {ok:false});
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
@@ -7694,8 +7695,69 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 const SITE_FEATURE_PERMISSION_PENDING_TTL_MS = 5 * 60 * 1000;
+const SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM = 'site-feature-permission-pending-cleanup';
 
 let pendingSiteFeatureToggleMutationQueue = Promise.resolve();
+
+async function pruneExpiredPendingSiteFeatureToggles(now = Date.now()) {
+  const result = await serializePendingSiteFeatureToggleMutation(async () => {
+    const data = await chrome.storage.local.get({
+      pendingSiteFeatureToggles:{},siteFeaturePreferenceRequestIds:{}
+    });
+    const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+      ? {...data.pendingSiteFeatureToggles} : {};
+    const requestIds = data.siteFeaturePreferenceRequestIds && typeof data.siteFeaturePreferenceRequestIds === 'object'
+      ? {...data.siteFeaturePreferenceRequestIds} : {};
+    const expired = [];
+    let changed = false;
+    for (const [origin,intent] of Object.entries(pending)) {
+      const entries = Object.fromEntries(pendingSiteFeatureEntries(intent));
+      for (const [feature,featureIntent] of Object.entries(entries)) {
+        const requestedAt = Number(featureIntent?.requestedAt);
+        if (!Number.isFinite(requestedAt) || now-requestedAt>SITE_FEATURE_PERMISSION_PENDING_TTL_MS || now<requestedAt) {
+          delete entries[feature];
+          const requestKey = origin + '|' + feature;
+          if (featureIntent?.requestId && requestIds[requestKey] === featureIntent.requestId) delete requestIds[requestKey];
+          if (!expired.includes(origin)) expired.push(origin);
+          changed = true;
+        }
+      }
+      const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
+      if (remaining) pending[origin] = remaining;
+      else if (Object.prototype.hasOwnProperty.call(pending,origin)) {
+        delete pending[origin];
+        changed = true;
+      }
+    }
+    if (changed) await chrome.storage.local.set({
+      pendingSiteFeatureToggles:pending,
+      siteFeaturePreferenceRequestIds:requestIds
+    });
+    return {expired,remaining:pending};
+  });
+  await schedulePendingSiteFeatureToggleCleanup(result.remaining);
+  return {expired:result.expired};
+}
+
+async function schedulePendingSiteFeatureToggleCleanup(pendingOverride) {
+  const pending = pendingOverride && typeof pendingOverride === 'object'
+    ? pendingOverride
+    : (await chrome.storage.local.get({pendingSiteFeatureToggles:{}})).pendingSiteFeatureToggles;
+  let nextExpiry = Infinity;
+  for (const intent of Object.values(pending || {})) {
+    for (const [,featureIntent] of pendingSiteFeatureEntries(intent)) {
+      const requestedAt = Number(featureIntent?.requestedAt);
+      if (Number.isFinite(requestedAt)) {
+        nextExpiry = Math.min(nextExpiry,requestedAt + SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 1);
+      }
+    }
+  }
+  if (Number.isFinite(nextExpiry)) {
+    await chrome.alarms.create(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM,{when:Math.max(Date.now()+1000,nextExpiry)});
+  } else {
+    await chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM);
+  }
+}
 
 function serializePendingSiteFeatureToggleMutation(operation) {
   const result = pendingSiteFeatureToggleMutationQueue.then(operation, operation);
@@ -7838,6 +7900,14 @@ recoverPendingSiteFeatureTogglesAfterWorkerStart().catch(error => {
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === STUDY_AUTOSTOP_ALARM) checkStudyAutoStop().catch(()=>{});
+  if (alarm.name === SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM) {
+    pruneExpiredPendingSiteFeatureToggles().catch(error => {
+      console.warn('KJV Scripture Tools pending site permission cleanup failed:', String(error));
+    });
+  }
+});
+schedulePendingSiteFeatureToggleCleanup().catch(error => {
+  console.warn('KJV Scripture Tools pending site permission cleanup scheduling failed:', String(error));
 });
 
 chrome.runtime.onStartup.addListener(installRules);
