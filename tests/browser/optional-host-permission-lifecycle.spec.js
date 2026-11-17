@@ -1834,7 +1834,7 @@ test('cleanup alarm scheduling re-reads the newest pending intents instead of ap
     expect(alarm).toBeTruthy();
     expect(alarm.scheduledTime).toBeGreaterThan(requestedAt);
     expect(alarm.scheduledTime).toBeLessThanOrEqual(
-      requestedAt + SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 2000
+      requestedAt + 5 * 60 * 1000 + 2000
     );
   } finally {
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings),previous);
