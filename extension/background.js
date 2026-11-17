@@ -4111,7 +4111,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         requestId = requestedAt + '-' + Math.random().toString(36).slice(2);
         entries[feature] = {requestedAt,requestId};
         pending[permissionOrigin] = serializePendingSiteFeatureEntries(Object.entries(entries));
-        await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
+        const requestIds = data.siteFeaturePreferenceRequestIds && typeof data.siteFeaturePreferenceRequestIds === 'object'
+          ? {...data.siteFeaturePreferenceRequestIds} : {};
+        // Claim latest intent before Chrome's permission prompt resolves.
+        // This immediately fences off any older popup's delayed rollback.
+        requestIds[permissionOrigin + '|' + feature] = requestId;
+        await chrome.storage.local.set({
+          pendingSiteFeatureToggles:pending,
+          siteFeaturePreferenceRequestIds:requestIds
+        });
         return true;
       });
       sendResponse(prepared ? {ok:true,pending:true,requestId} : {ok:false});
@@ -4131,11 +4139,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
           ? {...data.pendingSiteFeatureToggles} : {};
         const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
+        const requestIds = data.siteFeaturePreferenceRequestIds && typeof data.siteFeaturePreferenceRequestIds === 'object'
+          ? {...data.siteFeaturePreferenceRequestIds} : {};
+        const requestKey = permissionOrigin + '|' + feature;
+        // A popup may cancel only the pending permission intent it created.
+        if (!message.requestId || entries[feature]?.requestId !== message.requestId ||
+            requestIds[requestKey] !== message.requestId) return;
         delete entries[feature];
+        delete requestIds[requestKey];
         const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
         if (remaining) pending[permissionOrigin] = remaining;
         else delete pending[permissionOrigin];
-        await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
+        await chrome.storage.local.set({
+          pendingSiteFeatureToggles:pending,
+          siteFeaturePreferenceRequestIds:requestIds
+        });
       });
       sendResponse({ok:true});
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
