@@ -2964,7 +2964,7 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, hasHostAccess = hasHostAccessForTab) {
+async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, permissionCheck = hasHostAccessForTab) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -3030,7 +3030,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
       redirectEnabled:false
     });
     const stillEligible = latestSettings.masterEnabled !== false &&
-      await hasHostAccess(tab) &&
+      await permissionCheck(tab) &&
       await shouldInjectContentScriptForTab(tab, latestSettings);
     if (!stillEligible) {
       await unregisterRuntimeContentScriptForPattern(pattern);
@@ -3167,6 +3167,41 @@ async function reconcileRuntimeContentScriptRegistrationsNow() {
     if (!id.startsWith('blb-suite-runtime-')) continue;
     const pattern = (script.matches || []).find(match => /^https?:\/\/[^/]+\/\*$/.test(match));
     if (pattern) patterns.add(pattern);
+  }
+
+  // Persistent registrations can disappear independently of their saved site
+  // preferences (for example, during a concurrent startup cleanup). Rebuild
+  // the candidate set from explicitly enabled hosts as well as from existing
+  // registrations, so reconciliation can restore a missing registration
+  // instead of only pruning or refreshing registrations Chrome still has.
+  const configuredHosts = new Set([
+    ...Object.entries(data.pageSelectionButtonSites || {})
+      .filter(([, enabled]) => enabled === true)
+      .map(([hostname]) => hostname),
+    ...Object.entries(data.doubleClickBlbSites || {})
+      .filter(([, enabled]) => enabled === true)
+      .map(([hostname]) => hostname)
+  ]);
+  for (const hostname of configuredHosts) {
+    const normalized = normalizeSiteHostname(hostname);
+    if (!normalized) continue;
+    // Preferences use canonical hostnames without "www.", while Chrome host
+    // grants are origin-specific. A user may have granted only the www origin,
+    // so consider both forms and let the permission API select the authorized
+    // candidate rather than silently losing that registration on restart.
+    const hostCandidates = new Set([normalized, 'www.' + normalized]);
+    for (const candidate of hostCandidates) {
+      for (const protocol of ['https:', 'http:']) {
+        try {
+          const tab = {url:protocol + '//' + candidate + '/'};
+          if (!(await hasHostAccessForTab(tab))) continue;
+          if (!(await shouldInjectContentScriptForTab(tab, data))) continue;
+          patterns.add(originPatternForUrl(tab.url));
+        } catch (_) {
+          // Invalid or unsupported saved host keys must not block other sites.
+        }
+      }
+    }
   }
 
   await Promise.all([...patterns].map(async pattern => {
@@ -7919,20 +7954,22 @@ async function recoverPendingSiteFeatureTogglesAfterWorkerStart() {
 chrome.permissions.onAdded.addListener(permissions => {
   handleGrantedHostPermissions(permissions?.origins || []).catch(() => {});
 });
-recoverPendingSiteFeatureTogglesAfterWorkerStart().catch(error => {
-  console.warn('KJV Scripture Tools pending site permission recovery failed:', String(error));
-});
-
-// Dynamic content-script registrations persist across worker and browser
-// restarts. A revocation/settings cleanup may have been interrupted while the
-// worker was suspended, so reconcile the persisted set on every cold start,
-// even when there are no pending permission intents to trigger grant recovery.
+// Resolve durable permission intents before reconciling persisted registrations.
+// Running these recoveries concurrently can let the registration pass observe
+// pre-commit preferences, remove a registration for a newly granted valid
+// intent, and then miss recreating it because reconciliation only scans
+// registrations that still exist.
 async function recoverRuntimeContentScriptRegistrationsAfterWorkerStart() {
   await reconcileRuntimeContentScriptRegistrations();
 }
-recoverRuntimeContentScriptRegistrationsAfterWorkerStart().catch(error => {
-  console.warn('KJV Scripture Tools worker-start runtime registration recovery failed:', String(error));
-});
+recoverPendingSiteFeatureTogglesAfterWorkerStart()
+  .catch(error => {
+    console.warn('KJV Scripture Tools pending site permission recovery failed:', String(error));
+  })
+  .then(() => recoverRuntimeContentScriptRegistrationsAfterWorkerStart())
+  .catch(error => {
+    console.warn('KJV Scripture Tools worker-start runtime registration recovery failed:', String(error));
+  });
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === STUDY_AUTOSTOP_ALARM) checkStudyAutoStop().catch(()=>{});

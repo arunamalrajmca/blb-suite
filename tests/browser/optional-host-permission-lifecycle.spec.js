@@ -1216,6 +1216,21 @@ test('permission revocation during an in-flight registration cannot leave a pers
       // an uninstrumented activation before the registration gate is installed.
       await unregisterRuntimeContentScriptForPattern(originPattern);
 
+    }, {originPattern:pattern,id:registrationId,mainId:mainWorldId});
+
+    // Keep the real tab out of the activation sweep. Finish ordinary
+    // enabled-site reconciliation before intercepting registration; otherwise
+    // the reconciliation itself can enter the gate and wait forever.
+    await page.goto('about:blank');
+    await extensionWorker.evaluate(async ({originPattern}) => {
+      await chrome.storage.local.set({masterEnabled:true});
+      await reconcileRuntimeContentScriptRegistrations();
+      await runtimeContentScriptReconciliationQueue;
+      await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
+      await unregisterRuntimeContentScriptForPattern(originPattern);
+    }, {originPattern:pattern});
+
+    await extensionWorker.evaluate(({originPattern,id}) => {
       const originalRegister = chrome.scripting.registerContentScripts;
       let accessGranted = true;
       let signalStarted;
@@ -1245,18 +1260,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
       globalThis.__permissionRaceRevoke = () => { accessGranted = false; };
       globalThis.__permissionRaceStarted = started;
       globalThis.__permissionRaceRelease = releaseRegistration;
-    }, {originPattern:pattern,id:registrationId,mainId:mainWorldId});
-
-    // Keep the real tab out of the activation sweep. This case isolates the
-    // registration helper's permission race using its synthetic example.com
-    // tab descriptor below, while the master-ON path separately activates real
-    // eligible tabs.
-    await page.goto('about:blank');
-    await extensionWorker.evaluate(async () => {
-      await chrome.storage.local.set({masterEnabled:true});
-      await reconcileRuntimeContentScriptRegistrations();
-      await runtimeContentScriptReconciliationQueue;
-    });
+    }, {originPattern:pattern,id:registrationId});
     // Start the registration helper without awaiting it so the test can revoke
     // access at the exact point where Chrome's registration API is paused.
     await extensionWorker.evaluate(id => {
@@ -1265,7 +1269,8 @@ test('permission revocation during an in-flight registration cannot leave a pers
     // Wait for the actual registration call to enter its deliberate pause.
     await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
     await extensionWorker.evaluate(() => globalThis.__permissionRaceRevoke());
-    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+    // Release the paused API call before reconciliation can queue behind it.
+    // The helper's post-registration permission check owns cleanup here.
     await extensionWorker.evaluate(() => globalThis.__permissionRaceRelease());
     const activated = await extensionWorker.evaluate(() => globalThis.__permissionRaceActivation);
     expect(activated).toBe(false);
@@ -1275,16 +1280,19 @@ test('permission revocation during an in-flight registration cannot leave a pers
     );
     expect(remaining).toEqual([]);
   } finally {
-    await extensionWorker.evaluate(async ({originPattern,id,mainId,settings}) => {
+    // A timed-out test may already have lost its worker/browser context. Do not
+    // let best-effort fixture cleanup mask the original assertion or timeout.
+    await extensionWorker.evaluate(async ({originPattern,settings}) => {
       globalThis.__permissionRaceRestore?.();
       delete globalThis.__permissionRaceRestore;
       delete globalThis.__permissionRaceRevoke;
       delete globalThis.__permissionRaceStarted;
       delete globalThis.__permissionRaceRelease;
+      delete globalThis.__permissionRaceActivation;
       await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set(settings);
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
-    }, {originPattern:pattern,id:registrationId,mainId:mainWorldId,settings:previous});
+    }, {originPattern:pattern,settings:previous}).catch(() => {});
   }
 });
 

@@ -1010,29 +1010,52 @@ test('browser restart reconciles persisted host registrations and pending permis
     const requestKey = pendingOrigin + '|pageButton';
 
     const registrationId = await worker.evaluate(async ({value,request,tokenKey,token}) => {
-      await chrome.storage.local.set({
-        masterEnabled:true,
-        redirectEnabled:false,
-        pageSelectionButtonSites:{'example.com':false},
-        doubleClickBlbSites:{},
-        pendingSiteFeatureToggles:{
-          [request]:{
-            feature:'pageButton',
-            requestedAt:Date.now()-6*60*1000,
-            requestId:token
-          }
-        },
-        siteFeaturePreferenceRequestIds:{[tokenKey]:token}
+      // This fixture deliberately seeds a stale registration for an opted-out
+      // host. Suppress the production storage-change reconciliation only while
+      // constructing that persisted pre-restart state; otherwise the normal
+      // listener correctly removes the registration before the restart test
+      // can exercise startup reconciliation.
+      const originalReconcile = reconcileRuntimeContentScriptRegistrations;
+      let resolveSeedStorageChange;
+      const seedStorageChange = new Promise(resolve => {
+        resolveSeedStorageChange = resolve;
       });
-      const id = runtimeContentScriptIdForPattern(value);
-      await chrome.scripting.registerContentScripts([{
-        id,
-        matches:[value],
-        js:['content.js'],
-        runAt:'document_start',
-        persistAcrossSessions:true
-      }]);
-      return id;
+      const observeSeedStorageChange = (changes, area) => {
+        if (area !== 'local' || !changes.pageSelectionButtonSites) return;
+        chrome.storage.onChanged.removeListener(observeSeedStorageChange);
+        resolveSeedStorageChange();
+      };
+      reconcileRuntimeContentScriptRegistrations = () => Promise.resolve();
+      chrome.storage.onChanged.addListener(observeSeedStorageChange);
+      try {
+        await chrome.storage.local.set({
+          masterEnabled:true,
+          redirectEnabled:false,
+          pageSelectionButtonSites:{'example.com':false},
+          doubleClickBlbSites:{},
+          pendingSiteFeatureToggles:{
+            [request]:{
+              feature:'pageButton',
+              requestedAt:Date.now()-6*60*1000,
+              requestId:token
+            }
+          },
+          siteFeaturePreferenceRequestIds:{[tokenKey]:token}
+        });
+        await seedStorageChange;
+        const id = runtimeContentScriptIdForPattern(value);
+        await chrome.scripting.registerContentScripts([{
+          id,
+          matches:[value],
+          js:['content.js'],
+          runAt:'document_start',
+          persistAcrossSessions:true
+        }]);
+        return id;
+      } finally {
+        chrome.storage.onChanged.removeListener(observeSeedStorageChange);
+        reconcileRuntimeContentScriptRegistrations = originalReconcile;
+      }
     },{value:pattern,request:pendingOrigin,tokenKey:requestKey,token:requestId});
     await expect.poll(() => worker.evaluate(async id =>
       (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length===1,
@@ -1074,3 +1097,224 @@ test('browser restart reconciles persisted host registrations and pending permis
     fs.rmSync(profilePath,{recursive:true,force:true});
   }
 });
+
+test('browser startup reconciles multiple stale registrations and mixed expired, valid, and ungranted permission intents', async ({
+  extensionPath
+}) => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const {chromium} = require('@playwright/test');
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(),'blb-mixed-permission-startup-'));
+  const launch = () => chromium.launchPersistentContext(profilePath,{
+    channel:'chromium',
+    headless:true,
+    args:[
+      '--headless=new',
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+      '--no-first-run',
+      '--no-default-browser-check'
+    ]
+  });
+  let browserContext;
+  let restartedContext;
+  try {
+    browserContext = await launch();
+    let [worker] = browserContext.serviceWorkers();
+    if (!worker) worker = await browserContext.waitForEvent('serviceworker');
+    const extensionId = worker.url().split('/')[2];
+
+    // The browser fixture adds these hosts to the test extension's granted
+    // host_permissions. The final origin is intentionally absent from that
+    // list so its still-valid permission intent must remain pending.
+    const validPattern = 'https://www.dailyverses.net/*';
+    const expiredPattern = 'https://example.com/*';
+    const stalePatternTwo = 'https://www.facebook.com/*';
+    const stalePatternThree = 'https://www.supplyofgrace.com/*';
+    const missingPermissionPattern = 'https://no-permission-startup.invalid/*';
+    const validRequestId = 'startup-valid-' + Date.now();
+    const expiredRequestId = 'startup-expired-' + Date.now();
+    const missingRequestId = 'startup-missing-' + Date.now();
+    const validRequestKey = validPattern + '|pageButton';
+    const expiredRequestKey = expiredPattern + '|doubleClick';
+    const missingRequestKey = missingPermissionPattern + '|pageButton';
+
+    const seeded = await worker.evaluate(async values => {
+      const hasMissingPermission = await chrome.permissions.contains({
+        origins:[values.missingPermissionPattern]
+      });
+      if (hasMissingPermission) throw new Error('The missing-permission test origin unexpectedly has host access');
+
+      // The storage-change listener normally reconciles registrations as
+      // soon as these opt-out settings are written. Suppress only that
+      // pre-restart notification while constructing the persisted legacy
+      // state; restore the real reconciler before closing and restarting Chrome.
+      const originalReconcile = reconcileRuntimeContentScriptRegistrations;
+      let observeStorageChange;
+      const storageChangeObserved = new Promise(resolve => {
+        observeStorageChange = (changes, area) => {
+          if (area === 'local' && changes.pageSelectionButtonSites) {
+            chrome.storage.onChanged.removeListener(observeStorageChange);
+            resolve();
+          }
+        };
+        chrome.storage.onChanged.addListener(observeStorageChange);
+      });
+      reconcileRuntimeContentScriptRegistrations = async () => {};
+      try {
+        await chrome.storage.local.set({
+          masterEnabled:true,
+          redirectEnabled:false,
+          pageSelectionButtonSites:{
+            'dailyverses.net':false,
+            'example.com':false,
+            'facebook.com':false,
+            'supplyofgrace.com':false
+          },
+          doubleClickBlbSites:{},
+          pendingSiteFeatureToggles:{
+            [values.validPattern]:{
+              feature:'pageButton',
+              requestedAt:Date.now(),
+              requestId:values.validRequestId
+            },
+            [values.expiredPattern]:{
+              feature:'doubleClick',
+              requestedAt:Date.now()-6*60*1000,
+              requestId:values.expiredRequestId
+            },
+            [values.missingPermissionPattern]:{
+              feature:'pageButton',
+              requestedAt:Date.now(),
+              requestId:values.missingRequestId
+            }
+          },
+          siteFeaturePreferenceRequestIds:{
+            [values.validRequestKey]:values.validRequestId,
+            [values.expiredRequestKey]:values.expiredRequestId,
+            [values.missingRequestKey]:values.missingRequestId
+          },
+          siteHostAccessRevokedSites:{}
+        });
+        await storageChangeObserved;
+      } finally {
+        reconcileRuntimeContentScriptRegistrations = originalReconcile;
+        chrome.storage.onChanged.removeListener(observeStorageChange);
+      }
+
+      const patterns = [
+        values.validPattern,
+        values.expiredPattern,
+        values.stalePatternTwo,
+        values.stalePatternThree
+      ];
+      const registrations = [];
+      for (const pattern of patterns) {
+        const id = runtimeContentScriptIdForPattern(pattern);
+        await chrome.scripting.registerContentScripts([{
+          id,
+          matches:[pattern],
+          js:['content.js'],
+          runAt:'document_start',
+          persistAcrossSessions:true
+        }]);
+        registrations.push({pattern,id});
+      }
+      const saved = await chrome.storage.local.get({
+        pendingSiteFeatureToggles:{},
+        siteFeaturePreferenceRequestIds:{},
+        pageSelectionButtonSites:{}
+      });
+      return {registrations,saved,hasMissingPermission};
+    },{
+      validPattern,expiredPattern,stalePatternTwo,stalePatternThree,
+      missingPermissionPattern,validRequestId,expiredRequestId,missingRequestId,
+      validRequestKey,expiredRequestKey,missingRequestKey
+    });
+    expect(seeded.hasMissingPermission).toBe(false);
+    expect(seeded.registrations).toHaveLength(4);
+    await expect.poll(() => worker.evaluate(async ids => {
+      const all = await chrome.scripting.getRegisteredContentScripts();
+      return all.filter(entry => ids.includes(entry.id)).length;
+    },seeded.registrations.map(entry => entry.id))).toBe(4);
+
+    // Reuse the same profile so Chrome must recover the persistent
+    // registrations and storage state through a genuine browser restart.
+    await browserContext.close();
+    browserContext = null;
+
+    restartedContext = await launch();
+    let [restartedWorker] = restartedContext.serviceWorkers();
+    if (!restartedWorker) restartedWorker = await restartedContext.waitForEvent('serviceworker');
+    expect(restartedWorker.url().split('/')[2]).toBe(extensionId);
+
+    const ids = seeded.registrations.map(entry => entry.id);
+    const validId = seeded.registrations.find(entry => entry.pattern===validPattern).id;
+    const staleIds = seeded.registrations.filter(entry => entry.pattern!==validPattern).map(entry => entry.id);
+
+    let lastStartupSnapshot = null;
+    try {
+      await expect.poll(async () => {
+        lastStartupSnapshot = await restartedWorker.evaluate(async values => {
+          const registrations = await chrome.scripting.getRegisteredContentScripts();
+          const saved = await chrome.storage.local.get({
+            pageSelectionButtonSites:{},
+            doubleClickBlbSites:{},
+            pendingSiteFeatureToggles:{},
+            siteFeaturePreferenceRequestIds:{}
+          });
+          const validTab = {url:values.validPattern.replace(/\\*$/, '')};
+          return {
+            registeredIds:registrations.filter(entry => values.ids.includes(entry.id)).map(entry => entry.id).sort(),
+            validHostPermission:await chrome.permissions.contains({origins:[values.validPattern]}),
+            validEligible:await shouldInjectContentScriptForTab(validTab,saved),
+            validFiles:contentScriptFilesForTab(validTab,saved),
+            allRuntimeRegistrations:registrations.filter(entry => entry.id.startsWith('blb-suite-runtime-')).map(entry => ({id:entry.id,matches:entry.matches})),
+            pagePreference:saved.pageSelectionButtonSites['dailyverses.net'],
+            expiredPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.expiredPattern),
+            validPendingPresent:Object.prototype.hasOwnProperty.call(saved.pendingSiteFeatureToggles,values.validPattern),
+            missingPending:saved.pendingSiteFeatureToggles[values.missingPermissionPattern],
+            expiredRequestPresent:Object.prototype.hasOwnProperty.call(saved.siteFeaturePreferenceRequestIds,values.expiredRequestKey),
+            validRequestId:saved.siteFeaturePreferenceRequestIds[values.validRequestKey],
+            missingRequestId:saved.siteFeaturePreferenceRequestIds[values.missingRequestKey]
+          };
+        },{
+          ids,validPattern,expiredPattern,missingPermissionPattern,
+          expiredRequestKey,validRequestKey,missingRequestKey
+        });
+        return lastStartupSnapshot;
+      },{timeout:15000,intervals:[100,250,500,1000]}).toMatchObject({
+      registeredIds:[validId],
+      pagePreference:true,
+      expiredPendingPresent:false,
+      validPendingPresent:false,
+      missingPending:{
+        feature:'pageButton',
+        requestedAt:expect.any(Number),
+        requestId:missingRequestId
+      },
+      expiredRequestPresent:false,
+      validRequestId,
+      missingRequestId
+      });
+    } catch (error) {
+      throw new Error(
+        'Mixed permission startup diagnostics: ' + JSON.stringify(lastStartupSnapshot, null, 2),
+        {cause:error}
+      );
+    }
+
+    const finalRegistrations = await restartedWorker.evaluate(async idsToCheck => {
+      const registered = await chrome.scripting.getRegisteredContentScripts();
+      return registered.filter(entry => idsToCheck.includes(entry.id)).map(entry => entry.id);
+    },ids);
+    expect(finalRegistrations).toEqual([validId]);
+    expect(staleIds).toHaveLength(3);
+  } finally {
+    await restartedContext?.close().catch(() => {});
+    await browserContext?.close().catch(() => {});
+    fs.rmSync(profilePath,{recursive:true,force:true});
+  }
+});
+
