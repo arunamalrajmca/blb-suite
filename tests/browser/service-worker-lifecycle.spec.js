@@ -445,6 +445,49 @@ test('a replaced MV3 tab migrates extension-owned destination and MultiVerse sta
     ]
   });
 });
+  
+test('a replaced prerendered tab is activated when startup registration recovery may have missed it', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  const page = await context.newPage();
+  await page.goto('https://example.com/?replacement-recovery=1', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+    return tabs[0]?.id;
+  });
+  expect(tabId).toBeTruthy();
+
+  try {
+    const activated = await extensionWorker.evaluate(async id => {
+      const original = ensureContentScriptInTab;
+      const calls = [];
+      ensureContentScriptInTab = async tabId => {
+        calls.push(tabId);
+        return true;
+      };
+      try {
+        await handleReplacedTabIdentity(id, 940003);
+        return calls;
+      } finally {
+        ensureContentScriptInTab = original;
+      }
+    }, tabId);
+    expect(activated).toContain(tabId);
+  } finally {
+    await page.close().catch(() => {});
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations().catch(() => {}));
+  }
+});
 
 
 test('closing multiple MultiVerse tabs concurrently removes every persisted tab record', async ({extensionWorker}) => {
