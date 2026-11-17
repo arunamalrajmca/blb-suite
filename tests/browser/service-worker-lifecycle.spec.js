@@ -1556,33 +1556,37 @@ test('a tab closed during asynchronous eligibility checks is not injected during
   await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
   let installed = false;
   try {
-    await extensionWorker.evaluate(tabId => {
+    const tabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({url:'https://example.com/*'}).then(tabs => tabs[0]?.id)
+    );
+    expect(tabId).toBeTruthy();
+    await extensionWorker.evaluate(id => {
       const original = shouldInjectContentScriptForTab;
-      let release, entered;
+      let release;
       const gate = new Promise(resolve => { release = resolve; });
-      const started = new Promise(resolve => { entered = resolve; });
       let first = true;
       globalThis.__closedTabEligibilityGate = {
-        started, release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
+        started:false,
+        release:() => release(),
+        restore:() => { shouldInjectContentScriptForTab = original; }
       };
       shouldInjectContentScriptForTab = async (tab, data) => {
-        if (first && tab?.id === tabId) {
+        if (first && tab?.id === id) {
           first = false;
-          entered();
+          globalThis.__closedTabEligibilityGate.started = true;
           await gate;
         }
         return original(tab,data);
       };
-    },await extensionWorker.evaluate(() => chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)));
+    },tabId);
     installed = true;
-    const tabId = await extensionWorker.evaluate(() =>
-      chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)
-    );
     await extensionWorker.evaluate(id => {
       globalThis.__closedTabActivationPromise = ensureContentScriptInTab(id);
       return true;
     },tabId);
-    await extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate.started);
+    await expect.poll(() =>
+      extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate?.started === true)
+    ).toBe(true);
     await page.close();
     await extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate.release());
     expect(await extensionWorker.evaluate(() => globalThis.__closedTabActivationPromise)).toBe(false);
