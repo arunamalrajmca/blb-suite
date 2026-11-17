@@ -1318,3 +1318,148 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
   }
 });
 
+
+
+test('startup registration reconciliation remains correct when tabs open and navigate across mixed permission states', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  const permittedPattern = 'https://www.dailyverses.net/*';
+  const deniedPattern = 'https://example.com/*';
+  const permittedUrl = 'https://www.dailyverses.net/';
+  const deniedUrl = 'https://example.com/';
+  const registrationId = await extensionWorker.evaluate(pattern => runtimeContentScriptIdForPattern(pattern), permittedPattern);
+
+  // Keep the fixture's normal host grant for dailyverses.net, but revoke
+  // example.com so the open tabs exercise genuinely different permission
+  // states during the same reconciliation pass.
+  await extensionWorker.evaluate(async pattern => {
+    await chrome.permissions.remove({origins:[pattern]});
+  }, deniedPattern);
+  expect(await extensionWorker.evaluate(async pattern =>
+    chrome.permissions.contains({origins:[pattern]})
+  , permittedPattern)).toBe(true);
+  expect(await extensionWorker.evaluate(async pattern =>
+    chrome.permissions.contains({origins:[pattern]})
+  , deniedPattern)).toBe(false);
+
+  // Prevent the preference write's ordinary storage listener from completing
+  // activation before the test installs its registration gate.
+  await extensionWorker.evaluate(async () => {
+    globalThis.__multiTabStartupOriginalReconcile = reconcileRuntimeContentScriptRegistrations;
+    globalThis.__multiTabStartupOriginalInject = injectConfiguredTabsAfterExtensionUpdate;
+    reconcileRuntimeContentScriptRegistrations = async () => {};
+    injectConfiguredTabsAfterExtensionUpdate = async () => ({eligibleTabIds:[],activatedTabIds:[],failedTabIds:[]});
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{
+        'dailyverses.net':true,
+        'example.com':true
+      },
+      doubleClickBlbSites:{}
+    });
+    reconcileRuntimeContentScriptRegistrations = globalThis.__multiTabStartupOriginalReconcile;
+    injectConfiguredTabsAfterExtensionUpdate = globalThis.__multiTabStartupOriginalInject;
+    delete globalThis.__multiTabStartupOriginalReconcile;
+    delete globalThis.__multiTabStartupOriginalInject;
+    await unregisterRuntimeContentScriptForPattern('https://www.dailyverses.net/*');
+  });
+
+  let firstPage;
+  let secondPage;
+  let deniedPage;
+  try {
+    firstPage = await context.newPage();
+    secondPage = await context.newPage();
+    deniedPage = await context.newPage();
+
+    let releaseRegistration;
+    let registrationEntered;
+    await extensionWorker.evaluate(pattern => {
+      const api = chrome.scripting;
+      const original = api.registerContentScripts;
+      let release;
+      let entered;
+      const gate = new Promise(resolve => { release = resolve; });
+      const started = new Promise(resolve => { entered = resolve; });
+      api.registerContentScripts = async function(scripts) {
+        if ((scripts || []).some(script => (script.matches || []).includes(pattern))) {
+          entered();
+          await gate;
+        }
+        return original.call(api, scripts);
+      };
+      globalThis.__multiTabStartupRegistrationGate = {
+        started, release:() => release(), restore:() => { api.registerContentScripts = original; }
+      };
+    }, permittedPattern);
+
+    // Explicitly begin the startup-style reconciliation and pause its
+    // registration operation. Navigations in both already-open and newly
+    // opened tabs must queue behind that operation instead of racing it.
+    const reconciliation = extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+    await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.started);
+
+    await Promise.all([
+      firstPage.goto(permittedUrl, {waitUntil:'domcontentloaded'}),
+      secondPage.goto(permittedUrl, {waitUntil:'domcontentloaded'}),
+      deniedPage.goto(deniedUrl, {waitUntil:'domcontentloaded'}).catch(() => {})
+    ]);
+
+    await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.release());
+    await reconciliation;
+    await extensionWorker.evaluate(async () => {
+      await runtimeContentScriptReconciliationQueue;
+      await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
+    });
+
+    const state = await extensionWorker.evaluate(async ({registrationId,permittedPattern,deniedPattern}) => {
+      const registrations = await chrome.scripting.getRegisteredContentScripts();
+      const tabs = await chrome.tabs.query({});
+      const inspect = async tab => {
+        if (!tab?.id || !/^https?:/.test(tab.url || '')) return null;
+        try {
+          const [{result}] = await chrome.scripting.executeScript({
+            target:{tabId:tab.id},
+            world:'ISOLATED',
+            func:() => Boolean(window.__blbSuiteContentScriptLoadedV2)
+          });
+          return {url:tab.url,loaded:result};
+        } catch (_) {
+          return {url:tab.url,loaded:false};
+        }
+      };
+      const inspected = await Promise.all(tabs.filter(tab =>
+        tab.url?.startsWith('https://www.dailyverses.net/') || tab.url?.startsWith('https://example.com/')
+      ).map(inspect));
+      return {
+        registration:registrations.find(entry => entry.id === registrationId) || null,
+        permitted:await chrome.permissions.contains({origins:[permittedPattern]}),
+        denied:await chrome.permissions.contains({origins:[deniedPattern]}),
+        tabs:inspected
+      };
+    }, {registrationId,permittedPattern,deniedPattern});
+
+    expect(state.permitted).toBe(true);
+    expect(state.denied).toBe(false);
+    expect(state.registration?.matches).toContain(permittedPattern);
+    expect(state.tabs.filter(tab => tab?.url?.startsWith(permittedUrl) && tab.loaded).length).toBeGreaterThanOrEqual(2);
+    expect(state.tabs.filter(tab => tab?.url?.startsWith(deniedUrl) && tab.loaded)).toEqual([]);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const gate = globalThis.__multiTabStartupRegistrationGate;
+      gate?.release();
+      gate?.restore();
+      delete globalThis.__multiTabStartupRegistrationGate;
+    }).catch(() => {});
+    await Promise.all([firstPage,secondPage,deniedPage].filter(Boolean).map(page => page.close().catch(() => {})));
+    await extensionWorker.evaluate(async pattern => {
+      await chrome.storage.local.set({
+        pageSelectionButtonSites:{'dailyverses.net':false,'example.com':false},
+        doubleClickBlbSites:{}
+      });
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(pattern).catch(() => {});
+    }, permittedPattern).catch(() => {});
+  }
+});
