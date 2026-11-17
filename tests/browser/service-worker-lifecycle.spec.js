@@ -1500,19 +1500,18 @@ test('startup recovery includes tabs created after registration reconciliation h
   },pattern);
   let page;
   try {
-    const recovery = await extensionWorker.evaluate(() =>
-      recoverConfiguredTabsOnStartup().then(result => {
-        globalThis.__createdDuringStartupResult = result;
-        return result;
-      })
-    );
+    await extensionWorker.evaluate(() => {
+      globalThis.__createdDuringStartupRecovery = recoverConfiguredTabsOnStartup();
+      return true;
+    });
     await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.started);
     page = await context.newPage();
     await page.goto(url,{waitUntil:'domcontentloaded'});
     await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.release());
     await extensionWorker.evaluate(async () => {
       await globalThis.__createdDuringStartupRecovery;
-    }).catch(() => {});
+      delete globalThis.__createdDuringStartupRecovery;
+    });
     // The startup operation is held in the worker global so it can be awaited
     // after the new tab has completed navigation.
     const loaded = await extensionWorker.evaluate(async () => {
@@ -1527,7 +1526,6 @@ test('startup recovery includes tabs created after registration reconciliation h
       } catch (_) { return false; }
     });
     expect(loaded).toBe(true);
-    void recovery;
   } finally {
     await extensionWorker.evaluate(() => {
       globalThis.__createdDuringStartupGate?.release();
@@ -1577,12 +1575,18 @@ test('a tab closed during asynchronous eligibility checks is not injected during
       };
     },await extensionWorker.evaluate(() => chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)));
     installed = true;
-    const activation = await extensionWorker.evaluate(tabId => ensureContentScriptInTab(tabId),
-      await extensionWorker.evaluate(() => chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)));
+    const tabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)
+    );
+    await extensionWorker.evaluate(id => {
+      globalThis.__closedTabActivationPromise = ensureContentScriptInTab(id);
+      return true;
+    },tabId);
     await extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate.started);
     await page.close();
     await extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate.release());
-    expect(await activation).toBe(false);
+    expect(await extensionWorker.evaluate(() => globalThis.__closedTabActivationPromise)).toBe(false);
+    await extensionWorker.evaluate(() => { delete globalThis.__closedTabActivationPromise; });
   } finally {
     if (installed) await extensionWorker.evaluate(() => {
       globalThis.__closedTabEligibilityGate?.release();
@@ -1633,11 +1637,15 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
       };
     },tabId);
     installed = true;
-    const activationPromise = extensionWorker.evaluate(id => ensureContentScriptInTab(id),tabId);
+    await extensionWorker.evaluate(id => {
+      globalThis.__redirectTabActivationPromise = ensureContentScriptInTab(id);
+      return true;
+    },tabId);
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.started);
     await page.goto('https://www.wikipedia.org/',{waitUntil:'domcontentloaded'}).catch(() => {});
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
-    expect(await activationPromise).toBe(false);
+    expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
+    await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
     const tabState = await extensionWorker.evaluate(async id => {
       const [{result}] = await chrome.scripting.executeScript({
         target:{tabId:id},world:'ISOLATED',
