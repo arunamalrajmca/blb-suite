@@ -1129,7 +1129,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     // host_permissions. The final origin is intentionally absent from that
     // list so its still-valid permission intent must remain pending.
     const validPattern = 'https://example.com/*';
-    const expiredPattern = 'https://example.com/*';
+    const expiredPattern = 'https://www.gotquestions.org/*';
     const stalePatternTwo = 'https://www.facebook.com/*';
     const stalePatternThree = 'https://www.supplyofgrace.com/*';
     const missingPermissionPattern = 'https://no-permission-startup.invalid/*';
