@@ -1299,8 +1299,10 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
       missingRequestId
       });
     } catch (error) {
-      console.log('Mixed permission startup diagnostics: ' + JSON.stringify(lastStartupSnapshot));
-      throw error;
+      throw new Error(
+        'Mixed permission startup diagnostics: ' + JSON.stringify(lastStartupSnapshot, null, 2),
+        {cause:error}
+      );
     }
 
     const finalRegistrations = await restartedWorker.evaluate(async idsToCheck => {
