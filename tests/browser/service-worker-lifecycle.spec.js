@@ -3,7 +3,7 @@ const { test, expect } = require('./fixtures');
 test('a real MV3 service-worker termination is recovered by a content-script selection request', async ({ page, context, extensionStorage, extensionWorker, extensionId }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    pageSelectionButtonSites:{'example.com':true},
+    pageSelectionButtonSites:{'www.wikipedia.org':true},
     doubleClickBlbSites:{}
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
@@ -884,7 +884,7 @@ test('a terminated worker reconciles stale host registrations and expires pendin
     await extensionStorage.set({
       masterEnabled:true,
       redirectEnabled:false,
-      pageSelectionButtonSites:{'example.com':false},
+      pageSelectionButtonSites:{'www.wikipedia.org':false},
       doubleClickBlbSites:{},
       pendingSiteFeatureToggles:{
         [pendingOrigin]:{
@@ -1324,17 +1324,14 @@ test('startup registration reconciliation remains correct when tabs open and nav
   context, extensionStorage, extensionWorker
 }) => {
   const permittedPattern = 'https://www.dailyverses.net/*';
-  const deniedPattern = 'https://example.com/*';
+  const deniedPattern = 'https://www.wikipedia.org/*';
   const permittedUrl = 'https://www.dailyverses.net/';
-  const deniedUrl = 'https://example.com/';
+  const deniedUrl = 'https://www.wikipedia.org/';
   const registrationId = await extensionWorker.evaluate(pattern => runtimeContentScriptIdForPattern(pattern), permittedPattern);
 
-  // Keep the fixture's normal host grant for dailyverses.net, but revoke
-  // example.com so the open tabs exercise genuinely different permission
-  // states during the same reconciliation pass.
-  await extensionWorker.evaluate(async pattern => {
-    await chrome.permissions.remove({origins:[pattern]});
-  }, deniedPattern);
+  // dailyverses.net is granted by the browser fixture; wikipedia.org is
+  // deliberately outside its optional host grants, giving this test a real
+  // no-permission tab without attempting to remove a required permission.
   expect(await extensionWorker.evaluate(async pattern =>
     chrome.permissions.contains({origins:[pattern]})
   , permittedPattern)).toBe(true);
@@ -1435,7 +1432,7 @@ test('startup registration reconciliation remains correct when tabs open and nav
         }
       };
       const inspected = await Promise.all(tabs.filter(tab =>
-        tab.url?.startsWith('https://www.dailyverses.net/') || tab.url?.startsWith('https://example.com/')
+        tab.url?.startsWith('https://www.dailyverses.net/') || tab.url?.startsWith('https://www.wikipedia.org/')
       ).map(inspect));
       return {
         registration:registrations.find(entry => entry.id === registrationId) || null,
