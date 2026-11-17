@@ -62,7 +62,8 @@ async function readSitePreferences(extensionWorker) {
   return extensionWorker.evaluate(() => chrome.storage.local.get({
     pageSelectionButtonSites: {},
     doubleClickBlbSites: {},
-    pendingSiteFeatureToggles: {}
+    pendingSiteFeatureToggles: {},
+    siteFeaturePreferenceRequestIds: {}
   }));
 }
 
