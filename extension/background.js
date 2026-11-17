@@ -3243,9 +3243,31 @@ async function ensureContentScriptInTab(tabId) {
 
   const operation = (async () => {
     try {
-      const tab = await chrome.tabs.get(tabId);
+      let tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
-      if (!(await hasHostAccessForTab(tab))) return false;
+      const expectedOriginPattern = originPatternForUrl(tab.url);
+      if (!expectedOriginPattern || !(await hasHostAccessForTab(tab))) return false;
+
+      const getCurrentEligibleTab = async () => {
+        let current;
+        try {
+          current = await chrome.tabs.get(tabId);
+        } catch (_) {
+          return null;
+        }
+        if (!isHttpPageUrl(current?.url) ||
+            originPatternForUrl(current.url) !== expectedOriginPattern) return null;
+        if (!(await hasHostAccessForTab(current))) return null;
+        const latestSettings = await chrome.storage.local.get({
+          masterEnabled:true,
+          pageSelectionButtonSites:{},
+          doubleClickBlbSites:{},
+          redirectEnabled:false
+        });
+        if (latestSettings.masterEnabled === false ||
+            !(await shouldInjectContentScriptForTab(current, latestSettings))) return null;
+        return current;
+      };
 
       // Read settings only after permission is confirmed. A toggle may be
       // written while Chrome's permission prompt is closing, so re-read the
@@ -3262,6 +3284,8 @@ async function ensureContentScriptInTab(tabId) {
       if (!files.length) return false;
 
       const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
+      tab = await getCurrentEligibleTab();
+      if (!tab) return false;
       if (!registrationReady) {
         // Keep the current page usable even when Chrome rejects a persistent
         // registration update. The direct executeScript path below activates
@@ -3279,6 +3303,8 @@ async function ensureContentScriptInTab(tabId) {
       ];
       if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
         try {
+          tab = await getCurrentEligibleTab();
+          if (!tab) return false;
           await chrome.scripting.executeScript({
             target:{tabId},
             files:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
@@ -3299,10 +3325,14 @@ async function ensureContentScriptInTab(tabId) {
       // inject the current bundle and then refresh the newly installed gates.
       if (files.includes('content.js')) {
         try {
+          tab = await getCurrentEligibleTab();
+          if (!tab) return false;
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
           if (response?.ok === true) {
             if (files.includes('redirect-scripttagger.js')) {
               try {
+                tab = await getCurrentEligibleTab();
+                if (!tab) return false;
                 await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
               } catch (error) {
                 if (isTabUnavailableError(error)) return false;
@@ -3318,6 +3348,8 @@ async function ensureContentScriptInTab(tabId) {
       }
 
       try {
+        tab = await getCurrentEligibleTab();
+        if (!tab) return false;
         await chrome.scripting.executeScript({target:{tabId}, files});
       } catch (error) {
         // Tabs can close or navigate away between tabs.get() and executeScript().
@@ -3345,6 +3377,8 @@ async function ensureContentScriptInTab(tabId) {
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
               if (files.includes('redirect-scripttagger.js')) {
+                tab = await getCurrentEligibleTab();
+                if (!tab) return false;
                 await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
               }
               return true;

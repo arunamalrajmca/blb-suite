@@ -1468,3 +1468,206 @@ test('startup registration reconciliation remains correct when tabs open and nav
     }, permittedPattern).catch(() => {});
   }
 });
+
+
+test('startup recovery includes tabs created after registration reconciliation has started', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  const pattern = 'https://example.com/*';
+  const url = 'https://example.com/';
+  await extensionStorage.set({
+    masterEnabled:true,redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+  });
+  await extensionWorker.evaluate(async value => {
+    await unregisterRuntimeContentScriptForPattern(value);
+    const api = chrome.scripting;
+    const original = api.registerContentScripts;
+    let release, entered;
+    const gate = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    api.registerContentScripts = async function(scripts) {
+      if ((scripts || []).some(script => (script.matches || []).includes(value))) {
+        entered();
+        await gate;
+      }
+      return original.call(api, scripts);
+    };
+    globalThis.__createdDuringStartupGate = {
+      started, release:() => release(),
+      restore:() => { api.registerContentScripts = original; }
+    };
+  },pattern);
+  let page;
+  try {
+    await extensionWorker.evaluate(() => {
+      globalThis.__createdDuringStartupRecovery = recoverConfiguredTabsOnStartup();
+      return true;
+    });
+    await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.started);
+    page = await context.newPage();
+    await page.goto(url,{waitUntil:'domcontentloaded'});
+    await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.release());
+    await extensionWorker.evaluate(async () => {
+      await globalThis.__createdDuringStartupRecovery;
+      delete globalThis.__createdDuringStartupRecovery;
+    });
+    // The startup operation is held in the worker global so it can be awaited
+    // after the new tab has completed navigation.
+    const loaded = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      if (!tabs[0]?.id) return false;
+      try {
+        const [{result}] = await chrome.scripting.executeScript({
+          target:{tabId:tabs[0].id},world:'ISOLATED',
+          func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
+        });
+        return result === true;
+      } catch (_) { return false; }
+    });
+    expect(loaded).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      globalThis.__createdDuringStartupGate?.release();
+      globalThis.__createdDuringStartupGate?.restore();
+      delete globalThis.__createdDuringStartupGate;
+      delete globalThis.__createdDuringStartupRecovery;
+      delete globalThis.__createdDuringStartupResult;
+    }).catch(() => {});
+    await page?.close().catch(() => {});
+    await extensionWorker.evaluate(async value => {
+      await chrome.storage.local.set({pageSelectionButtonSites:{'example.com':false}});
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(value).catch(() => {});
+    },pattern).catch(() => {});
+  }
+});
+
+
+test('a tab closed during asynchronous eligibility checks is not injected during startup recovery', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  const pattern = 'https://example.com/*';
+  await extensionStorage.set({
+    masterEnabled:true,redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+  });
+  const page = await context.newPage();
+  await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
+  let installed = false;
+  try {
+    const tabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({url:'https://example.com/*'}).then(tabs => tabs[0]?.id)
+    );
+    expect(tabId).toBeTruthy();
+    await extensionWorker.evaluate(id => {
+      const original = shouldInjectContentScriptForTab;
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      let first = true;
+      globalThis.__closedTabEligibilityGate = {
+        started:false,
+        release:() => release(),
+        restore:() => { shouldInjectContentScriptForTab = original; }
+      };
+      shouldInjectContentScriptForTab = async (tab, data) => {
+        if (first && tab?.id === id) {
+          first = false;
+          globalThis.__closedTabEligibilityGate.started = true;
+          await gate;
+        }
+        return original(tab,data);
+      };
+    },tabId);
+    installed = true;
+    await extensionWorker.evaluate(id => {
+      globalThis.__closedTabActivationPromise = ensureContentScriptInTab(id);
+      return true;
+    },tabId);
+    await expect.poll(() =>
+      extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate?.started === true)
+    ).toBe(true);
+    await page.close();
+    await extensionWorker.evaluate(() => globalThis.__closedTabEligibilityGate.release());
+    expect(await extensionWorker.evaluate(() => globalThis.__closedTabActivationPromise)).toBe(false);
+    await extensionWorker.evaluate(() => { delete globalThis.__closedTabActivationPromise; });
+  } finally {
+    if (installed) await extensionWorker.evaluate(() => {
+      globalThis.__closedTabEligibilityGate?.release();
+      globalThis.__closedTabEligibilityGate?.restore();
+      delete globalThis.__closedTabEligibilityGate;
+    }).catch(() => {});
+    await extensionWorker.evaluate(async value => {
+      await chrome.storage.local.set({pageSelectionButtonSites:{'example.com':false}});
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(value).catch(() => {});
+    },pattern).catch(() => {});
+  }
+});
+
+
+test('a redirect during eligibility checks cannot inject the previous host bundle into the new document', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  const permittedPattern = 'https://example.com/*';
+  const deniedPattern = 'https://www.wikipedia.org/*';
+  await extensionStorage.set({
+    masterEnabled:true,redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+  });
+  const page = await context.newPage();
+  await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
+  let installed = false;
+  try {
+    const tabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)
+    );
+    await extensionWorker.evaluate(id => {
+      const original = shouldInjectContentScriptForTab;
+      let release, entered;
+      const gate = new Promise(resolve => { release = resolve; });
+      const started = new Promise(resolve => { entered = resolve; });
+      let first = true;
+      globalThis.__redirectTabEligibilityGate = {
+        started, release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
+      };
+      shouldInjectContentScriptForTab = async (tab,data) => {
+        if (first && tab?.id === id) {
+          first = false;
+          entered();
+          await gate;
+        }
+        return original(tab,data);
+      };
+    },tabId);
+    installed = true;
+    await extensionWorker.evaluate(id => {
+      globalThis.__redirectTabActivationPromise = ensureContentScriptInTab(id);
+      return true;
+    },tabId);
+    await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.started);
+    await page.goto('https://www.wikipedia.org/',{waitUntil:'domcontentloaded'}).catch(() => {});
+    await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
+    expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
+    await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
+    const redirectedTab = await extensionWorker.evaluate(async id => {
+      const current = await chrome.tabs.get(id);
+      return current?.url || '';
+    },tabId);
+    expect(redirectedTab).toContain('wikipedia.org');
+    expect(await extensionWorker.evaluate(pattern =>
+      chrome.permissions.contains({origins:[pattern]}),deniedPattern)).toBe(false);
+  } finally {
+    if (installed) await extensionWorker.evaluate(() => {
+      globalThis.__redirectTabEligibilityGate?.release();
+      globalThis.__redirectTabEligibilityGate?.restore();
+      delete globalThis.__redirectTabEligibilityGate;
+    }).catch(() => {});
+    await page.close().catch(() => {});
+    await extensionWorker.evaluate(async value => {
+      await chrome.storage.local.set({pageSelectionButtonSites:{'example.com':false}});
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(value).catch(() => {});
+    },permittedPattern).catch(() => {});
+  }
+});
