@@ -2393,6 +2393,10 @@ const blbLogicalTabRegistry = new Map();
 // opened manually.
 const intentionalNewBlbTabs = new Set();
 
+// Keep source-tab removal cleanup from racing the serialized state migration
+// started by tabs.onReplaced. The count handles duplicate overlapping events.
+const pendingReplacementSourceTabCounts = new Map();
+
 // Serialize the final BLB tab-creation operation. This is deliberately below
 // the feature/event layer: even if two independent callers ask to open the
 // same BLB destination at nearly the same time, only one caller is allowed to
@@ -2516,6 +2520,9 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 
 async function handleReplacedTabIdentity(addedTabId, removedTabId) {
   if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) return;
+  pendingReplacementSourceTabCounts.set(removedTabId,
+    (pendingReplacementSourceTabCounts.get(removedTabId) || 0) + 1);
+  try {
 
   // Chrome can replace a prerendered tab without following the ordinary
   // onRemoved lifecycle. Preserve extension-owned destination identities under
@@ -2588,6 +2595,11 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
       console.warn('KJV Scripture Tools replaced-tab content-script recovery failed:', String(error));
     }
   }
+  } finally {
+    const remaining = (pendingReplacementSourceTabCounts.get(removedTabId) || 1) - 1;
+    if (remaining > 0) pendingReplacementSourceTabCounts.set(removedTabId, remaining);
+    else pendingReplacementSourceTabCounts.delete(removedTabId);
+  }
 }
 
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
@@ -2602,12 +2614,17 @@ chrome.tabs.onRemoved.addListener(tabId => {
   for (const [key, id] of scriptTaggerDestinationTabs) {
     if (id === tabId) scriptTaggerDestinationTabs.delete(key);
   }
-  clearTrackedMultiVerseTab(tabId).catch(()=>{});
-  updatePendingMultiVerseRefsByTab(map => {
-    delete map[String(tabId)];
-  }).catch(error => {
-    console.warn('KJV Scripture Tools pending MultiVerse reference cleanup failed:', String(error));
-  });
+  // A source tab may emit onRemoved while its onReplaced state migration is
+  // still queued. Let that migration capture and transfer its persisted state;
+  // its own updater removes the source key once the destination owns it.
+  if (!pendingReplacementSourceTabCounts.has(tabId)) {
+    clearTrackedMultiVerseTab(tabId).catch(()=>{});
+    updatePendingMultiVerseRefsByTab(map => {
+      delete map[String(tabId)];
+    }).catch(error => {
+      console.warn('KJV Scripture Tools pending MultiVerse reference cleanup failed:', String(error));
+    });
+  }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
