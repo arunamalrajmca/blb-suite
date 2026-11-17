@@ -7735,28 +7735,34 @@ async function pruneExpiredPendingSiteFeatureToggles(now = Date.now()) {
     });
     return {expired,remaining:pending};
   });
-  await schedulePendingSiteFeatureToggleCleanup(result.remaining);
+  await schedulePendingSiteFeatureToggleCleanup();
   return {expired:result.expired};
 }
 
-async function schedulePendingSiteFeatureToggleCleanup(pendingOverride) {
-  const pending = pendingOverride && typeof pendingOverride === 'object'
-    ? pendingOverride
-    : (await chrome.storage.local.get({pendingSiteFeatureToggles:{}})).pendingSiteFeatureToggles;
-  let nextExpiry = Infinity;
-  for (const intent of Object.values(pending || {})) {
-    for (const [,featureIntent] of pendingSiteFeatureEntries(intent)) {
-      const requestedAt = Number(featureIntent?.requestedAt);
-      if (Number.isFinite(requestedAt)) {
-        nextExpiry = Math.min(nextExpiry,requestedAt + SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 1);
+async function schedulePendingSiteFeatureToggleCleanup() {
+  // Alarm state is derived from the latest persisted intents while holding the
+  // same mutation queue used by intent creation, cancellation, and expiry.
+  // Reading a caller's earlier snapshot here can clear an alarm that a newer
+  // popup intent has just scheduled.
+  return serializePendingSiteFeatureToggleMutation(async () => {
+    const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+    const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+      ? data.pendingSiteFeatureToggles : {};
+    let nextExpiry = Infinity;
+    for (const intent of Object.values(pending)) {
+      for (const [,featureIntent] of pendingSiteFeatureEntries(intent)) {
+        const requestedAt = Number(featureIntent?.requestedAt);
+        if (Number.isFinite(requestedAt)) {
+          nextExpiry = Math.min(nextExpiry,requestedAt + SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 1);
+        }
       }
     }
-  }
-  if (Number.isFinite(nextExpiry)) {
-    await chrome.alarms.create(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM,{when:Math.max(Date.now()+1000,nextExpiry)});
-  } else {
-    await chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM);
-  }
+    if (Number.isFinite(nextExpiry)) {
+      await chrome.alarms.create(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM,{when:Math.max(Date.now()+1000,nextExpiry)});
+    } else {
+      await chrome.alarms.clear(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM);
+    }
+  });
 }
 
 function serializePendingSiteFeatureToggleMutation(operation) {
