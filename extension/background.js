@@ -3169,6 +3169,34 @@ async function reconcileRuntimeContentScriptRegistrationsNow() {
     if (pattern) patterns.add(pattern);
   }
 
+  // Persistent registrations can disappear independently of their saved site
+  // preferences (for example, during a concurrent startup cleanup). Rebuild
+  // the candidate set from explicitly enabled hosts as well as from existing
+  // registrations, so reconciliation can restore a missing registration
+  // instead of only pruning or refreshing registrations Chrome still has.
+  const configuredHosts = new Set([
+    ...Object.entries(data.pageSelectionButtonSites || {})
+      .filter(([, enabled]) => enabled === true)
+      .map(([hostname]) => hostname),
+    ...Object.entries(data.doubleClickBlbSites || {})
+      .filter(([, enabled]) => enabled === true)
+      .map(([hostname]) => hostname)
+  ]);
+  for (const hostname of configuredHosts) {
+    const normalized = normalizeSiteHostname(hostname);
+    if (!normalized) continue;
+    for (const protocol of ['https:', 'http:']) {
+      try {
+        const tab = {url:protocol + '//' + normalized + '/'};
+        if (!(await hasHostAccessForTab(tab))) continue;
+        if (!(await shouldInjectContentScriptForTab(tab, data))) continue;
+        patterns.add(originPatternForUrl(tab.url));
+      } catch (_) {
+        // Invalid or unsupported saved host keys must not block other sites.
+      }
+    }
+  }
+
   await Promise.all([...patterns].map(async pattern => {
     const tab = {url:pattern.replace(/\*$/, '')};
     const eligible = data.masterEnabled !== false &&
