@@ -7998,7 +7998,19 @@ chrome.runtime.onStartup.addListener(() => {
     .catch(() => {})).catch(() => {});
 });
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
-chrome.runtime.onStartup.addListener(() => schedulePersistedRuntimeContentScriptAudit());
+async function recoverConfiguredTabsOnStartup() {
+  // Persistent registrations cover future navigations, but Chrome may restore
+  // tabs whose documents completed loading before reconciliation finished.
+  // Activate those already-open documents only after registrations settle.
+  await reconcileRuntimeContentScriptRegistrations();
+  return injectConfiguredTabsAfterExtensionUpdate();
+}
+chrome.runtime.onStartup.addListener(() => {
+  recoverConfiguredTabsOnStartup().catch(error => {
+    console.error('KJV Scripture Tools browser-startup tab recovery failed:', String(error));
+  });
+  schedulePersistedRuntimeContentScriptAudit();
+});
 chrome.runtime.onInstalled.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 
 const initialSelectionMenuSyncIsCurrent = beginSelectionMenuContextSync();
