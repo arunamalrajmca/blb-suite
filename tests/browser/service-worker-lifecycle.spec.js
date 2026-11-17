@@ -3,7 +3,7 @@ const { test, expect } = require('./fixtures');
 test('a real MV3 service-worker termination is recovered by a content-script selection request', async ({ page, context, extensionStorage, extensionWorker, extensionId }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    pageSelectionButtonSites:{'www.wikipedia.org':true},
+    pageSelectionButtonSites:{'example.com':true},
     doubleClickBlbSites:{}
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
