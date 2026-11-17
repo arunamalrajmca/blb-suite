@@ -1409,11 +1409,10 @@ test('startup registration reconciliation remains correct when tabs open and nav
 
     await extensionWorker.evaluate(() => globalThis.__multiTabStartupRegistrationGate.release());
     await extensionWorker.evaluate(async () => {
-      await runtimeContentScriptReconciliationQueue;
-      await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
-      // Startup/update recovery must also activate tabs whose navigation
-      // completed before the persistent registration became available.
-      await injectConfiguredTabsAfterExtensionUpdate();
+      // Exercise the same orchestration registered for chrome.runtime.onStartup:
+      // finish persistent registration reconciliation, then activate tabs
+      // whose documents completed navigation while registration was gated.
+      await recoverConfiguredTabsOnStartup();
       if (globalThis.__multiTabStartupReconciliationError) {
         throw new Error(globalThis.__multiTabStartupReconciliationError);
       }
@@ -1425,12 +1424,8 @@ test('startup registration reconciliation remains correct when tabs open and nav
       const inspect = async tab => {
         if (!tab?.id || !/^https?:/.test(tab.url || '')) return null;
         try {
-          const [{result}] = await chrome.scripting.executeScript({
-            target:{tabId:tab.id},
-            world:'ISOLATED',
-            func:() => Boolean(window.__blbSuiteContentScriptLoadedV2)
-          });
-          return {url:tab.url,loaded:result};
+          const response = await chrome.tabs.sendMessage(tab.id, {type:'blbSuiteRefreshSiteFeatures'});
+          return {url:tab.url,loaded:response?.ok === true};
         } catch (_) {
           return {url:tab.url,loaded:false};
         }
