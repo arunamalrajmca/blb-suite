@@ -1530,8 +1530,10 @@ async function setIndependentSiteFeature(feature, on) {
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
       (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
     if (on) {
-      await pinPromise;
-      if (generation === siteFeatureToggleGeneration[feature]) await cancelPendingSiteFeatureChoice(feature, pinned?.requestId);
+      const pendingChoice = await pinPromise;
+      if (generation === siteFeatureToggleGeneration[feature]) {
+        await cancelPendingSiteFeatureChoice(feature, pendingChoice?.requestId);
+      }
     } else await cancelPromise;
     render(state);
     return;
