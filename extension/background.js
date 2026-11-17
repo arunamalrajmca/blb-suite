@@ -2549,6 +2549,24 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
     delete map[String(removedTabId)];
   });
 
+  // The replacement can close while the two serialized storage migrations
+  // are in flight. Its onRemoved cleanup may run between those queues, so
+  // recheck liveness after both migrations and remove any state that landed
+  // on an already-closed destination.
+  const liveReplacement = await getLiveTabById(addedTabId);
+  if (!liveReplacement) {
+    forgetBlbTab(addedTabId);
+    intentionalNewBlbTabs.delete(addedTabId);
+    for (const [key, id] of scriptTaggerDestinationTabs) {
+      if (id === addedTabId) scriptTaggerDestinationTabs.delete(key);
+    }
+    await clearTrackedMultiVerseTab(addedTabId);
+    await updatePendingMultiVerseRefsByTab(map => {
+      delete map[String(addedTabId)];
+    });
+    return;
+  }
+
   // A prerendered replacement can become the live tab after the original
   // document's startup activation pass has already enumerated its tabs. The
   // replacement may have loaded before a persistent registration was ready,
