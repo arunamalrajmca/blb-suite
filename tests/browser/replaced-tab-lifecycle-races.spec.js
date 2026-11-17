@@ -125,6 +125,12 @@ test('replacement recovery does not inject after host permission is revoked duri
       return tabs[0]?.id;
     });
     expect(tabId).toBeTruthy();
+    // Let any navigation-triggered activation finish so this test controls the
+    // only in-flight activation for the replacement tab.
+    await extensionWorker.evaluate(async id => {
+      const pending = contentScriptInjectionLocks.get(id);
+      if (pending) await pending.catch(() => {});
+    }, tabId);
 
     await installReplacementActivationGate(extensionWorker, tabId);
     await extensionWorker.evaluate(id => { globalThis.__replacementRecoveryPromise = handleReplacedTabIdentity(id, 940013); return true; }, tabId);
