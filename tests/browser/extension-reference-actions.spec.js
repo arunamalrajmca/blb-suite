@@ -616,10 +616,33 @@ test.describe('core user-visible E2E', () => {
       root.removeAttribute('data-blb-verse-context-resolution');
     });
     await page.locator('#generic-verse-176').dblclick();
+    const maxVersePath = '/kjv/psa/119/176/';
     await expect.poll(async () => {
       const value = await article.getAttribute('data-blb-verse-context-resolution');
       try { return JSON.parse(value || '{}').resolvedUrl; } catch (_) { return null; }
-    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe('https://www.blueletterbible.org/kjv/psa/119/176/');
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe('https://www.blueletterbible.org' + maxVersePath);
+
+    // Wait for the valid 176 navigation to finish before taking the baseline.
+    // Otherwise its delayed tab creation can be misattributed to the following
+    // invalid-177 gesture, making this regression nondeterministic.
+    await expect.poll(async () => extensionWorker.evaluate(path => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname === 'www.blueletterbible.org' && url.pathname === path;
+        } catch (_) { return false; }
+      })
+    ), maxVersePath), { timeout: 3000, intervals: [100, 200, 300] }).toBe(true);
+    await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          if (url.hostname === 'www.blueletterbible.org' && url.pathname === path && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }), maxVersePath);
 
     const beforeInvalidVerse = await extensionWorker.evaluate(() =>
       chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
