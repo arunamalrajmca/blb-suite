@@ -1897,7 +1897,7 @@ test('grant-time expiry removes only the matching expired permission request tok
 
 
 test('worker-start recovery removes stale persisted host registrations even when no permission intent is pending', async ({
-  page, extensionWorker, extensionStorage
+  extensionWorker, extensionStorage
 }) => {
   const pattern = 'https://example.com/*';
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
@@ -1918,19 +1918,6 @@ test('worker-start recovery removes stale persisted host registrations even when
       pendingSiteFeatureToggles:{},
       siteFeaturePreferenceRequestIds:{}
     });
-    await extensionWorker.evaluate(() => {
-      globalThis.__workerStartRecoveryOriginalContains = chrome.permissions.contains;
-      const original = globalThis.__workerStartRecoveryOriginalContains;
-      chrome.permissions.contains = async details =>
-        details?.origins?.includes('https://example.com/*') ? true : original(details);
-    });
-    await page.goto('https://example.com/worker-start-registration-recovery', {waitUntil:'domcontentloaded'});
-    const tab = await extensionWorker.evaluate(async () => {
-      const [value] = await chrome.tabs.query({url:'https://example.com/worker-start-registration-recovery'});
-      return value ? {id:value.id,url:value.url} : null;
-    });
-    expect(tab).toBeTruthy();
-
     // Seed the Chrome-persisted registration directly. This fixture represents
     // a registration left behind by an interrupted cleanup; it should not
     // depend on the normal registration eligibility path or a live tab grant.
@@ -1951,7 +1938,7 @@ test('worker-start recovery removes stale persisted host registrations even when
     )).toBe(true);
 
     await extensionWorker.evaluate(async origin => {
-      const original = globalThis.__workerStartRecoveryOriginalContains;
+      const original = chrome.permissions.contains;
       chrome.permissions.contains = async details =>
         details?.origins?.includes(origin) ? false : original(details);
       try {
@@ -1960,7 +1947,6 @@ test('worker-start recovery removes stale persisted host registrations even when
         await recoverRuntimeContentScriptRegistrationsAfterWorkerStart();
       } finally {
         chrome.permissions.contains = original;
-        delete globalThis.__workerStartRecoveryOriginalContains;
       }
     }, pattern);
 
@@ -1975,12 +1961,6 @@ test('worker-start recovery removes stale persisted host registrations even when
     expect(saved.pendingSiteFeatureToggles).toEqual({});
     expect(saved.siteFeaturePreferenceRequestIds).toEqual({});
   } finally {
-    await extensionWorker.evaluate(() => {
-      if (globalThis.__workerStartRecoveryOriginalContains) {
-        chrome.permissions.contains = globalThis.__workerStartRecoveryOriginalContains;
-      }
-      delete globalThis.__workerStartRecoveryOriginalContains;
-    });
     await extensionWorker.evaluate(async ({origin,settings}) => {
       const id = runtimeContentScriptIdForPattern(origin);
       await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
