@@ -1,5 +1,41 @@
 const { test, expect } = require('./fixtures');
 
+test('popup registers only its two distinct storage listeners on each opening', async ({
+  page, extensionId
+}) => {
+  await page.addInitScript(() => {
+    const event = chrome.storage.onChanged;
+    const originalAddListener = event.addListener.bind(event);
+    window.__popupStorageListenerRegistrations = 0;
+    Object.defineProperty(event, 'addListener', {
+      configurable:true,
+      value:listener => {
+        window.__popupStorageListenerRegistrations++;
+        return originalAddListener(listener);
+      }
+    });
+  });
+
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+  await expect.poll(() => page.evaluate(() =>
+    window.__popupStorageListenerRegistrations
+  )).toBe(2);
+
+  // A fresh popup document gets its own two listeners; the prior document's
+  // listeners must not be re-registered or carried into this context.
+  await page.reload();
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+  await expect.poll(() => page.evaluate(() =>
+    window.__popupStorageListenerRegistrations
+  )).toBe(2);
+});
+
+
 test('popup master toggle persists across reload and preserves per-site feature preferences', async ({
   page,
   extensionId,
