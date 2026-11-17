@@ -705,11 +705,14 @@ test("Study Sessions History reports partial Strong's destination failures", asy
   await expect.poll(() => page.locator('#studyTopic').inputValue()).toBe(normalizedTopic);
   await page.evaluate(async () => {
     const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
-    const [activeTab] = await chrome.tabs.query({active:true, currentWindow:true});
     chrome.runtime.sendMessage = (message, ...args) => {
-      if (message?.type === 'blbSuiteOpenStrongHistory') {
-        if (message.value === 'H430') return Promise.resolve({ok:false, reason:'tab-create-failed'});
-        return Promise.resolve({ok:true, tabId:activeTab.id});
+      if (message?.type === 'blbSuiteOpenStrongHistoryBatch') {
+        return Promise.resolve({
+          ok:false,
+          opened:1,
+          total:2,
+          failures:[{value:'H430', reason:'tab-create-failed'}]
+        });
       }
       return originalSendMessage(message, ...args);
     };
