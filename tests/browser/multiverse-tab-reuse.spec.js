@@ -871,3 +871,89 @@ test('actual MultiVerse POST handoff navigation preserves its reservation until 
 
   await extensionWorker.evaluate(id => chrome.tabs.remove(id), tabId);
 });
+
+
+test('MultiVerse recovers when a matching destination closes during activation', async ({
+  context, extensionWorker
+}) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>MultiVerse tab recovery</title></head><body>fixture</body></html>'
+  }));
+  const refs = [
+    {book:'Genesis',bookNumber:1,chapter:1,from:1,to:1,version:'kjv'},
+    {book:'Genesis',bookNumber:1,chapter:2,from:1,to:1,version:'kjv'}
+  ];
+  const first = await openMultiVerse(extensionWorker, refs);
+  expect(first?.ok).toBe(true);
+  const oldTabId = first.tabIds[0];
+
+  const recovered = await extensionWorker.evaluate(async ({refs, oldTabId}) => {
+    const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
+    const originalRemove = chrome.tabs.remove.bind(chrome.tabs);
+    let closedDuringActivation = false;
+    Object.defineProperty(chrome.tabs, 'update', {
+      configurable:true,
+      value:(tabId, properties) => {
+        if (!closedDuringActivation && tabId === oldTabId && properties?.active) {
+          closedDuringActivation = true;
+          return originalRemove(tabId).then(() => originalUpdate(tabId, properties));
+        }
+        return originalUpdate(tabId, properties);
+      }
+    });
+    try {
+      const result = await openBlbMultiVerseRefs(refs, true);
+      const recoveredTabId = result?.tabIds?.[0] ?? null;
+      const liveTab = recoveredTabId != null
+        ? await chrome.tabs.get(recoveredTabId).catch(() => null)
+        : null;
+      return {result, closedDuringActivation, liveTabId:liveTab?.id ?? null};
+    } finally {
+      chrome.tabs.update = originalUpdate;
+    }
+  }, {refs, oldTabId});
+
+  expect(recovered.closedDuringActivation).toBe(true);
+  expect(recovered.result?.ok, JSON.stringify(recovered.result)).toBe(true);
+  expect(recovered.result.tabIds[0]).not.toBe(oldTabId);
+  expect(recovered.liveTabId).toBe(recovered.result.tabIds[0]);
+});
+
+test('MultiVerse does not report success when a reused live tab cannot be activated', async ({
+  context, extensionWorker
+}) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>MultiVerse activation failure</title></head><body>fixture</body></html>'
+  }));
+  const refs = [
+    {book:'Romans',bookNumber:45,chapter:1,from:1,to:1,version:'kjv'},
+    {book:'Romans',bookNumber:45,chapter:2,from:1,to:1,version:'kjv'}
+  ];
+  const first = await openMultiVerse(extensionWorker, refs);
+  expect(first?.ok).toBe(true);
+
+  const failed = await extensionWorker.evaluate(async ({refs, tabId}) => {
+    const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
+    Object.defineProperty(chrome.tabs, 'update', {
+      configurable:true,
+      value:(targetId, properties) => targetId === tabId && properties?.active
+        ? Promise.reject(new Error('simulated tab activation failure'))
+        : originalUpdate(targetId, properties)
+    });
+    try {
+      const result = await openBlbMultiVerseRefs(refs, true);
+      const stillLive = await chrome.tabs.get(tabId).then(() => true, () => false);
+      return {result, stillLive};
+    } finally {
+      chrome.tabs.update = originalUpdate;
+    }
+  }, {refs, tabId:first.tabIds[0]});
+
+  expect(failed.stillLive).toBe(true);
+  expect(failed.result?.ok).toBe(false);
+  expect(failed.result?.reason).toBe('tab-open-failed');
+});
