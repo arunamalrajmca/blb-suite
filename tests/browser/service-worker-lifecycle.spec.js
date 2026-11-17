@@ -1128,7 +1128,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     // The browser fixture adds these hosts to the test extension's granted
     // host_permissions. The final origin is intentionally absent from that
     // list so its still-valid permission intent must remain pending.
-    const validPattern = 'https://example.com/*';
+    const validPattern = 'https://www.dailyverses.net/*';
     const expiredPattern = 'https://www.gotquestions.org/*';
     const stalePatternTwo = 'https://www.facebook.com/*';
     const stalePatternThree = 'https://www.supplyofgrace.com/*';
