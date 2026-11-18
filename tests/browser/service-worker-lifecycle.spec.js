@@ -1729,7 +1729,7 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
       gate:{...globalThis.__redirectTabEligibilityGate,release:undefined,restore:undefined},
       currentTabUrl:(await chrome.tabs.get(id)).url
     }),tabId);
-    expect(activationDiagnostics).toMatchObject({activationResult:false});
+    expect(activationDiagnostics, 'Redirect activation diagnostics: ' + JSON.stringify(activationDiagnostics)).toMatchObject({activationResult:false});
     await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
     const redirectedTab = await extensionWorker.evaluate(async id => {
       const current = await chrome.tabs.get(id);
