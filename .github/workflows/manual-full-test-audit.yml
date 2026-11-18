@@ -137,10 +137,10 @@ jobs:
           # workflow runs them with Xvfb/xdotool; do not classify their
           # environment-gated skips as failures in this headless exhaustive run.
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
-          grep -v -F \
-            -e '› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut' \
-            -e '› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action' \
-            "$test_list" > "$test_list.filtered" || true
+          awk '
+            index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
+            index($0, "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action") == 0
+          ' "$test_list" > "$test_list.filtered"
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
           delegated=$((discovered_before_delegation - discovered_after_delegation))
