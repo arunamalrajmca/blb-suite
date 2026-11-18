@@ -1900,9 +1900,11 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
   test.setTimeout(150000);
   const origin = 'https://ungranted-pending-cleanup.example/*';
   const expiredOrigin = 'https://expired-matching-cleanup.example/*';
+  const futureOrigin = 'https://future-dated-cleanup.example/*';
   const pageRequestKey = origin + '|pageButton';
   const doubleClickRequestKey = origin + '|doubleClick';
   const expiredRequestKey = expiredOrigin + '|pageButton';
+  const futureRequestKey = futureOrigin + '|pageButton';
   const currentRequestId = 'real-alarm-current-double-click';
   const newerRequestId = 'real-alarm-newer-page-button-request';
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
@@ -1917,6 +1919,7 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
     const expiredAt = now - SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 65000;
     const currentAt = now;
     const expiredOrigin = 'https://expired-matching-cleanup.example/*';
+    const futureOrigin = 'https://future-dated-cleanup.example/*';
     await chrome.storage.local.set({
       pendingSiteFeatureToggles:{
         [value]:{
@@ -1929,12 +1932,18 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
           feature:'pageButton',
           requestedAt:expiredAt,
           requestId:'real-alarm-matching-expired-request'
+        },
+        [futureOrigin]:{
+          feature:'pageButton',
+          requestedAt:now + 120000,
+          requestId:'real-alarm-future-dated-request'
         }
       },
       siteFeaturePreferenceRequestIds:{
         [value + '|pageButton']:'real-alarm-newer-page-button-request',
         [value + '|doubleClick']:'real-alarm-current-double-click',
-        [expiredOrigin + '|pageButton']:'real-alarm-matching-expired-request'
+        [expiredOrigin + '|pageButton']:'real-alarm-matching-expired-request',
+        [futureOrigin + '|pageButton']:'real-alarm-future-dated-request'
       }
     });
     await schedulePendingSiteFeatureToggleCleanup();
@@ -1987,7 +1996,7 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
 
     observer = await context.newPage();
     await observer.goto(`chrome-extension://${extensionId}/popup.html`);
-    await expect.poll(() => observer.evaluate(async ({origin,expiredOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey}) => {
+    await expect.poll(() => observer.evaluate(async ({origin,expiredOrigin,futureOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey,futureRequestKey}) => {
       const data = await chrome.storage.local.get({
         pendingSiteFeatureToggles:{},
         siteFeaturePreferenceRequestIds:{}
@@ -1996,11 +2005,13 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
       return {
         remainingFeatures:remaining?.features ?? remaining ?? null,
         expiredOriginPresent:Object.prototype.hasOwnProperty.call(data.pendingSiteFeatureToggles,expiredOrigin),
+        futureOriginPresent:Object.prototype.hasOwnProperty.call(data.pendingSiteFeatureToggles,futureOrigin),
+        futureRequestId:data.siteFeaturePreferenceRequestIds[futureRequestKey] ?? null,
         newerPageRequestId:data.siteFeaturePreferenceRequestIds[pageRequestKey] ?? null,
         currentDoubleClickRequestId:data.siteFeaturePreferenceRequestIds[doubleClickRequestKey] ?? null,
         matchingExpiredRequestId:data.siteFeaturePreferenceRequestIds[expiredRequestKey] ?? null
       };
-    }, {origin,expiredOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey}), {
+    }, {origin,expiredOrigin,futureOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey,futureRequestKey}), {
       timeout:15000,intervals:[250,500,1000]
     }).toEqual({
       remainingFeatures:{
@@ -2009,6 +2020,8 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
         requestId:currentRequestId
       },
       expiredOriginPresent:false,
+      futureOriginPresent:false,
+      futureRequestId:null,
       newerPageRequestId:newerRequestId,
       currentDoubleClickRequestId:currentRequestId,
       matchingExpiredRequestId:null
