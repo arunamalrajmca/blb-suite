@@ -159,8 +159,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // Closing the temporary focused window deterministically returns focus
       // to the original browser window in headless Chromium. Chrome can emit
       // only WINDOW_ID_NONE during this handoff, so onRemoved must resync menus.
-      // A direct
-      // windows.update({focused:true}) can be ignored by the window manager
+      // A direct windows.update({focused:true}) can be ignored by the window manager
       // during the transient WINDOW_ID_NONE handoff.
       updates.length = 0;
       await chrome.windows.remove(otherWindow.id);
