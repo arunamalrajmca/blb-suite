@@ -666,12 +666,19 @@ test('persisted registration audit runs only on install/update and browser start
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
-  const auditInvocations = source.match(/=> schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
+  const auditInvocations = source.match(/schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
+  const startupListenerStart = source.indexOf('chrome.runtime.onStartup.addListener(');
+  const installListenerStart = source.indexOf('chrome.runtime.onInstalled.addListener(');
+  const startupListenerSource = startupListenerStart >= 0 && installListenerStart > startupListenerStart
+    ? source.slice(startupListenerStart, installListenerStart)
+    : '';
 
   expect(auditInvocations).toHaveLength(2);
   expect(source).not.toMatch(/^auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/m);
-  expect(source).toMatch(/chrome\.runtime\.onStartup\.addListener\(\(\) => schedulePersistedRuntimeContentScriptAudit\(\)/);
-  expect(source).toMatch(/chrome\.runtime\.onInstalled\.addListener\(\(\) => schedulePersistedRuntimeContentScriptAudit\(\)/);
+  expect(startupListenerSource).toContain('schedulePersistedRuntimeContentScriptAudit()');
+  expect(source.slice(installListenerStart)).toMatch(
+    /chrome\.runtime\.onInstalled\.addListener\([\s\S]*?schedulePersistedRuntimeContentScriptAudit\(\)/
+  );
 });
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
