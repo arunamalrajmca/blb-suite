@@ -1676,6 +1676,11 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
     const tabId = await extensionWorker.evaluate(() =>
       chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)
     );
+    // Let any navigation-time activation started while the site was disabled
+    // finish before installing the gate, so this test owns the in-flight lock.
+    await expect.poll(() => extensionWorker.evaluate(id =>
+      !contentScriptInjectionLocks.has(id),tabId
+    ),{timeout:10000,intervals:[50,100,250,500]}).toBe(true);
     await extensionWorker.evaluate(id => {
       const original = shouldInjectContentScriptForTab;
       let release;
