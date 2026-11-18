@@ -177,7 +177,9 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     const x11Y=Number(x11Geometry.match(/^Y=(\d+)$/m)?.[1]);
     const windowGeometry=await page.evaluate(() => ({
       chromeLeft:(window.outerWidth-window.innerWidth)/2,
-      chromeTop:window.outerHeight-window.innerHeight-(window.outerWidth-window.innerWidth)/2
+      // The Xvfb Chromium window includes a 40px bottom frame/status inset
+      // in outerHeight-innerHeight; exclude it to get the actual viewport top.
+      chromeTop:window.outerHeight-window.innerHeight-(window.outerWidth-window.innerWidth)/2-40
     }));
     expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'Chromium window must expose X11 screen coordinates').toBe(true);
     await test.info().attach('native context-menu click geometry',{
