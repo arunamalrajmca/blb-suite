@@ -44,10 +44,12 @@ async function cleanupReplacementActivationGate(extensionWorker, extensionStorag
 test('replacement recovery rechecks the latest site preference before injecting', async ({
   context, extensionStorage, extensionWorker
 }) => {
+  // Keep navigation-time onUpdated injection out of this test. The only
+  // activation attempt should be the replacement recovery gated below.
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},
+    pageSelectionButtonSites:{'example.com':false},
     doubleClickBlbSites:{}
   });
   const page = await context.newPage();
@@ -59,6 +61,7 @@ test('replacement recovery rechecks the latest site preference before injecting'
     });
     expect(tabId).toBeTruthy();
 
+    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
     await installReplacementActivationGate(extensionWorker, tabId);
     await extensionWorker.evaluate(id => { globalThis.__replacementRecoveryPromise = handleReplacedTabIdentity(id, 940011); return true; }, tabId);
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.started);
