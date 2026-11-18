@@ -3382,6 +3382,12 @@ async function ensureContentScriptInTab(tabId) {
         }
         if (!isHttpPageUrl(current?.url) ||
             originPatternForUrl(current.url) !== expectedOriginPattern) return null;
+        // During cross-origin navigation Chrome may retain the committed URL
+        // in url while exposing the destination in pendingUrl. Reject that
+        // destination immediately to avoid refreshing or injecting the old
+        // host bundle into a tab that is already navigating away.
+        if (current.pendingUrl &&
+            originPatternForUrl(current.pendingUrl) !== expectedOriginPattern) return null;
         if (!(await hasHostAccessForTab(current))) return null;
         const latestSettings = await chrome.storage.local.get({
           masterEnabled:true,
