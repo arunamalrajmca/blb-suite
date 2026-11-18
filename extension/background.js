@@ -2670,15 +2670,16 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
 
 chrome.tabs.onRemoved.addListener(tabId => {
   replacementActivatedTabIds.delete(tabId);
-  forgetBlbTab(tabId);
-  intentionalNewBlbTabs.delete(tabId);
-  for (const [key, id] of scriptTaggerDestinationTabs) {
-    if (id === tabId) scriptTaggerDestinationTabs.delete(key);
-  }
   // A source tab may emit onRemoved while its onReplaced state migration is
-  // still queued. Let that migration capture and transfer its persisted state;
-  // its own updater removes the source key once the destination owns it.
+  // still queued. Preserve all extension-owned tab identity until that
+  // migration has transferred it; otherwise forgetBlbTab and the in-memory
+  // cleanup below can erase the source before the queued A→B→C step runs.
   if (!pendingReplacementSourceTabCounts.has(tabId)) {
+    forgetBlbTab(tabId);
+    intentionalNewBlbTabs.delete(tabId);
+    for (const [key, id] of scriptTaggerDestinationTabs) {
+      if (id === tabId) scriptTaggerDestinationTabs.delete(key);
+    }
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
     updatePendingMultiVerseRefsByTab(map => {
       delete map[String(tabId)];
