@@ -60,15 +60,14 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
   await extensionStorage.clear();
   await serveBlbFixture(context);
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
-  // Set the disabled state after the first document has loaded so extension
-  // startup/default initialization cannot race the test's storage write.
+  // Prove the active document first receives the enabled passive-target
+  // behavior, then turn the Suite OFF and require the same document to restore
+  // the link's native target without a manual reload.
+  await expect(page.locator('#verse-in-bverse')).toHaveAttribute('target', '_blank');
   await extensionStorage.set({ masterEnabled: false });
-  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
   )).toBe(false);
-  await page.waitForTimeout(1000);
-
   await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
   const sourceTabs = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' })).map(tab => ({ id: tab.id, url: tab.url }))
