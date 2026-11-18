@@ -628,6 +628,7 @@ test("reusable feature groups consume the caller's single browser classification
   const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
   assert.ok(workflow.includes("  workflow_call:"), "feature groups must be invoked as a reusable workflow");
   assert.ok(workflow.includes("Run context-menu visibility and replacement lifecycle regressions"), "mapped context-menu lifecycle spec must have an explicit Group A runner");
+  assert.ok(workflow.includes("Run replacement-tab lifecycle race regressions"), "replacement-tab lifecycle race spec must have an explicit Group A runner");
   assert.ok(caller.includes("extension/**"), "References caller must retain the broad runtime fallback");
   assert.doesNotMatch(workflow, /^  change-detection:/m, "reusable workflow must not classify the same diff again");
   assert.doesNotMatch(workflow, /needs\.change-detection\.outputs\./, "jobs must consume workflow inputs");
