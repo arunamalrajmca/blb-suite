@@ -1892,64 +1892,79 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
 });
 
 
-test('a real Chrome cleanup alarm wakes a terminated MV3 worker and expires stale site-permission intents', async ({
-  context, extensionId, extensionStorage, extensionWorker
+test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker and removes expired intent', async ({
+  context, extensionId, extensionWorker
 }) => {
-  test.setTimeout(90000);
-  const origin = 'https://alarm-cleanup-worker-wake.example/*';
+  // Chrome enforces a minimum alarm delay. Schedule expiry 65 seconds ahead,
+  // then leave the worker stopped until the actual alarm wakes it.
+  test.setTimeout(150000);
+  const origin = 'https://ungranted-pending-cleanup.example/*';
   const requestKey = origin + '|pageButton';
-  const requestId = 'real-alarm-worker-wake-' + Date.now();
-  const key = 'site-feature-permission-pending-cleanup';
-  const ttl = 5 * 60 * 1000;
-  const requestedAt = Date.now() - ttl + 8000;
-  const previous = await extensionWorker.evaluate(async () => chrome.storage.local.get({
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
     pendingSiteFeatureToggles:{},
     siteFeaturePreferenceRequestIds:{}
   }));
   const previousAlarm = await extensionWorker.evaluate(() =>
     chrome.alarms.get('site-feature-permission-pending-cleanup')
   );
+  await extensionWorker.evaluate(async value => {
+    const now = Date.now();
+    const timestamp = now - SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 65000;
+    await chrome.storage.local.set({
+      pendingSiteFeatureToggles:{
+        [value]:{feature:'pageButton',requestedAt:timestamp,requestId:'real-alarm-expiry'}
+      },
+      siteFeaturePreferenceRequestIds:{
+        [value + '|pageButton']:'real-alarm-expiry'
+      }
+    });
+    await schedulePendingSiteFeatureToggleCleanup();
+    return timestamp;
+  }, origin);
+  expect(await extensionWorker.evaluate(value =>
+    chrome.permissions.contains({origins:[value]}), origin)).toBe(false);
+  const alarm = await extensionWorker.evaluate(() =>
+    chrome.alarms.get(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM)
+  );
+  expect(alarm).toBeTruthy();
+  expect(alarm.scheduledTime).toBeGreaterThan(Date.now());
+
   const browser = context.browser();
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
   const cdp = await browser.newBrowserCDPSession();
   let observer;
-
+  let cleanupPage;
+  let restartedWorkerTargetId = null;
+  const onTargetCreated = event => {
+    const target = event?.targetInfo;
+    if (target?.type === 'service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)) {
+      restartedWorkerTargetId = target.targetId;
+    }
+  };
   try {
-    await extensionStorage.set({
-      pendingSiteFeatureToggles:{
-        ...previous.pendingSiteFeatureToggles,
-        [origin]:{feature:'pageButton',requestedAt,requestId}
-      },
-      siteFeaturePreferenceRequestIds:{
-        ...previous.siteFeaturePreferenceRequestIds,
-        [requestKey]:requestId
-      }
-    });
-    await extensionWorker.evaluate(() => schedulePendingSiteFeatureToggleCleanup());
-    const alarm = await extensionWorker.evaluate(() =>
-      chrome.alarms.get('site-feature-permission-pending-cleanup')
-    );
-    expect(alarm).toBeTruthy();
-    expect(alarm.scheduledTime).toBeGreaterThan(Date.now());
-
-    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    await cdp.send('Target.setDiscoverTargets', {discover:true});
+    cdp.on('Target.targetCreated', onTargetCreated);
     const {targetInfos} = await cdp.send('Target.getTargets');
     const workerTarget = targetInfos.find(target =>
       target.type === 'service_worker' &&
       target.url.startsWith(`chrome-extension://${extensionId}/`)
     );
-    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+    expect(workerTarget, 'extension service-worker target must be discoverable').toBeTruthy();
 
-    const closed = await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+    const closed = await cdp.send('Target.closeTarget', {targetId:workerTarget.targetId});
     expect(closed.success).toBe(true);
     await expect.poll(async () => {
       const {targetInfos:currentTargets} = await cdp.send('Target.getTargets');
-      return currentTargets.some(target =>
-        target.type === 'service_worker' &&
-        target.url.startsWith(`chrome-extension://${extensionId}/`) &&
-        target.targetId !== workerTarget.targetId
-      );
-    },{timeout:20000,intervals:[250,500,1000]}).toBe(true);
+      return currentTargets.some(target => target.targetId === workerTarget.targetId);
+    }, {timeout:5000}).toBe(false);
+
+    // No extension page is opened during the wait: only the scheduled alarm
+    // may create a replacement worker and dispatch the pending-intent cleanup.
+    await new Promise(resolve => setTimeout(resolve, 70000));
+    expect(restartedWorkerTargetId,
+      'the pending permission cleanup alarm must create a fresh service-worker target'
+    ).toBeTruthy();
 
     observer = await context.newPage();
     await observer.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -1959,25 +1974,28 @@ test('a real Chrome cleanup alarm wakes a terminated MV3 worker and expires stal
         siteFeaturePreferenceRequestIds:{}
       });
       return {
-        originPresent:Object.prototype.hasOwnProperty.call(data.pendingSiteFeatureToggles,origin),
-        requestPresent:Object.prototype.hasOwnProperty.call(data.siteFeaturePreferenceRequestIds,requestKey)
+        pending:data.pendingSiteFeatureToggles[origin] ?? null,
+        requestId:data.siteFeaturePreferenceRequestIds[requestKey] ?? null
       };
-    },{origin,requestKey}),{timeout:10000}).toEqual({
-      originPresent:false,
-      requestPresent:false
+    }, {origin,requestKey}), {timeout:15000,intervals:[250,500,1000]}).toEqual({
+      pending:null,
+      requestId:null
     });
   } finally {
-    if (observer) await observer.close().catch(() => {});
-    await cdp.detach();
-    await extensionWorker.evaluate(async ({previous,previousAlarm}) => {
-      await chrome.storage.local.set(previous);
-      if (previousAlarm) {
-        await chrome.alarms.create('site-feature-permission-pending-cleanup',{
-          when:previousAlarm.scheduledTime
-        });
-      } else {
-        await chrome.alarms.clear('site-feature-permission-pending-cleanup');
-      }
-    },{previous,previousAlarm}).catch(() => {});
+    await cdp.detach().catch(() => {});
+    cleanupPage = observer || await context.newPage().catch(() => null);
+    if (cleanupPage) {
+      if (!observer) await cleanupPage.goto(`chrome-extension://${extensionId}/popup.html`).catch(() => {});
+      await cleanupPage.evaluate(async ({previous,previousAlarm}) => {
+        await chrome.storage.local.set(previous);
+        if (previousAlarm) {
+          await chrome.alarms.create('site-feature-permission-pending-cleanup',{when:previousAlarm.scheduledTime});
+        } else {
+          await chrome.alarms.clear('site-feature-permission-pending-cleanup');
+        }
+      }, {previous,previousAlarm}).catch(() => {});
+      if (cleanupPage !== observer) await cleanupPage.close().catch(() => {});
+    }
+    await observer?.close().catch(() => {});
   }
 });
