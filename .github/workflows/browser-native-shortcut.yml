@@ -61,8 +61,18 @@ jobs:
       - name: Install Chromium and headed-browser dependencies
         run: npx playwright install --with-deps chromium
       - name: Install X11 automation
-        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool
+        run: sudo apt-get install -y xvfb xdotool
       - name: Run physical browser-level Alt+B shortcut test
         env:
           BLB_HEADFUL_EXTENSION_TESTS: '1'
         run: xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test tests/browser/service-worker-shortcut-headed.spec.js
+      - name: Upload native shortcut diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-suite-native-shortcut-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
