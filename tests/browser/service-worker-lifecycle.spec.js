@@ -1691,16 +1691,19 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
       const gate = new Promise(resolve => { release = resolve; });
       let first = true;
       globalThis.__redirectTabEligibilityGate = {
-        started:false,
+        started:false, enteredUrl:'', eligibilityResult:null,
         release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
       };
       shouldInjectContentScriptForTab = async (tab,data) => {
         if (first && tab?.id === id) {
           first = false;
           globalThis.__redirectTabEligibilityGate.started = true;
+          globalThis.__redirectTabEligibilityGate.enteredUrl = tab?.url || '';
           await gate;
         }
-        return original(tab,data);
+        const result = await original(tab,data);
+        if (tab?.id === id) globalThis.__redirectTabEligibilityGate.eligibilityResult = result;
+        return result;
       };
     },tabId);
     installed = true;
@@ -1721,7 +1724,12 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
       catch (_) { return ''; }
     },tabId),{timeout:10000,intervals:[50,100,250,500]}).toContain('wikipedia.org');
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
-    expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
+    const activationDiagnostics = await extensionWorker.evaluate(async id => ({
+      activationResult:await globalThis.__redirectTabActivationPromise,
+      gate:{...globalThis.__redirectTabEligibilityGate,release:undefined,restore:undefined},
+      currentTabUrl:(await chrome.tabs.get(id)).url
+    }),tabId);
+    expect(activationDiagnostics).toMatchObject({activationResult:false});
     await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
     const redirectedTab = await extensionWorker.evaluate(async id => {
       const current = await chrome.tabs.get(id);
