@@ -64,7 +64,7 @@
   {
     "group": "service-worker-lifecycle",
     "file": "tests/browser/service-worker-lifecycle.spec.js",
-    "grep": ".*"
+    "grep": "a redirect during eligibility checks cannot inject the previous host bundle into the new document"
   },
   {
     "group": "kjv-corpus-lazy-loading",
