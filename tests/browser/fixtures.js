@@ -19,7 +19,7 @@ const sourceExtensionPath = process.env.BLB_EXTENSION_PATH
   ? path.resolve(process.env.BLB_EXTENSION_PATH)
   : path.resolve(__dirname, '../../extension');
 
-// Test-only hosts are injected into a worker-scoped copy before Chromium starts.
+// Test-only host permissions are added to a worker-scoped copy before Chromium starts.
 // Do not depend on the workflow definition to mutate the manifest: pull-request
 // runs may execute the base branch's workflow file, which can lag behind this PR.
 const testHosts = [
