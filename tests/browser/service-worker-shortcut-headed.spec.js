@@ -163,13 +163,17 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     let browserWindow=focusedWindow;
     for(let depth=0;depth<12;depth++){
       const info=execFileSync('xwininfo',['-id',browserWindow],{encoding:'utf8'});
-      const parent=info.match(/Parent window id:\\s*(0x[0-9a-f]+)/i)?.[1];
+      const parent=info.match(/Parent window id:\s*(0x[0-9a-f]+)/i)?.[1];
       if(!parent || parent.toLowerCase()===browserWindow.toLowerCase()) break;
       browserWindow=parent;
     }
     const x11Geometry=execFileSync('xdotool',['getwindowgeometry','--shell',browserWindow],{encoding:'utf8'});
-    const x11X=Number(x11Geometry.match(/^X=(\\d+)$/m)?.[1]);
-    const x11Y=Number(x11Geometry.match(/^Y=(\\d+)$/m)?.[1]);
+    const x11X=Number(x11Geometry.match(/^X=(\d+)$/m)?.[1]);
+    const x11Y=Number(x11Geometry.match(/^Y=(\d+)$/m)?.[1]);
+    const windowGeometry=await page.evaluate(() => ({
+      chromeLeft:(window.outerWidth-window.innerWidth)/2,
+      chromeTop:window.outerHeight-window.innerHeight-(window.outerWidth-window.innerWidth)/2
+    }));
     expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'Chromium window must expose X11 screen coordinates').toBe(true);
     await test.info().attach('native context-menu click geometry',{
       body:JSON.stringify({focusedWindow,browserWindow,x11Geometry,windowGeometry,targetBounds},null,2),
