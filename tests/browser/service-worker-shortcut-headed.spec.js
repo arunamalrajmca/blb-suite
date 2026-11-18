@@ -168,10 +168,16 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     await page.waitForTimeout(250);
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // Resolve the top-level Chromium window, not its focused renderer child.
-    const hierarchy=execFileSync('xwininfo',['-id',focusedWindow],{encoding:'utf8'});
-    const parent=hierarchy.match(/Parent window id:\\s*(0x[0-9a-f]+)/i)?.[1];
-    const browserWindow=parent || focusedWindow;
+    // Ascend from the focused renderer to Chromium's top-level X11 window.
+    // The root window identifies itself as its own parent, avoiding locale-
+    // dependent parsing of the separate xwininfo -root output.
+    let browserWindow=focusedWindow;
+    for(let depth=0;depth<12;depth++){
+      const info=execFileSync('xwininfo',['-id',browserWindow],{encoding:'utf8'});
+      const parent=info.match(/Parent window id:\\s*(0x[0-9a-f]+)/i)?.[1];
+      if(!parent || parent.toLowerCase()===browserWindow.toLowerCase()) break;
+      browserWindow=parent;
+    }
     const x11Geometry=execFileSync('xdotool',['getwindowgeometry','--shell',browserWindow],{encoding:'utf8'});
     const x11X=Number(x11Geometry.match(/^X=(\\d+)$/m)?.[1]);
     const x11Y=Number(x11Geometry.match(/^Y=(\\d+)$/m)?.[1]);
