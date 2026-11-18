@@ -1895,7 +1895,7 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
     pendingSiteFeatureToggles:{},
     siteFeaturePreferenceRequestIds:{}
   }));
-  const requestedAt = await extensionWorker.evaluate(async value => {
+  await extensionWorker.evaluate(async value => {
     const now = Date.now();
     const timestamp = now - SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 65000;
     await chrome.storage.local.set({
