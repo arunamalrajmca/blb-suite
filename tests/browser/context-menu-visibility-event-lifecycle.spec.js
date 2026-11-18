@@ -128,6 +128,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // capture, otherwise a late activation update can race the replacement
       // helper and make its result nondeterministic.
       await new Promise(resolve => setTimeout(resolve, 100));
+      const activeTabBeforeReplacementSync = await chrome.tabs.query({active:true,lastFocusedWindow:true});
       updates.length = 0;
       const replacementSynced = await syncSelectionMenusAfterTabReplacement(replacementTab.id);
       const replacementShowsWebMenu = updates.some(item =>
@@ -193,6 +194,8 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         inactiveNavigationUpdates,
         activeNavigationHidesWebMenu,
         replacementSynced,
+        replacementTabId:replacementTab.id,
+        activeTabBeforeReplacementSync:activeTabBeforeReplacementSync.map(tab => ({id:tab.id,url:tab.url})),
         replacementShowsWebMenu,
         replacementSynchronizesPdfMenu,
         backgroundReplacementIgnored,
@@ -236,7 +239,11 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     }, null, 2)
   ).toBe(true);
   expect(result.activeNavigationHidesWebMenu).toBe(true);
-  expect(result.replacementSynced).toBe(true);
+  expect(result.replacementSynced, JSON.stringify({
+    replacementTabId:result.replacementTabId,
+    activeTabBeforeReplacementSync:result.activeTabBeforeReplacementSync,
+    replacementUpdates:result.replacementUpdates
+  }, null, 2)).toBe(true);
   expect(result.replacementShowsWebMenu, JSON.stringify({
     replacementSynced:result.replacementSynced,
     replacementUpdates:result.replacementUpdates
