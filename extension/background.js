@@ -2518,6 +2518,15 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 
+async function runReplacementStateMigration(operation, stateLabel) {
+  try {
+    await operation();
+  } catch (error) {
+    console.warn(`KJV Scripture Tools replacement ${stateLabel} migration failed; retrying:`, String(error));
+    await operation();
+  }
+}
+
 async function handleReplacedTabIdentity(addedTabId, removedTabId) {
   if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) return;
   pendingReplacementSourceTabCounts.set(removedTabId,
@@ -2536,12 +2545,12 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
     if (id === removedTabId) scriptTaggerDestinationTabs.set(key, addedTabId);
   }
 
-  await updateTrackedMultiVerseTabs(map => {
+  await runReplacementStateMigration(() => updateTrackedMultiVerseTabs(map => {
     const previous = map[String(removedTabId)];
     if (previous && !map[String(addedTabId)]) map[String(addedTabId)] = previous;
     delete map[String(removedTabId)];
-  });
-  await updatePendingMultiVerseRefsByTab(map => {
+  }), 'tracked MultiVerse state');
+  await runReplacementStateMigration(() => updatePendingMultiVerseRefsByTab(map => {
     const previous = map[String(removedTabId)];
     if (Array.isArray(previous)) {
       const current = Array.isArray(map[String(addedTabId)]) ? map[String(addedTabId)] : [];
@@ -2554,7 +2563,7 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
       })];
     }
     delete map[String(removedTabId)];
-  });
+  }), 'pending MultiVerse references');
 
   // The replacement can close while the two serialized storage migrations
   // are in flight. Its onRemoved cleanup may run between those queues, so
