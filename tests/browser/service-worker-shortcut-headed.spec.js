@@ -110,25 +110,14 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     document.body.appendChild(target);
   });
 
-  // Create a genuine browser-owned selection using physical X11 input.
+  // Use Playwright's viewport-relative mouse coordinates for text selection.
+  // X11 screen-coordinate conversion is reserved for opening the browser menu.
   const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
   expect(targetBounds,'reference must have a visible viewport position').not.toBeNull();
-  const windowGeometry=await page.evaluate(() => ({
-    screenX:window.screenX,
-    screenY:window.screenY,
-    chromeTop:window.outerHeight-window.innerHeight,
-    chromeLeft:(window.outerWidth-window.innerWidth)/2
-  }));
-  const screenPoint=(x,y)=>[
-    Math.round(windowGeometry.screenX+windowGeometry.chromeLeft+x),
-    Math.round(windowGeometry.screenY+windowGeometry.chromeTop+y)
-  ];
-  const [selectionStartX,selectionY]=screenPoint(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
-  const [selectionEndX]=screenPoint(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2);
-  execFileSync('xdotool',['mousemove','--sync',String(selectionStartX),String(selectionY)]);
-  execFileSync('xdotool',['mousedown','1']);
-  execFileSync('xdotool',['mousemove','--sync',String(selectionEndX),String(selectionY)]);
-  execFileSync('xdotool',['mouseup','1']);
+  await page.mouse.move(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
+  await page.mouse.down();
+  await page.mouse.move(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2,{steps:8});
+  await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim()),{timeout:5000})
     .toBe('John 3:16');
   await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
