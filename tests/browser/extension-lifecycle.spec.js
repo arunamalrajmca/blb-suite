@@ -1139,36 +1139,50 @@ test('@failure-first Double-click reports a transient destination failure and su
 
 test('tab replacement preserves BLB, ScriptTagger, and MultiVerse destination identity', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
-  const ids = { removed: 71001, added: 71002 };
-  const result = await extensionWorker.evaluate(async ({removed, added}) => {
-    blbLogicalTabRegistry.clear();
-    intentionalNewBlbTabs.clear();
-    scriptTaggerDestinationTabs.clear();
-    rememberBlbTab('blb|kjv|john|3|16', removed);
-    intentionalNewBlbTabs.add(removed);
-    scriptTaggerDestinationTabs.set('script-tagger|kjv|jhn|3|16', removed);
-    await chrome.storage.local.set({
-      blbSuiteMultiVerseTabSets: {
-        [String(removed)]: {key:'multiverse|genesis|1', refs:[{book:'Genesis',chapter:1,from:1,to:1}]}
-      },
-      blbSuitePendingMultiVerseRefsByTab: {
-        [String(removed)]: [{book:'Genesis',chapter:1,from:1,to:1}]
-      }
-    });
+  const outcome = await extensionWorker.evaluate(async () => {
+    // The replacement migration now verifies that the destination tab is
+    // still live before retaining migrated state. Use real browser tab IDs
+    // rather than synthetic IDs so this test exercises that production guard.
+    const removedTab = await chrome.tabs.create({url:'about:blank',active:false});
+    const addedTab = await chrome.tabs.create({url:'about:blank',active:false});
+    const removed = removedTab.id;
+    const added = addedTab.id;
+    try {
+      blbLogicalTabRegistry.clear();
+      intentionalNewBlbTabs.clear();
+      scriptTaggerDestinationTabs.clear();
+      rememberBlbTab('blb|kjv|john|3|16', removed);
+      intentionalNewBlbTabs.add(removed);
+      scriptTaggerDestinationTabs.set('script-tagger|kjv|jhn|3|16', removed);
+      await chrome.storage.local.set({
+        blbSuiteMultiVerseTabSets: {
+          [String(removed)]: {key:'multiverse|genesis|1', refs:[{book:'Genesis',chapter:1,from:1,to:1}]}
+        },
+        blbSuitePendingMultiVerseRefsByTab: {
+          [String(removed)]: [{book:'Genesis',chapter:1,from:1,to:1}]
+        }
+      });
 
-    await handleReplacedTabIdentity(added, removed);
-    const storage = await chrome.storage.local.get({
-      blbSuiteMultiVerseTabSets:{},
-      blbSuitePendingMultiVerseRefsByTab:{}
-    });
-    return {
-      blbTab:blbLogicalTabRegistry.get('blb|kjv|john|3|16'),
-      intentional: intentionalNewBlbTabs.has(added) && !intentionalNewBlbTabs.has(removed),
-      scriptTagger:scriptTaggerDestinationTabs.get('script-tagger|kjv|jhn|3|16'),
-      multiVerse:storage.blbSuiteMultiVerseTabSets,
-      pendingRefs:storage.blbSuitePendingMultiVerseRefsByTab
-    };
-  }, ids);
+      await handleReplacedTabIdentity(added, removed);
+      const storage = await chrome.storage.local.get({
+        blbSuiteMultiVerseTabSets:{},
+        blbSuitePendingMultiVerseRefsByTab:{}
+      });
+      return {
+        ids:{removed,added},
+        blbTab:blbLogicalTabRegistry.get('blb|kjv|john|3|16'),
+        intentional: intentionalNewBlbTabs.has(added) && !intentionalNewBlbTabs.has(removed),
+        scriptTagger:scriptTaggerDestinationTabs.get('script-tagger|kjv|jhn|3|16'),
+        multiVerse:storage.blbSuiteMultiVerseTabSets,
+        pendingRefs:storage.blbSuitePendingMultiVerseRefsByTab
+      };
+    } finally {
+      await Promise.all([removed, added].map(tabId =>
+        chrome.tabs.remove(tabId).catch(() => {})
+      ));
+    }
+  });
+  const {ids,result} = {ids:outcome.ids,result:outcome};
 
   expect(result.blbTab).toBe(ids.added);
   expect(result.intentional).toBe(true);
