@@ -2401,6 +2401,9 @@ const pendingReplacementSourceTabCounts = new Map();
 // Otherwise a later B→C replacement can overtake a transient A→B retry.
 let pendingReplacementMigrationQueue = Promise.resolve();
 
+// A destination needs at most one replacement-triggered activation per tab lifetime.
+const replacementActivatedTabIds = new Set();
+
 // Serialize the final BLB tab-creation operation. This is deliberately below
 // the feature/event layer: even if two independent callers ask to open the
 // same BLB destination at nearly the same time, only one caller is allowed to
@@ -2600,25 +2603,35 @@ async function performReplacementTabIdentityMigration(addedTabId, removedTabId) 
     return;
   }
 
-  // A prerendered replacement can become the live tab after the original
-  // document's startup activation pass has already enumerated its tabs. The
-  // replacement may have loaded before a persistent registration was ready,
-  // so explicitly reconcile the surviving document as well.
-  try {
-    const tab = await chrome.tabs.get(addedTabId);
-    if (!isHttpPageUrl(tab?.url)) return;
-    const data = await chrome.storage.local.get({
-      masterEnabled:true,
-      pageSelectionButtonSites:{},
-      doubleClickBlbSites:{},
-      redirectEnabled:false
-    });
-    if (data.masterEnabled === false ||
-        !(await shouldInjectContentScriptForTab(tab, data))) return;
-    await ensureContentScriptInTab(addedTabId);
-  } catch (error) {
-    if (!isTabUnavailableError(error)) {
-      console.warn('KJV Scripture Tools replaced-tab content-script recovery failed:', String(error));
+  // Multiple replacement events can converge on one destination. Only the
+  // first migration performs recovery; later queued events must not repeat
+  // the same content-script activation.
+  if (!replacementActivatedTabIds.has(addedTabId)) {
+    replacementActivatedTabIds.add(addedTabId);
+    try {
+      const tab = await chrome.tabs.get(addedTabId);
+      if (!isHttpPageUrl(tab?.url)) {
+        replacementActivatedTabIds.delete(addedTabId);
+        return;
+      }
+      const data = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (data.masterEnabled === false ||
+          !(await shouldInjectContentScriptForTab(tab, data))) {
+        replacementActivatedTabIds.delete(addedTabId);
+        return;
+      }
+      const activated = await ensureContentScriptInTab(addedTabId);
+      if (!activated) replacementActivatedTabIds.delete(addedTabId);
+    } catch (error) {
+      replacementActivatedTabIds.delete(addedTabId);
+      if (!isTabUnavailableError(error)) {
+        console.warn('KJV Scripture Tools replaced-tab content-script recovery failed:', String(error));
+      }
     }
   }
   } finally {
@@ -2656,6 +2669,7 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
+  replacementActivatedTabIds.delete(tabId);
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   for (const [key, id] of scriptTaggerDestinationTabs) {
