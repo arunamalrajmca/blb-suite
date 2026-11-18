@@ -1705,6 +1705,12 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
       extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate?.started === true)
     ).toBe(true);
     await page.goto('https://www.wikipedia.org/',{waitUntil:'domcontentloaded'}).catch(() => {});
+    // Playwright's navigation completion can precede Chrome's tabs API URL
+    // update. Do not release eligibility until the worker sees the new host.
+    await expect.poll(() => extensionWorker.evaluate(async id => {
+      try { return (await chrome.tabs.get(id)).url || ''; }
+      catch (_) { return ''; }
+    },tabId),{timeout:10000,intervals:[50,100,250,500]}).toContain('wikipedia.org');
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
     expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
     await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
