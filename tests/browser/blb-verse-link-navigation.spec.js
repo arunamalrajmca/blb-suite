@@ -74,6 +74,16 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
   )).toBe(false);
   await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
   await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_self');
+
+  // Re-enable and disable again in the same document to verify both refresh
+  // directions, including restoration of the site's original target.
+  await extensionStorage.set({ masterEnabled: true });
+  await expect(page.locator('#verse-in-bverse')).toHaveAttribute('target', '_blank');
+  await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_blank');
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
+  await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_self');
+
   const sourceTabs = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' })).map(tab => ({ id: tab.id, url: tab.url }))
   );
