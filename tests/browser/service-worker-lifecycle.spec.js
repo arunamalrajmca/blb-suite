@@ -2083,6 +2083,15 @@ async function hasBlbPassage(extensionWorker, path) {
   }, path);
 }
 
+async function closeBlbTabs(extensionWorker) {
+  await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    await Promise.all(tabs.map(tab =>
+      Number.isInteger(tab.id) ? chrome.tabs.remove(tab.id).catch(() => {}) : Promise.resolve()
+    ));
+  });
+}
+
 test('first X.com document activates Floating Button and Double-click without a manual reload', async ({
   page, extensionStorage, extensionWorker
 }) => {
@@ -2139,6 +2148,69 @@ test('first X.com document activates Floating Button and Double-click without a 
     fileExecuted:true,
     initialized:true
   });
+});
+
+test('an already-open X.com document activates Floating Button and Double-click after site opt-in without a reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+
+  await page.route('https://x.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>X.com live activation regression</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await page.evaluate(() => { window.__blbSameDocumentActivationToken = 'same-x-com-document'; });
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    fileExecuted:false,
+    initialized:false,
+    doubleClickBound:false
+  });
+
+  // Enable both features after the page has already loaded. The storage-change
+  // activation path must inject and initialize into this existing document.
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':true},
+    doubleClickBlbSites:{'x.com':true}
+  });
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+    message:'enabling X.com features must activate the existing document without a page reload'
+  }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+
+  await page.evaluate(() => {
+    const target = document.querySelector('#reference');
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible();
+  await floatingButton.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/jhn/3/16/')).toBe(true);
+
+  await page.bringToFront();
+  await page.evaluate(() => {
+    document.querySelector('#reference').innerHTML = 'Romans 8:<span id="verse-number">28</span>';
+  });
+  await page.locator('#verse-number').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/rom/8/28/')).toBe(true);
+  expect(await page.evaluate(() => window.__blbSameDocumentActivationToken))
+    .toBe('same-x-com-document');
+
+  await closeBlbTabs(extensionWorker);
 });
 
 test('a BLB verse link opened in a new tab activates passive targets on the first load', async ({
