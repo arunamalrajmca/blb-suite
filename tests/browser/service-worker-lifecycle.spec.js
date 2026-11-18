@@ -1903,10 +1903,8 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
   const pageRequestKey = origin + '|pageButton';
   const doubleClickRequestKey = origin + '|doubleClick';
   const expiredRequestKey = expiredOrigin + '|pageButton';
-  const expiredRequestId = 'real-alarm-expired-page-button';
   const currentRequestId = 'real-alarm-current-double-click';
   const newerRequestId = 'real-alarm-newer-page-button-request';
-  const matchingExpiredRequestId = 'real-alarm-matching-expired-request';
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
     pendingSiteFeatureToggles:{},
     siteFeaturePreferenceRequestIds:{}
@@ -2006,7 +2004,9 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
       timeout:15000,intervals:[250,500,1000]
     }).toEqual({
       remainingFeatures:{
-        doubleClick:{requestedAt:expect.any(Number),requestId:currentRequestId}
+        feature:'doubleClick',
+        requestedAt:expect.any(Number),
+        requestId:currentRequestId
       },
       expiredOriginPresent:false,
       newerPageRequestId:newerRequestId,
