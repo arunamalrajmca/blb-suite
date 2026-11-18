@@ -165,19 +165,24 @@ test('source-page collector button survives full refreshes around real popup tog
   const openPopupForSourceTab = async () => {
     await page.bringToFront();
     const popup = await context.newPage();
-    await popup.goto('chrome-extension://' + extensionId + '/popup.html');
-    await popup.evaluate(async () => {
+    // Install the action-popup tab-context shim before popup.js initializes.
+    // Patching after navigation lets getState() read popup.html as the active
+    // tab and can leave the initial controls rendered from the wrong context.
+    await popup.addInitScript(hostPattern => {
       const nativeQuery = chrome.tabs.query.bind(chrome.tabs);
       Object.defineProperty(chrome.tabs, 'query', {
         configurable:true,
         value:async queryInfo => {
           if (queryInfo?.active === true && queryInfo?.currentWindow === true) {
-            const sourceTabs = await nativeQuery({url:'https://www.christianity.com/*'});
+            const sourceTabs = await nativeQuery({url:hostPattern});
             if (sourceTabs.length) return sourceTabs;
           }
           return nativeQuery(queryInfo);
         }
       });
+    }, 'https://www.christianity.com/*');
+    await popup.goto('chrome-extension://' + extensionId + '/popup.html');
+    await popup.evaluate(async () => {
       const activeTabs = await chrome.tabs.query({active:true,currentWindow:true});
       if (activeTabs.length !== 1 ||
           !String(activeTabs[0].url || '').startsWith('https://www.christianity.com/')) {
@@ -331,19 +336,24 @@ test('Crosswalk source-page collector button survives full refreshes around real
   const openPopupForSourceTab = async () => {
     await page.bringToFront();
     const popup = await context.newPage();
-    await popup.goto('chrome-extension://' + extensionId + '/popup.html');
-    await popup.evaluate(async () => {
+    // Install the action-popup tab-context shim before popup.js initializes.
+    // Patching after navigation lets getState() read popup.html as the active
+    // tab and can leave the initial controls rendered from the wrong context.
+    await popup.addInitScript(hostPattern => {
       const nativeQuery = chrome.tabs.query.bind(chrome.tabs);
       Object.defineProperty(chrome.tabs, 'query', {
         configurable:true,
         value:async queryInfo => {
           if (queryInfo?.active === true && queryInfo?.currentWindow === true) {
-            const sourceTabs = await nativeQuery({url:'https://www.crosswalk.com/*'});
+            const sourceTabs = await nativeQuery({url:hostPattern});
             if (sourceTabs.length) return sourceTabs;
           }
           return nativeQuery(queryInfo);
         }
       });
+    }, 'https://www.crosswalk.com/*');
+    await popup.goto('chrome-extension://' + extensionId + '/popup.html');
+    await popup.evaluate(async () => {
       const activeTabs = await chrome.tabs.query({active:true,currentWindow:true});
       if (activeTabs.length !== 1 ||
           !String(activeTabs[0].url || '').startsWith('https://www.crosswalk.com/')) {
