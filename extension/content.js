@@ -4165,11 +4165,14 @@ function handleContentSettingsChanged(changes, area) {
       void refreshSourceBibleRedirect();
     }
     blbPassiveNewTabTargets?.refresh?.();
+    // This module owns target="_blank" changes on bVerse links. Refresh it
+    // on both ON and OFF transitions so it can restore original targets
+    // immediately when the master switch is disabled.
+    blbVerseLinkNavigation?.refresh?.();
     if (suiteEnabled) {
       // Features whose observers skip DOM mutations while disabled must rescan
       // existing BLB links when the master switch is re-enabled.
       blbParsePopupNavigation?.refresh?.();
-      blbVerseLinkNavigation?.refresh?.();
       blbStudyReferenceCapture?.refresh?.();
       blbMultiVerseHandoff?.refresh?.();
     }
