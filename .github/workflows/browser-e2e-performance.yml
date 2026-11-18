@@ -153,13 +153,13 @@ jobs:
             local extension_path="$2"
             local output_path="$3"
             progress=$((progress + 1))
-            printf '\\n[%d/%d] scenario=%s variant=%s sample=%d/%d\\n' \\
+            printf '\n[%d/%d] scenario=%s variant=%s sample=%d/%d\n' \
               "$progress" "$total_samples" "$scenario" "$variant" "$sample" "$BLB_PERF_SAMPLES"
-            BLB_PERF_AGGREGATE_PROGRESS=1 \\
-              BLB_EXTENSION_PATH="$extension_path" \\
-              BLB_PERF_OUTPUT="$output_path" \\
-              BLB_PERF_SCENARIO="$scenario" \\
-              BLB_PERF_VARIANT="$variant" \\
+            BLB_PERF_AGGREGATE_PROGRESS=1 \
+              BLB_EXTENSION_PATH="$extension_path" \
+              BLB_PERF_OUTPUT="$output_path" \
+              BLB_PERF_SCENARIO="$scenario" \
+              BLB_PERF_VARIANT="$variant" \
               npx playwright test tests/browser/performance.spec.js --workers=1
           }
           for scenario in $SCENARIOS; do
