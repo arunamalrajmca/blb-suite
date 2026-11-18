@@ -2041,7 +2041,6 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
 
 // First-load and destination-tab readiness regressions.
 
-const { test, expect } = require('./fixtures');
 
 async function getTabIdForUrl(extensionWorker, urlPattern) {
   return extensionWorker.evaluate(async pattern => {
@@ -2075,7 +2074,7 @@ async function hasBlbPassage(extensionWorker, path) {
       try {
         const url = new URL(tab.pendingUrl || tab.url || '');
         return url.hostname === 'www.blueletterbible.org' &&
-          url.pathname.replace(/\\/+$/, '/') === expectedPath;
+          url.pathname.replace(/\/+$/, '/') === expectedPath;
       } catch (_) {
         return false;
       }
