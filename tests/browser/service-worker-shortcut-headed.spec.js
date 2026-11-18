@@ -54,12 +54,13 @@ test('a real MV3 service-worker termination is recovered by the physical Alt+B b
 
     // Playwright keyboard events are sent through CDP to the renderer and do
     // not reliably invoke Chrome's browser-level extension command. xdotool
-    // sends the shortcut through X11 to the headed Chromium window instead.
+    // sends the shortcut through X11 to the focused headed Chromium window.
+    // getwindowfocus uses X11 input focus directly and does not require an
+    // EWMH-compliant window manager (Xvfb intentionally runs without one).
     await page.bringToFront();
     await page.waitForTimeout(250);
-    const activeWindow=execFileSync('xdotool',['getactivewindow'],{encoding:'utf8'}).trim();
-    expect(activeWindow,'headed Chromium must own the active X11 window').toMatch(/^\d+$/);
-    execFileSync('xdotool',['windowfocus','--sync',activeWindow]);
+    const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
+    expect(focusedWindow,'headed Chromium must own the focused X11 window').toMatch(/^\\d+$/);
     execFileSync('xdotool',['key','--clearmodifiers','alt+b']);
 
     await expect.poll(async () => {
