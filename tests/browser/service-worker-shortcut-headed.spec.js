@@ -145,7 +145,7 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // the worker is confirmed stopped before the user selects the item.
     await page.locator('#native-context-menu-worker-wake-reference').click({button:'right'});
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
-    expect(focusedWindow,'headed Chromium must own the focused X11 window').toMatch(/^\\d+$/);
+    expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
     execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
