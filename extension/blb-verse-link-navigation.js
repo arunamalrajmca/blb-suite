@@ -4,7 +4,8 @@
     BLB_HOSTNAME,
     isSuiteEnabledNow,
     isModifiedLinkActivation,
-    openBlbDestinationFromContent
+    openBlbDestinationFromContent,
+    suiteSettingsReadyPromise
   }) {
     global.__blbVerseLinkNavigationCleanup?.();
     if (
@@ -14,7 +15,7 @@
 
     const listenerController = new AbortController();
     const managedTargets = new Map();
-    let observer = null, processScheduled = false, scheduledFrame = 0;
+    let observer = null, processScheduled = false, scheduledFrame = 0, active = true;
     const pendingRoots = [];
 
     // Restore only target values this module changed. Preserve a site's
@@ -34,6 +35,8 @@
     };
 
     const cleanup = () => {
+      if (!active) return;
+      active = false;
       observer?.disconnect();
       listenerController.abort();
       if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
@@ -60,6 +63,7 @@
     }
 
     const process = (root = document) => {
+      if (!active) return;
       if (!isSuiteEnabledNow()) {
         restoreManagedTargets();
         return;
@@ -69,6 +73,7 @@
     };
 
     const scheduleProcess = (root = null) => {
+      if (!active) return;
       if (!isSuiteEnabledNow()) {
         restoreManagedTargets();
         pendingRoots.length = 0;
@@ -83,6 +88,7 @@
       scheduledFrame = requestAnimationFrame(() => {
         scheduledFrame = 0;
         processScheduled = false;
+        if (!active) return;
         if (!isSuiteEnabledNow()) {
           restoreManagedTargets();
           pendingRoots.length = 0;
@@ -130,8 +136,18 @@
       process();
     }
 
+    // Runtime injection can occur after DOMContentLoaded. Wait for the
+    // authoritative initial settings read, then process the already-existing
+    // BLB links without requiring the user to reload the page.
+    Promise.resolve(suiteSettingsReadyPromise).catch(() => {}).then(() => {
+      if (!active) return;
+      if (isSuiteEnabledNow()) scheduleProcess();
+      else restoreManagedTargets();
+    });
+
     return Object.freeze({
       refresh() {
+        if (!active) return;
         if (!isSuiteEnabledNow()) {
           restoreManagedTargets();
           pendingRoots.length = 0;
