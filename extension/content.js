@@ -632,7 +632,8 @@ const blbVerseLinkNavigation = globalThis.BLBVerseLinkNavigationModule?.initiali
   BLB_HOSTNAME,
   isSuiteEnabledNow: () => suiteEnabled,
   isModifiedLinkActivation,
-  openBlbDestinationFromContent
+  openBlbDestinationFromContent,
+  suiteSettingsReadyPromise
 });
 
 // BLB MultiVerse tool-page navigation is isolated in a classic-script feature module.
