@@ -106,7 +106,7 @@ test('first X.com document activates Floating Button and Double-click without a 
 test('a BLB link opened in a new tab has its content script on the first load', async ({
   page, context, extensionWorker
 }) => {
-  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status:200,
     contentType:'text/html',
     body:'<!doctype html><html><head><title>BLB new-tab readiness</title></head><body><a id="new-tab-verse" target="_blank" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></body></html>'
