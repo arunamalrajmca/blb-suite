@@ -1626,6 +1626,12 @@ test('startup recovery includes tabs created after registration reconciliation h
 }) => {
   const pattern = 'https://example.com/*';
   const url = 'https://example.com/';
+  // Create the initial matching tab while the feature is disabled. Once
+  // startup recovery begins, its registration attempt is guaranteed to reach
+  // the gate before a second matching tab is created.
+  const firstPage = await context.newPage();
+  await firstPage.goto(url,{waitUntil:'domcontentloaded'});
+  let secondPage;
   await extensionStorage.set({
     masterEnabled:true,redirectEnabled:false,
     pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
@@ -1649,51 +1655,53 @@ test('startup recovery includes tabs created after registration reconciliation h
       restore:() => { api.registerContentScripts = original; }
     };
   },pattern);
-  let page;
   try {
     await extensionWorker.evaluate(() => {
       globalThis.__createdDuringStartupRecovery = recoverConfiguredTabsOnStartup();
       return true;
     });
     await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.started);
-    page = await context.newPage();
-    await page.goto(url,{waitUntil:'domcontentloaded'});
+    // This tab is created only after the real registration attempt is held.
+    secondPage = await context.newPage();
+    await secondPage.goto(url,{waitUntil:'domcontentloaded'});
     await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.release());
     await extensionWorker.evaluate(async () => {
       await globalThis.__createdDuringStartupRecovery;
       delete globalThis.__createdDuringStartupRecovery;
     });
-    // The startup operation is held in the worker global so it can be awaited
-    // after the new tab has completed navigation.
     const loaded = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-      if (!tabs[0]?.id) return false;
-      try {
-        const [{result}] = await chrome.scripting.executeScript({
-          target:{tabId:tabs[0].id},world:'ISOLATED',
-          func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
-        });
-        return result === true;
-      } catch (_) { return false; }
+      const results = await Promise.all(tabs.map(async tab => {
+        if (!tab?.id) return false;
+        try {
+          const [{result}] = await chrome.scripting.executeScript({
+            target:{tabId:tab.id},world:'ISOLATED',
+            func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
+          });
+          return result === true;
+        } catch (_) { return false; }
+      }));
+      return results;
     });
-    expect(loaded).toBe(true);
+    expect(loaded.filter(Boolean).length).toBeGreaterThanOrEqual(2);
   } finally {
     await extensionWorker.evaluate(() => {
       globalThis.__createdDuringStartupGate?.release();
       globalThis.__createdDuringStartupGate?.restore();
       delete globalThis.__createdDuringStartupGate;
       delete globalThis.__createdDuringStartupRecovery;
-      delete globalThis.__createdDuringStartupResult;
     }).catch(() => {});
-    await page?.close().catch(() => {});
-    await extensionWorker.evaluate(async value => {
-      await chrome.storage.local.set({pageSelectionButtonSites:{'example.com':false}});
+    await Promise.all([firstPage,secondPage].filter(Boolean).map(page => page.close().catch(() => {})));
+    await extensionWorker.evaluate(async pattern => {
+      await chrome.storage.local.set({
+        pageSelectionButtonSites:{'example.com':false},
+        doubleClickBlbSites:{}
+      });
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
-      await unregisterRuntimeContentScriptForPattern(value).catch(() => {});
-    },pattern).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(pattern).catch(() => {});
+    }, pattern).catch(() => {});
   }
 });
-
 
 test('a tab closed during asynchronous eligibility checks is not injected during startup recovery', async ({
   context, extensionStorage, extensionWorker
