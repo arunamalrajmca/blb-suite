@@ -21,14 +21,31 @@ test('a real MV3 service-worker termination is recovered by the physical Alt+B b
     target.textContent='John 3:16';
     target.style.cssText='position:fixed;left:40px;top:40px;padding:16px;background:white;font:24px Arial';
     document.body.appendChild(target);
-    const range=document.createRange();
-    range.selectNodeContents(target);
-    const selection=window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
   });
 
+  // Use a real X11 drag to create a browser-owned text selection. A
+  // script-created Selection is sufficient for renderer shortcuts, but does
+  // not reliably populate Chromium's native selection context menu.
+  const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
+  expect(targetBounds,'reference must have a visible viewport position').not.toBeNull();
+  const windowGeometry=await page.evaluate(() => ({
+    screenX:window.screenX,
+    screenY:window.screenY,
+    chromeTop:window.outerHeight-window.innerHeight,
+    chromeLeft:(window.outerWidth-window.innerWidth)/2
+  }));
+  const screenPoint=(x,y)=>[
+    Math.round(windowGeometry.screenX+windowGeometry.chromeLeft+x),
+    Math.round(windowGeometry.screenY+windowGeometry.chromeTop+y)
+  ];
+  const [selectionStartX,selectionY]=screenPoint(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
+  const [selectionEndX]=screenPoint(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2);
+  execFileSync('xdotool',['mousemove','--sync',String(selectionStartX),String(selectionY)]);
+  execFileSync('xdotool',['mousedown','1']);
+  execFileSync('xdotool',['mousemove','--sync',String(selectionEndX),String(selectionY)]);
+  execFileSync('xdotool',['mouseup','1']);
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim()),{timeout:5000})
+    .toBe('John 3:16');
   await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
   const tabId=await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
@@ -148,23 +165,16 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // the worker is confirmed stopped before the user selects the item.
     await page.bringToFront();
     await page.waitForTimeout(250);
-    const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
-    expect(targetBounds,'selected reference must have a visible screen position').not.toBeNull();
-    const windowGeometry=await page.evaluate(() => ({
-      screenX:window.screenX,
-      screenY:window.screenY,
-      chromeTop:window.outerHeight-window.innerHeight,
-      chromeLeft:(window.outerWidth-window.innerWidth)/2
-    }));
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // Playwright bounds are viewport-relative; xdotool needs absolute X11
-    // screen coordinates, including Chromium's title/tab/toolbar frame.
-    const clickX=Math.round(windowGeometry.screenX+windowGeometry.chromeLeft+targetBounds.x+targetBounds.width/2);
-    const clickY=Math.round(windowGeometry.screenY+windowGeometry.chromeTop+targetBounds.y+targetBounds.height/2);
+    // Right-click within the physically selected text so Chromium builds the
+    // native context menu with its selection-specific extension item.
+    const [clickX,clickY]=screenPoint(targetBounds.x+targetBounds.width/2,targetBounds.y+targetBounds.height/2);
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
-    execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
+    // Give the browser-owned menu time to open before sending menu navigation.
+    await page.waitForTimeout(400);
+    execFileSync('xdotool',['key','--clearmodifiers','End']);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
     await expect.poll(async () => {
