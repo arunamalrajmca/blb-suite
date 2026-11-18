@@ -200,7 +200,12 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
       path:'/tmp/blb-native-context-menu-open.png',
       contentType:'image/png'
     });
-    execFileSync('xdotool',['key','--clearmodifiers','End']);
+    // The extension item is above the final Inspect item. End selects
+    // Inspect (or the final browser item), not the extension command.
+    // Start at the first native-menu item and advance through the six
+    // preceding selectable entries to "Show on BLB".
+    execFileSync('xdotool',['key','--clearmodifiers','Home']);
+    execFileSync('xdotool',['key','--clearmodifiers','Down','Down','Down','Down','Down','Down']);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
     await expect.poll(async () => {
