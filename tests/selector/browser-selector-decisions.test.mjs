@@ -705,8 +705,8 @@ test("performance benchmark specs stay in the dedicated interleaved runner", () 
     commitChange(root, "tests/browser/performance.spec.js", "// benchmark regression change\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=true/);
-    assert.match(output, /changed_browser_specs=\\n/);
-    assert.match(output, /group_a_changed_browser_specs=\\n/);
+    assert.ok(output.includes("changed_browser_specs=\\n"));
+    assert.ok(output.includes("group_a_changed_browser_specs=\\n"));
     assert.match(output, /group_a_required=true/);
   });
 });
