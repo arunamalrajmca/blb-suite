@@ -49,14 +49,16 @@ test('MultiVerse KJV verse links retain native same-tab navigation when the Suit
   await extensionStorage.clear();
   await installToolViewFixture(context);
   await page.goto(TOOL_URL, { waitUntil: 'domcontentloaded' });
-  // Let extension startup finish before overriding the default, then reload
-  // so the content script reads the explicitly disabled state.
-  await page.waitForTimeout(300);
+  // Prove the enabled document first applies passive new-tab behavior, then
+  // turn the Suite OFF and require both link routing and target hints to update
+  // in that same document without a manual reload.
+  await expect(page.locator('#tool-view-verse')).toHaveAttribute('target', '_blank');
+  await expect(page.locator('#formatButton.multiVerseResults')).toBeVisible({ timeout: 10000 });
   await extensionStorage.set({ masterEnabled: false });
-  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
   )).toBe(false);
+  await expect(page.locator('#tool-view-verse')).not.toHaveAttribute('target', '_blank');
 
   const stored = await extensionWorker.evaluate(async () => chrome.storage.local.get({ masterEnabled: true }));
   expect(stored.masterEnabled).toBe(false);
