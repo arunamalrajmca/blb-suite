@@ -61,7 +61,7 @@ jobs:
       - name: Install Chromium and headed-browser dependencies
         run: npx playwright install --with-deps chromium
       - name: Install X11 automation
-        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool
+        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool imagemagick
       - name: Run physical browser-level Alt+B shortcut test
         env:
           BLB_HEADFUL_EXTENSION_TESTS: '1'
