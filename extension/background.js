@@ -2397,6 +2397,10 @@ const intentionalNewBlbTabs = new Set();
 // started by tabs.onReplaced. The count handles duplicate overlapping events.
 const pendingReplacementSourceTabCounts = new Map();
 
+// Serialize complete replacement migrations, not just individual storage writes.
+// Otherwise a later B→C replacement can overtake a transient A→B retry.
+let pendingReplacementMigrationQueue = Promise.resolve();
+
 // Serialize the final BLB tab-creation operation. This is deliberately below
 // the feature/event layer: even if two independent callers ask to open the
 // same BLB destination at nearly the same time, only one caller is allowed to
@@ -2527,7 +2531,7 @@ async function runReplacementStateMigration(operation, stateLabel) {
   }
 }
 
-async function handleReplacedTabIdentity(addedTabId, removedTabId) {
+async function performReplacementTabIdentityMigration(addedTabId, removedTabId) {
   if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) return;
   pendingReplacementSourceTabCounts.set(removedTabId,
     (pendingReplacementSourceTabCounts.get(removedTabId) || 0) + 1);
@@ -2622,6 +2626,27 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
     if (remaining > 0) pendingReplacementSourceTabCounts.set(removedTabId, remaining);
     else pendingReplacementSourceTabCounts.delete(removedTabId);
   }
+}
+
+
+// Count queued work immediately so onRemoved cannot erase an intermediate
+// source while its replacement is waiting behind an earlier migration.
+function handleReplacedTabIdentity(addedTabId, removedTabId) {
+  if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) {
+    return Promise.resolve();
+  }
+  pendingReplacementSourceTabCounts.set(removedTabId,
+    (pendingReplacementSourceTabCounts.get(removedTabId) || 0) + 1);
+  const run = pendingReplacementMigrationQueue.then(
+    () => performReplacementTabIdentityMigration(addedTabId, removedTabId),
+    () => performReplacementTabIdentityMigration(addedTabId, removedTabId)
+  );
+  pendingReplacementMigrationQueue = run.catch(() => {});
+  return run.finally(() => {
+    const remaining = (pendingReplacementSourceTabCounts.get(removedTabId) || 1) - 1;
+    if (remaining > 0) pendingReplacementSourceTabCounts.set(removedTabId, remaining);
+    else pendingReplacementSourceTabCounts.delete(removedTabId);
+  });
 }
 
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
