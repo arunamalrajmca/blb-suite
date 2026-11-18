@@ -114,6 +114,6 @@
   {
     "group": "context-menu-visibility-event-lifecycle",
     "file": "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
-    "grep": "tab activation and active-tab navigation synchronize the global web/PDF selection menus"
+    "grep": "(?:tab activation and active-tab navigation synchronize the global web/PDF selection menus)"
   }
 ]
