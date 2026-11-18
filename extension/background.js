@@ -7467,6 +7467,13 @@ chrome.windows.onFocusChanged.addListener(windowId => {
     syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
   }).catch(() => {});
 });
+
+// Closing the focused window can leave Chrome with only a WINDOW_ID_NONE
+// focus event. The removal event is a durable lifecycle signal that wakes the
+// worker after the handoff and lets us resolve the newly focused window.
+chrome.windows.onRemoved.addListener(() => {
+  syncSelectionMenusForFocusedWindow().catch(() => {});
+});
 async function shouldInjectContentScriptForTab(tab, data) {
   if (!tab?.url || !isHttpPageUrl(tab.url)) return false;
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));

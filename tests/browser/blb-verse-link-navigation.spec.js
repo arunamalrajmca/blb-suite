@@ -13,7 +13,10 @@ async function serveBlbFixture(context) {
     status: 200,
     contentType: 'text/html; charset=utf-8',
     body: `<!doctype html><html><head><title>BLB verse-link fixture</title></head><body>
-      <div id="bVerse_1"><a id="verse-in-bverse" href="${BVERSE_URL}">Strong's G25</a></div>
+      <div id="bVerse_1">
+        <a id="verse-in-bverse" href="${BVERSE_URL}">Strong's G25</a>
+        <a id="verse-in-bverse-self" target="_self" href="${BVERSE_URL}">Strong's G25 original self target</a>
+      </div>
       <a id="nowrap-link" class="nowrap" href="${NOWRAP_URL}">Strong's G3056</a>
     </body></html>`
   }));
@@ -29,6 +32,7 @@ test('enabled Suite targets bVerse links and routes ordinary nowrap links throug
   await page.waitForTimeout(1000);
 
   await expect(page.locator('#verse-in-bverse')).toHaveAttribute('target', '_blank');
+  await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_blank');
 
   await page.evaluate(url => {
     const container = document.createElement('div');
@@ -60,16 +64,26 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
   await extensionStorage.clear();
   await serveBlbFixture(context);
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
-  // Set the disabled state after the first document has loaded so extension
-  // startup/default initialization cannot race the test's storage write.
+  // Prove the active document first receives the enabled bVerse-link target
+  // behavior, then turn the Suite OFF and require the same document to restore
+  // the link's native target without a manual reload.
+  await expect(page.locator('#verse-in-bverse')).toHaveAttribute('target', '_blank');
   await extensionStorage.set({ masterEnabled: false });
-  await page.reload({ waitUntil: 'domcontentloaded' });
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
   )).toBe(false);
-  await page.waitForTimeout(1000);
-
   await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
+  await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_self');
+
+  // Re-enable and disable again in the same document to verify both refresh
+  // directions, including restoration of the site's original target.
+  await extensionStorage.set({ masterEnabled: true });
+  await expect(page.locator('#verse-in-bverse')).toHaveAttribute('target', '_blank');
+  await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_blank');
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
+  await expect(page.locator('#verse-in-bverse-self')).toHaveAttribute('target', '_self');
+
   const sourceTabs = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' })).map(tab => ({ id: tab.id, url: tab.url }))
   );

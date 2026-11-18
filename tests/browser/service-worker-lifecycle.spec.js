@@ -2038,3 +2038,271 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
     await observer?.close().catch(() => {});
   }
 });
+
+// First-load and destination-tab readiness regressions.
+
+
+async function getTabIdForUrl(extensionWorker, urlPattern) {
+  return extensionWorker.evaluate(async pattern => {
+    const tabs = await chrome.tabs.query({url:pattern});
+    return tabs.find(tab => Number.isInteger(tab.id))?.id ?? null;
+  }, urlPattern);
+}
+
+async function contentScriptLoaded(extensionWorker, tabId) {
+  return extensionWorker.evaluate(async id => {
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => ({
+          fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true,
+          initialized:window.__blbSuiteContentScriptLoadedV2 === true,
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return injection?.result || null;
+    } catch (_) {
+      return null;
+    }
+  }, tabId);
+}
+
+async function hasBlbPassage(extensionWorker, path) {
+  return extensionWorker.evaluate(async expectedPath => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.some(tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url || '');
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname.replace(/\/+$/, '/') === expectedPath;
+      } catch (_) {
+        return false;
+      }
+    });
+  }, path);
+}
+
+async function closeBlbTabs(extensionWorker) {
+  await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    await Promise.all(tabs.map(tab =>
+      Number.isInteger(tab.id) ? chrome.tabs.remove(tab.id).catch(() => {}) : Promise.resolve()
+    ));
+  });
+}
+
+test('first X.com document activates Floating Button and Double-click without a manual reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':true},
+    doubleClickBlbSites:{'x.com':true}
+  });
+
+  // Keep the test deterministic while retaining the real x.com origin,
+  // optional-host permission check, runtime registration, and tabs.onUpdated
+  // current-document injection path.
+  await page.route('https://x.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>X first-load regression</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+    message:'the first x.com document must receive and initialize the runtime bundle, including the Double-click handler, without reloading'
+  }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+
+  // Exercise the actual floating action on the first document.
+  await page.evaluate(() => {
+    const target = document.querySelector('#reference');
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible();
+  await floatingButton.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/jhn/3/16/')).toBe(true);
+
+  // The Floating Button opens and activates a BLB tab; return to the original
+  // x.com document before exercising Double-click on that same document.
+  await page.bringToFront();
+  await page.evaluate(() => {
+    const target = document.querySelector('#reference');
+    target.innerHTML = 'Romans 8:<span id="verse-number">28</span>';
+  });
+  await page.locator('#verse-number').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/rom/8/28/')).toBe(true);
+
+  expect(await contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    fileExecuted:true,
+    initialized:true
+  });
+
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
+
+test('an already-open X.com document activates Floating Button and Double-click after site opt-in without a reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+
+  await page.route('https://x.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>X.com live activation regression</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await page.evaluate(() => { window.__blbSameDocumentActivationToken = 'same-x-com-document'; });
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    fileExecuted:false,
+    initialized:false,
+    doubleClickBound:false
+  });
+
+  // Enable both features after the page has already loaded. The storage-change
+  // activation path must inject and initialize into this existing document.
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':true},
+    doubleClickBlbSites:{'x.com':true}
+  });
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+    message:'enabling X.com features must activate the existing document without a page reload'
+  }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+
+  await page.evaluate(() => {
+    const target = document.querySelector('#reference');
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible();
+  await floatingButton.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/jhn/3/16/')).toBe(true);
+
+  await page.bringToFront();
+  await page.evaluate(() => {
+    document.querySelector('#reference').innerHTML = 'Romans 8:<span id="verse-number">28</span>';
+  });
+  await page.locator('#verse-number').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/rom/8/28/')).toBe(true);
+  expect(await page.evaluate(() => window.__blbSameDocumentActivationToken))
+    .toBe('same-x-com-document');
+
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
+
+test('a BLB verse link opened in a new tab activates passive targets on the first load', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.toLowerCase() === '/kjv/rom/8/28/'
+      ? '<!doctype html><html><head><title>BLB destination</title></head><body><a id="next-verse" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a></body></html>'
+      : '<!doctype html><html><head><title>BLB source</title></head><body><a id="new-tab-verse" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
+
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  // The extension, rather than the fixture, must apply the new-tab behavior.
+  await expect(page.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
+  const popupPromise = context.waitForEvent('page');
+  await page.locator('#new-tab-verse').click();
+  const newTab = await popupPromise;
+  await newTab.waitForLoadState('domcontentloaded');
+
+  const newTabId = await getTabIdForUrl(
+    extensionWorker,
+    'https://www.blueletterbible.org/kjv/rom/8/28/*'
+  );
+  expect(Number.isInteger(newTabId)).toBe(true);
+
+  await expect.poll(() => contentScriptLoaded(extensionWorker, newTabId), {
+    message:'a BLB destination opened in a new tab must initialize the extension without a manual reload'
+  }).toMatchObject({fileExecuted:true, initialized:true});
+
+  // The new document must also activate the passive-target module immediately.
+  await expect(newTab.locator('#next-verse')).toHaveAttribute('target','_blank');
+  expect(newTab.url()).toContain('/kjv/rom/8/28/');
+
+  // Follow a verse link from that newly opened tab. It must open and initialize
+  // a second destination tab on its first load as well.
+  const secondPopupPromise = context.waitForEvent('page');
+  await newTab.locator('#next-verse').click();
+  const secondTab = await secondPopupPromise;
+  await secondTab.waitForLoadState('domcontentloaded');
+  expect(secondTab.url()).toContain('/kjv/1co/13/4/');
+  const secondTabId = await getTabIdForUrl(
+    extensionWorker,
+    'https://www.blueletterbible.org/kjv/1co/13/4/*'
+  );
+  expect(Number.isInteger(secondTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, secondTabId), {
+    message:'a second-level BLB destination tab must initialize without a manual reload'
+  }).toMatchObject({fileExecuted:true, initialized:true});
+  await expect(secondTab.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
+
+  await closeBlbTabs(extensionWorker);
+});
+
+test('a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.toLowerCase() === '/tools/multiverse.cfm'
+      ? '<!doctype html><html><head><title>MultiVerse destination</title></head><body><button id="formatButton" class="byVerseResults">Tool View</button><script>document.querySelector("#formatButton").addEventListener("click",function(){this.className=this.classList.contains("byVerseResults")?"multiVerseResults":"byVerseResults";});</script></body></html>'
+      : '<!doctype html><html><head><title>BLB source</title></head><body><a id="open-multiverse" target="_blank" href="https://www.blueletterbible.org/tools/MultiVerse.cfm">Open MultiVerse</a></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
+
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  const popupPromise = context.waitForEvent('page');
+  await page.locator('#open-multiverse').click();
+  const newTab = await popupPromise;
+  await newTab.waitForLoadState('load');
+  await expect(newTab.locator('#formatButton.multiVerseResults')).toBeVisible({timeout:10000});
+  await closeBlbTabs(extensionWorker);
+});

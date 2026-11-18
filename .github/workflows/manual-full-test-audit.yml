@@ -60,7 +60,9 @@ jobs:
         run: cp extension/manifest.json "$RUNNER_TEMP/blb-manifest-original.json"
 
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
+        # Grant permissions only. Keep content_scripts.matches production-accurate
+        # so the full audit exercises runtime registration and late injection.
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
 
       - name: Validate extension build and module contracts
         id: build

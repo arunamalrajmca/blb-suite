@@ -2101,14 +2101,10 @@ test.describe('core user-visible E2E', () => {
     // The handler marker lives in the extension's isolated world, not the
     // page's main world. Inspect it through scripting.executeScript rather
     // than page.waitForFunction, which can never see extension-world globals.
-    try {
-      await waitForDoubleClickHandler();
-    } catch (_) {
-      // If this document completed initialization before the site opt-in was
-      // persisted, reload so the content script starts with the saved setting.
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await waitForDoubleClickHandler();
-    }
+    // The existing document must activate when the preference is saved.
+    // A page reload would hide a failure in the runtime-registration/current-
+    // document injection path, so treat a missing handler as a real regression.
+    await waitForDoubleClickHandler();
 
     await page.evaluate((html) => {
       window.getSelection()?.removeAllRanges();
