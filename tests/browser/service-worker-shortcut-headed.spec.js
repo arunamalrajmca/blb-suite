@@ -150,13 +150,18 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     await page.waitForTimeout(250);
     const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
     expect(targetBounds,'selected reference must have a visible screen position').not.toBeNull();
+    const windowGeometry=await page.evaluate(() => ({
+      screenX:window.screenX,
+      screenY:window.screenY,
+      chromeTop:window.outerHeight-window.innerHeight,
+      chromeLeft:(window.outerWidth-window.innerWidth)/2
+    }));
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // Use X11 mouse input so Chromium opens its native context menu; a
-    // Playwright/CDP right-click dispatches the DOM event but does not reliably
-    // display the browser-owned menu in headed CI.
-    const clickX=Math.round(targetBounds.x+targetBounds.width/2);
-    const clickY=Math.round(targetBounds.y+targetBounds.height/2);
+    // Playwright bounds are viewport-relative; xdotool needs absolute X11
+    // screen coordinates, including Chromium's title/tab/toolbar frame.
+    const clickX=Math.round(windowGeometry.screenX+windowGeometry.chromeLeft+targetBounds.x+targetBounds.width/2);
+    const clickY=Math.round(windowGeometry.screenY+windowGeometry.chromeTop+targetBounds.y+targetBounds.height/2);
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
     execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
