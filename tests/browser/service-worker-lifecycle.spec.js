@@ -1892,14 +1892,21 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
 });
 
 
-test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker and removes expired intent', async ({
+test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker and prunes only expired feature intents', async ({
   context, extensionId, extensionWorker
 }) => {
-  // Chrome enforces a minimum alarm delay. Schedule expiry 65 seconds ahead,
-  // then leave the worker stopped until the actual alarm wakes it.
+  // Chrome enforces a minimum alarm delay. The first intent expires in 65s;
+  // a second feature remains valid so the alarm must reschedule itself.
   test.setTimeout(150000);
   const origin = 'https://ungranted-pending-cleanup.example/*';
-  const requestKey = origin + '|pageButton';
+  const expiredOrigin = 'https://expired-matching-cleanup.example/*';
+  const pageRequestKey = origin + '|pageButton';
+  const doubleClickRequestKey = origin + '|doubleClick';
+  const expiredRequestKey = expiredOrigin + '|pageButton';
+  const expiredRequestId = 'real-alarm-expired-page-button';
+  const currentRequestId = 'real-alarm-current-double-click';
+  const newerRequestId = 'real-alarm-newer-page-button-request';
+  const matchingExpiredRequestId = 'real-alarm-matching-expired-request';
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
     pendingSiteFeatureToggles:{},
     siteFeaturePreferenceRequestIds:{}
@@ -1909,20 +1916,34 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
   );
   await extensionWorker.evaluate(async value => {
     const now = Date.now();
-    const timestamp = now - SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 65000;
+    const expiredAt = now - SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 65000;
+    const currentAt = now;
+    const expiredOrigin = 'https://expired-matching-cleanup.example/*';
     await chrome.storage.local.set({
       pendingSiteFeatureToggles:{
-        [value]:{feature:'pageButton',requestedAt:timestamp,requestId:'real-alarm-expiry'}
+        [value]:{
+          features:{
+            pageButton:{requestedAt:expiredAt,requestId:'real-alarm-expired-page-button'},
+            doubleClick:{requestedAt:currentAt,requestId:'real-alarm-current-double-click'}
+          }
+        },
+        [expiredOrigin]:{
+          feature:'pageButton',
+          requestedAt:expiredAt,
+          requestId:'real-alarm-matching-expired-request'
+        }
       },
       siteFeaturePreferenceRequestIds:{
-        [value + '|pageButton']:'real-alarm-expiry'
+        [value + '|pageButton']:'real-alarm-newer-page-button-request',
+        [value + '|doubleClick']:'real-alarm-current-double-click',
+        [expiredOrigin + '|pageButton']:'real-alarm-matching-expired-request'
       }
     });
     await schedulePendingSiteFeatureToggleCleanup();
-    return timestamp;
+    return {expiredAt,currentAt};
   }, origin);
   expect(await extensionWorker.evaluate(value =>
-    chrome.permissions.contains({origins:[value]}), origin)).toBe(false);
+    chrome.permissions.contains({origins:[value]}) , origin)).toBe(false);
   const alarm = await extensionWorker.evaluate(() =>
     chrome.alarms.get(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM)
   );
@@ -1968,19 +1989,36 @@ test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker
 
     observer = await context.newPage();
     await observer.goto(`chrome-extension://${extensionId}/popup.html`);
-    await expect.poll(() => observer.evaluate(async ({origin,requestKey}) => {
+    await expect.poll(() => observer.evaluate(async ({origin,expiredOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey}) => {
       const data = await chrome.storage.local.get({
         pendingSiteFeatureToggles:{},
         siteFeaturePreferenceRequestIds:{}
       });
+      const remaining = data.pendingSiteFeatureToggles[origin];
       return {
-        pending:data.pendingSiteFeatureToggles[origin] ?? null,
-        requestId:data.siteFeaturePreferenceRequestIds[requestKey] ?? null
+        remainingFeatures:remaining?.features ?? remaining ?? null,
+        expiredOriginPresent:Object.prototype.hasOwnProperty.call(data.pendingSiteFeatureToggles,expiredOrigin),
+        newerPageRequestId:data.siteFeaturePreferenceRequestIds[pageRequestKey] ?? null,
+        currentDoubleClickRequestId:data.siteFeaturePreferenceRequestIds[doubleClickRequestKey] ?? null,
+        matchingExpiredRequestId:data.siteFeaturePreferenceRequestIds[expiredRequestKey] ?? null
       };
-    }, {origin,requestKey}), {timeout:15000,intervals:[250,500,1000]}).toEqual({
-      pending:null,
-      requestId:null
+    }, {origin,expiredOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey}), {
+      timeout:15000,intervals:[250,500,1000]
+    }).toEqual({
+      remainingFeatures:{
+        doubleClick:{requestedAt:expect.any(Number),requestId:currentRequestId}
+      },
+      expiredOriginPresent:false,
+      newerPageRequestId:newerRequestId,
+      currentDoubleClickRequestId:currentRequestId,
+      matchingExpiredRequestId:null
     });
+
+    const rescheduledAlarm = await observer.evaluate(() =>
+      chrome.alarms.get('site-feature-permission-pending-cleanup')
+    );
+    expect(rescheduledAlarm, 'the remaining valid intent must retain a cleanup alarm').toBeTruthy();
+    expect(rescheduledAlarm.scheduledTime).toBeGreaterThan(Date.now() + 120000);
   } finally {
     await cdp.detach().catch(() => {});
     cleanupPage = observer || await context.newPage().catch(() => null);
