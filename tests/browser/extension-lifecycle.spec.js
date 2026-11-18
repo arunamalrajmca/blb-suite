@@ -1182,7 +1182,8 @@ test('tab replacement preserves BLB, ScriptTagger, and MultiVerse destination id
       ));
     }
   });
-  const {ids,result} = {ids:outcome.ids,result:outcome};
+  const ids = outcome.ids;
+  const result = outcome;
 
   expect(result.blbTab).toBe(ids.added);
   expect(result.intentional).toBe(true);
