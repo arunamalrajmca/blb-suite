@@ -699,6 +699,18 @@ test("mixed runtime and browser-spec change selects the whole changed spec", () 
   });
 });
 
+test("performance benchmark specs stay in the dedicated interleaved runner", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// shared runtime change\\n");
+    commitChange(root, "tests/browser/performance.spec.js", "// benchmark regression change\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=true/);
+    assert.match(output, /changed_browser_specs=\\n/);
+    assert.match(output, /group_a_changed_browser_specs=\\n/);
+    assert.match(output, /group_a_required=true/);
+  });
+});
+
 test("unknown runtime file conservatively selects broad browser coverage", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/new-runtime-module.js", "// unknown runtime module\n");
