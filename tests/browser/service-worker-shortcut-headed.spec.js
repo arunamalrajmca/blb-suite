@@ -114,17 +114,9 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
   const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
   expect(targetBounds,'reference must have a visible viewport position').not.toBeNull();
   const windowGeometry=await page.evaluate(() => ({
-    screenX:window.screenX,
-    screenY:window.screenY,
     chromeTop:window.outerHeight-window.innerHeight,
     chromeLeft:(window.outerWidth-window.innerWidth)/2
   }));
-  const screenPoint=(x,y)=>[
-    Math.round(windowGeometry.screenX+windowGeometry.chromeLeft+x),
-    Math.round(windowGeometry.screenY+windowGeometry.chromeTop+y)
-  ];
-  const [selectionStartX,selectionY]=screenPoint(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
-  const [selectionEndX]=screenPoint(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2);
   // Use browser input coordinates for the text drag. The browser owns the
   // resulting selection; using X11 screen coordinates here is unreliable in
   // headless CI because Chromium's reported window origin can differ from
@@ -172,6 +164,18 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     await page.waitForTimeout(250);
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
+    // Use the X server's actual focused-window origin. window.screenX/Y can
+    // differ from X11 coordinates under Xvfb, which otherwise sends the
+    // physical right-click outside the selected reference and opens the
+    // wrong context menu.
+    const x11Geometry=execFileSync('xdotool',['getwindowgeometry','--shell',focusedWindow],{encoding:'utf8'});
+    const x11X=Number(x11Geometry.match(/^X=(\\d+)$/m)?.[1]);
+    const x11Y=Number(x11Geometry.match(/^Y=(\\d+)$/m)?.[1]);
+    expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'focused Chromium window must expose X11 screen coordinates').toBe(true);
+    const screenPoint=(x,y)=>[
+      Math.round(x11X+windowGeometry.chromeLeft+x),
+      Math.round(x11Y+windowGeometry.chromeTop+y)
+    ];
     // Right-click within the physically selected text so Chromium builds the
     // native context menu with its selection-specific extension item.
     const [clickX,clickY]=screenPoint(targetBounds.x+targetBounds.width/2,targetBounds.y+targetBounds.height/2);
