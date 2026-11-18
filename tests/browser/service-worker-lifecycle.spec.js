@@ -2145,16 +2145,21 @@ test('first X.com document activates Floating Button and Double-click without a 
   });
 });
 
-test('a BLB link opened in a new tab has its content script on the first load', async ({
-  page, context, extensionWorker
+test('a BLB verse link opened in a new tab activates passive targets on the first load', async ({
+  page, context, extensionStorage, extensionWorker
 }) => {
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status:200,
-    contentType:'text/html',
-    body:'<!doctype html><html><head><title>BLB new-tab readiness</title></head><body><a id="new-tab-verse" target="_blank" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></body></html>'
-  }));
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.toLowerCase() === '/kjv/rom/8/28/'
+      ? '<!doctype html><html><head><title>BLB destination</title></head><body><a id="next-verse" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a></body></html>'
+      : '<!doctype html><html><head><title>BLB source</title></head><body><a id="new-tab-verse" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
 
   await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  // The extension, rather than the fixture, must apply the new-tab behavior.
+  await expect(page.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
   const popupPromise = context.waitForEvent('page');
   await page.locator('#new-tab-verse').click();
   const newTab = await popupPromise;
@@ -2170,7 +2175,27 @@ test('a BLB link opened in a new tab has its content script on the first load', 
     message:'a BLB destination opened in a new tab must initialize the extension without a manual reload'
   }).toMatchObject({fileExecuted:true, initialized:true});
 
-  // Verify the destination remains usable in that original new-tab document.
-  await expect(newTab.locator('#new-tab-verse')).toBeVisible();
+  // The new document must also activate the passive-target module immediately.
+  await expect(newTab.locator('#next-verse')).toHaveAttribute('target','_blank');
   expect(newTab.url()).toContain('/kjv/rom/8/28/');
+});
+
+test('a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load', async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname.toLowerCase() === '/tools/multiverse.cfm'
+      ? '<!doctype html><html><head><title>MultiVerse destination</title></head><body><button id="formatButton" class="byVerseResults">Tool View</button><script>document.querySelector("#formatButton").addEventListener("click",function(){this.className=this.classList.contains("byVerseResults")?"multiVerseResults":"byVerseResults";});</script></body></html>'
+      : '<!doctype html><html><head><title>BLB source</title></head><body><a id="open-multiverse" target="_blank" href="https://www.blueletterbible.org/tools/MultiVerse.cfm">Open MultiVerse</a></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
+
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  const popupPromise = context.waitForEvent('page');
+  await page.locator('#open-multiverse').click();
+  const newTab = await popupPromise;
+  await newTab.waitForLoadState('load');
+  await expect(newTab.locator('#formatButton.multiVerseResults')).toBeVisible({timeout:10000});
 });
