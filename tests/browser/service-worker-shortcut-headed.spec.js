@@ -146,12 +146,19 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // Open Chromium's native page context menu, then use its visible extension
     // item by its exact displayed title. This is a browser-level click path:
     // the worker is confirmed stopped before the user selects the item.
-    await page.locator('#native-context-menu-worker-wake-reference').click({button:'right'});
+    const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
+    expect(targetBounds,'selected reference must have a visible screen position').not.toBeNull();
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // The extension menu item is appended after Chromium's built-in page items.
-    // End selects that final native menu entry; Return invokes the real click event.
-    execFileSync('xdotool',['key','--clearmodifiers','End','Return']);
+    // Use X11 mouse input so Chromium opens its native context menu; a
+    // Playwright/CDP right-click dispatches the DOM event but does not reliably
+    // display the browser-owned menu in headed CI.
+    const clickX=Math.round(targetBounds.x+targetBounds.width/2);
+    const clickY=Math.round(targetBounds.y+targetBounds.height/2);
+    execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
+    execFileSync('xdotool',['click','3']);
+    execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
+    execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
