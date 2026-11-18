@@ -181,10 +181,29 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     const [clickX,clickY]=screenPoint(targetBounds.x+targetBounds.width/2,targetBounds.y+targetBounds.height/2);
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
-    // Give the browser-owned menu time to open, then type the complete
-    // extension command label. A single "s" is ambiguous with Chromium's
-    // built-in Search action and can close the menu on the wrong command.
+    // Chromium's native context menu is outside the page compositor, so a
+    // Playwright page screenshot cannot show which item is actually focused.
+    // Capture the X11 root window before interacting with the menu; this makes
+    // menu placement, submenu nesting, and the selected item observable in CI.
     await page.waitForTimeout(500);
+    const nativeMenuScreenshot=test.info().outputPath('native-context-menu-open.png');
+    let nativeMenuCaptureError=null;
+    try {
+      execFileSync('import',['-window','root',nativeMenuScreenshot]);
+      await test.info().attach('native context menu open (X11 root)',{
+        path:nativeMenuScreenshot,
+        contentType:'image/png'
+      });
+    } catch (error) {
+      nativeMenuCaptureError=String(error.message||error);
+      await test.info().attach('native context menu capture unavailable',{
+        body:nativeMenuCaptureError,
+        contentType:'text/plain'
+      });
+    }
+    // Do not guess at Chromium's menu type-ahead behavior. Keep the existing
+    // attempt for this diagnostic run; the root-window capture above will
+    // reveal the actual menu structure before choosing a reliable click path.
     execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
     await page.waitForTimeout(150);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
