@@ -1,9 +1,11 @@
 const { test, expect } = require('./fixtures');
 const { execFileSync } = require('node:child_process');
+const headedBrowserTests = process.env.BLB_HEADFUL_EXTENSION_TESTS === '1';
 
 test('a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut', async ({
   page, context, extensionStorage, extensionWorker, extensionId
 }) => {
+  test.skip(!headedBrowserTests, 'requires the dedicated headed Chromium/X11 workflow');
   test.setTimeout(30000);
   await extensionStorage.set({
     masterEnabled:true,
@@ -87,6 +89,7 @@ test('a real MV3 service-worker termination is recovered by the physical Alt+B b
 test('a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action', async ({
   page, context, extensionStorage, extensionWorker, extensionId
 }) => {
+  test.skip(!headedBrowserTests, 'requires the dedicated headed Chromium/X11 workflow');
   test.setTimeout(30000);
   await extensionStorage.set({
     masterEnabled:true,
