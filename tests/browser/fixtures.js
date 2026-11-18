@@ -5,6 +5,7 @@ const path = require('path');
 const { execFileSync } = require('node:child_process');
 
 const profileFixtures = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+const headfulExtensionTests = process.env.BLB_HEADFUL_EXTENSION_TESTS === '1';
 function profileFixture(phase, startedAt, details = {}) {
   if (!profileFixtures) return;
   console.log('BLB_FIXTURE_PROFILE ' + JSON.stringify({
@@ -119,9 +120,9 @@ const test = base.extend({
     const launchStartedAt = process.hrtime.bigint();
     const context = await chromium.launchPersistentContext('', {
       channel: 'chromium',
-      headless: true,
+      headless: !headfulExtensionTests,
       args: [
-        '--headless=new',
+        ...(headfulExtensionTests ? [] : ['--headless=new']),
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
         '--no-first-run',
