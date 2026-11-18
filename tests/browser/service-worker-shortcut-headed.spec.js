@@ -187,7 +187,6 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // menu placement, submenu nesting, and the selected item observable in CI.
     await page.waitForTimeout(500);
     const nativeMenuScreenshot=test.info().outputPath('native-context-menu-open.png');
-    let nativeMenuCaptureError=null;
     try {
       execFileSync('import',['-window','root',nativeMenuScreenshot]);
       await test.info().attach('native context menu open (X11 root)',{
@@ -195,9 +194,9 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
         contentType:'image/png'
       });
     } catch (error) {
-      nativeMenuCaptureError=String(error.message||error);
+      const captureError=String(error.message||error);
       await test.info().attach('native context menu capture unavailable',{
-        body:nativeMenuCaptureError,
+        body:captureError,
         contentType:'text/plain'
       });
     }
