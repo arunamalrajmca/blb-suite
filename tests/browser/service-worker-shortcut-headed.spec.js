@@ -66,62 +66,129 @@ test('a real MV3 service-worker termination is recovered by the physical Alt+B b
     await page.waitForTimeout(250);
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // getwindowfocus may return Chromium's focused renderer child, not the
-    // top-level browser window. Ascend the X11 parent chain to the window
-    // whose origin corresponds to window.outerWidth/outerHeight; otherwise
-    // adding the browser-chrome offset double-counts the child-window offset
-    // and the right-click lands below the selected text.
-    const rootWindow=execFileSync('xwininfo',['-root'],{encoding:'utf8'})
-      .match(/Window id:\\s*(0x[0-9a-f]+)/i)?.[1];
-    expect(rootWindow,'X11 root window must be discoverable').toBeTruthy();
-    let browserWindow=focusedWindow;
-    for(let depth=0;depth<12;depth++){
-      const info=execFileSync('xwininfo',['-id',browserWindow],{encoding:'utf8'});
-      const parent=info.match(/Parent window id:\\s*(0x[0-9a-f]+)/i)?.[1];
-      if(!parent || parent.toLowerCase()===rootWindow.toLowerCase()) break;
-      browserWindow=parent;
-    }
+    execFileSync('xdotool',['key','--clearmodifiers','alt+b']);
+
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      const passage=current.some(target => {
+        if(target.type!=='page') return false;
+        try {
+          const url=new URL(target.url);
+          return url.hostname==='www.blueletterbible.org' && url.pathname==='/kjv/jhn/3/16/';
+        } catch (_) { return false; }
+      });
+      const worker=current.some(target =>
+        target.type==='service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)
+      );
+      return {passage,worker};
+    },{timeout:15000,intervals:[100,200,500,1000]}).toEqual({passage:true,worker:true});
+  } finally {
+    await cdp.detach();
+  }
+});
+
+
+test('a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action', async ({
+  page, context, extensionStorage, extensionWorker, extensionId
+}) => {
+  test.skip(!headedBrowserTests, 'requires the dedicated headed Chromium/X11 workflow');
+  test.setTimeout(30000);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+
+  await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const target=document.createElement('p');
+    target.id='native-context-menu-worker-wake-reference';
+    target.textContent='John 3:16';
+    target.style.cssText='position:fixed;left:40px;top:40px;padding:16px;background:white;font:24px Arial';
+    document.body.appendChild(target);
+  });
+
+  // Create a genuine browser-owned selection using physical X11 input.
+  const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
+  expect(targetBounds,'reference must have a visible viewport position').not.toBeNull();
+  const windowGeometry=await page.evaluate(() => ({
+    screenX:window.screenX,
+    screenY:window.screenY,
+    chromeTop:window.outerHeight-window.innerHeight,
+    chromeLeft:(window.outerWidth-window.innerWidth)/2
+  }));
+  const screenPoint=(x,y)=>[
+    Math.round(windowGeometry.screenX+windowGeometry.chromeLeft+x),
+    Math.round(windowGeometry.screenY+windowGeometry.chromeTop+y)
+  ];
+  const [selectionStartX,selectionY]=screenPoint(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
+  const [selectionEndX]=screenPoint(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2);
+  execFileSync('xdotool',['mousemove','--sync',String(selectionStartX),String(selectionY)]);
+  execFileSync('xdotool',['mousedown','1']);
+  execFileSync('xdotool',['mousemove','--sync',String(selectionEndX),String(selectionY)]);
+  execFileSync('xdotool',['mouseup','1']);
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim()),{timeout:5000})
+    .toBe('John 3:16');
+  await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
+  const tabId=await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+  const menuEligible=await extensionWorker.evaluate(async id => {
+    const tab=await chrome.tabs.get(id);
+    return shouldShowBlbContextMenu(tab,'John 3:16');
+  },tabId);
+  expect(menuEligible,'selected reference must make the BLB context-menu item eligible').toBe(true);
+
+  const browser=context.browser();
+  expect(browser,'headed persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp=await browser.newBrowserCDPSession();
+  try {
+    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    const {targetInfos}=await cdp.send('Target.getTargets');
+    const workerTarget=targetInfos.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target => target.targetId===workerTarget.targetId);
+    },{timeout:5000}).toBe(false);
+
+    // Open Chromium's native page context menu, then use its visible extension
+    // item by its exact displayed title. This is a browser-level click path:
+    // the worker is confirmed stopped before the user selects the item.
+    await page.bringToFront();
+    await page.waitForTimeout(250);
+    const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
+    expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
+    // Resolve the top-level Chromium window, not its focused renderer child.
+    const hierarchy=execFileSync('xwininfo',['-id',focusedWindow],{encoding:'utf8'});
+    const parent=hierarchy.match(/Parent window id:\\s*(0x[0-9a-f]+)/i)?.[1];
+    const browserWindow=parent || focusedWindow;
     const x11Geometry=execFileSync('xdotool',['getwindowgeometry','--shell',browserWindow],{encoding:'utf8'});
     const x11X=Number(x11Geometry.match(/^X=(\\d+)$/m)?.[1]);
     const x11Y=Number(x11Geometry.match(/^Y=(\\d+)$/m)?.[1]);
-    expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'top-level Chromium window must expose X11 screen coordinates').toBe(true);
+    expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'Chromium window must expose X11 screen coordinates').toBe(true);
     await test.info().attach('native context-menu click geometry',{
-      body:JSON.stringify({focusedWindow,browserWindow,rootWindow,x11Geometry,windowGeometry,targetBounds},null,2),
+      body:JSON.stringify({focusedWindow,browserWindow,x11Geometry,windowGeometry,targetBounds},null,2),
       contentType:'application/json'
     });
-    const screenPoint=(x,y)=>[
-      Math.round(x11X+windowGeometry.chromeLeft+x),
-      Math.round(x11Y+windowGeometry.chromeTop+y)
+    const [clickX,clickY]=[
+      Math.round(x11X+windowGeometry.chromeLeft+targetBounds.x+targetBounds.width/2),
+      Math.round(x11Y+windowGeometry.chromeTop+targetBounds.y+targetBounds.height/2)
     ];
-    // Right-click within the physically selected text so Chromium builds the
-    // native context menu with its selection-specific extension item.
-    const [clickX,clickY]=screenPoint(targetBounds.x+targetBounds.width/2,targetBounds.y+targetBounds.height/2);
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
-    // Chromium's native context menu is outside the page compositor, so a
-    // Playwright page screenshot cannot show which item is actually focused.
-    // Capture the X11 root window before interacting with the menu; this makes
-    // menu placement, submenu nesting, and the selected item observable in CI.
-    await page.waitForTimeout(500);
-    const nativeMenuScreenshot=test.info().outputPath('native-context-menu-open.png');
-    try {
-      execFileSync('import',['-window','root',nativeMenuScreenshot]);
-      await test.info().attach('native context menu open (X11 root)',{
-        path:nativeMenuScreenshot,
-        contentType:'image/png'
-      });
-    } catch (error) {
-      const captureError=String(error.message||error);
-      await test.info().attach('native context menu capture unavailable',{
-        body:captureError,
-        contentType:'text/plain'
-      });
-    }
-    // Do not guess at Chromium's menu type-ahead behavior. Keep the existing
-    // attempt for this diagnostic run; the root-window capture above will
-    // reveal the actual menu structure before choosing a reliable click path.
-    execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
-    await page.waitForTimeout(150);
+    // Give the browser-owned menu time to open before sending menu navigation.
+    await page.waitForTimeout(400);
+    execFileSync('xdotool',['key','--clearmodifiers','End']);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
     await expect.poll(async () => {
