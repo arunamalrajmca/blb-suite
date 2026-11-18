@@ -302,8 +302,7 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/omnibox-dictionary-routing.spec.js",
   "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js",
-  "tests/browser/source-page-button-redirect-separation.spec.js",
-  "tests/browser/context-menu-visibility-event-lifecycle.spec.js"
+  "tests/browser/source-page-button-redirect-separation.spec.js"
 ]);
 
 
