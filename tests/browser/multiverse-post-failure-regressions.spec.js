@@ -210,3 +210,85 @@ test('the MultiVerse POST queue preserves its minimum interval after in-memory w
   expect(result.second - result.first).toBeGreaterThanOrEqual(1500);
   expect(result.persisted).toBe(result.second);
 });
+
+
+test('the MultiVerse POST queue preserves its interval across a real MV3 worker termination', async ({
+  context, extensionId, extensionWorker
+}) => {
+  const extensionUrl = await extensionWorker.evaluate(() => chrome.runtime.getURL('multiverse-post.html'));
+  const extensionPage = await context.newPage();
+  const key = 'blbSuiteLastMultiVersePostScheduledAt';
+  let previousValue;
+  let storageArea = 'local';
+  const browser = context.browser();
+  expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp = await browser.newBrowserCDPSession();
+
+  try {
+    previousValue = await extensionWorker.evaluate(async () => {
+      const storage = chrome.storage.session || chrome.storage.local;
+      return (await storage.get({blbSuiteLastMultiVersePostScheduledAt:0}))
+        .blbSuiteLastMultiVersePostScheduledAt;
+    });
+    storageArea = await extensionWorker.evaluate(() =>
+      chrome.storage.session ? 'session' : 'local'
+    );
+    await extensionWorker.evaluate(async () => {
+      const storage = chrome.storage.session || chrome.storage.local;
+      await storage.remove('blbSuiteLastMultiVersePostScheduledAt');
+      lastMultiVersePostScheduledAt = 0;
+      pendingMultiVersePostSlot = Promise.resolve();
+    });
+
+    await extensionPage.goto(extensionUrl, {waitUntil:'domcontentloaded'});
+    const first = await extensionPage.evaluate(() =>
+      chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'})
+    );
+    expect(first).toMatchObject({ok:true});
+    expect(Number.isFinite(first.submitAt)).toBe(true);
+
+    await cdp.send('Target.setDiscoverTargets', {discover:true});
+    const {targetInfos} = await cdp.send('Target.getTargets');
+    const workerTarget = targetInfos.find(target =>
+      target.type === 'service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget, 'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed = await cdp.send('Target.closeTarget', {targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:currentTargets} = await cdp.send('Target.getTargets');
+      return currentTargets.some(target => target.targetId === workerTarget.targetId);
+    }, {timeout:5000}).toBe(false);
+
+    // The still-open extension handoff page now sends a fresh request. Chrome
+    // must start a new worker, which must recover the prior slot from storage.
+    const second = await extensionPage.evaluate(() =>
+      chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'})
+    );
+    expect(second).toMatchObject({ok:true});
+    expect(second.submitAt - first.submitAt).toBeGreaterThanOrEqual(1500);
+
+    const persisted = await extensionPage.evaluate(async area => {
+      const storage = chrome.storage[area];
+      return (await storage.get({blbSuiteLastMultiVersePostScheduledAt:0}))
+        .blbSuiteLastMultiVersePostScheduledAt;
+    }, storageArea);
+    expect(persisted).toBe(second.submitAt);
+  } finally {
+    await cdp.detach();
+    if (extensionPage) {
+      if (previousValue) {
+        await extensionPage.evaluate(async ({area,value}) =>
+          chrome.storage[area].set({[key]:value}), {area:storageArea,value:previousValue}
+        ).catch(() => {});
+      } else {
+        await extensionPage.evaluate(async ({area}) =>
+          chrome.storage[area].remove(key), {area:storageArea}
+        ).catch(() => {});
+      }
+      await extensionPage.close().catch(() => {});
+    }
+  }
+});
