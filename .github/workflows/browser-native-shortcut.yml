@@ -4,6 +4,14 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'extension/background.js'
+      - 'extension/manifest.json'
+      - 'tests/browser/fixtures.js'
+      - 'tests/browser/service-worker-shortcut-headed.spec.js'
+      - '.github/workflows/browser-native-shortcut.yml'
+      - 'package.json'
+      - 'package-lock.json'
   push:
     branches: [ main ]
     paths:
