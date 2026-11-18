@@ -228,6 +228,106 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
   }
 });
 
+test('a real MV3 service-worker termination is recovered by the Alt+B command message', async ({
+  page, context, extensionStorage, extensionWorker, extensionId
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const target=document.createElement('p');
+    target.id='alt-b-worker-wake-reference';
+    target.textContent='John 3:16';
+    document.body.appendChild(target);
+    const range=document.createRange();
+    range.selectNodeContents(target);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+
+  const tabId=await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  // The registered Alt+B command uses this runtime message to hand the
+  // current page selection to the service worker. Install a one-shot bridge
+  // before termination so the same message can be sent after the worker dies.
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => {
+        window.addEventListener('blb-suite-test-alt-b-wake', async () => {
+          const response=await new Promise((resolve,reject) => {
+            chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, result => {
+              if(chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+              resolve(result ?? null);
+            });
+          });
+          document.documentElement.dataset.blbAltBWorkerWakeResult=JSON.stringify(response);
+        },{once:true});
+      }
+    });
+  },tabId);
+
+  const browser=context.browser();
+  expect(browser,'persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp=await browser.newBrowserCDPSession();
+  try {
+    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    const {targetInfos}=await cdp.send('Target.getTargets');
+    const workerTarget=targetInfos.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target => target.targetId===workerTarget.targetId);
+    },{timeout:5000}).toBe(false);
+
+    // Send the exact runtime handoff used by the registered Alt+B command.
+    await page.evaluate(() => window.dispatchEvent(new Event('blb-suite-test-alt-b-wake')));
+
+    await page.waitForFunction(() =>
+      Object.prototype.hasOwnProperty.call(
+        document.documentElement.dataset,'blbAltBWorkerWakeResult'
+      ),null,{timeout:10000}
+    );
+    const response=await page.evaluate(() =>
+      JSON.parse(document.documentElement.dataset.blbAltBWorkerWakeResult)
+    );
+    expect(response).toMatchObject({ok:true});
+
+    const {targetInfos:recoveredTargets}=await cdp.send('Target.getTargets');
+    expect(recoveredTargets.some(target =>
+      target.type==='page' &&
+      (() => {
+        try {
+          const url=new URL(target.url);
+          return url.hostname==='www.blueletterbible.org' &&
+            url.pathname==='/kjv/jhn/3/16/';
+        } catch (_) { return false; }
+      })()
+    ),'Alt+B command handoff must open the expected BLB passage').toBe(true);
+    expect(recoveredTargets.some(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    ),'Alt+B command handoff must wake the extension service worker').toBe(true);
+  } finally {
+    await cdp.detach();
+  }
+});
+
 test('a real MV3 service-worker termination is recovered by the actual Floating Show on BLB action', async ({
   page, context, extensionStorage, extensionId
 }) => {
