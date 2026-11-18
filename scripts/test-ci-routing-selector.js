@@ -174,6 +174,7 @@ try {
     'tests/browser/content-feature-refresh-races.spec.js',
     'tests/browser/selection-phase-performance.spec.js',
     'tests/browser/service-worker-lifecycle.spec.js',
+    'tests/browser/service-worker-shortcut-headed.spec.js',
     'tests/browser/replaced-tab-lifecycle-races.spec.js',
     'tests/browser/site-registration-opt-out-race.spec.js',
     'tests/browser/optional-host-permission-lifecycle.spec.js',
