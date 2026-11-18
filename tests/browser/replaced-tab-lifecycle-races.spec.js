@@ -774,7 +774,7 @@ test('replacement migration retries each persisted state write after a transient
   try {
     await extensionWorker.evaluate(({destination}) => {
       globalThis.__replacementRetryOriginalGetLiveTabById = getLiveTabById;
-      getLiveTabById = async id => id === destination ? {id,url:'about:blank'} : null;
+      getLiveTabById = async id => [destination, destination + 2].includes(id) ? {id,url:'about:blank'} : null;
     }, ids);
     for (const [index, scenario] of cases.entries()) {
       const source = ids.source + index * 2;
