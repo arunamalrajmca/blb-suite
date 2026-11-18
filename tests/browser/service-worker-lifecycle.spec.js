@@ -1666,7 +1666,8 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
   const deniedPattern = 'https://www.wikipedia.org/*';
   await extensionStorage.set({
     masterEnabled:true,redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+    // Prevent navigation-time activation from completing before the gate exists.
+    pageSelectionButtonSites:{'example.com':false},doubleClickBlbSites:{}
   });
   const page = await context.newPage();
   await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
@@ -1677,28 +1678,32 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
     );
     await extensionWorker.evaluate(id => {
       const original = shouldInjectContentScriptForTab;
-      let release, entered;
+      let release;
       const gate = new Promise(resolve => { release = resolve; });
-      const started = new Promise(resolve => { entered = resolve; });
       let first = true;
       globalThis.__redirectTabEligibilityGate = {
-        started, release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
+        started:false,
+        release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
       };
       shouldInjectContentScriptForTab = async (tab,data) => {
         if (first && tab?.id === id) {
           first = false;
-          entered();
+          globalThis.__redirectTabEligibilityGate.started = true;
           await gate;
         }
         return original(tab,data);
       };
     },tabId);
     installed = true;
+    // Match the closed-tab race test: install the gate before enabling the site.
+    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
     await extensionWorker.evaluate(id => {
       globalThis.__redirectTabActivationPromise = ensureContentScriptInTab(id);
       return true;
     },tabId);
-    await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.started);
+    await expect.poll(() =>
+      extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate?.started === true)
+    ).toBe(true);
     await page.goto('https://www.wikipedia.org/',{waitUntil:'domcontentloaded'}).catch(() => {});
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
     expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
