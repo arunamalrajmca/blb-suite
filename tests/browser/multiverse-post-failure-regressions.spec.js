@@ -281,11 +281,11 @@ test('the MultiVerse POST queue preserves its interval across a real MV3 worker 
     if (extensionPage) {
       if (previousValue) {
         await extensionPage.evaluate(async ({area,value}) =>
-          chrome.storage[area].set({[key]:value}), {area:storageArea,value:previousValue}
+          chrome.storage[area].set({blbSuiteLastMultiVersePostScheduledAt:value}), {area:storageArea,value:previousValue}
         ).catch(() => {});
       } else {
         await extensionPage.evaluate(async ({area}) =>
-          chrome.storage[area].remove(key), {area:storageArea}
+          chrome.storage[area].remove('blbSuiteLastMultiVersePostScheduledAt'), {area:storageArea}
         ).catch(() => {});
       }
       await extensionPage.close().catch(() => {});
