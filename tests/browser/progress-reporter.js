@@ -1,18 +1,21 @@
 class ProgressReporter {
   onBegin(config, suite) {
     this.total = suite.allTests().length;
+    this.aggregateProgress = process.env.BLB_PERF_AGGREGATE_PROGRESS === '1';
     this.started = 0;
     this.passed = 0;
     this.failed = 0;
     this.skipped = 0;
     this.other = 0;
-    console.log(`Running ${this.total} tests`);
+    if (!this.aggregateProgress) console.log(`Running ${this.total} tests`);
   }
 
   onTestBegin(test) {
     this.started += 1;
-    const title = test.titlePath().filter(Boolean).join(' › ');
-    console.log(`\n… [${this.started}/${this.total}] ${title}`);
+    if (!this.aggregateProgress) {
+      const title = test.titlePath().filter(Boolean).join(' › ');
+      console.log(`\n… [${this.started}/${this.total}] ${title}`);
+    }
   }
 
   onTestEnd(test, result) {
@@ -29,7 +32,9 @@ class ProgressReporter {
     const statusText = status.toUpperCase();
     // The title was already printed when the test started. Keep the result
     // line compact so CI logs do not repeat the same long title twice.
-    console.log(`${color}${symbol} [${this.started}/${this.total}] ${statusText} (${(result.duration / 1000).toFixed(1)}s)${reset}`);
+    if (!this.aggregateProgress) {
+      console.log(`${color}${symbol} [${this.started}/${this.total}] ${statusText} (${(result.duration / 1000).toFixed(1)}s)${reset}`);
+    }
 
     if (!failed) {
       return;
@@ -72,8 +77,8 @@ class ProgressReporter {
       `${this.skipped} skipped`,
       ...(this.other ? [`${this.other} other`] : [])
     ].join(', ');
-    console.log(`\n${color}Test summary: ${this.started}/${this.total} completed — ${summary}${reset}`);
-    if (this.started < this.total) {
+    if (!this.aggregateProgress) console.log(`\n${color}Test summary: ${this.started}/${this.total} completed — ${summary}${reset}`);
+    if (!this.aggregateProgress && this.started < this.total) {
       console.log(`Run ended before all tests completed (runner status: ${result.status.toUpperCase()}).`);
     }
   }
