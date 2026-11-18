@@ -50,8 +50,15 @@ test('popup master toggle persists across reload and preserves per-site feature 
   });
 
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  // The checked state is available in the initial markup before the popup has
+  // finished its asynchronous eligibility/settings initialization. Wait for
+  // the loading overlay to be removed before interacting with the visual switch.
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
   const master = page.locator('#master');
   await expect(master).toBeChecked();
+  await expect(master).toBeVisible();
 
   await page.locator('label.master-switch .slider').click();
 
