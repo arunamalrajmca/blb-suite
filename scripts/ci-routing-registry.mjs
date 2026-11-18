@@ -33,6 +33,7 @@ export const featureSpecs = [
       "tests/browser/kjv-corpus-lazy-loading.spec.js",
       "tests/browser/audit-defect-regressions.spec.js",
       "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/service-worker-shortcut-headed.spec.js",
       "tests/browser/replaced-tab-lifecycle-races.spec.js",
       "tests/browser/site-registration-opt-out-race.spec.js",
       "tests/browser/optional-host-permission-lifecycle.spec.js",
