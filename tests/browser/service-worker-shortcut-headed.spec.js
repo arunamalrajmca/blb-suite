@@ -146,6 +146,8 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // Open Chromium's native page context menu, then use its visible extension
     // item by its exact displayed title. This is a browser-level click path:
     // the worker is confirmed stopped before the user selects the item.
+    await page.bringToFront();
+    await page.waitForTimeout(250);
     const targetBounds=await page.locator('#native-context-menu-worker-wake-reference').boundingBox();
     expect(targetBounds,'selected reference must have a visible screen position').not.toBeNull();
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
