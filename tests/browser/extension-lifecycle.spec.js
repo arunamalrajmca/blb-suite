@@ -1,5 +1,6 @@
 const { test, expect } = require('./fixtures');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const {
   removeTabById,
   waitForBlbTabPath,
@@ -663,29 +664,45 @@ test('persisted runtime content-script registration audit reports missing files 
 });
 
 test('persisted registration audit runs only on install/update and browser startup events', () => {
-  const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
-  const auditInvocations = source.match(/schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
-  // There are multiple startup/install listeners. Inspect the specific final
-  // lifecycle registrations that schedule this audit, without requiring a
-  // particular arrow-function or multiline formatting style.
   const startupListenerStart = source.lastIndexOf('chrome.runtime.onStartup.addListener(');
   const installListenerStart = source.lastIndexOf('chrome.runtime.onInstalled.addListener(');
-  const installListenerEnd = source.indexOf('const initialSelectionMenuSyncIsCurrent', installListenerStart);
-  const startupListenerSource = startupListenerStart >= 0 && installListenerStart > startupListenerStart
-    ? source.slice(startupListenerStart, installListenerStart)
-    : '';
-  const installListenerSource = installListenerStart >= 0 && installListenerEnd > installListenerStart
-    ? source.slice(installListenerStart, installListenerEnd)
-    : '';
+  const registrationEnd = source.indexOf('const initialSelectionMenuSyncIsCurrent', installListenerStart);
+  expect(startupListenerStart).toBeGreaterThanOrEqual(0);
+  expect(installListenerStart).toBeGreaterThan(startupListenerStart);
+  expect(registrationEnd).toBeGreaterThan(installListenerStart);
 
-  expect(auditInvocations).toHaveLength(2);
-  expect(source).not.toMatch(/^auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/m);
-  expect(startupListenerSource).toContain('schedulePersistedRuntimeContentScriptAudit()');
-  expect(installListenerSource).toContain('schedulePersistedRuntimeContentScriptAudit()');
+  const listenerSource = source.slice(startupListenerStart, registrationEnd);
+  const startupListeners = [];
+  const installListeners = [];
+  const scheduledAudits = [];
+  const recoveredTabs = [];
+
+  vm.runInNewContext(listenerSource, {
+    chrome: {
+      runtime: {
+        onStartup: { addListener: listener => startupListeners.push(listener) },
+        onInstalled: { addListener: listener => installListeners.push(listener) }
+      }
+    },
+    recoverConfiguredTabsOnStartup: () => {
+      recoveredTabs.push(true);
+      return Promise.resolve();
+    },
+    schedulePersistedRuntimeContentScriptAudit: () => scheduledAudits.push(true),
+    console: { error() {} }
+  });
+
+  expect(startupListeners).toHaveLength(1);
+  expect(installListeners).toHaveLength(1);
+  expect(scheduledAudits).toHaveLength(0);
+  startupListeners[0]();
+  expect(recoveredTabs).toHaveLength(1);
+  expect(scheduledAudits).toHaveLength(1);
+  installListeners[0]();
+  expect(scheduledAudits).toHaveLength(2);
 });
-
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
   const count = await extensionWorker.evaluate(async () => {
     // Let any initial browser startup audit settle before installing a deferred
