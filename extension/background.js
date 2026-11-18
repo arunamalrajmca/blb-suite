@@ -2591,15 +2591,21 @@ async function performReplacementTabIdentityMigration(addedTabId, removedTabId) 
   // on an already-closed destination.
   const liveReplacement = await getLiveTabById(addedTabId);
   if (!liveReplacement) {
-    forgetBlbTab(addedTabId);
-    intentionalNewBlbTabs.delete(addedTabId);
-    for (const [key, id] of scriptTaggerDestinationTabs) {
-      if (id === addedTabId) scriptTaggerDestinationTabs.delete(key);
+    // A closed intermediate destination may already be the source of a
+    // queued replacement (A→B→C). Preserve its migrated state until that
+    // downstream step consumes it; only terminal closed destinations are
+    // eligible for cleanup here.
+    if (!pendingReplacementSourceTabCounts.has(addedTabId)) {
+      forgetBlbTab(addedTabId);
+      intentionalNewBlbTabs.delete(addedTabId);
+      for (const [key, id] of scriptTaggerDestinationTabs) {
+        if (id === addedTabId) scriptTaggerDestinationTabs.delete(key);
+      }
+      await clearTrackedMultiVerseTab(addedTabId);
+      await updatePendingMultiVerseRefsByTab(map => {
+        delete map[String(addedTabId)];
+      });
     }
-    await clearTrackedMultiVerseTab(addedTabId);
-    await updatePendingMultiVerseRefsByTab(map => {
-      delete map[String(addedTabId)];
-    });
     return;
   }
 
