@@ -3405,6 +3405,11 @@ async function ensureContentScriptInTab(tabId) {
       });
       if (settings.masterEnabled === false) return false;
       if (!(await shouldInjectContentScriptForTab(tab, settings))) return false;
+      // Eligibility checks may be asynchronous. A tab can navigate to a
+      // different origin while they are pending, so never derive the bundle
+      // or register it from the pre-check tab snapshot.
+      tab = await getCurrentEligibleTab();
+      if (!tab) return false;
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
