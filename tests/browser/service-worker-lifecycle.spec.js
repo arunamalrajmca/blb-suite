@@ -1666,42 +1666,100 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
   const deniedPattern = 'https://www.wikipedia.org/*';
   await extensionStorage.set({
     masterEnabled:true,redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+    // Prevent navigation-time activation from completing before the gate exists.
+    pageSelectionButtonSites:{'example.com':false},doubleClickBlbSites:{}
   });
   const page = await context.newPage();
   await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
   let installed = false;
   try {
     const tabId = await extensionWorker.evaluate(() =>
-      chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)
+      chrome.tabs.query({}).then(tabs => tabs.find(tab => {
+        try { return new URL(tab.url || '').hostname === 'example.com'; }
+        catch (_) { return false; }
+      })?.id)
     );
+    expect(tabId).toBeDefined();
+    // Let any navigation-time activation started while the site was disabled
+    // finish before installing the gate, so this test owns the in-flight lock.
+    await expect.poll(() => extensionWorker.evaluate(id =>
+      !contentScriptInjectionLocks.has(id),tabId
+    ),{timeout:10000,intervals:[50,100,250,500]}).toBe(true);
     await extensionWorker.evaluate(id => {
       const original = shouldInjectContentScriptForTab;
-      let release, entered;
+      const originalGet = chrome.tabs.get.bind(chrome.tabs);
+      const originalSendMessage = chrome.tabs.sendMessage.bind(chrome.tabs);
+      const originalExecuteScript = chrome.scripting.executeScript.bind(chrome.scripting);
+      let release;
       const gate = new Promise(resolve => { release = resolve; });
-      const started = new Promise(resolve => { entered = resolve; });
       let first = true;
+      globalThis.__redirectTabActivationTrace = [];
+      chrome.tabs.get = async tabId => {
+        const tab = await originalGet(tabId);
+        if (tabId === id) globalThis.__redirectTabActivationTrace.push({
+          event:'tabs.get',url:tab?.url || '',pendingUrl:tab?.pendingUrl || ''
+        });
+        return tab;
+      };
+      chrome.tabs.sendMessage = async (tabId,message,...args) => {
+        const response = await originalSendMessage(tabId,message,...args);
+        if (tabId === id) globalThis.__redirectTabActivationTrace.push({
+          event:'tabs.sendMessage',type:message?.type || '',response:response || null
+        });
+        return response;
+      };
+      chrome.scripting.executeScript = async details => {
+        if (details?.target?.tabId === id) globalThis.__redirectTabActivationTrace.push({
+          event:'executeScript',files:details.files || [],world:details.world || 'ISOLATED'
+        });
+        return originalExecuteScript(details);
+      };
       globalThis.__redirectTabEligibilityGate = {
-        started, release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
+        started:false, enteredUrl:'', eligibilityResult:null,
+        release:() => release(), restore:() => {
+          shouldInjectContentScriptForTab = original;
+          chrome.tabs.get = originalGet;
+          chrome.tabs.sendMessage = originalSendMessage;
+          chrome.scripting.executeScript = originalExecuteScript;
+        }
       };
       shouldInjectContentScriptForTab = async (tab,data) => {
         if (first && tab?.id === id) {
           first = false;
-          entered();
+          globalThis.__redirectTabEligibilityGate.started = true;
+          globalThis.__redirectTabEligibilityGate.enteredUrl = tab?.url || '';
           await gate;
         }
-        return original(tab,data);
+        const result = await original(tab,data);
+        if (tab?.id === id) globalThis.__redirectTabEligibilityGate.eligibilityResult = result;
+        return result;
       };
     },tabId);
     installed = true;
+    // Match the closed-tab race test: install the gate before enabling the site.
+    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
     await extensionWorker.evaluate(id => {
       globalThis.__redirectTabActivationPromise = ensureContentScriptInTab(id);
       return true;
     },tabId);
-    await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.started);
+    await expect.poll(() =>
+      extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate?.started === true)
+    ).toBe(true);
     await page.goto('https://www.wikipedia.org/',{waitUntil:'domcontentloaded'}).catch(() => {});
+    // Playwright's navigation completion can precede Chrome's tabs API URL
+    // update. Do not release eligibility until the worker sees the new host.
+    await expect.poll(() => extensionWorker.evaluate(async id => {
+      try { return (await chrome.tabs.get(id)).url || ''; }
+      catch (_) { return ''; }
+    },tabId),{timeout:10000,intervals:[50,100,250,500]}).toContain('wikipedia.org');
     await extensionWorker.evaluate(() => globalThis.__redirectTabEligibilityGate.release());
-    expect(await extensionWorker.evaluate(() => globalThis.__redirectTabActivationPromise)).toBe(false);
+    const activationDiagnostics = await extensionWorker.evaluate(async id => ({
+      activationResult:await globalThis.__redirectTabActivationPromise,
+      gate:{...globalThis.__redirectTabEligibilityGate,release:undefined,restore:undefined},
+      trace:[...(globalThis.__redirectTabActivationTrace || [])],
+      currentTabUrl:(await chrome.tabs.get(id)).url
+    }),tabId);
+    expect(activationDiagnostics, 'Redirect activation diagnostics: ' + JSON.stringify(activationDiagnostics)).toMatchObject({activationResult:false});
     await extensionWorker.evaluate(() => { delete globalThis.__redirectTabActivationPromise; });
     const redirectedTab = await extensionWorker.evaluate(async id => {
       const current = await chrome.tabs.get(id);
