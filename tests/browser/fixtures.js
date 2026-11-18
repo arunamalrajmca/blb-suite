@@ -105,9 +105,11 @@ const test = base.extend({
       const manifestPath = path.join(extensionPath, 'manifest.json');
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), ...testHosts])];
-      for (const contentScript of manifest.content_scripts || []) {
-        contentScript.matches = [...new Set([...(contentScript.matches || []), ...testHosts])];
-      }
+      // Test hosts receive permissions, not synthetic manifest content-script
+      // matches. Production injects these sites through persisted runtime
+      // registrations plus current-document recovery; adding every test host
+      // to manifest.matches bypasses that entire lifecycle and masks first-load
+      // and new-tab activation defects.
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
       profileFixture('manifest-test-host-preparation', manifestStartedAt, { hostCount: testHosts.length });
       await use(extensionPath);
