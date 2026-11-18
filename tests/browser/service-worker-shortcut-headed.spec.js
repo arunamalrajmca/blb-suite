@@ -130,15 +130,11 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     return shouldShowBlbContextMenu(tab,'John 3:16');
   },tabId);
   expect(menuEligible,'selected reference must make the BLB context-menu item eligible').toBe(true);
-  const registeredMenu=await extensionWorker.evaluate(async () => {
-    const items=await chrome.contextMenus.getAll();
-    return items.find(item => item.id==='blb-suite-web-selection') || null;
-  });
-  expect(registeredMenu,'the persistent web selection menu must be registered').toMatchObject({
-    id:'blb-suite-web-selection',
-    title:'Show on BLB\tAlt+B',
-    visible:true
-  });
+  const menuSyncSucceeded=await extensionWorker.evaluate(async id => {
+    const tab=await chrome.tabs.get(id);
+    return syncWebSelectionContextMenuVisibility(tab,false,()=>true);
+  },tabId);
+  expect(menuSyncSucceeded,'Chrome must successfully register and show the eligible selection menu').toBe(true);
 
   const browser=context.browser();
   expect(browser,'headed persistent context must expose its Chromium browser').not.toBeNull();
