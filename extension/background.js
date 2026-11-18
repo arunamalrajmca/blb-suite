@@ -3459,6 +3459,11 @@ async function ensureContentScriptInTab(tabId) {
           if (!tab) return false;
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
           if (response?.ok === true) {
+            // The refresh message is asynchronous. Navigation can replace the
+            // document while the old content script is replying, so verify
+            // that this tab still belongs to the origin whose bundle we chose.
+            tab = await getCurrentEligibleTab();
+            if (!tab) return false;
             if (files.includes('redirect-scripttagger.js')) {
               try {
                 tab = await getCurrentEligibleTab();
@@ -3481,6 +3486,10 @@ async function ensureContentScriptInTab(tabId) {
         tab = await getCurrentEligibleTab();
         if (!tab) return false;
         await chrome.scripting.executeScript({target:{tabId}, files});
+        // executeScript may complete as a navigation commits. Do not report
+        // activation success for a document on a different origin.
+        tab = await getCurrentEligibleTab();
+        if (!tab) return false;
       } catch (error) {
         // Tabs can close or navigate away between tabs.get() and executeScript().
         // This is a normal lifecycle race, not a broken extension resource.
@@ -3506,6 +3515,8 @@ async function ensureContentScriptInTab(tabId) {
           try {
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
+              tab = await getCurrentEligibleTab();
+              if (!tab) return false;
               if (files.includes('redirect-scripttagger.js')) {
                 tab = await getCurrentEligibleTab();
                 if (!tab) return false;
