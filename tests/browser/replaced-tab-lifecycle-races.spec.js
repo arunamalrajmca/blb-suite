@@ -986,7 +986,7 @@ test('replacement chains wait for earlier transient storage retries before migra
   try {
     await extensionWorker.evaluate(({intermediate,final}) => {
       globalThis.__replacementChainOriginalGetLiveTabById = getLiveTabById;
-      getLiveTabById = async id => [intermediate,final].includes(id) ? {id,url:'about:blank'} : null;
+      getLiveTabById = async id => [940502,940503,940512,940513].includes(id) ? {id,url:'about:blank'} : null;
     }, ids);
 
     for (const [index, scenario] of cases.entries()) {
