@@ -149,8 +149,9 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     await page.locator('#native-context-menu-worker-wake-reference').click({button:'right'});
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
-    execFileSync('xdotool',['key','--clearmodifiers','Return']);
+    // The extension menu item is appended after Chromium's built-in page items.
+    // End selects that final native menu entry; Return invokes the real click event.
+    execFileSync('xdotool',['key','--clearmodifiers','End','Return']);
 
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
