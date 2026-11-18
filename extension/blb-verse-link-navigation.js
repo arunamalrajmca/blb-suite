@@ -128,7 +128,7 @@
     }, { capture: true, signal: listenerController.signal });
 
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", process, {
+      document.addEventListener("DOMContentLoaded", () => process(), {
         once: true,
         signal: listenerController.signal
       });
