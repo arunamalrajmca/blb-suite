@@ -71,7 +71,7 @@ test('replacement recovery rechecks the latest site preference before injecting'
     await page.goto('https://example.com/?replacement-preference-race=1', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-      return tabs.find(tab => String(tab.url || '').includes('replacement-close-race'))?.id;
+      return tabs.find(tab => String(tab.url || tab.pendingUrl || '').includes('replacement-preference-race'))?.id;
     });
     expect(tabId).toBeTruthy();
 
@@ -108,7 +108,7 @@ test('replacement recovery does not inject when the replacement tab closes durin
     await page.goto('https://example.com/?replacement-close-race=1', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-      return tabs[0]?.id;
+      return tabs.find(tab => String(tab.url || tab.pendingUrl || '').includes('replacement-close-race'))?.id;
     });
     expect(tabId).toBeTruthy();
 
