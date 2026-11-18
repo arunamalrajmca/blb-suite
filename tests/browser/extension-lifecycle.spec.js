@@ -667,18 +667,23 @@ test('persisted registration audit runs only on install/update and browser start
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
   const auditInvocations = source.match(/schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
-  const startupListenerStart = source.indexOf('chrome.runtime.onStartup.addListener(');
-  const installListenerStart = source.indexOf('chrome.runtime.onInstalled.addListener(');
+  // There are multiple startup/install listeners. Inspect the specific final
+  // lifecycle registrations that schedule this audit, without requiring a
+  // particular arrow-function or multiline formatting style.
+  const startupListenerStart = source.lastIndexOf('chrome.runtime.onStartup.addListener(');
+  const installListenerStart = source.lastIndexOf('chrome.runtime.onInstalled.addListener(');
+  const installListenerEnd = source.indexOf('const initialSelectionMenuSyncIsCurrent', installListenerStart);
   const startupListenerSource = startupListenerStart >= 0 && installListenerStart > startupListenerStart
     ? source.slice(startupListenerStart, installListenerStart)
+    : '';
+  const installListenerSource = installListenerStart >= 0 && installListenerEnd > installListenerStart
+    ? source.slice(installListenerStart, installListenerEnd)
     : '';
 
   expect(auditInvocations).toHaveLength(2);
   expect(source).not.toMatch(/^auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/m);
   expect(startupListenerSource).toContain('schedulePersistedRuntimeContentScriptAudit()');
-  expect(source.slice(installListenerStart)).toMatch(
-    /chrome\.runtime\.onInstalled\.addListener\([\s\S]*?schedulePersistedRuntimeContentScriptAudit\(\)/
-  );
+  expect(installListenerSource).toContain('schedulePersistedRuntimeContentScriptAudit()');
 });
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
