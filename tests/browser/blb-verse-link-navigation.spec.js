@@ -60,7 +60,7 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
   await extensionStorage.clear();
   await serveBlbFixture(context);
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
-  // Prove the active document first receives the enabled passive-target
+  // Prove the active document first receives the enabled bVerse-link target
   // behavior, then turn the Suite OFF and require the same document to restore
   // the link's native target without a manual reload.
   await expect(page.locator('#verse-in-bverse')).toHaveAttribute('target', '_blank');
