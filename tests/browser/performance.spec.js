@@ -70,6 +70,30 @@ async function waitForBlbTab(extensionWorker, predicate, timeout = 10000) {
   ).toBeTruthy();
   return match;
 }
+async function sendSelectionMessageFromActivePage(extensionWorker, page, message) {
+  const pageUrl = page.url();
+  const tabId = await extensionWorker.evaluate(async url => {
+    const tabs = await chrome.tabs.query({});
+    const matching = tabs.filter(tab => tab.url === url || tab.pendingUrl === url);
+    const target = matching.find(tab => tab.active) || matching[0];
+    if (!Number.isInteger(target?.id)) {
+      throw new Error('Could not locate the active benchmark source tab for ' + url);
+    }
+    await chrome.tabs.update(target.id, {active:true});
+    return target.id;
+  }, pageUrl);
+
+  const injected = await extensionWorker.evaluate(async ({tabId, message}) => {
+    const results = await chrome.scripting.executeScript({
+      target:{tabId},
+      world:'ISOLATED',
+      func: async payload => await chrome.runtime.sendMessage(payload),
+      args:[message]
+    });
+    return results?.[0]?.result ?? null;
+  }, {tabId, message});
+  return injected;
+}
 async function writeSample(scenario, handoffMs, extra = {}) {
   const output = process.env.BLB_PERF_OUTPUT;
   if (!output) throw new Error('BLB_PERF_OUTPUT is required');
@@ -137,9 +161,13 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
 
     const tabsBefore = await getBlbTabs(extensionWorker);
     const targetTabBefore = tabsBefore.find(tab => /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.effectiveUrl));
-    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    // Send from the real active source document's isolated content-script
+    // world. Sending from popup.html is intentionally rejected by the
+    // production sender authorization gate because extension pages are not
+    // content-script callers.
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
     const started = Date.now();
-    const response = await page.evaluate(async () => chrome.runtime.sendMessage({
+    const response = await sendSelectionMessageFromActivePage(extensionWorker, page, {
       type: 'blbSuiteOpenSelectionText',
       text: 'John 3:16',
       contextualReference: {
@@ -151,9 +179,9 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       },
       directUrl: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
       tabBehavior: { activeIfNew: true, activateExisting: true }
-    }));
+    });
     const handoffMs = Date.now() - started;
-    expect(response?.ok).toBeTruthy();
+    expect(response?.ok, `BLB selection handoff rejected (${scenario}): ${JSON.stringify(response)}`).toBeTruthy();
 
     if (scenario === 'fresh') {
       const tabIdsBefore = new Set(tabsBefore.map(tab => tab.id));
