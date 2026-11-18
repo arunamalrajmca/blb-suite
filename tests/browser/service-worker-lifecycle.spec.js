@@ -2057,7 +2057,8 @@ async function contentScriptLoaded(extensionWorker, tabId) {
         world:'ISOLATED',
         func:() => ({
           fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true,
-          initialized:window.__blbSuiteContentScriptLoadedV2 === true
+          initialized:window.__blbSuiteContentScriptLoadedV2 === true,
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
         })
       });
       return injection?.result || null;
@@ -2106,15 +2107,8 @@ test('first X.com document activates Floating Button and Double-click without a 
   expect(Number.isInteger(tabId)).toBe(true);
 
   await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
-    message:'the first x.com document must receive the runtime content-script bundle without reloading'
-  }).toMatchObject({fileExecuted:true, initialized:true});
-
-  // Ask the same refresh handshake used by production tab activation to
-  // complete both feature gates before exercising the first user gesture.
-  const refreshed = await extensionWorker.evaluate(async id =>
-    chrome.tabs.sendMessage(id, {type:'blbSuiteRefreshSiteFeatures'}), tabId
-  );
-  expect(refreshed).toMatchObject({ok:true});
+    message:'the first x.com document must receive and initialize the runtime bundle, including the Double-click handler, without reloading'
+  }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
 
   // Exercise the actual floating action on the first document.
   await page.evaluate(() => {
