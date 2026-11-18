@@ -1626,6 +1626,12 @@ test('startup recovery includes tabs created after registration reconciliation h
 }) => {
   const pattern = 'https://example.com/*';
   const url = 'https://example.com/';
+  // Create the initial matching tab while the feature is disabled. Once
+  // startup recovery begins, its registration attempt is guaranteed to reach
+  // the gate before a second matching tab is created.
+  const firstPage = await context.newPage();
+  await firstPage.goto(url,{waitUntil:'domcontentloaded'});
+  let secondPage;
   await extensionStorage.set({
     masterEnabled:true,redirectEnabled:false,
     pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
@@ -1649,51 +1655,53 @@ test('startup recovery includes tabs created after registration reconciliation h
       restore:() => { api.registerContentScripts = original; }
     };
   },pattern);
-  let page;
   try {
     await extensionWorker.evaluate(() => {
       globalThis.__createdDuringStartupRecovery = recoverConfiguredTabsOnStartup();
       return true;
     });
     await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.started);
-    page = await context.newPage();
-    await page.goto(url,{waitUntil:'domcontentloaded'});
+    // This tab is created only after the real registration attempt is held.
+    secondPage = await context.newPage();
+    await secondPage.goto(url,{waitUntil:'domcontentloaded'});
     await extensionWorker.evaluate(() => globalThis.__createdDuringStartupGate.release());
     await extensionWorker.evaluate(async () => {
       await globalThis.__createdDuringStartupRecovery;
       delete globalThis.__createdDuringStartupRecovery;
     });
-    // The startup operation is held in the worker global so it can be awaited
-    // after the new tab has completed navigation.
     const loaded = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-      if (!tabs[0]?.id) return false;
-      try {
-        const [{result}] = await chrome.scripting.executeScript({
-          target:{tabId:tabs[0].id},world:'ISOLATED',
-          func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
-        });
-        return result === true;
-      } catch (_) { return false; }
+      const results = await Promise.all(tabs.map(async tab => {
+        if (!tab?.id) return false;
+        try {
+          const [{result}] = await chrome.scripting.executeScript({
+            target:{tabId:tab.id},world:'ISOLATED',
+            func:() => Boolean(window.__blbSuiteContentScriptFileExecutedV3)
+          });
+          return result === true;
+        } catch (_) { return false; }
+      }));
+      return results;
     });
-    expect(loaded).toBe(true);
+    expect(loaded.filter(Boolean).length).toBeGreaterThanOrEqual(2);
   } finally {
     await extensionWorker.evaluate(() => {
       globalThis.__createdDuringStartupGate?.release();
       globalThis.__createdDuringStartupGate?.restore();
       delete globalThis.__createdDuringStartupGate;
       delete globalThis.__createdDuringStartupRecovery;
-      delete globalThis.__createdDuringStartupResult;
     }).catch(() => {});
-    await page?.close().catch(() => {});
-    await extensionWorker.evaluate(async value => {
-      await chrome.storage.local.set({pageSelectionButtonSites:{'example.com':false}});
+    await Promise.all([firstPage,secondPage].filter(Boolean).map(page => page.close().catch(() => {})));
+    await extensionWorker.evaluate(async pattern => {
+      await chrome.storage.local.set({
+        pageSelectionButtonSites:{'example.com':false},
+        doubleClickBlbSites:{}
+      });
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
-      await unregisterRuntimeContentScriptForPattern(value).catch(() => {});
-    },pattern).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(pattern).catch(() => {});
+    }, pattern).catch(() => {});
   }
 });
-
 
 test('a tab closed during asynchronous eligibility checks is not injected during startup recovery', async ({
   context, extensionStorage, extensionWorker
@@ -1880,5 +1888,153 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
       await unregisterRuntimeContentScriptForPattern(value).catch(() => {});
     },permittedPattern).catch(() => {});
+  }
+});
+
+
+test('a real pending site-permission cleanup alarm wakes a terminated MV3 worker and prunes only expired feature intents', async ({
+  context, extensionId, extensionWorker
+}) => {
+  // Chrome enforces a minimum alarm delay. The first intent expires in 65s;
+  // a second feature remains valid so the alarm must reschedule itself.
+  test.setTimeout(150000);
+  const origin = 'https://ungranted-pending-cleanup.example/*';
+  const expiredOrigin = 'https://expired-matching-cleanup.example/*';
+  const futureOrigin = 'https://future-dated-cleanup.example/*';
+  const pageRequestKey = origin + '|pageButton';
+  const doubleClickRequestKey = origin + '|doubleClick';
+  const expiredRequestKey = expiredOrigin + '|pageButton';
+  const futureRequestKey = futureOrigin + '|pageButton';
+  const currentRequestId = 'real-alarm-current-double-click';
+  const newerRequestId = 'real-alarm-newer-page-button-request';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pendingSiteFeatureToggles:{},
+    siteFeaturePreferenceRequestIds:{}
+  }));
+  const previousAlarm = await extensionWorker.evaluate(() =>
+    chrome.alarms.get('site-feature-permission-pending-cleanup')
+  );
+  await extensionWorker.evaluate(async value => {
+    const now = Date.now();
+    const expiredAt = now - SITE_FEATURE_PERMISSION_PENDING_TTL_MS + 65000;
+    const currentAt = now;
+    const expiredOrigin = 'https://expired-matching-cleanup.example/*';
+    const futureOrigin = 'https://future-dated-cleanup.example/*';
+    await chrome.storage.local.set({
+      pendingSiteFeatureToggles:{
+        [value]:{
+          features:{
+            pageButton:{requestedAt:expiredAt,requestId:'real-alarm-expired-page-button'},
+            doubleClick:{requestedAt:currentAt,requestId:'real-alarm-current-double-click'}
+          }
+        },
+        [expiredOrigin]:{
+          feature:'pageButton',
+          requestedAt:expiredAt,
+          requestId:'real-alarm-matching-expired-request'
+        },
+        [futureOrigin]:{
+          feature:'pageButton',
+          requestedAt:now + 120000,
+          requestId:'real-alarm-future-dated-request'
+        }
+      },
+      siteFeaturePreferenceRequestIds:{
+        [value + '|pageButton']:'real-alarm-newer-page-button-request',
+        [value + '|doubleClick']:'real-alarm-current-double-click',
+        [expiredOrigin + '|pageButton']:'real-alarm-matching-expired-request',
+        [futureOrigin + '|pageButton']:'real-alarm-future-dated-request'
+      }
+    });
+    await schedulePendingSiteFeatureToggleCleanup();
+    return {expiredAt,currentAt};
+  }, origin);
+  expect(await extensionWorker.evaluate(value =>
+    chrome.permissions.contains({origins:[value]}) , origin)).toBe(false);
+  const alarm = await extensionWorker.evaluate(() =>
+    chrome.alarms.get(SITE_FEATURE_PERMISSION_PENDING_CLEANUP_ALARM)
+  );
+  expect(alarm).toBeTruthy();
+  expect(alarm.scheduledTime).toBeGreaterThan(Date.now());
+
+  const browser = context.browser();
+  expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp = await browser.newBrowserCDPSession();
+  let observer;
+  let cleanupPage;
+  try {
+    await cdp.send('Target.setDiscoverTargets', {discover:true});
+    const {targetInfos} = await cdp.send('Target.getTargets');
+    const workerTarget = targetInfos.find(target =>
+      target.type === 'service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget, 'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed = await cdp.send('Target.closeTarget', {targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:currentTargets} = await cdp.send('Target.getTargets');
+      return currentTargets.some(target => target.targetId === workerTarget.targetId);
+    }, {timeout:5000}).toBe(false);
+
+    // No extension page is opened during the wait. The later storage-only
+    // observer verifies the alarm handler's result without waking the worker
+    // through a runtime message.
+    await new Promise(resolve => setTimeout(resolve, 70000));
+    observer = await context.newPage();
+    await observer.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => observer.evaluate(async ({origin,expiredOrigin,futureOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey,futureRequestKey}) => {
+      const data = await chrome.storage.local.get({
+        pendingSiteFeatureToggles:{},
+        siteFeaturePreferenceRequestIds:{}
+      });
+      const remaining = data.pendingSiteFeatureToggles[origin];
+      return {
+        remainingFeatures:remaining?.features ?? remaining ?? null,
+        expiredOriginPresent:Object.prototype.hasOwnProperty.call(data.pendingSiteFeatureToggles,expiredOrigin),
+        futureOriginPresent:Object.prototype.hasOwnProperty.call(data.pendingSiteFeatureToggles,futureOrigin),
+        futureRequestId:data.siteFeaturePreferenceRequestIds[futureRequestKey] ?? null,
+        newerPageRequestId:data.siteFeaturePreferenceRequestIds[pageRequestKey] ?? null,
+        currentDoubleClickRequestId:data.siteFeaturePreferenceRequestIds[doubleClickRequestKey] ?? null,
+        matchingExpiredRequestId:data.siteFeaturePreferenceRequestIds[expiredRequestKey] ?? null
+      };
+    }, {origin,expiredOrigin,futureOrigin,pageRequestKey,doubleClickRequestKey,expiredRequestKey,futureRequestKey}), {
+      timeout:15000,intervals:[250,500,1000]
+    }).toEqual({
+      remainingFeatures:{
+        feature:'doubleClick',
+        requestedAt:expect.any(Number),
+        requestId:currentRequestId
+      },
+      expiredOriginPresent:false,
+      futureOriginPresent:false,
+      futureRequestId:null,
+      newerPageRequestId:newerRequestId,
+      currentDoubleClickRequestId:currentRequestId,
+      matchingExpiredRequestId:null
+    });
+
+    const rescheduledAlarm = await observer.evaluate(() =>
+      chrome.alarms.get('site-feature-permission-pending-cleanup')
+    );
+    expect(rescheduledAlarm, 'the remaining valid intent must retain a cleanup alarm').toBeTruthy();
+    expect(rescheduledAlarm.scheduledTime).toBeGreaterThan(Date.now() + 120000);
+  } finally {
+    await cdp.detach().catch(() => {});
+    cleanupPage = observer || await context.newPage().catch(() => null);
+    if (cleanupPage) {
+      if (!observer) await cleanupPage.goto(`chrome-extension://${extensionId}/popup.html`).catch(() => {});
+      await cleanupPage.evaluate(async ({previous,previousAlarm}) => {
+        await chrome.storage.local.set(previous);
+        if (previousAlarm) {
+          await chrome.alarms.create('site-feature-permission-pending-cleanup',{when:previousAlarm.scheduledTime});
+        } else {
+          await chrome.alarms.clear('site-feature-permission-pending-cleanup');
+        }
+      }, {previous,previousAlarm}).catch(() => {});
+      if (cleanupPage !== observer) await cleanupPage.close().catch(() => {});
+    }
+    await observer?.close().catch(() => {});
   }
 });
