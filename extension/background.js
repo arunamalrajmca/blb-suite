@@ -2554,9 +2554,22 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
     const previous = map[String(removedTabId)];
     if (Array.isArray(previous)) {
       const current = Array.isArray(map[String(addedTabId)]) ? map[String(addedTabId)] : [];
-      const seen = new Set(current.map(ref => JSON.stringify(ref)));
+      // References are identified by their Bible coordinates, not object
+      // property insertion order or incidental extra fields. Keep the
+      // destination copy when both tabs already contain the same reference.
+      const referenceKey = ref => {
+        if (!ref || typeof ref !== 'object') return JSON.stringify(ref);
+        return JSON.stringify([
+          Number(ref.bookNumber),
+          Number(ref.chapter),
+          ref.from == null ? null : Number(ref.from),
+          ref.to == null ? null : Number(ref.to),
+          String(ref.version || 'kjv').trim().toLowerCase()
+        ]);
+      };
+      const seen = new Set(current.map(referenceKey));
       map[String(addedTabId)] = [...current, ...previous.filter(ref => {
-        const key = JSON.stringify(ref);
+        const key = referenceKey(ref);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;

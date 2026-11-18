@@ -876,3 +876,93 @@ test('replacement migration retries each persisted state write after a transient
     }, {ids:[940301,940302,940303,940304],logicalKey,scriptKey}).catch(() => {});
   }
 });
+
+
+
+test('replacement migration preserves destination state and merges unique pending references', async ({
+  extensionWorker
+}) => {
+  const source = 940401;
+  const destination = 940402;
+  const logicalKey = 'replacement-conflicting-state|logical';
+  const scriptKey = 'replacement-conflicting-state|script';
+  const destinationRef = {
+    bookNumber:43, chapter:3, from:16, to:16, version:'kjv'
+  };
+  const sourceDuplicateWithDifferentPropertyOrder = {
+    version:'KJV', to:16, from:16, chapter:3, bookNumber:43
+  };
+  const sourceOnlyRef = {
+    bookNumber:43, chapter:4, from:1, to:2, version:'kjv'
+  };
+  try {
+    await extensionWorker.evaluate(({destination}) => {
+      globalThis.__replacementConflictOriginalGetLiveTabById = getLiveTabById;
+      getLiveTabById = async id => id === destination ? {id,url:'about:blank'} : null;
+    }, {destination});
+    await extensionWorker.evaluate(async ({source,destination,logicalKey,scriptKey,destinationRef,sourceDuplicateWithDifferentPropertyOrder,sourceOnlyRef}) => {
+      await updateTrackedMultiVerseTabs(map => {
+        map[String(source)] = {key:'source-reservation',updatedAt:1};
+        map[String(destination)] = {key:'destination-reservation',updatedAt:2};
+      });
+      await updatePendingMultiVerseRefsByTab(map => {
+        map[String(destination)] = [destinationRef];
+        map[String(source)] = [sourceDuplicateWithDifferentPropertyOrder, sourceOnlyRef];
+      });
+      blbLogicalTabRegistry.set(logicalKey, source);
+      intentionalNewBlbTabs.add(source);
+      scriptTaggerDestinationTabs.set(scriptKey, source);
+    }, {source,destination,logicalKey,scriptKey,destinationRef,sourceDuplicateWithDifferentPropertyOrder,sourceOnlyRef});
+
+    await extensionWorker.evaluate(({source,destination}) =>
+      handleReplacedTabIdentity(destination, source), {source,destination});
+    await extensionWorker.evaluate(async () => {
+      await pendingMultiVerseTrackingUpdate;
+      await pendingMultiVerseRefsUpdate;
+    });
+    const result = await extensionWorker.evaluate(async ({source,destination,logicalKey,scriptKey}) => {
+      const tracked = await getTrackedMultiVerseTabs();
+      const pending = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+      return {
+        trackedSource:tracked[String(source)],
+        trackedDestination:tracked[String(destination)],
+        pendingSource:pending.blbSuitePendingMultiVerseRefsByTab[String(source)],
+        pendingDestination:pending.blbSuitePendingMultiVerseRefsByTab[String(destination)],
+        logical:blbLogicalTabRegistry.get(logicalKey),
+        script:scriptTaggerDestinationTabs.get(scriptKey),
+        intentionalSource:intentionalNewBlbTabs.has(source),
+        intentionalDestination:intentionalNewBlbTabs.has(destination)
+      };
+    }, {source,destination,logicalKey,scriptKey});
+
+    expect(result.trackedSource).toBeUndefined();
+    expect(result.trackedDestination).toEqual({key:'destination-reservation',updatedAt:2});
+    expect(result.pendingSource).toBeUndefined();
+    expect(result.pendingDestination).toEqual([destinationRef, sourceOnlyRef]);
+    expect(result.logical).toBe(destination);
+    expect(result.script).toBe(destination);
+    expect(result.intentionalSource).toBe(false);
+    expect(result.intentionalDestination).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__replacementConflictOriginalGetLiveTabById) {
+        getLiveTabById = globalThis.__replacementConflictOriginalGetLiveTabById;
+        delete globalThis.__replacementConflictOriginalGetLiveTabById;
+      }
+    }).catch(() => {});
+    await extensionWorker.evaluate(async ({source,destination,logicalKey,scriptKey}) => {
+      blbLogicalTabRegistry.delete(logicalKey);
+      scriptTaggerDestinationTabs.delete(scriptKey);
+      intentionalNewBlbTabs.delete(source);
+      intentionalNewBlbTabs.delete(destination);
+      await updateTrackedMultiVerseTabs(map => {
+        delete map[String(source)];
+        delete map[String(destination)];
+      });
+      await updatePendingMultiVerseRefsByTab(map => {
+        delete map[String(source)];
+        delete map[String(destination)];
+      });
+    }, {source,destination,logicalKey,scriptKey}).catch(() => {});
+  }
+});
