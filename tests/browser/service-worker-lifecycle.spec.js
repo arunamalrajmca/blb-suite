@@ -1674,8 +1674,12 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
   let installed = false;
   try {
     const tabId = await extensionWorker.evaluate(() =>
-      chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>tab?.id)
+      chrome.tabs.query({}).then(tabs => tabs.find(tab => {
+        try { return new URL(tab.url || '').hostname === 'example.com'; }
+        catch (_) { return false; }
+      })?.id)
     );
+    expect(tabId).toBeDefined();
     // Let any navigation-time activation started while the site was disabled
     // finish before installing the gate, so this test owns the in-flight lock.
     await expect.poll(() => extensionWorker.evaluate(id =>
