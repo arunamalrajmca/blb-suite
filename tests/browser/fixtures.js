@@ -47,6 +47,7 @@ const testHosts = [
   'https://crossway.org/*',
   'https://sarata.com/*',
   'https://www.supplyofgrace.com/*',
+  'https://supplyofgrace.com/*',
   'https://sermonindex.net/*',
   'https://webstersdictionary1828.com/*',
   'https://www.thekingsbible.com/*',
