@@ -181,11 +181,11 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     const [clickX,clickY]=screenPoint(targetBounds.x+targetBounds.width/2,targetBounds.y+targetBounds.height/2);
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
-    // Give the browser-owned menu time to open, then use its type-to-select
-    // behavior to target the extension command by its displayed title. End
-    // is not reliable here: Chromium may focus a built-in item or submenu.
+    // Give the browser-owned menu time to open, then type the complete
+    // extension command label. A single "s" is ambiguous with Chromium's
+    // built-in Search action and can close the menu on the wrong command.
     await page.waitForTimeout(500);
-    execFileSync('xdotool',['key','--clearmodifiers','s']);
+    execFileSync('xdotool',['type','--clearmodifiers','--delay','80','Show on BLB']);
     await page.waitForTimeout(150);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
