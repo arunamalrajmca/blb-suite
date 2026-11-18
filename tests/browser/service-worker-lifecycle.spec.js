@@ -2281,6 +2281,7 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
   await expect.poll(() => contentScriptLoaded(extensionWorker, secondTabId), {
     message:'a second-level BLB destination tab must initialize without a manual reload'
   }).toMatchObject({fileExecuted:true, initialized:true});
+  await expect(secondTab.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
 
   await closeBlbTabs(extensionWorker);
 });
