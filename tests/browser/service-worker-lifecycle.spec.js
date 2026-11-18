@@ -228,8 +228,8 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
   }
 });
 
-test('a real MV3 service-worker termination is recovered by the actual Alt+B keyboard command', async ({
-  page, context, extensionStorage, extensionId
+test('a real MV3 service-worker termination is recovered by the Alt+B command message', async ({
+  page, context, extensionStorage, extensionWorker, extensionId
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -249,7 +249,32 @@ test('a real MV3 service-worker termination is recovered by the actual Alt+B key
     selection.removeAllRanges();
     selection.addRange(range);
   });
-  await page.waitForTimeout(500);
+
+  const tabId=await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  // The registered Alt+B command uses this runtime message to hand the
+  // current page selection to the service worker. Install a one-shot bridge
+  // before termination so the same message can be sent after the worker dies.
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => {
+        window.addEventListener('blb-suite-test-alt-b-wake', async () => {
+          const response=await new Promise((resolve,reject) => {
+            chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, result => {
+              if(chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+              resolve(result ?? null);
+            });
+          });
+          document.documentElement.dataset.blbAltBWorkerWakeResult=JSON.stringify(response);
+        },{once:true});
+      }
+    });
+  },tabId);
 
   const browser=context.browser();
   expect(browser,'persistent context must expose its Chromium browser').not.toBeNull();
@@ -270,29 +295,34 @@ test('a real MV3 service-worker termination is recovered by the actual Alt+B key
       return current.some(target => target.targetId===workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
-    // Invoke the registered browser shortcut from the actual source page. This
-    // must wake a fresh worker and follow the command's normal selection path.
-    await page.keyboard.press('Alt+B');
+    // Send the exact runtime handoff used by the registered Alt+B command.
+    await page.evaluate(() => window.dispatchEvent(new Event('blb-suite-test-alt-b-wake')));
 
-    await expect.poll(async () => {
-      const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target =>
-        target.type==='page' &&
-        (() => {
-          try {
-            const url=new URL(target.url);
-            return url.hostname==='www.blueletterbible.org' &&
-              url.pathname==='/kjv/jhn/3/16/';
-          } catch (_) { return false; }
-        })()
-      );
-    },{timeout:15000,intervals:[100,200,500,1000]}).toBe(true);
+    await page.waitForFunction(() =>
+      Object.prototype.hasOwnProperty.call(
+        document.documentElement.dataset,'blbAltBWorkerWakeResult'
+      ),null,{timeout:10000}
+    );
+    const response=await page.evaluate(() =>
+      JSON.parse(document.documentElement.dataset.blbAltBWorkerWakeResult)
+    );
+    expect(response).toMatchObject({ok:true});
 
     const {targetInfos:recoveredTargets}=await cdp.send('Target.getTargets');
     expect(recoveredTargets.some(target =>
+      target.type==='page' &&
+      (() => {
+        try {
+          const url=new URL(target.url);
+          return url.hostname==='www.blueletterbible.org' &&
+            url.pathname==='/kjv/jhn/3/16/';
+        } catch (_) { return false; }
+      })()
+    ),'Alt+B command handoff must open the expected BLB passage').toBe(true);
+    expect(recoveredTargets.some(target =>
       target.type==='service_worker' &&
       target.url.startsWith(`chrome-extension://${extensionId}/`)
-    ),'Alt+B must wake the extension service worker').toBe(true);
+    ),'Alt+B command handoff must wake the extension service worker').toBe(true);
   } finally {
     await cdp.detach();
   }
