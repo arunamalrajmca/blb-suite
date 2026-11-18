@@ -123,11 +123,13 @@ for (const path of changed) {
     // it must still execute its focused reference-matrix job. Otherwise a
     // failing reproduction can be edited without ever rerunning that test.
     if ((path === "tests/browser/source-page-button-redirect-separation.spec.js" ||
-         (focusedSourcePageRuntimeChange && path === "tests/browser/scripttagger-global-injection.spec.js")) &&
+         (focusedSourcePageRuntimeChange && path === "tests/browser/scripttagger-global-injection.spec.js") ||
+         path === "tests/browser/context-menu-visibility-event-lifecycle.spec.js") &&
         existingBrowserSpecs.has(path) && hasAddedSpecLines(path)) {
-      // Both regressions have dedicated workflow steps: the source-page
-      // refresh matrix and Group B ScriptTagger injection. Keep them out of
-      // changed_browser_specs so the dedicated jobs do not suppress themselves.
+      // These regressions have dedicated workflow routing: the source-page
+      // refresh matrix, Group B ScriptTagger injection, and Group A context-menu
+      // lifecycle runner. Keep them out of changed_browser_specs so dedicated
+      // jobs do not suppress themselves.
       specs.add(path);
       continue;
     }
