@@ -2397,6 +2397,13 @@ const intentionalNewBlbTabs = new Set();
 // started by tabs.onReplaced. The count handles duplicate overlapping events.
 const pendingReplacementSourceTabCounts = new Map();
 
+// Serialize complete replacement migrations, not just individual storage writes.
+// Otherwise a later B→C replacement can overtake a transient A→B retry.
+let pendingReplacementMigrationQueue = Promise.resolve();
+
+// A destination needs at most one replacement-triggered activation per tab lifetime.
+const replacementActivatedTabIds = new Set();
+
 // Serialize the final BLB tab-creation operation. This is deliberately below
 // the feature/event layer: even if two independent callers ask to open the
 // same BLB destination at nearly the same time, only one caller is allowed to
@@ -2527,7 +2534,7 @@ async function runReplacementStateMigration(operation, stateLabel) {
   }
 }
 
-async function handleReplacedTabIdentity(addedTabId, removedTabId) {
+async function performReplacementTabIdentityMigration(addedTabId, removedTabId) {
   if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) return;
   pendingReplacementSourceTabCounts.set(removedTabId,
     (pendingReplacementSourceTabCounts.get(removedTabId) || 0) + 1);
@@ -2584,37 +2591,53 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
   // on an already-closed destination.
   const liveReplacement = await getLiveTabById(addedTabId);
   if (!liveReplacement) {
-    forgetBlbTab(addedTabId);
-    intentionalNewBlbTabs.delete(addedTabId);
-    for (const [key, id] of scriptTaggerDestinationTabs) {
-      if (id === addedTabId) scriptTaggerDestinationTabs.delete(key);
+    // A closed intermediate destination may already be the source of a
+    // queued replacement (A→B→C). Preserve its migrated state until that
+    // downstream step consumes it; only terminal closed destinations are
+    // eligible for cleanup here.
+    if (!pendingReplacementSourceTabCounts.has(addedTabId)) {
+      forgetBlbTab(addedTabId);
+      intentionalNewBlbTabs.delete(addedTabId);
+      for (const [key, id] of scriptTaggerDestinationTabs) {
+        if (id === addedTabId) scriptTaggerDestinationTabs.delete(key);
+      }
+      await clearTrackedMultiVerseTab(addedTabId);
+      await updatePendingMultiVerseRefsByTab(map => {
+        delete map[String(addedTabId)];
+      });
     }
-    await clearTrackedMultiVerseTab(addedTabId);
-    await updatePendingMultiVerseRefsByTab(map => {
-      delete map[String(addedTabId)];
-    });
     return;
   }
 
-  // A prerendered replacement can become the live tab after the original
-  // document's startup activation pass has already enumerated its tabs. The
-  // replacement may have loaded before a persistent registration was ready,
-  // so explicitly reconcile the surviving document as well.
-  try {
-    const tab = await chrome.tabs.get(addedTabId);
-    if (!isHttpPageUrl(tab?.url)) return;
-    const data = await chrome.storage.local.get({
-      masterEnabled:true,
-      pageSelectionButtonSites:{},
-      doubleClickBlbSites:{},
-      redirectEnabled:false
-    });
-    if (data.masterEnabled === false ||
-        !(await shouldInjectContentScriptForTab(tab, data))) return;
-    await ensureContentScriptInTab(addedTabId);
-  } catch (error) {
-    if (!isTabUnavailableError(error)) {
-      console.warn('KJV Scripture Tools replaced-tab content-script recovery failed:', String(error));
+  // Multiple replacement events can converge on one destination. Only the
+  // first migration performs recovery; later queued events must not repeat
+  // the same content-script activation.
+  if (!replacementActivatedTabIds.has(addedTabId)) {
+    replacementActivatedTabIds.add(addedTabId);
+    try {
+      const tab = await chrome.tabs.get(addedTabId);
+      if (!isHttpPageUrl(tab?.url)) {
+        replacementActivatedTabIds.delete(addedTabId);
+        return;
+      }
+      const data = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (data.masterEnabled === false ||
+          !(await shouldInjectContentScriptForTab(tab, data))) {
+        replacementActivatedTabIds.delete(addedTabId);
+        return;
+      }
+      const activated = await ensureContentScriptInTab(addedTabId);
+      if (!activated) replacementActivatedTabIds.delete(addedTabId);
+    } catch (error) {
+      replacementActivatedTabIds.delete(addedTabId);
+      if (!isTabUnavailableError(error)) {
+        console.warn('KJV Scripture Tools replaced-tab content-script recovery failed:', String(error));
+      }
     }
   }
   } finally {
@@ -2624,6 +2647,27 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
   }
 }
 
+
+// Count queued work immediately so onRemoved cannot erase an intermediate
+// source while its replacement is waiting behind an earlier migration.
+function handleReplacedTabIdentity(addedTabId, removedTabId) {
+  if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) {
+    return Promise.resolve();
+  }
+  pendingReplacementSourceTabCounts.set(removedTabId,
+    (pendingReplacementSourceTabCounts.get(removedTabId) || 0) + 1);
+  const run = pendingReplacementMigrationQueue.then(
+    () => performReplacementTabIdentityMigration(addedTabId, removedTabId),
+    () => performReplacementTabIdentityMigration(addedTabId, removedTabId)
+  );
+  pendingReplacementMigrationQueue = run.catch(() => {});
+  return run.finally(() => {
+    const remaining = (pendingReplacementSourceTabCounts.get(removedTabId) || 1) - 1;
+    if (remaining > 0) pendingReplacementSourceTabCounts.set(removedTabId, remaining);
+    else pendingReplacementSourceTabCounts.delete(removedTabId);
+  });
+}
+
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
   handleReplacedTabIdentity(addedTabId, removedTabId).catch(error => {
     console.warn('KJV Scripture Tools replaced-tab identity migration failed:', String(error));
@@ -2631,15 +2675,17 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  forgetBlbTab(tabId);
-  intentionalNewBlbTabs.delete(tabId);
-  for (const [key, id] of scriptTaggerDestinationTabs) {
-    if (id === tabId) scriptTaggerDestinationTabs.delete(key);
-  }
+  replacementActivatedTabIds.delete(tabId);
   // A source tab may emit onRemoved while its onReplaced state migration is
-  // still queued. Let that migration capture and transfer its persisted state;
-  // its own updater removes the source key once the destination owns it.
+  // still queued. Preserve all extension-owned tab identity until that
+  // migration has transferred it; otherwise forgetBlbTab and the in-memory
+  // cleanup below can erase the source before the queued A→B→C step runs.
   if (!pendingReplacementSourceTabCounts.has(tabId)) {
+    forgetBlbTab(tabId);
+    intentionalNewBlbTabs.delete(tabId);
+    for (const [key, id] of scriptTaggerDestinationTabs) {
+      if (id === tabId) scriptTaggerDestinationTabs.delete(key);
+    }
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
     updatePendingMultiVerseRefsByTab(map => {
       delete map[String(tabId)];

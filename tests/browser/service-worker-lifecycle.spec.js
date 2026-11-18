@@ -1601,7 +1601,8 @@ test('a tab closed during asynchronous eligibility checks is not injected during
   const pattern = 'https://example.com/*';
   await extensionStorage.set({
     masterEnabled:true,redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+    // Keep navigation from starting an activation before the eligibility gate.
+    pageSelectionButtonSites:{'example.com':false},doubleClickBlbSites:{}
   });
   const page = await context.newPage();
   await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
@@ -1631,6 +1632,7 @@ test('a tab closed during asynchronous eligibility checks is not injected during
       };
     },tabId);
     installed = true;
+    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
     await extensionWorker.evaluate(id => {
       globalThis.__closedTabActivationPromise = ensureContentScriptInTab(id);
       return true;

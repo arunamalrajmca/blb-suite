@@ -44,10 +44,12 @@ async function cleanupReplacementActivationGate(extensionWorker, extensionStorag
 test('replacement recovery rechecks the latest site preference before injecting', async ({
   context, extensionStorage, extensionWorker
 }) => {
+  // Keep navigation-time onUpdated injection out of this test. The only
+  // activation attempt should be the replacement recovery gated below.
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},
+    pageSelectionButtonSites:{'example.com':false},
     doubleClickBlbSites:{}
   });
   const page = await context.newPage();
@@ -59,9 +61,12 @@ test('replacement recovery rechecks the latest site preference before injecting'
     });
     expect(tabId).toBeTruthy();
 
+    // Install the gate before enabling the site. Enabling can itself trigger
+    // an activation for an already-open tab, which must be held behind this gate.
     await installReplacementActivationGate(extensionWorker, tabId);
-    await extensionWorker.evaluate(id => { globalThis.__replacementRecoveryPromise = handleReplacedTabIdentity(id, 940011); return true; }, tabId);
+    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.started);
+    await extensionWorker.evaluate(id => { globalThis.__replacementRecoveryPromise = handleReplacedTabIdentity(id, 940011); return true; }, tabId);
 
     // The replacement passed its initial eligibility check, but the user turns
     // the feature OFF before the actual tab activation begins.
@@ -964,5 +969,163 @@ test('replacement migration preserves destination state and merges unique pendin
         delete map[String(destination)];
       });
     }, {source,destination,logicalKey,scriptKey}).catch(() => {});
+  }
+});
+
+
+test('replacement chains wait for earlier transient storage retries before migrating and cleaning source state', async ({
+  extensionWorker
+}) => {
+  const cases = [
+    {storageKey:'blbSuiteMultiVerseTabSets',label:'tracked MultiVerse state'},
+    {storageKey:'blbSuitePendingMultiVerseRefsByTab',label:'pending MultiVerse references'}
+  ];
+  const ids = {source:940501, intermediate:940502, final:940503};
+  const logicalKey = 'replacement-overlapping-retry|logical';
+  const scriptKey = 'replacement-overlapping-retry|script';
+  try {
+    await extensionWorker.evaluate(({intermediate,final}) => {
+      globalThis.__replacementChainOriginalGetLiveTabById = getLiveTabById;
+      getLiveTabById = async id => [940502,940503,940512,940513].includes(id) ? {id,url:'about:blank'} : null;
+    }, ids);
+
+    for (const [index, scenario] of cases.entries()) {
+      const offset = index * 10;
+      const source = ids.source + offset;
+      const intermediate = ids.intermediate + offset;
+      const final = ids.final + offset;
+      const reference = {bookNumber:43,chapter:3,from:16,to:16,version:'kjv'};
+      await extensionWorker.evaluate(async ({source,logicalKey,scriptKey,reference}) => {
+        await updateTrackedMultiVerseTabs(map => {
+          map[String(source)] = {key:'chain-reservation',updatedAt:1};
+        });
+        await updatePendingMultiVerseRefsByTab(map => {
+          map[String(source)] = [reference];
+        });
+        blbLogicalTabRegistry.set(logicalKey, source);
+        intentionalNewBlbTabs.add(source);
+        scriptTaggerDestinationTabs.set(scriptKey, source);
+      }, {source,logicalKey,scriptKey,reference});
+
+      await extensionWorker.evaluate(async ({storageKey}) => {
+        const originalSet = chrome.storage.local.set.bind(chrome.storage.local);
+        let release, entered;
+        const gate = new Promise(resolve => { release = resolve; });
+        const started = new Promise(resolve => { entered = resolve; });
+        let failed = false;
+        chrome.storage.local.set = async items => {
+          if (!failed && Object.prototype.hasOwnProperty.call(items, storageKey)) {
+            failed = true;
+            entered();
+            await gate;
+            throw new Error('simulated delayed transient replacement write failure');
+          }
+          return originalSet(items);
+        };
+        globalThis.__replacementChainWriteGate = {
+          started,
+          release:() => release(),
+          restore:() => { chrome.storage.local.set = originalSet; },
+          get failed() { return failed; }
+        };
+      }, scenario);
+
+      await extensionWorker.evaluate(({intermediate,source}) => {
+        globalThis.__replacementChainFirst = handleReplacedTabIdentity(intermediate,source);
+        return true;
+      }, {intermediate,source});
+      await extensionWorker.evaluate(() => globalThis.__replacementChainWriteGate.started);
+      await extensionWorker.evaluate(({final,intermediate}) => {
+        globalThis.__replacementChainSecond = handleReplacedTabIdentity(final,intermediate);
+        return true;
+      }, {final,intermediate});
+
+      const queuedState = await extensionWorker.evaluate(({intermediate}) => ({
+        intermediateSourceCount:pendingReplacementSourceTabCounts.get(intermediate) || 0,
+        queuePending:pendingReplacementMigrationQueue instanceof Promise
+      }), {intermediate});
+      expect(queuedState.intermediateSourceCount).toBeGreaterThan(0);
+      expect(queuedState.queuePending).toBe(true);
+
+      await extensionWorker.evaluate(() => {
+        globalThis.__replacementChainWriteGate.release();
+        globalThis.__replacementChainWriteGate.restore();
+      });
+      await extensionWorker.evaluate(async () => {
+        await Promise.all([globalThis.__replacementChainFirst,globalThis.__replacementChainSecond].filter(Boolean));
+        delete globalThis.__replacementChainFirst;
+        delete globalThis.__replacementChainSecond;
+      });
+      await extensionWorker.evaluate(async () => {
+        await pendingMultiVerseTrackingUpdate;
+        await pendingMultiVerseRefsUpdate;
+        await pendingReplacementMigrationQueue;
+      });
+
+      const result = await extensionWorker.evaluate(async ({source,intermediate,final,logicalKey,scriptKey}) => {
+        const tracked = await getTrackedMultiVerseTabs();
+        const pending = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+        return {
+          trackedSource:tracked[String(source)],
+          trackedIntermediate:tracked[String(intermediate)],
+          trackedFinal:tracked[String(final)],
+          pendingSource:pending.blbSuitePendingMultiVerseRefsByTab[String(source)],
+          pendingIntermediate:pending.blbSuitePendingMultiVerseRefsByTab[String(intermediate)],
+          pendingFinal:pending.blbSuitePendingMultiVerseRefsByTab[String(final)],
+          logical:blbLogicalTabRegistry.get(logicalKey),
+          script:scriptTaggerDestinationTabs.get(scriptKey),
+          sourceCount:pendingReplacementSourceTabCounts.get(source),
+          intermediateCount:pendingReplacementSourceTabCounts.get(intermediate)
+        };
+      }, {source,intermediate,final,logicalKey,scriptKey});
+
+      expect(result.trackedSource, scenario.label).toBeUndefined();
+      expect(result.trackedIntermediate, scenario.label).toBeUndefined();
+      expect(result.trackedFinal, scenario.label).toEqual({key:'chain-reservation',updatedAt:1});
+      expect(result.pendingSource, scenario.label).toBeUndefined();
+      expect(result.pendingIntermediate, scenario.label).toBeUndefined();
+      expect(result.pendingFinal, scenario.label).toEqual([reference]);
+      expect(result.logical, scenario.label).toBe(final);
+      expect(result.script, scenario.label).toBe(final);
+      expect(result.sourceCount, scenario.label).toBeUndefined();
+      expect(result.intermediateCount, scenario.label).toBeUndefined();
+
+      await extensionWorker.evaluate(async ({source,intermediate,final,logicalKey,scriptKey}) => {
+        blbLogicalTabRegistry.delete(logicalKey);
+        scriptTaggerDestinationTabs.delete(scriptKey);
+        for (const id of [source,intermediate,final]) intentionalNewBlbTabs.delete(id);
+        await updateTrackedMultiVerseTabs(map => {
+          for (const id of [source,intermediate,final]) delete map[String(id)];
+        });
+        await updatePendingMultiVerseRefsByTab(map => {
+          for (const id of [source,intermediate,final]) delete map[String(id)];
+        });
+      }, {source,intermediate,final,logicalKey,scriptKey});
+      await extensionWorker.evaluate(() => {
+        globalThis.__replacementChainWriteGate?.restore();
+        delete globalThis.__replacementChainWriteGate;
+      });
+    }
+  } finally {
+    await extensionWorker.evaluate(() => {
+      globalThis.__replacementChainWriteGate?.release();
+      globalThis.__replacementChainWriteGate?.restore();
+      delete globalThis.__replacementChainWriteGate;
+      if (globalThis.__replacementChainOriginalGetLiveTabById) {
+        getLiveTabById = globalThis.__replacementChainOriginalGetLiveTabById;
+        delete globalThis.__replacementChainOriginalGetLiveTabById;
+      }
+    }).catch(() => {});
+    await extensionWorker.evaluate(async ({ids,logicalKey,scriptKey}) => {
+      blbLogicalTabRegistry.delete(logicalKey);
+      scriptTaggerDestinationTabs.delete(scriptKey);
+      for (const id of ids) intentionalNewBlbTabs.delete(id);
+      await updateTrackedMultiVerseTabs(map => {
+        for (const id of ids) delete map[String(id)];
+      });
+      await updatePendingMultiVerseRefsByTab(map => {
+        for (const id of ids) delete map[String(id)];
+      });
+    }, {ids:[940501,940502,940503,940511,940512,940513],logicalKey,scriptKey}).catch(() => {});
   }
 });
