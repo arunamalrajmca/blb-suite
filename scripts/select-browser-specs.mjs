@@ -137,6 +137,10 @@ for (const path of changed) {
     // changes in the same diff, run the changed spec alongside mapped coverage.
     if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path) &&
         hasAddedSpecLines(path) &&
+        // Performance specs are invoked only by the dedicated interleaved
+        // baseline/candidate workflow, which supplies per-sample environment
+        // and output paths. Never run them in the generic Group A process.
+        path !== "tests/browser/performance.spec.js" &&
         path !== "tests/browser/omnibox-command-routing.spec.js" &&
         path !== "tests/browser/source-page-button-redirect-separation.spec.js") {
       changedBrowserSpecs.push(path);
