@@ -22,6 +22,20 @@ async function installReplacementActivationGate(extensionWorker, tabId) {
   }, tabId);
 }
 
+async function waitForTabToClose(extensionWorker, tabId) {
+  await expect.poll(
+    async () => extensionWorker.evaluate(async id => {
+      try {
+        await chrome.tabs.get(id);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }, tabId),
+    {timeout:5000}
+  ).toBe(false);
+}
+
 async function cleanupReplacementActivationGate(extensionWorker, extensionStorage, page) {
   await extensionWorker.evaluate(() => {
     globalThis.__replacementActivationGate?.release();
@@ -57,7 +71,7 @@ test('replacement recovery rechecks the latest site preference before injecting'
     await page.goto('https://example.com/?replacement-preference-race=1', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-      return tabs[0]?.id;
+      return tabs.find(tab => String(tab.url || '').includes('replacement-close-race'))?.id;
     });
     expect(tabId).toBeTruthy();
 
@@ -103,6 +117,7 @@ test('replacement recovery does not inject when the replacement tab closes durin
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.started);
 
     await page.close();
+    await waitForTabToClose(extensionWorker, tabId);
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.release());
     await extensionWorker.evaluate(async () => { await globalThis.__replacementRecoveryPromise; delete globalThis.__replacementRecoveryPromise; });
 
@@ -451,6 +466,7 @@ test('replacement tab closing during activation leaves no migrated tab-owned sta
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.started);
 
     await page.close();
+    await waitForTabToClose(extensionWorker, addedTabId);
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.release());
     await extensionWorker.evaluate(async () => {
       await globalThis.__replacementRecoveryPromise;
