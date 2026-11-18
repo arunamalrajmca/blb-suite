@@ -60,7 +60,7 @@ test('a real MV3 service-worker termination is recovered by the physical Alt+B b
     await page.bringToFront();
     await page.waitForTimeout(250);
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
-    expect(focusedWindow,'headed Chromium must own the focused X11 window').toMatch(/^\d+$/);
+    expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
     execFileSync('xdotool',['key','--clearmodifiers','alt+b']);
 
     await expect.poll(async () => {
