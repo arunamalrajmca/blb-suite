@@ -169,8 +169,8 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // physical right-click outside the selected reference and opens the
     // wrong context menu.
     const x11Geometry=execFileSync('xdotool',['getwindowgeometry','--shell',focusedWindow],{encoding:'utf8'});
-    const x11X=Number(x11Geometry.match(/^X=(\\d+)$/m)?.[1]);
-    const x11Y=Number(x11Geometry.match(/^Y=(\\d+)$/m)?.[1]);
+    const x11X=Number(x11Geometry.match(/^X=(\d+)$/m)?.[1]);
+    const x11Y=Number(x11Geometry.match(/^Y=(\d+)$/m)?.[1]);
     expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'focused Chromium window must expose X11 screen coordinates').toBe(true);
     const screenPoint=(x,y)=>[
       Math.round(x11X+windowGeometry.chromeLeft+x),
