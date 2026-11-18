@@ -789,7 +789,6 @@ test('replacement migration retries each persisted state write after a transient
         blbLogicalTabRegistry.set(logicalKey, source);
         intentionalNewBlbTabs.add(source);
         scriptTaggerDestinationTabs.set(scriptKey, source);
-        globalThis.__replacementRetryTestIds = {source,destination};
       }, {source,destination,logicalKey,scriptKey});
 
       const result = await extensionWorker.evaluate(async ({source,destination,scenario,logicalKey,scriptKey}) => {
@@ -864,5 +863,16 @@ test('replacement migration retries each persisted state write after a transient
       }
       delete globalThis.__replacementRetryTestIds;
     }).catch(() => {});
+    await extensionWorker.evaluate(async ({ids,logicalKey,scriptKey}) => {
+      blbLogicalTabRegistry.delete(logicalKey);
+      scriptTaggerDestinationTabs.delete(scriptKey);
+      for (const id of ids) intentionalNewBlbTabs.delete(id);
+      await updateTrackedMultiVerseTabs(map => {
+        for (const id of ids) delete map[String(id)];
+      });
+      await updatePendingMultiVerseRefsByTab(map => {
+        for (const id of ids) delete map[String(id)];
+      });
+    }, {ids:[940301,940302,940303,940304],logicalKey,scriptKey}).catch(() => {});
   }
 });
