@@ -136,6 +136,17 @@ jobs:
           # window and X11 input. The dedicated Native Browser Shortcut E2E
           # workflow runs them with Xvfb/xdotool; do not classify their
           # environment-gated skips as failures in this headless exhaustive run.
+          # Validate complete spec-file coverage before delegating any tests.
+          # The headed tests are the only cases in their spec file, so checking
+          # coverage after filtering would incorrectly report that file missing.
+          expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
+          listed_specs=$(sed -nE 's/^[[:space:]]*(\[[^]]+\] › [^[:space:]]+\.spec\.js):[0-9]+:[0-9]+ › .*/\1/p' "$test_list" | sed -E 's/^[^]]+\] › //' | sort -u | wc -l | tr -d ' ')
+          echo "Browser spec files expected before delegation: $expected_specs"
+          echo "Browser spec files represented before delegation: $listed_specs"
+          if [[ "$listed_specs" -ne "$expected_specs" ]]; then
+            echo "Playwright's test list does not cover every browser spec file."
+            exit 1
+          fi
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
           awk '
             index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
@@ -150,13 +161,9 @@ jobs:
           fi
           echo "Delegated headed native-browser tests: $delegated (covered by BLB Suite — Native Browser Shortcut E2E)."
           total=$(wc -l < "$test_list" | tr -d ' ')
-          expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
-          listed_specs=$(sed -nE 's/^[[:space:]]*\[[^]]+\] › ([^[:space:]]+\.spec\.js):[0-9]+:[0-9]+ › .*/\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
-          echo "Browser test cases discovered: $total"
-          echo "Browser spec files expected: $expected_specs"
-          echo "Browser spec files represented: $listed_specs"
-          if [[ "$total" -eq 0 || "$listed_specs" -ne "$expected_specs" ]]; then
-            echo "Playwright's test list does not cover every browser spec file."
+          echo "Browser test cases discovered after delegation: $total"
+          if [[ "$total" -eq 0 ]]; then
+            echo "No headless browser tests remain after delegation."
             exit 1
           fi
 
