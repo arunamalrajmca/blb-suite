@@ -249,7 +249,8 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   }, null, 2)).toBe(true);
   expect(result.replacementShowsWebMenu, JSON.stringify({
     replacementSynced:result.replacementSynced,
-    replacementUpdates:result.replacementUpdates
+    replacementUpdates:result.replacementUpdates,
+    replacementUpdatedMenuIds:result.replacementUpdatedMenuIds
   }, null, 2)).toBe(true);
   expect(result.replacementSynchronizesPdfMenu).toBe(true);
   expect(result.backgroundReplacementIgnored).toBe(true);
