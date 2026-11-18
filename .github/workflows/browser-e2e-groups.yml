@@ -177,7 +177,6 @@ jobs:
         if: ${{ !cancelled() && inputs.group_a_changed_browser_specs != '' }}
         env:
           GROUP_A_CHANGED_BROWSER_SPECS: ${{ inputs.group_a_changed_browser_specs }}
-          BLB_HEADFUL_EXTENSION_TESTS: '1'
         shell: bash
         run: |
           set -euo pipefail
