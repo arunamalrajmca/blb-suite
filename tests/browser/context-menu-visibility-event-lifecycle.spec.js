@@ -117,11 +117,17 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // Let the real activation listener finish before isolating the explicit
       // replacement synchronization; otherwise its asynchronous visibility
       // update can race this direct helper invocation and invalidate its result.
-      for (let attempt=0; attempt<50 && !updates.some(item =>
-        item.id === 'blb-suite-web-selection' && item.visible === true
+      for (let attempt=0; attempt<100 && (
+        !updates.some(item => item.id === 'blb-suite-web-selection' && item.visible === true) ||
+        !updates.some(item => item.id === 'blb-suite-pdf-selection')
       ); attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
+      // Activation drives the two menu synchronizers independently. Wait for
+      // both updates and let queued activation work settle before clearing the
+      // capture, otherwise a late activation update can race the replacement
+      // helper and make its result nondeterministic.
+      await new Promise(resolve => setTimeout(resolve, 100));
       updates.length = 0;
       const replacementSynced = await syncSelectionMenusAfterTabReplacement(replacementTab.id);
       const replacementShowsWebMenu = updates.some(item =>
