@@ -1,0 +1,78 @@
+name: BLB Suite — Native Browser Shortcut E2E
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'extension/background.js'
+      - 'extension/manifest.json'
+      - 'tests/browser/fixtures.js'
+      - 'tests/browser/service-worker-shortcut-headed.spec.js'
+      - '.github/workflows/browser-native-shortcut.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [ main ]
+    paths:
+      - 'extension/background.js'
+      - 'extension/manifest.json'
+      - 'tests/browser/fixtures.js'
+      - 'tests/browser/service-worker-shortcut-headed.spec.js'
+      - '.github/workflows/browser-native-shortcut.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: native-browser-shortcut-${{ github.event.pull_request.number || github.ref }}-${{ github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  native-shortcut:
+    name: Native Alt+B shortcut after worker termination
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Cache npm downloads
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium and headed-browser dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Install X11 automation
+        run: sudo apt-get update && sudo apt-get install -y xvfb xdotool
+      - name: Run physical browser-level Alt+B shortcut test
+        env:
+          BLB_HEADFUL_EXTENSION_TESTS: '1'
+        run: xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test tests/browser/service-worker-shortcut-headed.spec.js
+      - name: Upload native shortcut diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-suite-native-shortcut-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14

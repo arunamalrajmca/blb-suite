@@ -30,8 +30,10 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   const end = groupsWorkflow.indexOf("\n      - name:", start);
   assert.ok(start >= 0 && end > start);
   const changedRunner = groupsWorkflow.slice(start, end);
-  assert.ok(changedRunner.includes('npx playwright test "${specs[@]}" --max-failures=1'));
-  assert.equal(changedRunner.split("npx playwright test").length - 1, 1);
+  assert.ok(changedRunner.includes('npx playwright test "${normal_specs[@]}" --max-failures=1'));
+  assert.ok(changedRunner.includes('BLB_HEADFUL_EXTENSION_TESTS=1 xvfb-run'));
+  assert.ok(changedRunner.includes('npx playwright test "$headed_spec" --max-failures=1'));
+  assert.equal(changedRunner.split("npx playwright test").length - 1, 2);
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ steps.browser-select.outputs.group_a_changed_browser_specs }}"));
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ needs.change-detection.outputs.group_a_changed_browser_specs }}"));
   assert.doesNotMatch(groupsWorkflow, /case "$spec" in/);

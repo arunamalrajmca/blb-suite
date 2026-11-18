@@ -1,0 +1,84 @@
+const { test, expect } = require('./fixtures');
+const { execFileSync } = require('node:child_process');
+
+test('a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut', async ({
+  page, context, extensionStorage, extensionWorker, extensionId
+}) => {
+  test.setTimeout(30000);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const target=document.createElement('p');
+    target.id='native-alt-b-worker-wake-reference';
+    target.textContent='John 3:16';
+    target.style.cssText='position:fixed;left:40px;top:40px;padding:16px;background:white;font:24px Arial';
+    document.body.appendChild(target);
+    const range=document.createRange();
+    range.selectNodeContents(target);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+
+  await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
+  const tabId=await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const browser=context.browser();
+  expect(browser,'headed persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp=await browser.newBrowserCDPSession();
+  try {
+    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    const {targetInfos}=await cdp.send('Target.getTargets');
+    const workerTarget=targetInfos.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target => target.targetId===workerTarget.targetId);
+    },{timeout:5000}).toBe(false);
+
+    // Playwright keyboard events are sent through CDP to the renderer and do
+    // not reliably invoke Chrome's browser-level extension command. xdotool
+    // sends the shortcut through X11 to the focused headed Chromium window.
+    // getwindowfocus uses X11 input focus directly and does not require an
+    // EWMH-compliant window manager (Xvfb intentionally runs without one).
+    await page.bringToFront();
+    await page.waitForTimeout(250);
+    const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
+    expect(focusedWindow,'headed Chromium must own the focused X11 window').toMatch(/^\d+$/);
+    execFileSync('xdotool',['key','--clearmodifiers','alt+b']);
+
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      const passage=current.some(target => {
+        if(target.type!=='page') return false;
+        try {
+          const url=new URL(target.url);
+          return url.hostname==='www.blueletterbible.org' && url.pathname==='/kjv/jhn/3/16/';
+        } catch (_) { return false; }
+      });
+      const worker=current.some(target =>
+        target.type==='service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)
+      );
+      return {passage,worker};
+    },{timeout:15000,intervals:[100,200,500,1000]}).toEqual({passage:true,worker:true});
+  } finally {
+    await cdp.detach();
+  }
+});
