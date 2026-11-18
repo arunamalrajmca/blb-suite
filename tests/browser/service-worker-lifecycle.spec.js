@@ -2265,6 +2265,24 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
   // The new document must also activate the passive-target module immediately.
   await expect(newTab.locator('#next-verse')).toHaveAttribute('target','_blank');
   expect(newTab.url()).toContain('/kjv/rom/8/28/');
+
+  // Follow a verse link from that newly opened tab. It must open and initialize
+  // a second destination tab on its first load as well.
+  const secondPopupPromise = context.waitForEvent('page');
+  await newTab.locator('#next-verse').click();
+  const secondTab = await secondPopupPromise;
+  await secondTab.waitForLoadState('domcontentloaded');
+  expect(secondTab.url()).toContain('/kjv/1co/13/4/');
+  const secondTabId = await getTabIdForUrl(
+    extensionWorker,
+    'https://www.blueletterbible.org/kjv/1co/13/4/*'
+  );
+  expect(Number.isInteger(secondTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, secondTabId), {
+    message:'a second-level BLB destination tab must initialize without a manual reload'
+  }).toMatchObject({fileExecuted:true, initialized:true});
+
+  await closeBlbTabs(extensionWorker);
 });
 
 test('a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load', async ({
