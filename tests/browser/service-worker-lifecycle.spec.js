@@ -1687,12 +1687,41 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
     ),{timeout:10000,intervals:[50,100,250,500]}).toBe(true);
     await extensionWorker.evaluate(id => {
       const original = shouldInjectContentScriptForTab;
+      const originalGet = chrome.tabs.get.bind(chrome.tabs);
+      const originalSendMessage = chrome.tabs.sendMessage.bind(chrome.tabs);
+      const originalExecuteScript = chrome.scripting.executeScript.bind(chrome.scripting);
       let release;
       const gate = new Promise(resolve => { release = resolve; });
       let first = true;
+      globalThis.__redirectTabActivationTrace = [];
+      chrome.tabs.get = async tabId => {
+        const tab = await originalGet(tabId);
+        if (tabId === id) globalThis.__redirectTabActivationTrace.push({
+          event:'tabs.get',url:tab?.url || '',pendingUrl:tab?.pendingUrl || ''
+        });
+        return tab;
+      };
+      chrome.tabs.sendMessage = async (tabId,message,...args) => {
+        const response = await originalSendMessage(tabId,message,...args);
+        if (tabId === id) globalThis.__redirectTabActivationTrace.push({
+          event:'tabs.sendMessage',type:message?.type || '',response:response || null
+        });
+        return response;
+      };
+      chrome.scripting.executeScript = async details => {
+        if (details?.target?.tabId === id) globalThis.__redirectTabActivationTrace.push({
+          event:'executeScript',files:details.files || [],world:details.world || 'ISOLATED'
+        });
+        return originalExecuteScript(details);
+      };
       globalThis.__redirectTabEligibilityGate = {
         started:false, enteredUrl:'', eligibilityResult:null,
-        release:() => release(), restore:() => { shouldInjectContentScriptForTab = original; }
+        release:() => release(), restore:() => {
+          shouldInjectContentScriptForTab = original;
+          chrome.tabs.get = originalGet;
+          chrome.tabs.sendMessage = originalSendMessage;
+          chrome.scripting.executeScript = originalExecuteScript;
+        }
       };
       shouldInjectContentScriptForTab = async (tab,data) => {
         if (first && tab?.id === id) {
@@ -1727,6 +1756,7 @@ test('a redirect during eligibility checks cannot inject the previous host bundl
     const activationDiagnostics = await extensionWorker.evaluate(async id => ({
       activationResult:await globalThis.__redirectTabActivationPromise,
       gate:{...globalThis.__redirectTabEligibilityGate,release:undefined,restore:undefined},
+      trace:[...(globalThis.__redirectTabActivationTrace || [])],
       currentTabUrl:(await chrome.tabs.get(id)).url
     }),tabId);
     expect(activationDiagnostics, 'Redirect activation diagnostics: ' + JSON.stringify(activationDiagnostics)).toMatchObject({activationResult:false});
