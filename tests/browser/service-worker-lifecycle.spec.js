@@ -2095,9 +2095,15 @@ async function closeBlbTabs(extensionWorker) {
 test('first X.com document activates Floating Button and Double-click without a manual reload', async ({
   page, extensionStorage, extensionWorker
 }) => {
+  await closeBlbTabs(extensionWorker);
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  await extensionStorage.set({
     pageSelectionButtonSites:{'x.com':true},
     doubleClickBlbSites:{'x.com':true}
   });
@@ -2148,6 +2154,13 @@ test('first X.com document activates Floating Button and Double-click without a 
     fileExecuted:true,
     initialized:true
   });
+
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
 
 test('an already-open X.com document activates Floating Button and Double-click after site opt-in without a reload', async ({
@@ -2156,6 +2169,7 @@ test('an already-open X.com document activates Floating Button and Double-click 
   await closeBlbTabs(extensionWorker);
   await extensionStorage.set({
     masterEnabled:true,
+    redirectEnabled:false,
     pageSelectionButtonSites:{'x.com':false},
     doubleClickBlbSites:{'x.com':false}
   });
@@ -2211,6 +2225,11 @@ test('an already-open X.com document activates Floating Button and Double-click 
     .toBe('same-x-com-document');
 
   await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
 
 test('a BLB verse link opened in a new tab activates passive targets on the first load', async ({
