@@ -162,44 +162,36 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     await page.waitForTimeout(250);
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // Ascend from the focused renderer to Chromium's top-level X11 window.
-    // The root window identifies itself as its own parent, avoiding locale-
-    // dependent parsing of the separate xwininfo -root output.
-    let browserWindow=focusedWindow;
-    for(let depth=0;depth<12;depth++){
-      const info=execFileSync('xwininfo',['-id',browserWindow],{encoding:'utf8'});
-      const parent=info.match(/Parent window id:\s*(0x[0-9a-f]+)/i)?.[1];
-      if(!parent || parent.toLowerCase()===browserWindow.toLowerCase()) break;
-      browserWindow=parent;
-    }
-    const x11Geometry=execFileSync('xdotool',['getwindowgeometry','--shell',browserWindow],{encoding:'utf8'});
-    const x11X=Number(x11Geometry.match(/^X=(\d+)$/m)?.[1]);
-    const x11Y=Number(x11Geometry.match(/^Y=(\d+)$/m)?.[1]);
+    // Find Chromium's visible top-level window directly. This avoids xwininfo
+    // (and the extra x11-utils package) while keeping click coordinates in the
+    // same X11 screen coordinate space used by xdotool.
+    const browserWindows=execFileSync('xdotool',['search','--onlyvisible','--class','chromium'],{encoding:'utf8'})
+      .trim().split(/\s+/).filter(Boolean);
+    expect(browserWindows.length,'Chromium must expose a visible top-level X11 window').toBeGreaterThan(0);
+    const windowCandidates=browserWindows.map(id=>{
+      const geometry=execFileSync('xdotool',['getwindowgeometry','--shell',id],{encoding:'utf8'});
+      const x=Number(geometry.match(/^X=(\d+)$/m)?.[1]);
+      const y=Number(geometry.match(/^Y=(\d+)$/m)?.[1]);
+      const width=Number(geometry.match(/^WIDTH=(\d+)$/m)?.[1]);
+      const height=Number(geometry.match(/^HEIGHT=(\d+)$/m)?.[1]);
+      return {id,geometry,x,y,width,height,area:width*height};
+    }).filter(item=>[item.x,item.y,item.width,item.height].every(Number.isFinite));
+    windowCandidates.sort((a,b)=>b.area-a.area);
+    const browserWindow=windowCandidates[0];
+    expect(browserWindow,'Chromium top-level window must have measurable geometry').toBeTruthy();
+    const {x:x11X,y:x11Y}=browserWindow;
     const windowGeometry=await page.evaluate(() => ({
       chromeLeft:(window.outerWidth-window.innerWidth)/2,
-      // The Xvfb Chromium window includes a 40px bottom frame/status inset
-      // in outerHeight-innerHeight; exclude it to get the actual viewport top.
+      // Exclude the 40px bottom frame/status inset in this Xvfb layout.
       chromeTop:window.outerHeight-window.innerHeight-(window.outerWidth-window.innerWidth)/2-40
     }));
     expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'Chromium window must expose X11 screen coordinates').toBe(true);
-    await test.info().attach('native context-menu click geometry',{
-      body:JSON.stringify({focusedWindow,browserWindow,x11Geometry,windowGeometry,targetBounds},null,2),
-      contentType:'application/json'
-    });
     const [clickX,clickY]=[
       Math.round(x11X+windowGeometry.chromeLeft+targetBounds.x+targetBounds.width/2),
       Math.round(x11Y+windowGeometry.chromeTop+targetBounds.y+targetBounds.height/2)
     ];
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
-    // Capture the native menu before keyboard navigation so a missing extension
-    // item can be distinguished from a menu-navigation failure.
-    await page.waitForTimeout(400);
-    execFileSync('import',['-window','root','/tmp/blb-native-context-menu-open.png']);
-    await test.info().attach('native context menu before selection',{
-      path:'/tmp/blb-native-context-menu-open.png',
-      contentType:'image/png'
-    });
     // The extension item is above the final Inspect item. End selects
     // Inspect (or the final browser item), not the extension command.
     // Start at the first native-menu item and advance through the six
