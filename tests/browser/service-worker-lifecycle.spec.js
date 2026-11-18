@@ -2287,7 +2287,7 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
 });
 
 test('a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load', async ({
-  page, context, extensionStorage
+  page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({masterEnabled:true});
   await context.route('https://www.blueletterbible.org/**', route => {
@@ -2304,4 +2304,5 @@ test('a MultiVerse link opened from BLB in a new tab defaults to Tool View on fi
   const newTab = await popupPromise;
   await newTab.waitForLoadState('load');
   await expect(newTab.locator('#formatButton.multiVerseResults')).toBeVisible({timeout:10000});
+  await closeBlbTabs(extensionWorker);
 });
