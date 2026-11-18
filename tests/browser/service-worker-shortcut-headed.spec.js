@@ -125,10 +125,14 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
   ];
   const [selectionStartX,selectionY]=screenPoint(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
   const [selectionEndX]=screenPoint(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2);
-  execFileSync('xdotool',['mousemove','--sync',String(selectionStartX),String(selectionY)]);
-  execFileSync('xdotool',['mousedown','1']);
-  execFileSync('xdotool',['mousemove','--sync',String(selectionEndX),String(selectionY)]);
-  execFileSync('xdotool',['mouseup','1']);
+  // Use browser input coordinates for the text drag. The browser owns the
+  // resulting selection; using X11 screen coordinates here is unreliable in
+  // headless CI because Chromium's reported window origin can differ from
+  // the X server's decorated-window origin.
+  await page.mouse.move(targetBounds.x+15,targetBounds.y+targetBounds.height/2);
+  await page.mouse.down();
+  await page.mouse.move(targetBounds.x+targetBounds.width-15,targetBounds.y+targetBounds.height/2,{steps:8});
+  await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim()),{timeout:5000})
     .toBe('John 3:16');
   await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
