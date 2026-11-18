@@ -136,7 +136,7 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
   });
   expect(registeredMenu,'the persistent web selection menu must be registered').toMatchObject({
     id:'blb-suite-web-selection',
-    title:'Show on BLB\\tAlt+B',
+    title:'Show on BLB\tAlt+B',
     visible:true
   });
 
