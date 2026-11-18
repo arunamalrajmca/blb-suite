@@ -97,6 +97,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/optional-host-permission-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/selection-phase-performance.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/service-worker-lifecycle.spec.js", "import { test } from '@playwright/test';\\n");
+  put(root, "tests/browser/service-worker-shortcut-headed.spec.js", "const { test } = require('@playwright/test');\\n");
   put(root, "tests/browser/replaced-tab-lifecycle-races.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-clipboard-reference-pattern.spec.js", "import { test } from '@playwright/test';\n");
