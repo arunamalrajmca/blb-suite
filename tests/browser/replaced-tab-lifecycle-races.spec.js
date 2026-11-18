@@ -61,10 +61,12 @@ test('replacement recovery rechecks the latest site preference before injecting'
     });
     expect(tabId).toBeTruthy();
 
-    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
+    // Install the gate before enabling the site. Enabling can itself trigger
+    // an activation for an already-open tab, which must be held behind this gate.
     await installReplacementActivationGate(extensionWorker, tabId);
-    await extensionWorker.evaluate(id => { globalThis.__replacementRecoveryPromise = handleReplacedTabIdentity(id, 940011); return true; }, tabId);
+    await extensionStorage.set({pageSelectionButtonSites:{'example.com':true}});
     await extensionWorker.evaluate(() => globalThis.__replacementActivationGate.started);
+    await extensionWorker.evaluate(id => { globalThis.__replacementRecoveryPromise = handleReplacedTabIdentity(id, 940011); return true; }, tabId);
 
     // The replacement passed its initial eligibility check, but the user turns
     // the feature OFF before the actual tab activation begins.
