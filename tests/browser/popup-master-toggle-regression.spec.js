@@ -49,18 +49,28 @@ test('popup master toggle persists across reload and preserves per-site feature 
     studySelectedTopic: 'Genesis'
   });
 
+  // This test exercises global master-setting persistence, not sensitive-page
+  // detection. Give the popup a deterministic ordinary active-tab context.
+  await page.addInitScript(() => {
+    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable: true,
+      value: query => query?.active && query?.currentWindow
+        ? Promise.resolve([{id: 1, url: 'https://example.com/', title: 'Example Domain'}])
+        : originalQuery(query)
+    });
+  });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  // The checked state is available in the initial markup before the popup has
-  // finished its asynchronous eligibility/settings initialization. Wait for
-  // the loading overlay to be removed before interacting with the visual switch.
   await expect.poll(() => page.locator('body').evaluate(body =>
     !body.classList.contains('popup-loading')
   )).toBe(true);
+  await expect(page.locator('body')).not.toHaveClass(/sensitive-restricted/);
   const master = page.locator('#master');
+  const masterSlider = page.locator('label.master-switch .slider');
   await expect(master).toBeChecked();
-  await expect(master).toBeVisible();
+  await expect(masterSlider).toBeVisible();
 
-  await page.locator('label.master-switch .slider').click();
+  await masterSlider.click();
 
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const state = await chrome.storage.local.get([
