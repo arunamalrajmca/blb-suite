@@ -2125,7 +2125,9 @@ test('first X.com document activates Floating Button and Double-click without a 
   await floatingButton.click();
   await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/jhn/3/16/')).toBe(true);
 
-  // Exercise Double-click on the same, still-unreloaded x.com document.
+  // The Floating Button opens and activates a BLB tab; return to the original
+  // x.com document before exercising Double-click on that same document.
+  await page.bringToFront();
   await page.evaluate(() => {
     const target = document.querySelector('#reference');
     target.innerHTML = 'Romans 8:<span id="verse-number">28</span>';
