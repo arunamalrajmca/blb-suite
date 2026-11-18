@@ -1025,11 +1025,15 @@ test('replacement chains wait for earlier transient storage retries before migra
         };
       }, scenario);
 
-      const first = await extensionWorker.evaluate(({intermediate,source}) =>
-        handleReplacedTabIdentity(intermediate,source), {intermediate,source});
+      await extensionWorker.evaluate(({intermediate,source}) => {
+        globalThis.__replacementChainFirst = handleReplacedTabIdentity(intermediate,source);
+        return true;
+      }, {intermediate,source});
       await extensionWorker.evaluate(() => globalThis.__replacementChainWriteGate.started);
-      const second = await extensionWorker.evaluate(({final,intermediate}) =>
-        handleReplacedTabIdentity(final,intermediate), {final,intermediate});
+      await extensionWorker.evaluate(({final,intermediate}) => {
+        globalThis.__replacementChainSecond = handleReplacedTabIdentity(final,intermediate);
+        return true;
+      }, {final,intermediate});
 
       const queuedState = await extensionWorker.evaluate(({intermediate}) => ({
         intermediateSourceCount:pendingReplacementSourceTabCounts.get(intermediate) || 0,
@@ -1044,7 +1048,9 @@ test('replacement chains wait for earlier transient storage retries before migra
       });
       await extensionWorker.evaluate(async () => {
         await Promise.all([globalThis.__replacementChainFirst,globalThis.__replacementChainSecond].filter(Boolean));
-      }).catch(() => {});
+        delete globalThis.__replacementChainFirst;
+        delete globalThis.__replacementChainSecond;
+      });
       await extensionWorker.evaluate(async () => {
         await pendingMultiVerseTrackingUpdate;
         await pendingMultiVerseRefsUpdate;
