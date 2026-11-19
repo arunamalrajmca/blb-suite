@@ -98,7 +98,7 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(collector.includes('if (sourceSite && !isSourceHomepage)'), 'every source-page homepage must be excluded by the shared rule');
   assert(!collector.includes('showOnHomepage'), 'source-page homepage behavior must not be overridden per host');
   assert(!registry.includes('showOnHomepage'), 'the source-page registry must not opt any homepage into button display');
-  assert(/"bibleproject\\.com"\\s*:\\s*\\{\\s*id:\\s*"bibleproject"\\s*\\}/.test(registry), 'BibleProject must use the same universal homepage exclusion');
+  assert(registry.includes('"bibleproject.com": { id:"bibleproject" }'), 'BibleProject must use the same universal homepage exclusion');
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
   assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
