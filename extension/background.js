@@ -7278,6 +7278,10 @@ function pageSelectionSettingKeyFromTab(tab) {
   try { decoded = decodeURIComponent(raw); } catch (_) {}
   const looksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded) || /\.pdf(?:$|\s)/i.test(title);
   if (/^file:/i.test(raw) && looksPdf) return '__blb_local_pdf__';
+  // Keep HTTP(S) PDFs aligned with the popup's synthetic PDF preference key.
+  // Otherwise the popup writes __blb_pdf_viewer__ while the context-menu
+  // visibility path incorrectly reads the hosting website's preference.
+  if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';
   if (/^(?:chrome|brave)-extension:/i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   if (/^(?:brave|chrome):\/\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   return hostnameFromTabUrl(raw);
