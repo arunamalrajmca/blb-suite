@@ -2456,6 +2456,16 @@ test('generic configured-site activation retries after an in-flight refresh race
   });
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toBeVisible();
+  await button.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/jhn/3/16/')).toBe(true);
+
+  await page.bringToFront();
+  await page.locator('#reference').evaluate(element => {
+    element.innerHTML = 'Romans 8:<span id="supplyofgrace-verse">28</span>';
+  });
+  await page.locator('#supplyofgrace-verse').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/rom/8/28/')).toBe(true);
+
   await extensionWorker.evaluate(async () => {
     await globalThis.__supplyOfGraceActivation;
     if (globalThis.__supplyOfGraceRefreshCount < 2) {
