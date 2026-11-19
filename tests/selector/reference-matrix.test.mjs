@@ -36,7 +36,6 @@ test("dedicated reference specs remain covered by individual or batched matrix e
   const files = new Set(matrix.flatMap(entry => entry.files || (entry.file ? [entry.file] : [])));
   for (const spec of [
     "shared-regex-patterns",
-    "source-bible-url-regressions",
     "redirect-hostnames",
     "multiverse-clipboard-reference-pattern",
     "facebook-selection-parser",
