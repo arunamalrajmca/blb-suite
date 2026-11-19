@@ -220,8 +220,11 @@ test.describe('Webster collector behavior', () => {
       contentType:'text/html; charset=utf-8',
       body:'<!doctype html><html><head><title>Webster homepage fixture</title></head><body><main>Webster home</main></body></html>'
     }));
-    await page.goto('https://webstersdictionary1828.com/',{waitUntil:'domcontentloaded'});
-    await expect(page.locator('#blb-suite-webster-multiverse')).toHaveCount(0);
+    const button=page.locator('#blb-suite-webster-multiverse');
+    for (const path of ['/','/index.html','/index.htm','/home','/homepage','/default.aspx']) {
+      await page.goto('https://webstersdictionary1828.com'+path,{waitUntil:'domcontentloaded'});
+      await expect(button,'Webster homepage '+path+' must not display the collection button').toHaveCount(0);
+    }
     await page.goto('https://webstersdictionary1828.com/dictionary/Faith',{waitUntil:'domcontentloaded'});
     await expect(page.locator('#blb-suite-webster-multiverse')).toBeVisible({timeout:10000});
   });
