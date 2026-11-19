@@ -49,7 +49,8 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
       try { return new URL(String(value || '')).hostname; } catch (_) { return ''; }
     },
     hasHostAccessForTab: async tab => tab.hostAccess === true,
-    ensureContentScriptInTab: async id => { injected.push(id); return true; }
+    ensureContentScriptInTab: async id => { injected.push(id); return true; },
+    ensureContentScriptInTabWithRetry: async id => { injected.push(id); return true; }
   };
   context.globalThis = context;
   vm.runInNewContext(sharedRegexPatterns, context);
