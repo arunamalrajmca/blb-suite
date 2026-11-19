@@ -124,6 +124,62 @@ test('Ask AI omnibox feature and ChatGPT host permission are removed', () => {
   assert(!source.includes('chatgpt.com'), 'ChatGPT composer injection and navigation must be removed');
 });
 
+// CI routing contracts: every shipped JS module and browser spec must be
+// selectable, and nontrivial matrix grep filters must select real tests.
+test('CI routing covers every extension JavaScript module and browser spec', () => {
+  const repositoryRoot = path.resolve(ROOT, '..');
+  const routing = fs.readFileSync(path.join(repositoryRoot, 'scripts/ci-routing-registry.mjs'), 'utf8');
+  const routedPaths = new Set([...routing.matchAll(/["']((?:extension|tests\/browser)\/[^"']+)["']/g)].map(match => match[1]));
+  for (const filename of fs.readdirSync(ROOT).filter(name => name.endsWith('.js'))) {
+    assert(routedPaths.has('extension/' + filename), 'extension module has no CI feature mapping: ' + filename);
+  }
+  const browserDirectory = path.join(repositoryRoot, 'tests/browser');
+  for (const filename of fs.readdirSync(browserDirectory).filter(name => name.endsWith('.spec.js'))) {
+    assert(routedPaths.has('tests/browser/' + filename), 'browser spec is absent from CI routing: ' + filename);
+  }
+});
+
+test('CI reference-matrix grep filters select tests in every assigned file', () => {
+  const repositoryRoot = path.resolve(ROOT, '..');
+  const matrix = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'scripts/reference-e2e-matrix.json'), 'utf8'));
+  const titlePattern = /\btest(?:\.(?:only|skip|fixme))?\s*\(\s*(['"`])([\s\S]*?)\1/g;
+  for (const group of matrix) {
+    if (!group.grep || group.grep === '.*') continue;
+    const matcher = new RegExp(group.grep);
+    const files = group.file ? [group.file] : (group.files || []);
+    for (const filename of files) {
+      const source = fs.readFileSync(path.join(repositoryRoot, filename), 'utf8');
+      const titles = [...source.matchAll(titlePattern)].map(match => match[2].replace(/\s+/g, ' ').trim());
+      assert(titles.some(title => matcher.test(title)),
+        'CI matrix group "' + group.group + '" selects no tests in ' + filename + '; update its grep when adding tests');
+    }
+  }
+});
+
+test('critical lifecycle and sensitive-site regressions remain in their CI matrix filters', () => {
+  const repositoryRoot = path.resolve(ROOT, '..');
+  const matrix = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'scripts/reference-e2e-matrix.json'), 'utf8'));
+  const required = [
+    {
+      file:'tests/browser/service-worker-lifecycle.spec.js',
+      title:'generic configured-site activation retries after an in-flight refresh races a same-origin navigation'
+    },
+    {
+      file:'tests/browser/shared-regex-patterns.spec.js',
+      title:'GitHub is a sensitive destination and never receives any extension injection'
+    }
+  ];
+  for (const item of required) {
+    const source = fs.readFileSync(path.join(repositoryRoot, item.file), 'utf8');
+    assert(source.includes("test('" + item.title + "'"), 'missing critical regression test: ' + item.title);
+    const group = matrix.find(entry =>
+      (entry.file === item.file || (entry.files || []).includes(item.file)) &&
+      new RegExp(entry.grep).test(item.title)
+    );
+    assert(group, 'critical regression is not selected by the CI matrix: ' + item.title);
+  }
+});
+
 // Syntax checks for all JS source files.
 test('all JavaScript source files parse', () => {
   for (const f of fs.readdirSync(ROOT).filter(x=>x.endsWith('.js'))) {
