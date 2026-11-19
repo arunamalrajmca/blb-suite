@@ -2446,6 +2446,14 @@ test('generic configured-site activation retries after an in-flight refresh race
     message:'the committed same-origin document must be initialized after the outgoing document reports a stale successful refresh'
   }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
 
+  await page.locator('#reference').evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toBeVisible();
   await extensionWorker.evaluate(async () => {
