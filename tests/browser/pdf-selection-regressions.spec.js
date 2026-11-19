@@ -201,3 +201,31 @@ test('PDF OFF is enforced consistently for local, browser-viewer, and direct web
   expect(result.disabled).toEqual([false,false,false]);
   expect(result.directPdfIsPdf).toBe(true);
 });
+
+
+test('the active web-selection menu follows Show on BLB ON/OFF for a hosted PDF tab', async ({extensionWorker,extensionStorage}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'__blb_pdf_viewer__':true},
+    doubleClickBlbSites:{}
+  });
+  const result=await extensionWorker.evaluate(async () => {
+    const originalUpdate=chrome.contextMenus.update;
+    const originalKnown=selectionMenuKnownPresent;
+    const updates=[];
+    try {
+      selectionMenuKnownPresent=true;
+      chrome.contextMenus.update=async (id,details) => {updates.push({id,visible:details.visible});};
+      const pdfTab={id:987654,url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',title:'The-Big-Picture.pdf'};
+      await syncWebSelectionContextMenuVisibility(pdfTab,false);
+      await chrome.storage.local.set({pageSelectionButtonSites:{'__blb_pdf_viewer__':false}});
+      await syncWebSelectionContextMenuVisibility(pdfTab,false);
+      return updates;
+    } finally {
+      chrome.contextMenus.update=originalUpdate;
+      selectionMenuKnownPresent=originalKnown;
+    }
+  });
+  const menuUpdates=result.filter(item=>item.id==='blb-suite-web-selection');
+  expect(menuUpdates.map(item=>item.visible)).toEqual([true,false]);
+});
