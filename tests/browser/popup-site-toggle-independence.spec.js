@@ -921,5 +921,12 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
     await expect(page.locator('#studyStatus')).not.toContainText(
       'Unable to turn Show on BLB OFF for this page.'
     );
+
+    const offEligibility = await extensionWorker.evaluate(async tab => {
+      const menuVisible = await shouldShowBlbContextMenu(tab,'John 3:16');
+      const enabled = await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab));
+      return {menuVisible,enabled};
+    }, {id:987654,url:item.url,title:item.title});
+    expect(offEligibility).toEqual({menuVisible:false,enabled:false});
   }
 });

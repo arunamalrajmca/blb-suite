@@ -2306,3 +2306,68 @@ test('a MultiVerse link opened from BLB in a new tab defaults to Tool View on fi
   await expect(newTab.locator('#formatButton.multiVerseResults')).toBeVisible({timeout:10000});
   await closeBlbTabs(extensionWorker);
 });
+
+
+test('an X.com link opened in a new tab activates Floating Button and Double-click on first load', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'x.com':true},
+    doubleClickBlbSites:{'x.com':true}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  await context.route('https://x.com/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname === '/'
+      ? '<!doctype html><html><head><title>X source</title></head><body><a id="open-x-target" target="_blank" href="https://x.com/i/status/123">Open post</a></body></html>'
+      : '<!doctype html><html><head><title>X destination</title></head><body><p id="x-reference">John 3:16</p></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
+
+  await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+  const sourceTabId = await getTabIdForUrl(extensionWorker, 'https://x.com/');
+  expect(Number.isInteger(sourceTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, sourceTabId)).toMatchObject({
+    fileExecuted:true, initialized:true, doubleClickBound:true
+  });
+
+  const popupPromise = context.waitForEvent('page');
+  await page.locator('#open-x-target').click();
+  const destination = await popupPromise;
+  await destination.waitForLoadState('domcontentloaded');
+  const destinationTabId = await getTabIdForUrl(extensionWorker, 'https://x.com/i/status/123');
+  expect(Number.isInteger(destinationTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, destinationTabId), {
+    message:'the newly opened X.com destination must initialize the extension on its first document, without a reload'
+  }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+
+  await destination.locator('#x-reference').evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const floatingButton = destination.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible();
+  await floatingButton.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/jhn/3/16/')).toBe(true);
+
+  await destination.bringToFront();
+  await destination.locator('#x-reference').evaluate(element => {
+    element.innerHTML = 'Romans 8:<span id="x-verse-number">28</span>';
+  });
+  await destination.locator('#x-verse-number').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker, '/kjv/rom/8/28/')).toBe(true);
+
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});

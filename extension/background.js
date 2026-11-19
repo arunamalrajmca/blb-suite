@@ -7581,6 +7581,23 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
       if (!(await shouldInjectContentScriptForTab(activationTab, data))) return null;
       if (changeInfo.status === 'complete' && activationTab.url === tab?.url) {
+        // A startup/master-toggle recovery can already be activating this tab
+        // while its new BLB document is committing. Reusing that in-flight
+        // promise here can report success for the outgoing document (same
+        // origin) and leave the newly opened verse page without live handlers.
+        // After that older activation settles, run the readiness handshake
+        // again against the committed document; this is a refresh when the
+        // static manifest bundle is already present, not an unconditional reinjection.
+        const earlierActivation = contentScriptInjectionLocks.get(tabId);
+        if (earlierActivation) {
+          earlierActivation.catch(() => {}).then(async () => {
+            let current;
+            try { current = await chrome.tabs.get(tabId); } catch (_) { return; }
+            if (current?.url !== tab?.url || current?.status !== 'complete') return;
+            await ensureContentScriptInTab(tabId);
+          }).catch(() => {});
+          return earlierActivation;
+        }
         return ensureContentScriptInTab(tabId);
       }
       // BLB already has static manifest coverage; all other configured

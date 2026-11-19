@@ -813,3 +813,48 @@ test('source Bible redirect activates on the same page when the Suite master swi
   }, {timeout:10000}).toBe(true);
   await expect(page).toHaveURL(sourceUrl);
 });
+
+test('BibleProject homepage and nested pages expose Open Bible References in BLB', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+
+  const fixtures = [
+    {
+      url:'https://bibleproject.com/',
+      title:'BibleProject homepage',
+      body:'<main><a href="/explore/video/john-3-16/">John 3:16</a></main>'
+    },
+    {
+      url:'https://bibleproject.com/explore/video/john-3-16/',
+      title:'BibleProject article',
+      body:'<main><a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a></main>'
+    }
+  ];
+
+  for (const fixture of fixtures) {
+    await page.route(fixture.url, route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:'<!doctype html><html><head><title>' + fixture.title +
+        '</title></head><body>' + fixture.body + '</body></html>'
+    }));
+    await page.goto(fixture.url, {waitUntil:'domcontentloaded'});
+    await expect(page.locator('#blb-suite-bibleproject-multiverse'))
+      .toHaveText('Open Bible References in BLB');
+  }
+
+  const registration = await extensionWorker.evaluate(async () => {
+    const scripts = await chrome.scripting.getRegisteredContentScripts();
+    return scripts.find(script =>
+      (script.matches || []).includes('https://bibleproject.com/*')
+    ) || null;
+  });
+  expect(registration?.js).toContain('source-page-collector.js');
+  expect(registration?.js).toContain('content.js');
+});
