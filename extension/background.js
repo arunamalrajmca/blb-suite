@@ -7472,18 +7472,13 @@ async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true
 
 chrome.tabs.onActivated.addListener(activeInfo => {
   // An activation in a background window must not control the global menus.
-  // Resolve focus first; only a confirmed activation in the focused window
-  // starts a new visibility generation.
+  // Once Chrome confirms the activated tab belongs to the focused window,
+  // use the same authoritative focused-window synchronizer as focus changes.
+  // This resolves the active tab once and refreshes both global menu items
+  // together, avoiding a stale per-event tab snapshot during rapid activation.
   chrome.windows.getLastFocused().then(focusedWindow => {
     if (focusedWindow?.id !== activeInfo?.windowId) return;
-    const isCurrent = beginSelectionMenuContextSync();
-    chrome.tabs.query({active:true, windowId:activeInfo.windowId}).then(tabs => {
-      if (!isCurrent()) return;
-      const tab = tabs[0];
-      if (!tab) return;
-      syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
-      syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
-    }).catch(() => {});
+    syncSelectionMenusForFocusedWindow().catch(() => {});
   }).catch(() => {});
 });
 
