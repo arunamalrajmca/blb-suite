@@ -360,3 +360,45 @@ test('web selection menu ignores stale asynchronous visibility results', async (
   expect(result).toEqual([{id:'blb-suite-web-selection',visible:true}]);
 });
 
+
+
+test('worker restart preserves web menu visibility while click-time eligibility still blocks sensitive hosts', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalUpdate = chrome.contextMenus.update;
+    const originalKnownPresent = selectionMenuKnownPresent;
+    const originalSuiteEnabled = isSuiteEnabled;
+    const originalPermissionCheck = hasSelectionActionPermissionForTab;
+    const originalPageEnabled = isPageButtonEnabledForHostname;
+    const updates = [];
+    try {
+      // A restarted MV3 worker begins with this in-memory flag reset even
+      // though the browser-owned context-menu item and its visibility persist.
+      selectionMenuKnownPresent = false;
+      chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
+      const ensured = await ensureWebSelectionContextMenu();
+
+      isSuiteEnabled = async () => true;
+      hasSelectionActionPermissionForTab = async () => true;
+      isPageButtonEnabledForHostname = async () => true;
+      const sensitiveHostAllowed = await shouldShowBlbContextMenu(
+        {id:77,url:'https://github.com/arunamalrajmca/blb-suite'},
+        'John 3:16'
+      );
+      return {
+        ensured,
+        update:updates.find(item => item.id === 'blb-suite-web-selection'),
+        sensitiveHostAllowed
+      };
+    } finally {
+      chrome.contextMenus.update = originalUpdate;
+      selectionMenuKnownPresent = originalKnownPresent;
+      isSuiteEnabled = originalSuiteEnabled;
+      hasSelectionActionPermissionForTab = originalPermissionCheck;
+      isPageButtonEnabledForHostname = originalPageEnabled;
+    }
+  });
+
+  expect(result.ensured).toBe(true);
+  expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\\tAlt+B'});
+  expect(result.sensitiveHostAllowed).toBe(false);
+});
