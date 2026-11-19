@@ -2778,7 +2778,7 @@ async function openScriptTaggerDestination(url) {
     if (remembered?.id != null) {
       const rememberedUrl = String(remembered.pendingUrl || remembered.url || '');
       if (canonicalScriptTaggerDestinationKey(rememberedUrl) === key) {
-        await activateTabWithTransientRetry(remembered.id);
+        await chrome.tabs.update(remembered.id, {active:true});
         if (remembered.windowId != null) {
           try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
         }
@@ -2796,7 +2796,7 @@ async function openScriptTaggerDestination(url) {
       );
       if (existing?.id != null) {
         scriptTaggerDestinationTabs.set(key, existing.id);
-        await activateTabWithTransientRetry(existing.id);
+        await chrome.tabs.update(existing.id, {active:true});
         if (existing.windowId != null) {
           try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
         }
