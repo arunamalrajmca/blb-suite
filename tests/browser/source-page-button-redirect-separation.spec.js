@@ -512,7 +512,7 @@ test('Christianity.com and Crosswalk.com exclude homepages while enabling nested
         registration.matches?.includes(pattern) &&
         registration.js?.includes('content.js') &&
         registration.js?.includes('source-page-collector-sites.js'));
-    }, originPattern)).toBe(true);
+    }, originPattern), {message:'Runtime content-script registration must exist before navigation: ' + originPattern}).toBe(true);
 
     await page.goto(fixture.article, {waitUntil:'domcontentloaded'});
     await expect(page.locator(fixture.selector), fixture.article)
@@ -554,7 +554,7 @@ test('every shared-registry page-button host shows the exact button on content p
         registration.matches?.includes(pattern) &&
         registration.js?.includes('content.js') &&
         registration.js?.includes('source-page-collector-sites.js'));
-    }, originPattern)).toBe(true);
+    }, originPattern), {message:'Runtime content-script registration must exist before navigation: ' + originPattern}).toBe(true);
 
     await page.goto(contentPage, {waitUntil:'domcontentloaded'});
     await expect(button, contentPage + ' must show the expected page button')
