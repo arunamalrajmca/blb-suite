@@ -2828,3 +2828,44 @@ test('selection destination activation retries only Chrome transient tab-drag fa
 
   expect(result).toEqual({attempts:2, activatedId:expect.any(Number)});
 });
+
+
+test('selection runtime messages survive repeated transient No SW dispatch failures', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://example.com/');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    fileExecuted:true,
+    initialized:true
+  });
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:async () => {
+        let attempts = 0;
+        const response = await sendRuntimeMessageWithRetry({
+          type:'blbSuiteOpenSelectionText',
+          requestId:'no-sw-retry-regression-john-3-16',
+          text:'John 3:16'
+        }, async () => {
+          attempts++;
+          if (attempts < 5) throw new Error('No SW');
+          return {ok:true};
+        });
+        return {attempts, response};
+      }
+    });
+    return injected?.result;
+  }, tabId);
+
+  expect(result).toEqual({attempts:5, response:{ok:true}});
+});
