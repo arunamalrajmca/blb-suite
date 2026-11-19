@@ -6,6 +6,7 @@ test.describe('PDF selection context-menu regressions', () => {
       const cases = [
         { tab: { url: 'file:///C:/Bible/notes.pdf', title: 'notes.pdf' }, key: '__blb_local_pdf__', pdf: true },
         { tab: { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf', title: 'PDF Viewer' }, key: '__blb_pdf_viewer__', pdf: true },
+        { tab: { url: 'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf', title: 'The Big Picture' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'brave://pdf-internals/', title: 'PDF internals' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: 'example.com', pdf: false },
         { tab: { url: 'https://example.com/article', title: 'Article' }, key: 'example.com', pdf: false }
@@ -163,4 +164,48 @@ test('local PDF context-menu handoff opens a selected full Bible reference throu
       before:beforeTabs
     });
   }
+});
+
+
+test('PDF identity and context-menu visibility stay aligned for direct hosted PDF URLs', async ({
+  extensionWorker, extensionStorage
+}) => {
+  await extensionWorker.evaluate(() => installPdfSelectionContextMenu());
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'__blb_pdf_viewer__':true}
+  });
+  const result = await extensionWorker.evaluate(async () => {
+    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    const originalUpdate = chrome.contextMenus.update.bind(chrome.contextMenus);
+    const updates = [];
+    const pdfTab = {
+      id:987654,
+      url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',
+      title:'The Big Picture',
+      status:'complete'
+    };
+    try {
+      chrome.tabs.query = async query => query?.active ? [pdfTab] : originalQuery(query);
+      chrome.contextMenus.update = async (id, details) => {
+        updates.push({id,visible:details.visible});
+        try { return await originalUpdate(id,details); } catch (_) { return; }
+      };
+      await syncPdfSelectionContextMenuVisibility(pdfTab);
+      await chrome.storage.local.set({pageSelectionButtonSites:{'__blb_pdf_viewer__':false}});
+      await new Promise(resolve => setTimeout(resolve,100));
+      await syncPdfSelectionContextMenuVisibility(pdfTab);
+      return {
+        key:pageSelectionSettingKeyFromTab(pdfTab),
+        saved:(await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites,
+        updates
+      };
+    } finally {
+      chrome.tabs.query = originalQuery;
+      chrome.contextMenus.update = originalUpdate;
+    }
+  });
+  expect(result.key).toBe('__blb_pdf_viewer__');
+  expect(result.saved.__blb_pdf_viewer__).toBe(false);
+  expect(result.updates.filter(item => item.id==='blb-suite-pdf-selection').at(-1)?.visible).toBe(false);
 });
