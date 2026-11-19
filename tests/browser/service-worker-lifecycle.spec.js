@@ -2268,12 +2268,47 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await firstFloating.click();
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
 
+  // Exercise the context-menu action through the same eligibility and click
+  // handlers used by the native right-click menu.
   await page.bringToFront();
   await page.locator('#first-reference').evaluate(element => {
-    element.innerHTML='Romans 8:<span id="supply-first-verse">28</span>';
+    element.textContent='Romans 8:28';
+    const range=document.createRange();
+    range.selectNodeContents(element);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const firstTab={id:firstTabId,url:'https://www.supplyofgrace.com/',title:'Supply of Grace'};
+  await expect.poll(() => extensionWorker.evaluate(tab =>
+    shouldShowBlbContextMenu(tab,'Romans 8:28'),firstTab)).toBe(true);
+  await extensionWorker.evaluate(tab => handleBlbSelectionContextMenuClick({
+    menuItemId:'blb-suite-web-selection',
+    selectionText:'Romans 8:28'
+  },tab),firstTab);
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+
+  // Alt+B uses the shared command handler and the selected live document text.
+  await page.locator('#first-reference').evaluate(element => {
+    element.textContent='Acts 4:12';
+    const range=document.createRange();
+    range.selectNodeContents(element);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const altBResult=await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+  expect(altBResult?.ok).toBe(true);
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/act/4/12/')).toBe(true);
+
+  // Double-click must resolve a different reference on the same first-load page.
+  await page.locator('#first-reference').evaluate(element => {
+    element.innerHTML='Philippians 4:<span id="supply-first-verse">6</span>';
   });
   await page.locator('#supply-first-verse').dblclick();
-  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/phl/4/6/')).toBe(true);
 
   const newTabPromise=context.waitForEvent('page');
   await page.locator('#open-supply-target').click();
