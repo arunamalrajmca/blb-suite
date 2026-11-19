@@ -2231,6 +2231,106 @@ test('optional redirect-script failure cannot block core selection activation on
   }
 });
 
+test('a newer site opt-in recovers from an older in-flight OFF activation without reloading', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const host='supplyofgrace.com';
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{[host]:false},
+    doubleClickBlbSites:{[host]:false}
+  });
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Stale activation snapshot</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://www.supplyofgrace.com/activation-race.html', {waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await extensionWorker.evaluate(async () => {
+    const local=chrome.storage.local;
+    const originalGet=local.get.bind(local);
+    const staleSnapshot=await originalGet({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    let release;
+    let started;
+    const startedPromise=new Promise(resolve => {started=resolve;});
+    const gate=new Promise(resolve => {release=resolve;});
+    let intercepted=false;
+    Object.defineProperty(local,'get',{
+      configurable:true,
+      value:async (...args) => {
+        const keys=args[0];
+        if(!intercepted && keys && typeof keys==='object' &&
+           'pageSelectionButtonSites' in keys && 'doubleClickBlbSites' in keys) {
+          intercepted=true;
+          started();
+          await gate;
+          return staleSnapshot;
+        }
+        return originalGet(...args);
+      }
+    });
+    globalThis.__staleSiteActivationGate={startedPromise,release,originalGet};
+  });
+  try {
+    const olderActivation=extensionWorker.evaluate(tabId => ensureContentScriptInTab(tabId),tabId);
+    await extensionWorker.evaluate(async () => { await globalThis.__staleSiteActivationGate.startedPromise; });
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:true},
+      doubleClickBlbSites:{[host]:true}
+    });
+    const newerActivation=extensionWorker.evaluate(tabId => ensureContentScriptInTabWithRetry(tabId),tabId);
+    await extensionWorker.evaluate(() => globalThis.__staleSiteActivationGate.release());
+    await olderActivation;
+    const recovered=await newerActivation;
+    await expect.poll(() => contentScriptLoaded(extensionWorker,tabId), {
+      message:'a newer ON choice must not inherit an older OFF activation result or require reloading the page'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+    expect(recovered).toBe(true);
+
+    // Verify real actions after the recovery, not only the initialization marker.
+    await page.locator('#reference').evaluate(element => {
+      const range=document.createRange();
+      range.selectNodeContents(element);
+      const selection=window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+    });
+    const floatingButton=page.locator('#blb-suite-page-selection-button');
+    await expect(floatingButton).toBeVisible();
+    await floatingButton.click();
+    await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+    await page.evaluate(() => {
+      document.querySelector('#reference').innerHTML='Romans 8:<span id="verse-number">28</span>';
+    });
+    await page.locator('#verse-number').dblclick();
+    await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const gate=globalThis.__staleSiteActivationGate;
+      if(gate) Object.defineProperty(chrome.storage.local,'get',{configurable:true,value:gate.originalGet});
+      gate?.release?.();
+      delete globalThis.__staleSiteActivationGate;
+    });
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:false},
+      doubleClickBlbSites:{[host]:false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  }
+});
+
+
 test('unrelated Supply of Grace pages activate selection features on first load and in a newly opened tab', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
