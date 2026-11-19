@@ -630,3 +630,21 @@ test('a stale redirect permission result in another popup cannot overwrite the l
   )).toBe(true);
   await secondPopup.close();
 });
+
+
+test('GitHub and its subdomains are excluded by the shared sensitive-site policy', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(() => ({
+    hosts:['github.com','www.github.com','gist.github.com','raw.githubusercontent.com'].map(host => ({
+      host,
+      sensitive:BLBShared.isSensitiveSiteHostname(host),
+      scripts:contentScriptFilesForTab({url:'https://'+host+'/arunamalrajmca/blb-suite/tree/main'},{
+        masterEnabled:true,
+        redirectEnabled:true,
+        pageSelectionButtonSites:{[host]:true},
+        doubleClickBlbSites:{[host]:true}
+      })
+    }))
+  }));
+  expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.sensitive)).toBe(true);
+  expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.scripts.length===0)).toBe(true);
+});
