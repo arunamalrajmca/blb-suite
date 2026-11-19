@@ -2371,3 +2371,56 @@ test('an X.com link opened in a new tab activates Floating Button and Double-cli
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
+
+
+test('an unrelated configured host activates on its first load without site-specific code or a manual reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const host='supplyofgrace.com';
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{[host]:true},
+    doubleClickBlbSites:{[host]:true}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Generic first-load activation</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://supplyofgrace.com/', {waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://supplyofgrace.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,tabId), {
+    message:'a normal non-special-case host must receive the same first-load content-script readiness handshake'
+  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+  await page.evaluate(() => {
+    const target=document.querySelector('#reference');
+    const range=document.createRange();
+    range.selectNodeContents(target);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const floatingButton=page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible();
+  await floatingButton.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+
+  await page.bringToFront();
+  await page.evaluate(() => {
+    document.querySelector('#reference').innerHTML='Romans 8:<span id="verse-number">28</span>';
+  });
+  await page.locator('#verse-number').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+
+  await extensionStorage.set({
+    pageSelectionButtonSites:{[host]:false},
+    doubleClickBlbSites:{[host]:false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
