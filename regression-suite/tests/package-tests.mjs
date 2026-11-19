@@ -97,6 +97,7 @@ test('no optional host-permission regression', () => {
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
   const collector = read('source-page-collector.js');
   const registry = read('source-page-collector-sites.js');
+  assert(registry.includes('"bibleproject.com": { id:"bibleproject" }'), "BibleProject must retain nested-page registration without homepage opt-in");
   assert(/"rediscover\.bible"\s*:\s*\{\s*id:\s*"rediscover"/.test(registry));
   assert(/"sagacityweb\.com"\s*:\s*\{\s*id:\s*"sagacity"/.test(registry));
   assert(/"thetreasuryofscriptureknowledge\.com"\s*:\s*\{\s*id:\s*"treasury"/.test(registry));
