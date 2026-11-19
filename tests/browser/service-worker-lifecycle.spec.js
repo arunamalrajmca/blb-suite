@@ -2371,3 +2371,73 @@ test('an X.com link opened in a new tab activates Floating Button and Double-cli
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
+
+
+test('generic configured-site activation retries after an in-flight refresh races a same-origin navigation', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'supplyofgrace.com':true},
+    doubleClickBlbSites:{'supplyofgrace.com':true}
+  });
+  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Supply of Grace lifecycle</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://supplyofgrace.com/first-document', {waitUntil:'domcontentloaded'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://supplyofgrace.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    fileExecuted:true, initialized:true, doubleClickBound:true
+  });
+
+  // Hold the first refresh response so the old document's activation remains
+  // in-flight while the browser commits a new document on the same origin.
+  await extensionWorker.evaluate(id => {
+    const original = chrome.tabs.sendMessage.bind(chrome.tabs);
+    globalThis.__supplyOfGraceOriginalSendMessage = original;
+    globalThis.__supplyOfGraceOldRefreshResolved = false;
+    globalThis.__supplyOfGraceActivation = null;
+    chrome.tabs.sendMessage = (targetTabId, message, options) => {
+      if (targetTabId === id && message?.type === 'blbSuiteRefreshSiteFeatures' &&
+          !globalThis.__supplyOfGraceOldRefreshResolved) {
+        return new Promise(resolve => {
+          globalThis.__supplyOfGraceResolveOldRefresh = () => {
+            globalThis.__supplyOfGraceOldRefreshResolved = true;
+            resolve({ok:true});
+          };
+        });
+      }
+      return original(targetTabId, message, options);
+    };
+    globalThis.__supplyOfGraceActivation = ensureContentScriptInTab(id);
+  }, tabId);
+  await expect.poll(() => extensionWorker.evaluate(() =>
+    typeof globalThis.__supplyOfGraceResolveOldRefresh === 'function'
+  )).toBe(true);
+
+  await page.goto('https://supplyofgrace.com/second-document', {waitUntil:'domcontentloaded'});
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const tab = await chrome.tabs.get(id);
+    return {url:tab.url,status:tab.status};
+  }, tabId)).toEqual({url:'https://supplyofgrace.com/second-document',status:'complete'});
+
+  await extensionWorker.evaluate(() => globalThis.__supplyOfGraceResolveOldRefresh());
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+    message:'the committed same-origin document must be initialized after the outgoing document reports a stale successful refresh'
+  }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeVisible();
+  await extensionWorker.evaluate(async () => {
+    await globalThis.__supplyOfGraceActivation;
+    chrome.tabs.sendMessage = globalThis.__supplyOfGraceOriginalSendMessage;
+    delete globalThis.__supplyOfGraceOriginalSendMessage;
+    delete globalThis.__supplyOfGraceResolveOldRefresh;
+    delete globalThis.__supplyOfGraceActivation;
+  });
+});
