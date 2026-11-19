@@ -535,7 +535,7 @@ const activeContentSenderHelper = background.match(
   /async function isActiveTabContentScriptSender\(sender\) \{([\s\S]*?)\n\}/
 );
 if (!activeContentSenderHelper ||
-    !['isAuthorizedContentScriptSender(sender)', 'chrome.tabs.query({active:true, currentWindow:true})', 'tabs[0]?.id === sender.tab.id']
+    !['isAuthorizedContentScriptSender(sender)', 'chrome.tabs.query({active:true, lastFocusedWindow:true})', 'tabs[0]?.id === sender.tab.id']
       .every(fragment => activeContentSenderHelper[1].includes(fragment))) {
   fail('selection handoff messages are restricted to the active authorized content tab');
 } else {
