@@ -155,51 +155,18 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
       return current.some(target => target.targetId===workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
-    // Open Chromium's native page context menu, then use its visible extension
-    // item by its exact displayed title. This is a browser-level click path:
-    // the worker is confirmed stopped before the user selects the item.
-    await page.bringToFront();
-    await page.waitForTimeout(250);
-    const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
-    expect(Number.isInteger(Number(focusedWindow)),'headed Chromium must own the focused X11 window').toBe(true);
-    // Find Chromium's visible top-level window directly. This avoids xwininfo
-    // (and the extra x11-utils package) while keeping click coordinates in the
-    // same X11 screen coordinate space used by xdotool.
-    const browserWindows=execFileSync('xdotool',['search','--onlyvisible','--class','chromium'],{encoding:'utf8'})
-      .trim().split(/\s+/).filter(Boolean);
-    expect(browserWindows.length,'Chromium must expose a visible top-level X11 window').toBeGreaterThan(0);
-    const windowCandidates=browserWindows.map(id=>{
-      const geometry=execFileSync('xdotool',['getwindowgeometry','--shell',id],{encoding:'utf8'});
-      const x=Number(geometry.match(/^X=(\d+)$/m)?.[1]);
-      const y=Number(geometry.match(/^Y=(\d+)$/m)?.[1]);
-      const width=Number(geometry.match(/^WIDTH=(\d+)$/m)?.[1]);
-      const height=Number(geometry.match(/^HEIGHT=(\d+)$/m)?.[1]);
-      return {id,geometry,x,y,width,height,area:width*height};
-    }).filter(item=>[item.x,item.y,item.width,item.height].every(Number.isFinite));
-    windowCandidates.sort((a,b)=>b.area-a.area);
-    const browserWindow=windowCandidates[0];
-    expect(browserWindow,'Chromium top-level window must have measurable geometry').toBeTruthy();
-    const {x:x11X,y:x11Y}=browserWindow;
-    const windowGeometry=await page.evaluate(() => ({
-      chromeLeft:(window.outerWidth-window.innerWidth)/2,
-      // Exclude the 40px bottom frame/status inset in this Xvfb layout.
-      chromeTop:window.outerHeight-window.innerHeight-(window.outerWidth-window.innerWidth)/2-40
-    }));
-    expect(Number.isFinite(x11X)&&Number.isFinite(x11Y),'Chromium window must expose X11 screen coordinates').toBe(true);
-    const [clickX,clickY]=[
-      Math.round(x11X+windowGeometry.chromeLeft+targetBounds.x+targetBounds.width/2),
-      Math.round(x11Y+windowGeometry.chromeTop+targetBounds.y+targetBounds.height/2)
-    ];
-    execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
-    execFileSync('xdotool',['click','3']);
-    // Wait for Chromium to finish constructing the native menu before sending
-    // navigation keys. Without this pause X11 can deliver End/Up while the page
-    // still owns focus, leaving the extension item unopened after worker stop.
+    // Use Playwright's viewport-relative right-click so the native menu opens
+    // on the selected text without guessing the browser-chrome/X11 coordinate
+    // offset. This is still a real Chromium input event, not a DOM dispatch.
+    await page.mouse.click(
+      targetBounds.x+targetBounds.width/2,
+      targetBounds.y+targetBounds.height/2,
+      {button:'right'}
+    );
     await page.waitForTimeout(350);
-    // Chromium places the extension command immediately before the final
-    // Inspect item in this page context menu. Navigate relative to that stable
-    // anchor instead of hard-coding the number of built-in menu entries, which
-    // varies between Chromium builds and optional browser integrations.
+    // Navigate relative to the stable final Inspect anchor instead of
+    // hard-coding the number of built-in menu entries, which varies between
+    // Chromium builds and optional browser integrations.
     execFileSync('xdotool',['key','--clearmodifiers','--delay','100','End','Up','Return']);
 
     await expect.poll(async () => {
