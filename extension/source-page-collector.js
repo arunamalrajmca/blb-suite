@@ -28,7 +28,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
       // static home aliases as well as the canonical root path.
       const normalizedSourcePath = location.pathname.replace(/\/+$/, "") || "/";
       const isSourceHomepage = normalizedSourcePath === "/" ||
-        /^\/(?:index(?:\.html?)?|home(?:page)?|default(?:\.aspx|\.html?))$/i.test(normalizedSourcePath);
+        /^\/(?:index(?:\.(?:html?|php|asp|aspx))?|home(?:page)?|default(?:\.(?:html?|php|asp|aspx))?)$/i.test(normalizedSourcePath);
       if (sourceSite && !isSourceHomepage) {
         const buttonId = "blb-suite-" + sourceSite + "-multiverse";
         const statusId = "blb-suite-" + sourceSite + "-multiverse-status";
