@@ -5,6 +5,7 @@ if (!navigator.brave) document.documentElement.classList.add('chrome-popup-densi
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
 let currentSiteUrl = '';
+let currentSiteKey = '';
 
 function isSensitiveSiteHostname(value) {
   return BLBShared.isSensitiveSiteHostname(value);
@@ -55,6 +56,7 @@ async function getState() {
       ? `${active.protocol}//${active.hostname}/*` : '';
   } catch (_) { currentSiteOrigin = ''; }
   const siteKey = getSiteKey(activeUrl, pageTitle);
+  currentSiteKey = siteKey;
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const isBlbSite = siteKey === BLB_HOSTNAME;
@@ -200,12 +202,14 @@ async function ensureSiteFeatureContentScript() {
 }
 
 async function writeSiteFeaturePreference(feature, enabled, requestId, conditionalRollback = false) {
-  if (!currentSiteOrigin) return false;
+  const isPdfPageButton = feature === 'pageButton' &&
+    (currentSiteKey === '__blb_local_pdf__' || currentSiteKey === '__blb_pdf_viewer__');
+  if (!currentSiteOrigin && !isPdfPageButton) return false;
   const writeRequestId = requestId || `${Date.now()}-${crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
   try {
     const response = await chrome.runtime.sendMessage({
       type:'blbSuiteSetSiteFeaturePreference',
-      origin:currentSiteOrigin,
+      ...(isPdfPageButton ? {siteKey:currentSiteKey} : {origin:currentSiteOrigin}),
       feature,
       enabled:!!enabled,
       requestId:writeRequestId,
@@ -229,7 +233,7 @@ async function setPageButton(on, requestId) {
     render(await getState());
     return;
   }
-  if (on) {
+  if (on && !state.isPdfContext) {
     let activated = false;
     try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
     if (!activated) {
