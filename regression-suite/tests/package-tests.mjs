@@ -111,7 +111,7 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
 test('PDF preference keys and core injection are consistent across popup and background', () => {
   const background = read('background.js');
   const popup = read('popup.js');
-  assert(background.includes('looksPdf) return \'__blb_pdf_viewer__\''), 
+  assert(background.includes("if (/^https?:/i.test(raw) && looksPdf)"),
     'background must classify hosted PDFs with the same synthetic key as popup.js');
   assert(background.includes('const primaryFiles = files.filter(file => !optionalRedirectFiles.includes(file));'),
     'optional redirect scripts must be separated from the core content bundle');
