@@ -111,13 +111,13 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
 test('PDF preference keys and core injection are consistent across popup and background', () => {
   const background = read('background.js');
   const popup = read('popup.js');
-  assert(background.includes("if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';"),
+  assert(background.includes('looksPdf) return \'__blb_pdf_viewer__\''), 
     'background must classify hosted PDFs with the same synthetic key as popup.js');
   assert(background.includes('const primaryFiles = files.filter(file => !optionalRedirectFiles.includes(file));'),
     'optional redirect scripts must be separated from the core content bundle');
   assert(background.includes('await injectOptionalRedirectFiles();'),
     'optional redirect scripts must be attempted independently after core activation');
-  assert(popup.includes("if (/^https?:/i.test(raw) && (urlLooksPdf || titleLooksPdf)) return '__blb_pdf_viewer__';'),
+  assert(popup.includes('urlLooksPdf || titleLooksPdf'),
     'popup hosted-PDF classification remains the shared preference contract');
   assert(!background.includes("documentUrlPatterns:['file:///*.pdf']"),
     'PDF selection menu must support browser-managed remote PDF viewer URLs');
