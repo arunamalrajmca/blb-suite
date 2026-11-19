@@ -156,6 +156,7 @@ test('www BLB verse-link tabs are feature-ready on first load without a manual r
       ? '<!doctype html><html><head><title>BLB www source</title></head><body>' +
         '<a id="www-verse-link" href="' + verseUrl + '">John 3:16</a></body></html>'
       : '<!doctype html><html><head><title>BLB www destination</title></head><body>' +
+        '<p id="destination-reference">John 3:16</p>' +
         '<div id="bVerse_1"><a id="destination-bverse-link" href="' +
         'https://www.blueletterbible.org/lexicon/g25/kjv/tr/0-1/">' +
         "Strong's G25</a></div></body></html>";
@@ -195,4 +196,16 @@ test('www BLB verse-link tabs are feature-ready on first load without a manual r
   // Verify the BLB verse-link navigation module is active in the new document,
   // not merely that the top-level content.js file executed.
   await expect(destination.locator('#destination-bverse-link')).toHaveAttribute('target','_blank');
+
+  // The Show on BLB floating action must also be ready on the new document,
+  // without using a reload to recover its per-site setting.
+  await destination.locator('#destination-reference').evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  await expect(destination.locator('#blb-suite-page-selection-button')).toBeVisible();
 });
