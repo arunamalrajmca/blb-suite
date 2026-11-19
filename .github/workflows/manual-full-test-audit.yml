@@ -134,14 +134,45 @@ jobs:
           # project, spec location, suite path, and test title. A bare file:line:column
           # is not a test-list entry and silently selects zero tests.
           sed -nE 's/^[[:space:]]*(\[[^]]+\] › [^[:space:]]+\.spec\.js:[0-9]+:[0-9]+ › .*)$/\1/p' "$list_output" > "$test_list"
-          total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
           listed_specs=$(sed -nE 's/^[[:space:]]*\[[^]]+\] › ([^[:space:]]+\.spec\.js):[0-9]+:[0-9]+ › .*/\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
-          echo "Browser test cases discovered: $total"
-          echo "Browser spec files expected: $expected_specs"
-          echo "Browser spec files represented: $listed_specs"
-          if [[ "$total" -eq 0 || "$listed_specs" -ne "$expected_specs" ]]; then
+          echo "Browser spec files expected before delegation: $expected_specs"
+          echo "Browser spec files represented before delegation: $listed_specs"
+          if [[ "$listed_specs" -ne "$expected_specs" ]]; then
             echo "Playwright's test list does not cover every browser spec file."
+            exit 1
+          fi
+
+          # These three cases are owned by dedicated execution workflows:
+          # two physical browser-input tests run with Xvfb/xdotool, while the
+          # performance spec runs with the benchmark matrix and its own
+          # authenticated content-script fixture. Running them here in the
+          # generic per-test headless harness is not equivalent coverage.
+          alt_count=$(grep -F "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" | wc -l | tr -d ' ')
+          right_click_count=$(grep -F "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action" "$test_list" | wc -l | tr -d ' ')
+          performance_count=$(grep -F "› Show on BLB performance benchmark" "$test_list" | wc -l | tr -d ' ')
+          if [[ "$alt_count" -ne 1 || "$right_click_count" -ne 1 || "$performance_count" -ne 1 ]]; then
+            echo "::error::Expected exactly one delegated Alt+B test, right-click test, and performance benchmark; found $alt_count/$right_click_count/$performance_count."
+            exit 1
+          fi
+          discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
+          awk '
+            index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
+            index($0, "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action") == 0 &&
+            index($0, "› Show on BLB performance benchmark") == 0
+          ' "$test_list" > "$test_list.filtered"
+          mv "$test_list.filtered" "$test_list"
+          discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
+          delegated=$((discovered_before_delegation - discovered_after_delegation))
+          if [[ "$delegated" -ne 3 ]]; then
+            echo "::error::Expected to delegate exactly 3 tests to dedicated workflows, found $delegated."
+            exit 1
+          fi
+          total=$discovered_after_delegation
+          echo "Delegated tests: $delegated (2 native-browser cases + 1 performance benchmark)."
+          echo "Browser test cases discovered after delegation: $total"
+          if [[ "$total" -eq 0 ]]; then
+            echo "No headless browser tests remain after delegation."
             exit 1
           fi
 
