@@ -66,6 +66,11 @@
     "grep": "(?:a redirect during eligibility checks cannot inject the previous host bundle into the new document|first X.com document activates Floating Button and Double-click without a manual reload|an already-open X.com document activates Floating Button and Double-click after site opt-in without a reload|a BLB verse link opened in a new tab activates passive targets on the first load|a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load|an X.com link opened in a new tab activates Floating Button and Double-click on first load|generic supplyofgrace.com site opt-in activates the already-open document without reload)"
   },
   {
+    "group": "context-menu-visibility-event-lifecycle",
+    "file": "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
+    "grep": ".*"
+  },
+  {
     "group": "kjv-corpus-lazy-loading",
     "file": "tests/browser/kjv-corpus-lazy-loading.spec.js",
     "grep": ".*"
