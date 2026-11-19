@@ -7389,9 +7389,9 @@ async function ensureWebSelectionContextMenu() {
     // deliberately omit `visible` from this update because Chrome retains that
     // browser-owned state even though this worker's in-memory flags are reset.
     // Hiding it here would remove the only user action capable of waking an
-    // otherwise-idle worker for a right-click. The active-tab sync below
-    // re-evaluates visibility, and the click handler independently rechecks
-    // global state, site preference, host permission, and sensitive-site policy.
+    // otherwise-idle worker for a right-click. The tabs.onActivated sync below
+    // re-evaluates visibility after restart, and the click handler independently
+    // rechecks global state, site preference, host permission, and sensitive-site policy.
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\tAlt+B'
     });
