@@ -814,7 +814,7 @@ test('source Bible redirect activates on the same page when the Suite master swi
   await expect(page).toHaveURL(sourceUrl);
 });
 
-test('BibleProject homepage and nested pages expose Open Bible References in BLB', async ({
+test('BibleProject follows the generic homepage exclusion and shows its button only on nested pages', async ({
   page, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
@@ -845,8 +845,12 @@ test('BibleProject homepage and nested pages expose Open Bible References in BLB
         '</title></head><body>' + fixture.body + '</body></html>'
     }));
     await page.goto(fixture.url, {waitUntil:'domcontentloaded'});
-    await expect(page.locator('#blb-suite-bibleproject-multiverse'))
-      .toHaveText('Open Bible References in BLB');
+    if (new URL(fixture.url).pathname === '/') {
+      await expect(page.locator('#blb-suite-bibleproject-multiverse')).toHaveCount(0);
+    } else {
+      await expect(page.locator('#blb-suite-bibleproject-multiverse'))
+        .toHaveText('Open Bible References in BLB');
+    }
   }
 
   const registration = await extensionWorker.evaluate(async () => {
