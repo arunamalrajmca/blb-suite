@@ -824,12 +824,16 @@ test('BibleProject homepage and nested pages expose Open Bible References in BLB
     doubleClickBlbSites:{}
   });
 
+  const homepage = 'https://bibleproject.com/';
+  await page.route(homepage, route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>BibleProject homepage</title></head><body><main><a href="/explore/video/john-3-16/">John 3:16</a></main></body></html>'
+  }));
+  await page.goto(homepage, {waitUntil:'domcontentloaded'});
+  await expect(page.locator('#blb-suite-bibleproject-multiverse')).toHaveCount(0);
+
   const fixtures = [
-    {
-      url:'https://bibleproject.com/',
-      title:'BibleProject homepage',
-      body:'<main><a href="/explore/video/john-3-16/">John 3:16</a></main>'
-    },
     {
       url:'https://bibleproject.com/explore/video/john-3-16/',
       title:'BibleProject article',
