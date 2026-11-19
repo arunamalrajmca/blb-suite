@@ -4453,7 +4453,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       const siteKey = message.siteKey;
-      await serializePendingSiteFeatureToggleMutation(async () => {
+      const ok = await serializePendingSiteFeatureToggleMutation(async () => {
         const data = await chrome.storage.local.get({
           masterEnabled:true,
           pageSelectionButtonSites:{}
@@ -4464,7 +4464,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         pageSites[siteKey] = message.enabled;
         await chrome.storage.local.set({pageSelectionButtonSites:pageSites});
         return true;
-      }).then(ok => sendResponse({ok:ok === true}));
+      });
+      // Synchronize the focused PDF's native menu before acknowledging the
+      // popup write. The storage listener remains the recovery path for other
+      // windows and worker wakeups.
+      if (ok) {
+        try {
+          const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+          if (tabs[0] && pageSelectionSettingKeyFromTab(tabs[0]) === siteKey) {
+            await syncPdfSelectionContextMenuVisibility(tabs[0]);
+          }
+        } catch (_) {}
+      }
+      sendResponse({ok:ok === true});
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
