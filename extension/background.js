@@ -7383,10 +7383,11 @@ async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
   try {
     // The native context-menu item persists across service-worker restarts.
-    // Preserve its last synchronized visibility while refreshing the title;
-    // hiding it here would make a right-click unable to wake this worker.
-    // The active-tab sync below re-evaluates visibility, and the click handler
-    // independently rechecks site preference, host permission, and eligibility.
+    // Preserve its last synchronized visibility while refreshing the title:
+    // hiding it here would remove the only user action capable of waking an
+    // otherwise-idle worker for a right-click. The active-tab sync below
+    // re-evaluates visibility, and the click handler independently rechecks
+    // global state, site preference, host permission, and sensitive-site policy.
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\tAlt+B'
     });
