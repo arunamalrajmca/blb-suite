@@ -51,7 +51,15 @@ test('latest per-site selection settings win when content-script storage reads r
             const keys = args[0];
             if (keys && typeof keys === 'object' &&
                 ('pageSelectionButtonSites' in keys || 'doubleClickBlbSites' in keys)) {
-              return new Promise(resolve => pending.push(() => resolve(snapshot)));
+              const values = {};
+              for (const key of ['pageSelectionButtonSites','doubleClickBlbSites']) {
+                if (key in keys) values[key] = snapshot[key]?.['example.com'] === true;
+              }
+              return new Promise(resolve => pending.push({
+                values,
+                resolved:false,
+                resolve:() => resolve(snapshot)
+              }));
             }
             return snapshot;
           }
@@ -75,22 +83,47 @@ test('latest per-site selection settings win when content-script storage reads r
     doubleClickBlbSites:{'example.com':true}
   }));
 
-  await expect.poll(() => extensionWorker.evaluate(async id => {
+  const pendingReadSummary = async () => extensionWorker.evaluate(async id => {
     const [result] = await chrome.scripting.executeScript({
       target:{tabId:id},
       world:'ISOLATED',
-      func:() => globalThis.__blbFeatureRefreshPendingReads?.length || 0
+      func:() => {
+        const summary = {
+          pageSelectionButtonSites:{on:0,off:0},
+          doubleClickBlbSites:{on:0,off:0}
+        };
+        for (const read of globalThis.__blbFeatureRefreshPendingReads || []) {
+          for (const [key, enabled] of Object.entries(read.values)) {
+            summary[key][enabled ? 'on' : 'off']++;
+          }
+        }
+        return summary;
+      }
     });
     return result.result;
-  }, tabId)).toBe(4);
+  }, tabId);
+
+  // The page may still have a startup refresh in flight when interception is
+  // installed. Do not assume an exact read count: identify each delayed read
+  // by its captured settings snapshot and force all newer ON snapshots to
+  // resolve before any older OFF snapshots.
+  await expect.poll(async () => {
+    const summary = await pendingReadSummary();
+    return ['pageSelectionButtonSites','doubleClickBlbSites'].every(key =>
+      summary[key].on > 0 && summary[key].off > 0
+    );
+  }).toBe(true);
 
   await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
     target:{tabId:id},
     world:'ISOLATED',
     func:() => {
-      const pending = globalThis.__blbFeatureRefreshPendingReads;
-      pending[2]();
-      pending[3]();
+      for (const read of globalThis.__blbFeatureRefreshPendingReads || []) {
+        if (!read.resolved && Object.values(read.values).some(enabled => enabled)) {
+          read.resolved = true;
+          read.resolve();
+        }
+      }
     }
   }), tabId);
   await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toEqual({
@@ -102,9 +135,12 @@ test('latest per-site selection settings win when content-script storage reads r
     target:{tabId:id},
     world:'ISOLATED',
     func:() => {
-      const pending = globalThis.__blbFeatureRefreshPendingReads;
-      pending[0]();
-      pending[1]();
+      for (const read of globalThis.__blbFeatureRefreshPendingReads || []) {
+        if (!read.resolved && Object.values(read.values).every(enabled => !enabled)) {
+          read.resolved = true;
+          read.resolve();
+        }
+      }
     }
   }), tabId);
   await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toEqual({

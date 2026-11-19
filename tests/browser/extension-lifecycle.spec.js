@@ -1,5 +1,6 @@
 const { test, expect } = require('./fixtures');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const {
   removeTabById,
   waitForBlbTabPath,
@@ -663,15 +664,44 @@ test('persisted runtime content-script registration audit reports missing files 
 });
 
 test('persisted registration audit runs only on install/update and browser startup events', () => {
-  const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
-  const auditInvocations = source.match(/=> schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
+  const startupListenerStart = source.lastIndexOf('chrome.runtime.onStartup.addListener(');
+  const installListenerStart = source.lastIndexOf('chrome.runtime.onInstalled.addListener(');
+  const registrationEnd = source.indexOf('const initialSelectionMenuSyncIsCurrent', installListenerStart);
+  expect(startupListenerStart).toBeGreaterThanOrEqual(0);
+  expect(installListenerStart).toBeGreaterThan(startupListenerStart);
+  expect(registrationEnd).toBeGreaterThan(installListenerStart);
 
-  expect(auditInvocations).toHaveLength(2);
-  expect(source).not.toMatch(/^auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/m);
-  expect(source).toMatch(/chrome\.runtime\.onStartup\.addListener\(\(\) => schedulePersistedRuntimeContentScriptAudit\(\)/);
-  expect(source).toMatch(/chrome\.runtime\.onInstalled\.addListener\(\(\) => schedulePersistedRuntimeContentScriptAudit\(\)/);
+  const listenerSource = source.slice(startupListenerStart, registrationEnd);
+  const startupListeners = [];
+  const installListeners = [];
+  const scheduledAudits = [];
+  const recoveredTabs = [];
+
+  vm.runInNewContext(listenerSource, {
+    chrome: {
+      runtime: {
+        onStartup: { addListener: listener => startupListeners.push(listener) },
+        onInstalled: { addListener: listener => installListeners.push(listener) }
+      }
+    },
+    recoverConfiguredTabsOnStartup: () => {
+      recoveredTabs.push(true);
+      return Promise.resolve();
+    },
+    schedulePersistedRuntimeContentScriptAudit: () => scheduledAudits.push(true),
+    console: { error() {} }
+  });
+
+  expect(startupListeners).toHaveLength(1);
+  expect(installListeners).toHaveLength(1);
+  expect(scheduledAudits).toHaveLength(0);
+  startupListeners[0]();
+  expect(recoveredTabs).toHaveLength(1);
+  expect(scheduledAudits).toHaveLength(1);
+  installListeners[0]();
+  expect(scheduledAudits).toHaveLength(2);
 });
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
@@ -1110,36 +1140,51 @@ test('@failure-first Double-click reports a transient destination failure and su
 
 test('tab replacement preserves BLB, ScriptTagger, and MultiVerse destination identity', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
-  const ids = { removed: 71001, added: 71002 };
-  const result = await extensionWorker.evaluate(async ({removed, added}) => {
-    blbLogicalTabRegistry.clear();
-    intentionalNewBlbTabs.clear();
-    scriptTaggerDestinationTabs.clear();
-    rememberBlbTab('blb|kjv|john|3|16', removed);
-    intentionalNewBlbTabs.add(removed);
-    scriptTaggerDestinationTabs.set('script-tagger|kjv|jhn|3|16', removed);
-    await chrome.storage.local.set({
-      blbSuiteMultiVerseTabSets: {
-        [String(removed)]: {key:'multiverse|genesis|1', refs:[{book:'Genesis',chapter:1,from:1,to:1}]}
-      },
-      blbSuitePendingMultiVerseRefsByTab: {
-        [String(removed)]: [{book:'Genesis',chapter:1,from:1,to:1}]
-      }
-    });
+  const outcome = await extensionWorker.evaluate(async () => {
+    // The replacement migration now verifies that the destination tab is
+    // still live before retaining migrated state. Use real browser tab IDs
+    // rather than synthetic IDs so this test exercises that production guard.
+    const removedTab = await chrome.tabs.create({url:'about:blank',active:false});
+    const addedTab = await chrome.tabs.create({url:'about:blank',active:false});
+    const removed = removedTab.id;
+    const added = addedTab.id;
+    try {
+      blbLogicalTabRegistry.clear();
+      intentionalNewBlbTabs.clear();
+      scriptTaggerDestinationTabs.clear();
+      rememberBlbTab('blb|kjv|john|3|16', removed);
+      intentionalNewBlbTabs.add(removed);
+      scriptTaggerDestinationTabs.set('script-tagger|kjv|jhn|3|16', removed);
+      await chrome.storage.local.set({
+        blbSuiteMultiVerseTabSets: {
+          [String(removed)]: {key:'multiverse|genesis|1', refs:[{book:'Genesis',chapter:1,from:1,to:1}]}
+        },
+        blbSuitePendingMultiVerseRefsByTab: {
+          [String(removed)]: [{book:'Genesis',chapter:1,from:1,to:1}]
+        }
+      });
 
-    await handleReplacedTabIdentity(added, removed);
-    const storage = await chrome.storage.local.get({
-      blbSuiteMultiVerseTabSets:{},
-      blbSuitePendingMultiVerseRefsByTab:{}
-    });
-    return {
-      blbTab:blbLogicalTabRegistry.get('blb|kjv|john|3|16'),
-      intentional: intentionalNewBlbTabs.has(added) && !intentionalNewBlbTabs.has(removed),
-      scriptTagger:scriptTaggerDestinationTabs.get('script-tagger|kjv|jhn|3|16'),
-      multiVerse:storage.blbSuiteMultiVerseTabSets,
-      pendingRefs:storage.blbSuitePendingMultiVerseRefsByTab
-    };
-  }, ids);
+      await handleReplacedTabIdentity(added, removed);
+      const storage = await chrome.storage.local.get({
+        blbSuiteMultiVerseTabSets:{},
+        blbSuitePendingMultiVerseRefsByTab:{}
+      });
+      return {
+        ids:{removed,added},
+        blbTab:blbLogicalTabRegistry.get('blb|kjv|john|3|16'),
+        intentional: intentionalNewBlbTabs.has(added) && !intentionalNewBlbTabs.has(removed),
+        scriptTagger:scriptTaggerDestinationTabs.get('script-tagger|kjv|jhn|3|16'),
+        multiVerse:storage.blbSuiteMultiVerseTabSets,
+        pendingRefs:storage.blbSuitePendingMultiVerseRefsByTab
+      };
+    } finally {
+      await Promise.all([removed, added].map(tabId =>
+        chrome.tabs.remove(tabId).catch(() => {})
+      ));
+    }
+  });
+  const ids = outcome.ids;
+  const result = outcome;
 
   expect(result.blbTab).toBe(ids.added);
   expect(result.intentional).toBe(true);

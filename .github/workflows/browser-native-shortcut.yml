@@ -9,6 +9,8 @@ on:
       - 'extension/manifest.json'
       - 'tests/browser/fixtures.js'
       - 'tests/browser/service-worker-shortcut-headed.spec.js'
+      # A full audit delegates its physical Alt+B case to this X11 workflow.
+      - '.github/workflows/manual-full-test-audit.yml'
       - '.github/workflows/browser-native-shortcut.yml'
       - 'package.json'
       - 'package-lock.json'
@@ -19,6 +21,8 @@ on:
       - 'extension/manifest.json'
       - 'tests/browser/fixtures.js'
       - 'tests/browser/service-worker-shortcut-headed.spec.js'
+      # A full audit delegates its physical Alt+B case to this X11 workflow.
+      - '.github/workflows/manual-full-test-audit.yml'
       - '.github/workflows/browser-native-shortcut.yml'
       - 'package.json'
       - 'package-lock.json'
