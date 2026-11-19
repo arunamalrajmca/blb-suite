@@ -905,11 +905,27 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
       pageSelectionButtonSites:{[item.siteKey]:true}
     });
 
-    const eligibility = await extensionWorker.evaluate(async tab => ({
-      menuVisible:await shouldShowBlbContextMenu(tab,'John 3:16'),
-      enabled:await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab))
-    }), {id:987654,url:item.url,title:item.title});
-    expect(eligibility).toEqual({menuVisible:true,enabled:true});
+    const eligibility = await extensionWorker.evaluate(async tab => {
+      const siteKey = pageSelectionSettingKeyFromTab(tab);
+      return {
+        siteKey,
+        isPdf:isPdfViewerTab(tab),
+        sensitive:isSensitiveSiteUrl(tab.url),
+        suiteEnabled:await isSuiteEnabled(),
+        permission:await hasSelectionActionPermissionForTab(tab),
+        menuVisible:await shouldShowBlbContextMenu(tab,'John 3:16'),
+        enabled:await isPageButtonEnabledForHostname(siteKey)
+      };
+    }, {id:987654,url:item.url,title:item.title});
+    expect(eligibility, item.url).toMatchObject({
+      siteKey:item.siteKey,
+      isPdf:true,
+      sensitive:false,
+      suiteEnabled:true,
+      permission:true,
+      menuVisible:true,
+      enabled:true
+    });
 
     // OFF must persist for both browser-managed and direct HTTP(S) PDFs.
     await page.locator('#pageSetting .slider').click();
