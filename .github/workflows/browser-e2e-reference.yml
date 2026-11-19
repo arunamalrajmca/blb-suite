@@ -308,7 +308,7 @@ jobs:
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        if: ${{ (matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) && steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         if: ${{ matrix.group != 'source-page-button-redirect-refresh' && (matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
