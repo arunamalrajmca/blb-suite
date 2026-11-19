@@ -108,6 +108,21 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(background.includes('collectorConfig?.mainWorldClickGuard === true'), 'optional MAIN-world click guards must come from shared registry metadata');
 });
 
+test('PDF preference keys and core injection are consistent across popup and background', () => {
+  const background = read('background.js');
+  const popup = read('popup.js');
+  assert(background.includes("if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';"),
+    'background must classify hosted PDFs with the same synthetic key as popup.js');
+  assert(background.includes('const primaryFiles = files.filter(file => !optionalRedirectFiles.includes(file));'),
+    'optional redirect scripts must be separated from the core content bundle');
+  assert(background.includes('await injectOptionalRedirectFiles();'),
+    'optional redirect scripts must be attempted independently after core activation');
+  assert(popup.includes("if (/^https?:/i.test(raw) && (urlLooksPdf || titleLooksPdf)) return '__blb_pdf_viewer__';'),
+    'popup hosted-PDF classification remains the shared preference contract');
+  assert(!background.includes("documentUrlPatterns:['file:///*.pdf']"),
+    'PDF selection menu must support browser-managed remote PDF viewer URLs');
+});
+
 test('GitHub is a sensitive destination and must never receive runtime scripts', () => {
   const shared = read('regex-patterns.js');
   assert(shared.includes("'github.com'"), 'GitHub must be in the centralized sensitive-site domain suffix policy');
