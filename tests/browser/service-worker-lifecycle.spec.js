@@ -2264,8 +2264,11 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
 
   await page.bringToFront();
-  await page.locator('#first-reference').dblclick();
-  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+  await page.locator('#first-reference').evaluate(element => {
+    element.innerHTML='Romans 8:<span id="supply-first-verse">28</span>';
+  });
+  await page.locator('#supply-first-verse').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
 
   const newTabPromise=context.waitForEvent('page');
   await page.locator('#open-supply-target').click();
@@ -2291,8 +2294,11 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
 
   await destination.bringToFront();
-  await destination.locator('#target-reference').dblclick();
-  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+  await destination.locator('#target-reference').evaluate(element => {
+    element.innerHTML='Acts 4:<span id="supply-target-verse">12</span>';
+  });
+  await destination.locator('#supply-target-verse').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/act/4/12/')).toBe(true);
   await destination.close();
   await extensionStorage.set({
     pageSelectionButtonSites:{'supplyofgrace.com':false},
