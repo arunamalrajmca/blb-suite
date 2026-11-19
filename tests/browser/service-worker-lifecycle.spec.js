@@ -2444,17 +2444,26 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await expect.poll(() => extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
   )).toBe(destinationTabId);
-  await destination.evaluate(() => {
-    window.__blbSuiteEnableDoubleClickEquivalentDiagnostics=true;
-    window.__blbSuiteDoubleClickEquivalentCalls=[];
-  });
+  await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+    target:{tabId:id},
+    world:'ISOLATED',
+    func:() => {
+      window.__blbSuiteEnableDoubleClickEquivalentDiagnostics=true;
+      window.__blbSuiteDoubleClickEquivalentCalls=[];
+    }
+  }),destinationTabId);
   await destination.locator('#target-reference').evaluate(element => {
     element.innerHTML='Acts 4:<span id="supply-target-verse">12</span>';
   });
   await destination.locator('#supply-target-verse').dblclick({delay:100});
-  await expect.poll(() => destination.evaluate(() =>
-    window.__blbSuiteDoubleClickEquivalentCalls || []
-  )).toContain('12');
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const [result]=await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => window.__blbSuiteDoubleClickEquivalentCalls || []
+    });
+    return result?.result || [];
+  },destinationTabId)).toContain('12');
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/act/4/12/')).toBe(true);
   await destination.close();
   await closeBlbTabs(extensionWorker);
