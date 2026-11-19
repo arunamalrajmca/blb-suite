@@ -6,6 +6,8 @@ test.describe('PDF selection context-menu regressions', () => {
       const cases = [
         { tab: { url: 'file:///C:/Bible/notes.pdf', title: 'notes.pdf' }, key: '__blb_local_pdf__', pdf: true },
         { tab: { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf', title: 'PDF Viewer' }, key: '__blb_pdf_viewer__', pdf: true },
+        { tab: { url: 'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf', title: 'The Big Picture.pdf' }, key: '__blb_pdf_viewer__', pdf: true },
+        { tab: { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html', title: 'The Big Picture.pdf' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'brave://pdf-internals/', title: 'PDF internals' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: 'example.com', pdf: false },
         { tab: { url: 'https://example.com/article', title: 'Article' }, key: 'example.com', pdf: false }
@@ -63,10 +65,14 @@ test.describe('PDF selection context-menu regressions', () => {
 
         const localPdf = { url: 'file:///C:/Bible/notes.pdf', title: 'notes.pdf' };
         const browserPdf = { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=notes.pdf', title: 'PDF Viewer' };
+        const hostedPdf = { url: 'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf', title: 'The Big Picture.pdf' };
+        const titleOnlyViewer = { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html', title: 'The Big Picture.pdf' };
         const ordinaryPage = { url: 'https://example.com/article', title: 'Article' };
 
         await syncPdfSelectionContextMenuVisibility(localPdf);
         await syncPdfSelectionContextMenuVisibility(browserPdf);
+        await syncPdfSelectionContextMenuVisibility(hostedPdf);
+        await syncPdfSelectionContextMenuVisibility(titleOnlyViewer);
         await syncPdfSelectionContextMenuVisibility(ordinaryPage);
 
         await chrome.storage.local.set({ masterEnabled: false });
@@ -78,6 +84,8 @@ test.describe('PDF selection context-menu regressions', () => {
         await chrome.storage.local.set({ pageSelectionButtonSites: { '__blb_local_pdf__': false, '__blb_pdf_viewer__': false } });
         await syncPdfSelectionContextMenuVisibility(localPdf);
         await syncPdfSelectionContextMenuVisibility(browserPdf);
+        await syncPdfSelectionContextMenuVisibility(hostedPdf);
+        await syncPdfSelectionContextMenuVisibility(titleOnlyViewer);
 
         return updates;
       } finally {
@@ -91,7 +99,8 @@ test.describe('PDF selection context-menu regressions', () => {
     expect(pdfUpdates.some(update => update.visible === true)).toBe(true);
     expect(pdfUpdates.at(-1).visible).toBe(false);
     expect(pdfUpdates.filter(update => update.visible === true).length).toBeGreaterThanOrEqual(2);
-    expect(pdfUpdates.slice(-2).every(update => update.visible === false)).toBe(true);
+    expect(pdfUpdates.slice(-4).every(update => update.visible === false)).toBe(true);
+    expect(pdfUpdates.some(update => update.visible === true)).toBe(true);
   });
 });
 
