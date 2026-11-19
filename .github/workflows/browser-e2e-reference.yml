@@ -242,7 +242,6 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ steps['playwright-cache'].outputs['cache-hit'] != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
@@ -308,7 +307,7 @@ jobs:
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ (matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) && steps['playwright-cache'].outputs['cache-hit'] != 'true' }}
+        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         if: ${{ matrix.group != 'source-page-button-redirect-refresh' && (matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
@@ -401,7 +400,6 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ steps['playwright-cache'].outputs['cache-hit'] != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
@@ -614,7 +612,6 @@ jobs:
           console.log(`Preserved all ${before.length} original Playwright test/describe registrations.`);
           NODE
       - name: Cache Playwright browsers
-        id: playwright-cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -624,8 +621,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Install Chromium for extension browser tests
-        if: ${{ steps['playwright-cache'].outputs['cache-hit'] != 'true' }}
-        run: npx playwright install chromium
+        run: npx playwright install --with-deps chromium
       - name: Run only changed focused behavior tests
         env:
           FOCUSED_SPECS: ${{ needs.change-detection.outputs.focused_specs }}
@@ -656,6 +652,3 @@ jobs:
             playwright-report/
           if-no-files-found: ignore
           retention-days: 14
-
-# Keep this workflow file change-triggered so a fresh PR synchronization re-runs
-# the required browser-e2e status publisher after a workflow-level startup failure.
