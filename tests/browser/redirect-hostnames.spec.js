@@ -85,8 +85,6 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
 
 
 // Source Bible redirect and page collector regression coverage.
-{
-const { test, expect } = require('@playwright/test');
 
 test('source redirect regression entrypoint is active', () => {
   expect(true).toBe(true);
@@ -1474,5 +1472,3 @@ test('table-driven malformed reference matrix refuses unsafe or ambiguous destin
 
 
 
-
-}
