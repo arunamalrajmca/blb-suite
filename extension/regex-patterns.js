@@ -37,7 +37,7 @@ globalThis.BLBShared = Object.freeze({
     'chase.com', 'citi.com', 'bankofamerica.com', 'wellsfargo.com',
     'capitalone.com', 'discover.com', 'americanexpress.com',
     'hdfcbank.com', 'icicibank.com', 'sbi.co.in', 'axisbank.com', 'kotak.com',
-    'mychart.com', 'mayoclinic.org', 'clevelandclinic.org', 'hopkinsmedicine.org',
+    'mychart.com', 'mayoclinic.org', 'clevelandclinic.org', 'hopkinsmedicine.org', 'github.com',
     'massgeneralbrigham.org', 'uclahealth.org', 'kp.org', 'apollohospitals.com',
     'unitedhealthcare.com', 'uhc.com', 'aetna.com', 'cigna.com', 'humana.com',
     'anthem.com', 'bcbs.com', 'geico.com', 'progressive.com', 'statefarm.com',
