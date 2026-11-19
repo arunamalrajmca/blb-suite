@@ -7360,6 +7360,8 @@ async function isPageButtonEnabledForHostname(hostname) {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
+  // Use the same predicate before exposing the persistent menu and again at
+  // click time after a worker wake; stale visibility must never authorize an action.
   if (!(await isSuiteEnabled())) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
   // The right-click action is exactly the same site-based feature as the
