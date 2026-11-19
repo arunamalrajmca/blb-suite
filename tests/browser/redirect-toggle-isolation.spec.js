@@ -642,9 +642,18 @@ test('GitHub and its subdomains are excluded by the shared sensitive-site policy
         redirectEnabled:true,
         pageSelectionButtonSites:{[host]:true},
         doubleClickBlbSites:{[host]:true}
-      })
+      }),
+      shouldInject:await shouldInjectContentScriptForTab({url:'https://'+host+'/arunamalrajmca/blb-suite/tree/main'},{
+        masterEnabled:true,
+        redirectEnabled:true,
+        pageSelectionButtonSites:{[host]:true},
+        doubleClickBlbSites:{[host]:true}
+      }),
+      registrationAttempt:await registerRuntimeContentScriptForPattern({url:'https://'+host+'/arunamalrajmca/blb-suite/tree/main'},['redirect-scripttagger.js'])
     }))
   }));
   expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.sensitive)).toBe(true);
   expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.scripts.length===0)).toBe(true);
+  expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.shouldInject===false)).toBe(true);
+  expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.registrationAttempt===false)).toBe(true);
 });
