@@ -2312,6 +2312,9 @@ test('a newer site opt-in recovers from an older in-flight OFF activation withou
     await expect(floatingButton).toBeVisible();
     await floatingButton.click();
     await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+    // The handoff can activate a BLB tab; restore the source tab before
+    // exercising its real browser double-click gesture.
+    await page.bringToFront();
     await page.evaluate(() => {
       document.querySelector('#reference').innerHTML='Romans 8:<span id="verse-number">28</span>';
     });
