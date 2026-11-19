@@ -915,8 +915,8 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('X.com activates Show on BLB and Double-click in an already-open document without reloading', async ({
-    page, extensionStorage, extensionWorker
+  test('X.com popup toggles activate Show on BLB and Double-click in the already-open document without reloading', async ({
+    page, context, extensionId, extensionStorage, extensionWorker
   }) => {
     await extensionStorage.set({
       masterEnabled:true,
@@ -935,20 +935,49 @@ test.describe('core user-visible E2E', () => {
     }));
     await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
     const originalTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    const tabId = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({url:'https://x.com/*'}))[0]?.id
+    );
+    expect(Number.isInteger(tabId)).toBe(true);
 
-    // Simulate enabling both site features from the popup while X.com is
-    // already open. This must activate the current document, not just register
-    // scripts for its next navigation.
-    await extensionStorage.set({
-      pageSelectionButtonSites:{'x.com':true},
-      doubleClickBlbSites:{'x.com':true}
-    });
-    const readIsolatedActivation = () => extensionWorker.evaluate(async () => {
-      const tabs = await chrome.tabs.query({});
-      const tab = tabs.find(item => (item.url || item.pendingUrl || '').startsWith('https://x.com/'));
-      if (!Number.isInteger(tab?.id)) return null;
+    // Exercise the real popup toggle handlers while preserving X.com as the
+    // active browser tab. The test fixture already grants the optional host
+    // permission, so the request resolves without a native permission prompt.
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => popupPage.locator('body').evaluate(body =>
+      !body.classList.contains('popup-loading')
+    )).toBe(true);
+    await popupPage.evaluate(async activeTabId => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs,'query',{
+        configurable:true,
+        value:queryInfo => queryInfo?.active
+          ? Promise.resolve([{id:activeTabId,url:'https://x.com/',title:'X fixture'}])
+          : originalQuery(queryInfo)
+      });
+      Object.defineProperty(chrome.permissions,'request',{
+        configurable:true,
+        value:async () => true
+      });
+      render(await getState());
+    }, tabId);
+
+    await expect(popupPage.locator('#pageSetting')).toBeVisible();
+    await popupPage.locator('#pageSetting .slider').click();
+    await expect.poll(async () => extensionWorker.evaluate(() =>
+      chrome.storage.local.get({pageSelectionButtonSites:{}})
+    )).toMatchObject({pageSelectionButtonSites:{'x.com':true}});
+    await popupPage.locator('#doubleSetting .slider').click();
+    await expect.poll(async () => extensionWorker.evaluate(() =>
+      chrome.storage.local.get({doubleClickBlbSites:{}})
+    )).toMatchObject({doubleClickBlbSites:{'x.com':true}});
+    await popupPage.close();
+    await page.bringToFront();
+
+    const readIsolatedActivation = () => extensionWorker.evaluate(async id => {
       const [injected] = await chrome.scripting.executeScript({
-        target:{tabId:tab.id},
+        target:{tabId:id},
         world:'ISOLATED',
         func:() => ({
           loaded:window.__blbSuiteContentScriptLoadedV2 === true,
@@ -956,8 +985,8 @@ test.describe('core user-visible E2E', () => {
         })
       });
       return injected.result;
-    });
-    await expect.poll(readIsolatedActivation).toMatchObject({
+    }, tabId);
+    await expect.poll(() => readIsolatedActivation()).toMatchObject({
       loaded:true,
       doubleClickBound:true
     });
@@ -971,7 +1000,7 @@ test.describe('core user-visible E2E', () => {
       selection.removeAllRanges();
       selection.addRange(range);
       document.dispatchEvent(new MouseEvent('mouseup', {
-       bubbles:true, cancelable:true, view:window
+        bubbles:true, cancelable:true, view:window
       }));
     });
     const button = page.locator('#blb-suite-page-selection-button');
