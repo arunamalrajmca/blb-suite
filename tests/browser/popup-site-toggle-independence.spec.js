@@ -905,11 +905,17 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
     await page.evaluate(() => {
       const original = chrome.runtime.sendMessage.bind(chrome.runtime);
       window.__pdfPreferenceMessages = [];
+      window.__pdfPreferenceResponses = [];
       chrome.runtime.sendMessage = (...args) => {
-        if (args[0]?.type === 'blbSuiteSetSiteFeaturePreference') {
-          window.__pdfPreferenceMessages.push(args[0]);
+        if (args[0]?.type === 'blbSuiteSetSiteFeaturePreference') window.__pdfPreferenceMessages.push(args[0]);
+        const response = original(...args);
+        if (response && typeof response.then === 'function') {
+          return response.then(value => {
+            if (args[0]?.type === 'blbSuiteSetSiteFeaturePreference') window.__pdfPreferenceResponses.push(value);
+            return value;
+          });
         }
-        return original(...args);
+        return response;
       };
     });
 
@@ -917,11 +923,13 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
     await expect(page.locator('#pageButton')).toBeChecked();
     await expect.poll(async () => ({
       storage:await extensionWorker.evaluate(() => chrome.storage.local.get({
-        pageSelectionButtonSites:{}
+        masterEnabled:true,pageSelectionButtonSites:{}
       })),
-      popupState:await page.evaluate(() => getState())
+      popupState:await page.evaluate(() => getState()),
+      popupMessages:await page.evaluate(() => window.__pdfPreferenceMessages),
+      popupResponses:await page.evaluate(() => window.__pdfPreferenceResponses)
     }), {message:'PDF ON preference must persist for ' + item.url}).toMatchObject({
-      storage:{pageSelectionButtonSites:{[item.siteKey]:true}},
+      storage:{masterEnabled:true,pageSelectionButtonSites:{[item.siteKey]:true}},
       popupState:{siteKey:item.siteKey,isPdfContext:true,isSensitiveSite:false,pageButton:true}
     });
     const preferenceMessages = await page.evaluate(() => window.__pdfPreferenceMessages);
