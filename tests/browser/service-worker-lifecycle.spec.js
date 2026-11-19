@@ -2401,16 +2401,25 @@ test('generic configured-site activation retries after an in-flight refresh race
     const original = chrome.tabs.sendMessage.bind(chrome.tabs);
     globalThis.__supplyOfGraceOriginalSendMessage = original;
     globalThis.__supplyOfGraceOldRefreshResolved = false;
+    globalThis.__supplyOfGraceRefreshCount = 0;
+    globalThis.__supplyOfGraceRetryScheduled = false;
     globalThis.__supplyOfGraceActivation = null;
+    globalThis.__supplyOfGraceOriginalRetry = ensureContentScriptInTabAfterActivationLock;
+    ensureContentScriptInTabAfterActivationLock = (...args) => {
+      globalThis.__supplyOfGraceRetryScheduled = true;
+      return globalThis.__supplyOfGraceOriginalRetry(...args);
+    };
     chrome.tabs.sendMessage = (targetTabId, message, options) => {
-      if (targetTabId === id && message?.type === 'blbSuiteRefreshSiteFeatures' &&
-          !globalThis.__supplyOfGraceOldRefreshResolved) {
-        return new Promise(resolve => {
-          globalThis.__supplyOfGraceResolveOldRefresh = () => {
-            globalThis.__supplyOfGraceOldRefreshResolved = true;
-            resolve({ok:true});
-          };
-        });
+      if (targetTabId === id && message?.type === 'blbSuiteRefreshSiteFeatures') {
+        globalThis.__supplyOfGraceRefreshCount += 1;
+        if (!globalThis.__supplyOfGraceOldRefreshResolved) {
+          return new Promise(resolve => {
+            globalThis.__supplyOfGraceResolveOldRefresh = () => {
+              globalThis.__supplyOfGraceOldRefreshResolved = true;
+              resolve({ok:true});
+            };
+          });
+        }
       }
       return original(targetTabId, message, options);
     };
@@ -2425,6 +2434,9 @@ test('generic configured-site activation retries after an in-flight refresh race
     const tab = await chrome.tabs.get(id);
     return {url:tab.url,status:tab.status};
   }, tabId)).toEqual({url:'https://supplyofgrace.com/second-document',status:'complete'});
+  await expect.poll(() => extensionWorker.evaluate(() =>
+    globalThis.__supplyOfGraceRetryScheduled
+  ), {message:'tabs.onUpdated must schedule a fresh activation after observing the in-flight lock'}).toBe(true);
 
   await extensionWorker.evaluate(() => globalThis.__supplyOfGraceResolveOldRefresh());
   await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
@@ -2435,8 +2447,13 @@ test('generic configured-site activation retries after an in-flight refresh race
   await expect(button).toBeVisible();
   await extensionWorker.evaluate(async () => {
     await globalThis.__supplyOfGraceActivation;
+    if (globalThis.__supplyOfGraceRefreshCount < 2) {
+      throw new Error('the committed document did not receive a second refresh handshake');
+    }
     chrome.tabs.sendMessage = globalThis.__supplyOfGraceOriginalSendMessage;
+    ensureContentScriptInTabAfterActivationLock = globalThis.__supplyOfGraceOriginalRetry;
     delete globalThis.__supplyOfGraceOriginalSendMessage;
+    delete globalThis.__supplyOfGraceOriginalRetry;
     delete globalThis.__supplyOfGraceResolveOldRefresh;
     delete globalThis.__supplyOfGraceActivation;
   });
