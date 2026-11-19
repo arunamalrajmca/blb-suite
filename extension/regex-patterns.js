@@ -41,7 +41,7 @@ globalThis.BLBShared = Object.freeze({
     'massgeneralbrigham.org', 'uclahealth.org', 'kp.org', 'apollohospitals.com',
     'unitedhealthcare.com', 'uhc.com', 'aetna.com', 'cigna.com', 'humana.com',
     'anthem.com', 'bcbs.com', 'geico.com', 'progressive.com', 'statefarm.com',
-    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov'
+    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov', 'chrome.google.com'
   ]),
   isSensitiveSiteHostname(value) {
     let host = String(value || '').trim().toLowerCase().replace(/\.$/, '');
@@ -56,11 +56,21 @@ globalThis.BLBShared = Object.freeze({
   },
   isSensitiveSiteUrl(value) {
     const raw = String(value || '').trim();
-    const normalizedUrl = raw.toLowerCase();
-    if (this.sensitiveSiteUrlKeywords.some(keyword => normalizedUrl.includes(keyword))) return true;
     try {
       const url = new URL(raw);
-      return (url.protocol === 'http:' || url.protocol === 'https:') && this.isSensitiveSiteHostname(url.hostname);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return this.isSensitiveSiteHostname(raw);
+      // Classify only the host, path, and decoded query parameters. URL fragments
+      // are client-side state and often contain opaque/base64 application payloads;
+      // scanning them creates false positives on ordinary Google Search pages.
+      const searchableParts = [url.hostname, url.pathname, ...Array.from(url.searchParams.values())];
+      const containsSensitiveKeyword = searchableParts.some(part => {
+        const normalized = String(part || '').toLowerCase().replace(/%[0-9a-f]{2}/gi, ' ');
+        return this.sensitiveSiteUrlKeywords.some(keyword => {
+          const keywordPattern = keyword.replace(/-/g, '[- ]');
+          return new RegExp('(?:^|[^a-z0-9])' + keywordPattern + '(?:$|[^a-z0-9])', 'i').test(normalized);
+        });
+      });
+      return containsSensitiveKeyword || this.isSensitiveSiteHostname(url.hostname);
     } catch (_) {
       return this.isSensitiveSiteHostname(raw);
     }

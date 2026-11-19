@@ -30,6 +30,16 @@
     }
   }
 
+  if (host==="bibleproject.com") {
+    // BibleProject translation chapter routes: /bible/<version>/<book-slug>/<chapter>/.
+    // The source translation is intentionally ignored; open the equivalent KJV chapter.
+    const match=u.pathname.match(/^\/bible\/[^/]+\/([^/]+)\/(\d+)\/?$/i);
+    if (match) {
+      const book=match[1].replace(/-/g," ");
+      ref=validateSourceBibleReference({book,chapter:Number(match[2]),from:1,to:null});
+    }
+  }
+
   if (host==="bible.com") {
     // Ignore the selected translation/version completely. Any version clicked
     // on Bible.com is redirected to the KJV equivalent in BLB.

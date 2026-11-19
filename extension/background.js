@@ -2886,7 +2886,7 @@ const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
 // Hostnames are normalized by hostnameFromTabUrl() before this set is checked.
 // Keep entries in normalized form (without "www.") to avoid unreachable duplicates.
 const REDIRECT_HOSTNAMES = new Set([
-  'bible.com', 'biblegateway.com', 'bibleref.com',
+  'bible.com', 'biblegateway.com', 'bibleref.com', 'bibleproject.com',
   'biblehub.com', 'bibleportal.com',
   'christianity.com', 'churchofjesuschrist.org', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com',
   'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',

@@ -74,6 +74,71 @@ async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
 }
 
 test.describe('real-browser source URL redirect regressions', () => {
+  test('sensitive URL classification ignores opaque Google Search fragments and matches gallery hostname', async ({ page }) => {
+    await page.setContent('<!doctype html><title>Google Search classification harness</title>');
+    await page.addScriptTag({ content: read('extension/regex-patterns.js') });
+    const result = await page.evaluate(() => ({
+      search: BLBShared.isSensitiveSiteUrl('https://www.google.com/search?q=Scripture+about+God+giving+sweet+to+eat#sv=opaque-tax-lab-generative-entity-viewer'),
+      gallery: BLBShared.isSensitiveSiteUrl('https://chrome.google.com/webstore/devconsole/123')
+    }));
+    expect(result.search).toBe(false);
+    expect(result.gallery).toBe(true);
+  });
+
+
+  test('BibleProject NLT chapter URL redirects to the corresponding BLB KJV chapter', async ({ page }) => {
+    const sourceUrl = 'https://bibleproject.com/bible/nlt/2-chronicles/18/';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/2ch/18/1/';
+    await loadProductionRedirect(page, sourceUrl);
+    await page.addScriptTag({ content: productionRedirectGate });
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
+  });
+
+  for (const source of [
+    { host:'christianity.com', url:'https://www.christianity.com/wiki/bible/example.html', button:'#blb-suite-christianity-multiverse' },
+    { host:'gotquestions.org', url:'https://www.gotquestions.org/example-question.html', button:'#blb-suite-gotquestions-multiverse' },
+    { host:'crosswalk.com', url:'https://www.crosswalk.com/faith/bible-study/example.html', button:'#blb-suite-crosswalk-multiverse' },
+    { host:'enduringword.com', url:'https://www.enduringword.com/bible-commentary/john-3/', button:'#blb-suite-enduringword-multiverse' }
+  ]) {
+    test(`${source.host} MultiVerse button is absent when the extension is disabled`, async ({ page }) => {
+      await loadSourcePageMultiVerse(page, source.url, false);
+      await page.waitForTimeout(50);
+      await expect(page.locator(source.button)).toHaveCount(0);
+    });
+  }
+
+  for (const source of [
+    { host: 'christianity.com', url: 'https://www.christianity.com/wiki/bible/example.html', button: '#blb-suite-christianity-multiverse' },
+    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' },
+    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/faith/bible-study/example.html', button: '#blb-suite-crosswalk-multiverse' }
+  ]) {
+    test(`${source.host} offers a page-wide BLB MultiVerse button for linked Bible references`, async ({ page }) => {
+      await loadSourcePageMultiVerse(page, source.url);
+      await page.evaluate(() => {
+        document.body.insertAdjacentHTML('beforeend', [
+          '<a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>',
+          '<a href="https://www.biblegateway.com/passage/?search=Romans%208%3A9">Romans 8:9</a>',
+          '<a href="https://www.biblegateway.com/passage/?search=John%203%3A16">John 3:16</a>',
+          '<a href="/unrelated.html">Read more</a>',
+          '<a href="https://www.biblegateway.com/passage/?search=Ephesians%202%3A8-9">Ephesians 2:8-9</a>'
+        ].join(' '));
+      });
+      await page.locator(source.button).click();
+      await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+      const request = await page.evaluate(() => window.__multiVerseRequests[0]);
+      expect(request.type).toBe('blbSuiteOpenWebsterMultiVerse');
+      expect(request.refs.map(ref => ref.text)).toEqual(['John 3:16', 'Romans 8:9', 'Ephesians 2:8-9']);
+      expect(request.refs.map(ref => ref.url)).toEqual([
+        'https://www.blueletterbible.org/kjv/jhn/3/16/',
+        'https://www.blueletterbible.org/kjv/rom/8/9/',
+        'https://www.blueletterbible.org/kjv/eph/2/8-9/'
+      ]);
+      expect(request.refs.every(ref => ref.version === 'kjv')).toBe(true);
+      await expect(page).toHaveURL(source.url);
+    });
+  }
+
+
   for (const source of [
     { host:'christianity.com', url:'https://www.christianity.com/wiki/bible/example.html', button:'#blb-suite-christianity-multiverse' },
     { host:'gotquestions.org', url:'https://www.gotquestions.org/example-question.html', button:'#blb-suite-gotquestions-multiverse' },
