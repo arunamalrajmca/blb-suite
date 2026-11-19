@@ -2395,16 +2395,22 @@ test('generic supplyofgrace.com site opt-in activates the already-open document 
     fileExecuted:false,initialized:false,doubleClickBound:false
   });
 
-  // Reproduce the stale tab-lock condition that previously allowed a prior
-  // activation result to be mistaken for readiness of the live document.
-  const result=await extensionWorker.evaluate(async id => {
+  await page.evaluate(() => { window.__supplyOfGraceDocumentToken = 'same-live-document'; });
+  // Reproduce a prior tab-scoped activation still resolving when the user
+  // enables this site's feature. The storage-change activation path must not
+  // mistake that old promise for proof that the current document is ready.
+  await extensionWorker.evaluate(id => {
     contentScriptInjectionLocks.set(id,Promise.resolve(true));
-    return ensureContentScriptInTab(id);
   },tabId);
-  expect(result).toBe(true);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'supplyofgrace.com':true},
+    doubleClickBlbSites:{'supplyofgrace.com':false}
+  });
   await expect.poll(() => contentScriptLoaded(extensionWorker,tabId),{
     message:'a generic optional-permission host must be initialized in its current document after an overlapping activation'
   }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:false});
+  await expect.poll(() => page.evaluate(() => window.__supplyOfGraceDocumentToken))
+    .toBe('same-live-document');
 
   await page.evaluate(() => {
     const target=document.querySelector('#reference');
