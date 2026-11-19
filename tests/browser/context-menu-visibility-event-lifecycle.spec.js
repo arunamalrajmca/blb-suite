@@ -290,13 +290,16 @@ test('PDF selection menu ignores stale asynchronous visibility results', async (
       chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
       isPdfViewerTab = () => true;
       isSuiteEnabled = async () => true;
-      isPageButtonEnabledForHostname = async hostname => {
-        if (hostname === 'slow.example') {
+      // Direct HTTP(S) PDFs and browser-managed PDFs share the synthetic
+      // __blb_pdf_viewer__ preference key. Distinguish the two concurrent tab
+      // snapshots by title, not by the preference key they intentionally share.
+      isPageButtonEnabledForHostname = async (_siteKey, title) => {
+        if (title === 'Slow PDF') {
           signalSlowStarted();
           await slowGate;
           return false;
         }
-        return hostname === 'fast.example';
+        return title === 'Fast PDF';
       };
 
       const slow = syncPdfSelectionContextMenuVisibility({url:'https://slow.example/document.pdf',title:'Slow PDF'});
