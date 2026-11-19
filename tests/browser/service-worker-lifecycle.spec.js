@@ -2211,6 +2211,7 @@ test('optional redirect-script failure cannot block core selection activation on
     await page.locator('#optional-failure-verse').dblclick();
     await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
   } finally {
+    await closeBlbTabs(extensionWorker);
     await extensionWorker.evaluate(() => {
       if (globalThis.__blbOriginalEnsureRuntimeRegistration) {
         ensureRuntimeContentScriptRegistered=globalThis.__blbOriginalEnsureRuntimeRegistration;
@@ -2343,6 +2344,7 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await destination.locator('#supply-target-verse').dblclick();
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/act/4/12/')).toBe(true);
   await destination.close();
+  await closeBlbTabs(extensionWorker);
   await extensionStorage.set({
     pageSelectionButtonSites:{'supplyofgrace.com':false},
     doubleClickBlbSites:{'supplyofgrace.com':false}
