@@ -135,13 +135,6 @@ test('the physical right-click BLB context-menu action remains available after w
     return syncWebSelectionContextMenuVisibility(tab,false,()=>true);
   },tabId);
   expect(menuSyncSucceeded,'Chrome must successfully register and show the eligible selection menu').toBe(true);
-  // Keep a second same-origin tab available so a normal tabs.onActivated event
-  // can wake the worker after forced termination. The right-click then tests
-  // the restored menu/action path, while Alt+B separately tests direct wake-up.
-  const wakePage=await context.newPage();
-  await wakePage.goto('https://example.com/worker-wake.html',{waitUntil:'domcontentloaded'});
-  await page.bringToFront();
-
   const browser=context.browser();
   expect(browser,'headed persistent context must expose its Chromium browser').not.toBeNull();
   const cdp=await browser.newBrowserCDPSession();
@@ -161,8 +154,18 @@ test('the physical right-click BLB context-menu action remains available after w
       return current.some(target => target.targetId===workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
-    // A normal tab-activation event wakes the worker after forced termination.
-    await wakePage.bringToFront();
+    // Create and activate a same-origin tab only after confirming termination;
+    // its normal tab lifecycle event wakes the worker for the right-click test.
+    const wakePage=await context.newPage();
+    await wakePage.goto('https://example.com/worker-wake.html',{waitUntil:'domcontentloaded'});
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target =>
+        target.type==='service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)
+      );
+    },{timeout:5000,intervals:[100,200,500]}).toBe(true);
+    await page.bringToFront();
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
       return current.some(target =>
