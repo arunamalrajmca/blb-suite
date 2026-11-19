@@ -1074,3 +1074,35 @@ test("selection text helper changes select both split extension suites", () => {
     assert.ok(output.includes("group_a_required=true"));
   });
 });
+
+
+test("full audit delegates native physical-input tests and the measured performance benchmark", () => {
+  const audit = readFileSync(
+    new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
+    "utf8"
+  );
+  const native = readFileSync(
+    new URL("../../.github/workflows/browser-native-shortcut.yml", import.meta.url),
+    "utf8"
+  );
+  const performance = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url),
+    "utf8"
+  );
+
+  for (const title of [
+    "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
+    "a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action",
+    "Show on BLB performance benchmark"
+  ]) {
+    assert.ok(audit.includes(title), "full audit must explicitly identify delegated test: " + title);
+  }
+  assert.ok(audit.includes("Expected to delegate exactly 3 native-browser/performance tests"),
+    "full audit must fail if delegated test coverage changes unexpectedly");
+  assert.ok(native.includes(".github/workflows/manual-full-test-audit.yml"),
+    "full-audit changes must trigger the native shortcut workflow");
+  assert.ok(performance.includes(".github/workflows/manual-full-test-audit.yml"),
+    "full-audit changes must trigger the performance workflow");
+  assert.ok(performance.includes("'ci-full-test-audit'"),
+    "the opt-in full-audit label must run the delegated performance benchmark");
+});
