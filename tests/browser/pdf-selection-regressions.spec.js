@@ -216,16 +216,19 @@ test('the active web-selection menu follows Show on BLB ON/OFF for a hosted PDF 
     const updates=[];
     try {
       selectionMenuKnownPresent=true;
-      chrome.tabs.query=async () => [];
-      chrome.contextMenus.update=async (id,details) => {updates.push({id,visible:details.visible});};
+      Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async () => []});
+      Object.defineProperty(chrome.contextMenus,'update',{
+        configurable:true,
+        value:async (id,details) => {updates.push({id,visible:details.visible});}
+      });
       const pdfTab={id:987654,url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',title:'The-Big-Picture.pdf'};
       await syncWebSelectionContextMenuVisibility(pdfTab,false);
       await chrome.storage.local.set({pageSelectionButtonSites:{'__blb_pdf_viewer__':false}});
       await syncWebSelectionContextMenuVisibility(pdfTab,false);
       return updates;
     } finally {
-      chrome.contextMenus.update=originalUpdate;
-      chrome.tabs.query=originalTabsQuery;
+      Object.defineProperty(chrome.contextMenus,'update',{configurable:true,value:originalUpdate});
+      Object.defineProperty(chrome.tabs,'query',{configurable:true,value:originalTabsQuery});
       selectionMenuKnownPresent=originalKnown;
     }
   });
