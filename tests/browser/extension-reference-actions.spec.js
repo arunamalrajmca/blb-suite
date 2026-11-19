@@ -923,7 +923,7 @@ test.describe('core user-visible E2E', () => {
       pageSelectionButtonSites:{'x.com':false},
       doubleClickBlbSites:{'x.com':false}
     });
-    await page.route('https://x.com/**', route => route.fulfill({
+    await context.route('https://x.com/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
       body:`<!doctype html><html><head><title>X live-toggle fixture</title></head><body>
@@ -975,6 +975,12 @@ test.describe('core user-visible E2E', () => {
     await popupPage.close();
     await page.bringToFront();
 
+    const registrationExists = await extensionWorker.evaluate(async () => {
+      const id = runtimeContentScriptIdForPattern('https://x.com/*');
+      return (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 1;
+    });
+    expect(registrationExists, 'X.com must have a persistent registration for future first-load tabs').toBe(true);
+
     const readIsolatedActivation = () => extensionWorker.evaluate(async id => {
       const [injected] = await chrome.scripting.executeScript({
         target:{tabId:id},
@@ -992,6 +998,31 @@ test.describe('core user-visible E2E', () => {
     });
     await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached();
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalTimeOrigin);
+
+    // A second X.com tab must receive the registered bundle on its first
+    // navigation, without relying on the background's post-load reinjection
+    // fallback or a manual reload.
+    const secondXPage = await context.newPage();
+    await secondXPage.goto('https://x.com/second-status', {waitUntil:'domcontentloaded'});
+    const secondXTabId = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({url:'https://x.com/second-status'}))[0]?.id
+    );
+    expect(Number.isInteger(secondXTabId)).toBe(true);
+    const secondTabActivation = () => extensionWorker.evaluate(async id => {
+      const [injected] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => ({
+          loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return injected.result;
+    }, secondXTabId);
+    await expect.poll(secondTabActivation).toMatchObject({loaded:true,doubleClickBound:true});
+    await expect(secondXPage.locator('#blb-suite-page-selection-button')).toBeAttached();
+    await secondXPage.close();
+    await page.bringToFront();
 
     await page.locator('#x-live-show').evaluate(element => {
       const range = document.createRange();
