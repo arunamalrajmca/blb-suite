@@ -230,7 +230,7 @@ test('the physical right-click BLB context-menu action remains available after w
     expect(recoveredTargets.some(target =>
       target.type==='service_worker' &&
       target.url.startsWith(`chrome-extension://${extensionId}/`)
-    ),'the native context-menu action must wake the extension service worker').toBe(true);
+    ),'the extension service worker must remain available after tab-activation recovery').toBe(true);
   } finally {
     await cdp.detach();
   }
