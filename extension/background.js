@@ -7568,14 +7568,27 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       syncPdfSelectionContextMenuVisibility(activeTab, isCurrent).catch(() => {});
     }).catch(() => {});
   }
-  // Start host registration as soon as Chrome reports the committed URL.
-  // Waiting only for "complete" can leave a fast follow-up navigation without
-  // its runtime content script on the first load. Keep the complete event as
-  // a second attempt for documents that are not injectable at commit time.
-  if ((changeInfo.url || changeInfo.status === 'complete') && tab?.url && isHttpPageUrl(tab.url)) {
+  // On URL changes Chrome may expose the destination in pendingUrl before
+  // tab.url is committed. Register its host pattern immediately so a quick
+  // follow-up navigation cannot outrun dynamic registration. Inject into the
+  // live document only once the committed tab reaches "complete".
+  const activationUrl = changeInfo.url ? (tab?.pendingUrl || tab?.url) : tab?.url;
+  const activationTab = activationUrl && activationUrl !== tab?.url
+    ? {...tab,url:activationUrl,pendingUrl:undefined}
+    : tab;
+  if ((changeInfo.url || changeInfo.status === 'complete') &&
+      activationTab?.url && isHttpPageUrl(activationTab.url)) {
     chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
-      if (await shouldInjectContentScriptForTab(tab, data)) return ensureContentScriptInTab(tabId);
-      return null;
+      if (!(await shouldInjectContentScriptForTab(activationTab, data))) return null;
+      if (changeInfo.status === 'complete' && activationTab.url === tab?.url) {
+        return ensureContentScriptInTab(tabId);
+      }
+      // BLB already has static manifest coverage; all other configured
+      // hosts need their persistent registration before the next navigation.
+      if (normalizeSiteHostname(hostnameFromTabUrl(activationTab.url)) === BLB_HOSTNAME) return null;
+      const files = contentScriptFilesForTab(activationTab, data);
+      if (!files.length || !(await hasHostAccessForTab(activationTab))) return null;
+      return ensureRuntimeContentScriptRegistered(activationTab, files);
     }).catch(() => {});
   }
 });
