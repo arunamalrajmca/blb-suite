@@ -7322,7 +7322,7 @@ async function isPageButtonEnabledForHostname(hostname) {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
-  if (!(await isSuiteEnabled()) || isPdfViewerTab(tab)) return false;
+  if (!(await isSuiteEnabled())) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
   // The right-click action is exactly the same site-based feature as the
   // floating Show on BLB button. Do not require a content-script visibility
@@ -7402,7 +7402,9 @@ async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTa
       }
       return false;
     }
-    const visible = await shouldShowBlbContextMenu(activeTab, '');
+    // PDF documents use their dedicated PDF context-menu item. Do not show
+    // the general web-selection item on the same PDF document.
+    const visible = !isPdfViewerTab(activeTab) && await shouldShowBlbContextMenu(activeTab, '');
     // A newer activation/navigation may have started while eligibility was
     // being read. Also verify that an ordinary sync still targets the active
     // tab in the last-focused window before changing the global menu.
