@@ -64,7 +64,7 @@ async function getState() {
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
-  if (!isBlbSite && currentSiteOrigin) {
+  if (!isBlbSite && !isPdfContext && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
       // Wildcard redirect permissions can satisfy contains() for a specific
