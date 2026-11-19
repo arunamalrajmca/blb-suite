@@ -1512,7 +1512,7 @@ async function cancelPendingSiteFeatureChoice(feature, requestId) {
 }
 
 async function persistSiteFeatureOffChoice(feature) {
-  await writeSiteFeaturePreference(feature, false);
+  return await writeSiteFeaturePreference(feature, false);
 }
 
 const siteFeatureToggleGeneration = Object.create(null);

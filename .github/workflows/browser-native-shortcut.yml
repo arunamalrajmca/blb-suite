@@ -54,6 +54,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -62,10 +63,28 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
-      - name: Install Chromium and headed-browser dependencies
-        run: npx playwright install --with-deps chromium
-      - name: Install X11 automation
-        run: sudo apt-get install -y xvfb xdotool
+      - name: Install Chromium when the exact Playwright browser cache is unavailable
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
+        run: npx playwright install chromium
+      - name: Install missing Chromium runtime libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser_bin="$(find "$HOME/.cache/ms-playwright" -type f -path '*/chrome-linux*/chrome' -print -quit)"
+          if [[ -z "$browser_bin" ]] || ldd "$browser_bin" | grep -q 'not found'; then
+            npx playwright install-deps chromium
+          else
+            echo "Cached Chromium runtime dependencies are already present; skipping apt dependency installation."
+          fi
+      - name: Install X11 automation only when missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v Xvfb >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
+            sudo apt-get install -y xvfb xdotool
+          else
+            echo "Xvfb and xdotool are already installed; skipping apt installation."
+          fi
       - name: Run physical browser-level Alt+B shortcut test
         env:
           BLB_HEADFUL_EXTENSION_TESTS: '1'

@@ -110,7 +110,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/context-menu-visibility-event-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/redirect-source-url-patterns.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/redirect-hostnames.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pr-422-feature-regressions.spec.js", "import { test } from '@playwright/test';\n");
@@ -452,7 +452,9 @@ test("test-only browser edits reuse the required reference workflow classifier",
   assert.match(workflow, /id: focused[\s\S]*?FOCUSED_SPECS=/);
   assert.match(workflow, /github\.event_name == 'pull_request'[\s\S]*?needs\.change-detection\.outputs\.runtime_changed == 'false'/);
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
-  assert.match(workflow, /npx playwright test "\$spec"/);
+  assert.match(workflow, /--list "\$spec"/);
+  assert.match(workflow, /Playwright discovered no tests in \$spec/);
+  assert.match(workflow, /npx playwright test --config=playwright\.config\.js "\$spec"/);
 });
 
 test("MultiVerse tab-reuse regressions share the Group A runner with conservative full-suite coverage", () => {
@@ -481,7 +483,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   );
   const groupB = groupA;
   for (const spec of [
-    "redirect-source-url-patterns",
+    "redirect-hostnames",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "multiverse-clipboard-reference-pattern",
@@ -511,7 +513,9 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupA, /browser_e2e_required:/);
   assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
   assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
-  assert.match(referenceWorkflow, /npx playwright test "\$spec"/);
+  assert.match(referenceWorkflow, /--list "\$spec"/);
+  assert.match(referenceWorkflow, /Playwright discovered no tests in \$spec/);
+  assert.match(referenceWorkflow, /npx playwright test --config=playwright\.config\.js "\$spec"/);
   assert.match(groupA, /npx playwright test "\$spec"/);
   assert.match(groupA, /browser_e2e_required == 'true'/);
   assert.match(groupB, /browser_e2e_required == 'true'/);
@@ -982,10 +986,10 @@ test("reference-delegated redirect regressions retain every explicitly required 
 test("changed browser specs delegated to References are removed from Group A execution list", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
-    commitChange(root, "tests/browser/redirect-source-url-patterns.spec.js", "// changed reference matrix regression\\n");
+    commitChange(root, "tests/browser/redirect-hostnames.spec.js", "// changed reference matrix regression\\n");
     const output = select(root, base);
     assert.match(output, /reference_required=true/);
-    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-source-url-patterns.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-hostnames.spec.js"));
     assert.ok(output.includes("group_a_changed_browser_specs=" + "\n"));
     assert.match(output, /group_a_required=true/);
   });
