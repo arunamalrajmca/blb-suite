@@ -122,6 +122,8 @@ test('PDF preference keys and core injection are consistent across popup and bac
     'optional redirect scripts must be attempted independently after core activation');
   assert(popup.includes('urlLooksPdf || titleLooksPdf'),
     'popup hosted-PDF classification remains the shared preference contract');
+  assert(popup.includes('if (!isBlbSite && !isPdfContext && currentSiteOrigin)'),
+    'PDF settings must not require host permissions for the underlying PDF server');
   assert(!background.includes("documentUrlPatterns:['file:///*.pdf']"),
     'PDF selection menu must support browser-managed remote PDF viewer URLs');
 });
