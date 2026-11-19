@@ -2092,6 +2092,40 @@ async function closeBlbTabs(extensionWorker) {
   });
 }
 
+test('shared activation retries transient readiness failures while the same document remains eligible', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.route('https://example.com/**',route => route.fulfill({
+    status:200,contentType:'text/html',
+    body:'<!doctype html><html><head><title>Activation retry fixture</title></head><body>John 3:16</body></html>'
+  }));
+  await page.goto('https://example.com/activation-retry',{waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://example.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  const result=await extensionWorker.evaluate(async id => {
+    const original=ensureContentScriptInTab;
+    let attempts=0;
+    ensureContentScriptInTab=async () => ++attempts >= 3;
+    try {
+      return {ok:await ensureContentScriptInTabWithRetry(id),attempts};
+    } finally {
+      ensureContentScriptInTab=original;
+    }
+  },tabId);
+  expect(result).toEqual({ok:true,attempts:3});
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'example.com':false},
+    doubleClickBlbSites:{'example.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
+
 test('GitHub and all subdomains are excluded before any content-script injection, even with redirects enabled', async ({
   extensionWorker, extensionStorage
 }) => {
