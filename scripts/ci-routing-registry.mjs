@@ -45,6 +45,14 @@ export const featureSpecs = [
     ]
   },
   {
+    paths: ["extension/regex-patterns.js"],
+    specs: [
+      "tests/browser/shared-regex-patterns.spec.js",
+      "tests/browser/service-worker-lifecycle.spec.js",
+      "tests/browser/redirect-hostnames.spec.js"
+    ]
+  },
+  {
     paths: ["extension/kjv-case-sensitive-words.js"],
     specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
   },
