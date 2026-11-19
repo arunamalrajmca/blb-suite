@@ -2371,3 +2371,51 @@ test('an X.com link opened in a new tab activates Floating Button and Double-cli
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
+
+
+test('generic supplyofgrace.com site opt-in activates the already-open document without reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'supplyofgrace.com':false},
+    doubleClickBlbSites:{'supplyofgrace.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Supply of Grace first-load fixture</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://supplyofgrace.com/',{waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://supplyofgrace.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,tabId)).toMatchObject({
+    fileExecuted:false,initialized:false,doubleClickBound:false
+  });
+
+  // Reproduce the stale tab-lock condition that previously allowed a prior
+  // activation result to be mistaken for readiness of the live document.
+  const result=await extensionWorker.evaluate(async id => {
+    contentScriptInjectionLocks.set(id,Promise.resolve(true));
+    return ensureContentScriptInTab(id);
+  },tabId);
+  expect(result).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,tabId),{
+    message:'a generic optional-permission host must be initialized in its current document after an overlapping activation'
+  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:false});
+
+  await page.evaluate(() => {
+    const target=document.querySelector('#reference');
+    const range=document.createRange();
+    range.selectNodeContents(target);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible();
+  await page.locator('#blb-suite-page-selection-button').click();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+});
