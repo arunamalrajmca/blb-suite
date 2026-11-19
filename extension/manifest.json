@@ -15,7 +15,8 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://www.blueletterbible.org/*"
+    "https://www.blueletterbible.org/*",
+    "https://blueletterbible.org/*"
   ],
   "omnibox": {
     "keyword": "b"
@@ -55,6 +56,7 @@
     {
       "matches": [
         "https://www.blueletterbible.org/*",
+        "https://blueletterbible.org/*",
         "file:///*.pdf",
         "file:///*.html",
         "file:///*.htm"

@@ -689,7 +689,7 @@ test('Open Bible References in BLB remains visible across redirect changes and f
 
 
 test('same-tab redirect re-enable restores source-page buttons on every registered host', async ({
-  page, extensionStorage, extensionPath
+  page, extensionStorage, extensionPath, extensionWorker
 }) => {
   const cases = sharedPageButtonHosts(extensionPath)
     .map(({host, siteId}) => ({
@@ -721,6 +721,20 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     // The homepage must remain excluded from page-button rendering.
     await page.goto(homepage.toString(), {waitUntil:'domcontentloaded'});
     await expect(button, homepage.toString() + ' homepage exclusion').toHaveCount(0);
+
+    // Do not let the nested-page navigation race the asynchronous dynamic
+    // registration created by the homepage's completed navigation. The
+    // behavior under test is same-tab feature refresh after registration,
+    // not whether two immediate navigations happen to overlap registration.
+    const originPattern = homepage.origin + '/*';
+    await expect.poll(() => extensionWorker.evaluate(async pattern => {
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const [registration] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+      return Boolean(registration &&
+        registration.matches?.includes(pattern) &&
+        registration.js?.includes('content.js') &&
+        registration.js?.includes('source-page-collector-sites.js'));
+    }, originPattern)).toBe(true);
 
     await page.goto(url, {waitUntil:'domcontentloaded'});
     await expect(button, url).toBeVisible();
