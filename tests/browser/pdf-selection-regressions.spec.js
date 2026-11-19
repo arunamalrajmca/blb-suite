@@ -74,6 +74,10 @@ test.describe('PDF selection context-menu regressions', () => {
 
         await chrome.storage.local.set({ masterEnabled: true, pageSelectionButtonSites: { '__blb_local_pdf__': false, '__blb_pdf_viewer__': true } });
         await syncPdfSelectionContextMenuVisibility(localPdf);
+        await syncPdfSelectionContextMenuVisibility(browserPdf);
+        await chrome.storage.local.set({ pageSelectionButtonSites: { '__blb_local_pdf__': false, '__blb_pdf_viewer__': false } });
+        await syncPdfSelectionContextMenuVisibility(localPdf);
+        await syncPdfSelectionContextMenuVisibility(browserPdf);
 
         return updates;
       } finally {
@@ -87,6 +91,7 @@ test.describe('PDF selection context-menu regressions', () => {
     expect(pdfUpdates.some(update => update.visible === true)).toBe(true);
     expect(pdfUpdates.at(-1).visible).toBe(false);
     expect(pdfUpdates.filter(update => update.visible === true).length).toBeGreaterThanOrEqual(2);
+    expect(pdfUpdates.slice(-2).every(update => update.visible === false)).toBe(true);
   });
 });
 
