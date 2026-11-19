@@ -884,7 +884,8 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
 
   const cases = [
     {siteKey:'__blb_local_pdf__',url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'},
-    {siteKey:'__blb_pdf_viewer__',url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf',title:'PDF Viewer'}
+    {siteKey:'__blb_pdf_viewer__',url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf',title:'PDF Viewer'},
+    {siteKey:'__blb_pdf_viewer__',url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',title:'The-Big-Picture.pdf'}
   ];
   for (const item of cases) {
     await extensionStorage.set({pageSelectionButtonSites:{[item.siteKey]:false}});
@@ -908,5 +909,17 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
       enabled:await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab))
     }), {id:987654,url:item.url,title:item.title});
     expect(eligibility).toEqual({menuVisible:true,enabled:true});
+
+    // OFF must persist for both browser-managed and direct HTTP(S) PDFs.
+    await page.locator('#pageSetting .slider').click();
+    await expect(page.locator('#pageButton')).not.toBeChecked();
+    await expect.poll(async () => extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{}
+    }))).toMatchObject({
+      pageSelectionButtonSites:{[item.siteKey]:false}
+    });
+    await expect(page.locator('#studyStatus')).not.toContainText(
+      'Unable to turn Show on BLB OFF for this page.'
+    );
   }
 });
