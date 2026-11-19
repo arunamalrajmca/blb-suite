@@ -343,7 +343,7 @@ jobs:
             discovery_log="$(mktemp)"
             node --check "$spec"
             npx playwright test --config=playwright.config.js --list --reporter=list "$spec" 2>&1 | tee "$discovery_log"
-            if ! grep -Eq 'Running [1-9][0-9]* tests?|Listing tests:' "$discovery_log"; then
+            if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
               echo "::error::Playwright discovered no tests in $spec."
               exit 1
             fi
