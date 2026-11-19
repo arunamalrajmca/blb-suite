@@ -22,12 +22,11 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
-      const sourceSiteConfig = globalThis.BLBSourcePageCollectorSites?.[host] || {};
       const sourceSite = globalThis.BLBSourcePageCollectorSites?.[host]?.id || "";
-      // Most source-site homepages are general landing pages, not article/reference
-      // pages. A registry entry can explicitly opt in when its homepage is useful.
+      // Source-page collection buttons are only for nested content pages.
+      // Keep this generic for every registered site; no homepage opt-ins.
       const isSourceHomepage = location.pathname === "/" || location.pathname === "";
-      if (sourceSite && (!isSourceHomepage || sourceSiteConfig.showOnHomepage === true)) {
+      if (sourceSite && !isSourceHomepage) {
         const buttonId = "blb-suite-" + sourceSite + "-multiverse";
         const statusId = "blb-suite-" + sourceSite + "-multiverse-status";
     
