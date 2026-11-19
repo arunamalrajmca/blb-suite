@@ -155,19 +155,47 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
       return current.some(target => target.targetId===workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
-    // Use Playwright's viewport-relative right-click so the native menu opens
-    // on the selected text without guessing the browser-chrome/X11 coordinate
-    // offset. This is still a real Chromium input event, not a DOM dispatch.
-    await page.mouse.click(
-      targetBounds.x+targetBounds.width/2,
-      targetBounds.y+targetBounds.height/2,
-      {button:'right'}
-    );
+    // Open Chromium's native context menu with an X11 mouse event. Convert
+    // viewport coordinates to screen coordinates using the visible browser
+    // window and its measured chrome insets.
+    await page.bringToFront();
+    await page.waitForTimeout(250);
+    const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
+    expect(Number.isInteger(Number(focusedWindow))).toBe(true);
+    const browserWindows=execFileSync('xdotool',['search','--onlyvisible','--class','chromium'],{encoding:'utf8'})
+      .trim().split(/\\s+/).filter(Boolean);
+    expect(browserWindows.length).toBeGreaterThan(0);
+    const windowCandidates=browserWindows.map(id=>{
+      const geometry=execFileSync('xdotool',['getwindowgeometry','--shell',id],{encoding:'utf8'});
+      const x=Number(geometry.match(/^X=(\\d+)$/m)?.[1]);
+      const y=Number(geometry.match(/^Y=(\\d+)$/m)?.[1]);
+      const width=Number(geometry.match(/^WIDTH=(\\d+)$/m)?.[1]);
+      const height=Number(geometry.match(/^HEIGHT=(\\d+)$/m)?.[1]);
+      return {id,x,y,width,height,area:width*height};
+    }).filter(item=>[item.x,item.y,item.width,item.height].every(Number.isFinite));
+    windowCandidates.sort((a,b)=>b.area-a.area);
+    const browserWindow=windowCandidates[0];
+    expect(browserWindow).toBeTruthy();
+    const windowGeometry=await page.evaluate(() => ({
+      chromeLeft:(window.outerWidth-window.innerWidth)/2,
+      chromeTop:window.outerHeight-window.innerHeight-(window.outerWidth-window.innerWidth)/2-40,
+      screenX:window.screenX,
+      screenY:window.screenY,
+      outerWidth:window.outerWidth,
+      outerHeight:window.outerHeight,
+      innerWidth:window.innerWidth,
+      innerHeight:window.innerHeight
+    }));
+    const clickX=Math.round(browserWindow.x+windowGeometry.chromeLeft+targetBounds.x+targetBounds.width/2);
+    const clickY=Math.round(browserWindow.y+windowGeometry.chromeTop+targetBounds.y+targetBounds.height/2);
+    console.log('[native-right-click-diagnostics]',JSON.stringify({browserWindow,windowGeometry,targetBounds,clickX,clickY}));
+    execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
+    execFileSync('xdotool',['click','3']);
     await page.waitForTimeout(350);
-    // Navigate relative to the stable final Inspect anchor instead of
-    // hard-coding the number of built-in menu entries, which varies between
-    // Chromium builds and optional browser integrations.
-    execFileSync('xdotool',['key','--clearmodifiers','--delay','100','End','Up','Return']);
+    // Use Chromium's native menu type-ahead for the exact visible extension
+    // title instead of assuming its position among built-in menu entries.
+    execFileSync('xdotool',['type','--clearmodifiers','--delay','100','Show on BLB']);
+    execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
