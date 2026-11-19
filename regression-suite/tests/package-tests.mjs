@@ -76,6 +76,19 @@ test('manifest-referenced files exist', () => {
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
   for (const f of refs) assert(fs.existsSync(path.join(ROOT,f)), `missing ${f}`);
 });
+test('extension updates reconcile persisted runtime registrations before activating tabs', () => {
+  const background = read('background.js');
+  const updateHandler = background.slice(
+    background.indexOf('chrome.runtime.onInstalled.addListener(async details => {'),
+    background.indexOf('chrome.storage.onChanged.addListener', background.indexOf('chrome.runtime.onInstalled.addListener(async details => {'))
+  );
+  assert(updateHandler.includes('await reconcileRuntimeContentScriptRegistrations()'),
+    'extension update must prune stale and newly sensitive persisted registrations before tab activation');
+  assert(updateHandler.indexOf('await reconcileRuntimeContentScriptRegistrations()') <
+    updateHandler.indexOf('injectConfiguredTabsAfterExtensionUpdate()'),
+    'runtime registration cleanup must finish before update-time tab activation');
+});
+
 test('no optional host-permission regression', () => {
   const m = JSON.parse(read('manifest.json'));
   assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*']);
