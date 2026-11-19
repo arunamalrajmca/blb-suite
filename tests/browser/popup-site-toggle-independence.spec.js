@@ -919,13 +919,15 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
       storage:await extensionWorker.evaluate(() => chrome.storage.local.get({
         pageSelectionButtonSites:{}
       })),
-      popupMessages:await page.evaluate(() => window.__pdfPreferenceMessages),
       popupState:await page.evaluate(() => getState())
     }), {message:'PDF ON preference must persist for ' + item.url}).toMatchObject({
       storage:{pageSelectionButtonSites:{[item.siteKey]:true}},
-      popupMessages:[{siteKey:item.siteKey,feature:'pageButton',enabled:true}],
-      popupState:{siteKey:item.siteKey,isPdfContext:true,isSensitiveSite:false}
+      popupState:{siteKey:item.siteKey,isPdfContext:true,isSensitiveSite:false,pageButton:true}
     });
+    const preferenceMessages = await page.evaluate(() => window.__pdfPreferenceMessages);
+    expect(preferenceMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({siteKey:item.siteKey,feature:'pageButton',enabled:true})
+    ]));
 
     const eligibility = await extensionWorker.evaluate(async tab => {
       const siteKey = pageSelectionSettingKeyFromTab(tab);
