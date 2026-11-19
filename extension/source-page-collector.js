@@ -23,10 +23,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
       const sourceSite = globalThis.BLBSourcePageCollectorSites?.[host]?.id || "";
-      // Most source-site homepages are general landing pages, not article/reference
-      // pages. A registry entry can explicitly opt in when its homepage is useful.
+      // Source-page collection buttons are never shown on host homepages.
+      // This is a generic product rule; registry entries cannot opt out.
       const isSourceHomepage = location.pathname === "/" || location.pathname === "";
-      if (sourceSite && (!isSourceHomepage || sourceSiteConfig.showOnHomepage === true)) {
+      if (sourceSite && !isSourceHomepage) {
         const buttonId = "blb-suite-" + sourceSite + "-multiverse";
         const statusId = "blb-suite-" + sourceSite + "-multiverse-status";
     
