@@ -2092,6 +2092,115 @@ async function closeBlbTabs(extensionWorker) {
   });
 }
 
+test('GitHub and all subdomains are excluded before any content-script injection, even with redirects enabled', async ({
+  extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{'github.com':true},
+    doubleClickBlbSites:{'github.com':true}
+  });
+  const results = await extensionWorker.evaluate(async () => {
+    const settings = await chrome.storage.local.get({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{}
+    });
+    return [
+      'https://github.com/arunamalrajmca/blb-suite/tree/main',
+      'https://www.github.com/arunamalrajmca/blb-suite',
+      'https://docs.github.com/en'
+    ].map(url => ({
+      url,
+      sensitive:isSensitiveSiteUrl(url),
+      files:contentScriptFilesForTab({url},settings)
+    }));
+  });
+  for (const result of results) {
+    expect(result.sensitive, result.url).toBe(true);
+    expect(result.files, result.url).toEqual([]);
+  }
+});
+
+test('unrelated Supply of Grace pages activate selection features on first load and in a newly opened tab', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'supplyofgrace.com':true},
+    doubleClickBlbSites:{'supplyofgrace.com':true}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  await context.route('https://www.supplyofgrace.com/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname === '/'
+      ? '<!doctype html><html><head><title>Supply of Grace source</title></head><body><a id="open-supply-target" target="_blank" href="https://www.supplyofgrace.com/articles/reference-test">Open article</a><p id="first-reference">John 3:16</p></body></html>'
+      : '<!doctype html><html><head><title>Supply of Grace article</title></head><body><p id="target-reference">Romans 8:28</p></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
+
+  await page.goto('https://www.supplyofgrace.com/',{waitUntil:'domcontentloaded'});
+  const firstTabId = await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
+  expect(Number.isInteger(firstTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,firstTabId),{
+    message:'the shared first-load activation path must initialize Supply of Grace without reloading'
+  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+  await page.locator('#first-reference').evaluate(element => {
+    const range=document.createRange();
+    range.selectNodeContents(element);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const firstFloating=page.locator('#blb-suite-page-selection-button');
+  await expect(firstFloating).toBeVisible();
+  await firstFloating.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+
+  await page.bringToFront();
+  await page.locator('#first-reference').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+
+  const newTabPromise=context.waitForEvent('page');
+  await page.locator('#open-supply-target').click();
+  const destination=await newTabPromise;
+  await destination.waitForLoadState('domcontentloaded');
+  const destinationTabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/articles/reference-test');
+  expect(Number.isInteger(destinationTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,destinationTabId),{
+    message:'a newly opened Supply of Grace tab must initialize on its first document without a manual reload'
+  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+  await destination.locator('#target-reference').evaluate(element => {
+    const range=document.createRange();
+    range.selectNodeContents(element);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const destinationFloating=destination.locator('#blb-suite-page-selection-button');
+  await expect(destinationFloating).toBeVisible();
+  await destinationFloating.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+
+  await destination.bringToFront();
+  await destination.locator('#target-reference').dblclick();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+  await destination.close();
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'supplyofgrace.com':false},
+    doubleClickBlbSites:{'supplyofgrace.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
+
 test('first X.com document activates Floating Button and Double-click without a manual reload', async ({
   page, extensionStorage, extensionWorker
 }) => {
