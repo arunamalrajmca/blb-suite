@@ -4381,6 +4381,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'blbSuiteSetSiteFeaturePreference' &&
+      (message.siteKey === '__blb_local_pdf__' || message.siteKey === '__blb_pdf_viewer__')) {
+    try {
+      const feature = message.feature === 'pageButton' ? 'pageButton' : '';
+      if (!feature || typeof message.enabled !== 'boolean' ||
+          (message.requestId != null && (typeof message.requestId !== 'string' || message.requestId.length > 160))) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const siteKey = message.siteKey;
+      await serializePendingSiteFeatureToggleMutation(async () => {
+        const data = await chrome.storage.local.get({
+          masterEnabled:true,
+          pageSelectionButtonSites:{}
+        });
+        if (message.enabled && data.masterEnabled === false) return false;
+        const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+          ? {...data.pageSelectionButtonSites} : {};
+        pageSites[siteKey] = message.enabled;
+        await chrome.storage.local.set({pageSelectionButtonSites:pageSites});
+        return true;
+      }).then(ok => sendResponse({ok:ok === true}));
+    } catch (error) { sendResponse({ok:false,error:String(error)}); }
+    return true;
+  }
+
   if (message.type === 'blbSuiteSetSiteFeaturePreference') {
     try {
       const origin = String(message.origin || '');
