@@ -2340,8 +2340,17 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await destination.bringToFront();
   await destination.locator('#target-reference').evaluate(element => {
     element.innerHTML='Acts 4:<span id="supply-target-verse">12</span>';
+    // Select only the verse number, as a real double-click does, but establish
+    // the selection explicitly so the regression tests the content-script's
+    // numeric-token context recovery rather than browser text-selection timing.
+    const verse=element.querySelector('#supply-target-verse');
+    const range=document.createRange();
+    range.selectNodeContents(verse);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    verse.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,view:window}));
   });
-  await destination.locator('#supply-target-verse').dblclick();
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/act/4/12/')).toBe(true);
   await destination.close();
   await closeBlbTabs(extensionWorker);
