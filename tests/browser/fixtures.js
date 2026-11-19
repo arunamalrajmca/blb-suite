@@ -40,7 +40,6 @@ const testHosts = [
   'https://www.bible.com/*',
   'https://www.christianity.com/*',
   'https://www.crosswalk.com/*',
-  'https://crosswalk.com/*',
   'https://www.enduringword.com/*',
   'https://www.churchofjesuschrist.org/*',
   'https://mercyhouseministry.com/*',
