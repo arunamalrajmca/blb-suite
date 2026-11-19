@@ -163,14 +163,14 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow))).toBe(true);
     const browserWindows=execFileSync('xdotool',['search','--onlyvisible','--class','chromium'],{encoding:'utf8'})
-      .trim().split(/\\s+/).filter(Boolean);
+      .trim().split(/\s+/).filter(Boolean);
     expect(browserWindows.length).toBeGreaterThan(0);
     const windowCandidates=browserWindows.map(id=>{
       const geometry=execFileSync('xdotool',['getwindowgeometry','--shell',id],{encoding:'utf8'});
-      const x=Number(geometry.match(/^X=(\\d+)$/m)?.[1]);
-      const y=Number(geometry.match(/^Y=(\\d+)$/m)?.[1]);
-      const width=Number(geometry.match(/^WIDTH=(\\d+)$/m)?.[1]);
-      const height=Number(geometry.match(/^HEIGHT=(\\d+)$/m)?.[1]);
+      const x=Number(geometry.match(/^X=(\d+)$/m)?.[1]);
+      const y=Number(geometry.match(/^Y=(\d+)$/m)?.[1]);
+      const width=Number(geometry.match(/^WIDTH=(\d+)$/m)?.[1]);
+      const height=Number(geometry.match(/^HEIGHT=(\d+)$/m)?.[1]);
       return {id,x,y,width,height,area:width*height};
     }).filter(item=>[item.x,item.y,item.width,item.height].every(Number.isFinite));
     windowCandidates.sort((a,b)=>b.area-a.area);
