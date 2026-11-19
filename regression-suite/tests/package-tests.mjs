@@ -10,7 +10,7 @@ test('manifest JSON + MV3 + version', () => {
 });
 test('required HTTP/HTTPS host permissions', () => {
   const m = JSON.parse(read('manifest.json'));
-  assert.deepEqual(m.host_permissions, ['https://www.blueletterbible.org/*']);
+  assert.deepEqual(m.host_permissions, ['https://www.blueletterbible.org/*','https://blueletterbible.org/*']);
   assert(!m.host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT access must not be required at install time');
 });
 test('content-script coverage includes web + local HTML/PDF', () => {
