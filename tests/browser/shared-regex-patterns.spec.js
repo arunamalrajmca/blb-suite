@@ -117,6 +117,8 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     healthInformationSite: BLBShared.isSensitiveSiteHostname('healthline.com'),
     financeContentSubdomain: BLBShared.isSensitiveSiteHostname('finance.yahoo.com'),
     unrelated: BLBShared.isSensitiveSiteHostname('example.com'),
+    github: BLBShared.isSensitiveSiteHostname('github.com'),
+    githubSubdomain: BLBShared.isSensitiveSiteHostname('api.github.com'),
     paymentsPath: BLBShared.isSensitiveSiteUrl('https://example.com/payments'),
     paymentsSegment: BLBShared.isSensitiveSiteUrl('https://example.com/account/payments-details'),
     paymentsQuery: BLBShared.isSensitiveSiteUrl('https://example.com/checkout?flow=payments'),
@@ -158,6 +160,8 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     healthInformationSite: false,
     financeContentSubdomain: false,
     unrelated: false,
+    github: true,
+    githubSubdomain: true,
     paymentsPath: true,
     paymentsSegment: true,
     paymentsQuery: true,
@@ -546,4 +550,25 @@ test('all reference orders preserve the middle selection through parsing and fin
   expect(postRefs).toContain('romans 16:21');
   expect(postRefs).toContain('1 corinthians 4:17');
   expect(postRefs).toContain('philippians 2:19-22');
+});
+
+
+test('GitHub is a sensitive destination and never receives any extension injection', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const settings = {
+      masterEnabled:true,
+      redirectEnabled:true,
+      pageSelectionButtonSites:{'github.com':true},
+      doubleClickBlbSites:{'github.com':true}
+    };
+    const tab = {id:987654,url:'https://github.com/arunamalrajmca/blb-suite/tree/main'};
+    return {
+      sensitive:BLBShared.isSensitiveSiteUrl(tab.url),
+      files:contentScriptFilesForTab(tab,settings),
+      shouldInject:await shouldInjectContentScriptForTab(tab,settings)
+    };
+  });
+  expect(result.sensitive).toBe(true);
+  expect(result.files).toEqual([]);
+  expect(result.shouldInject).toBe(false);
 });
