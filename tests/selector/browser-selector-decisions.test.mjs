@@ -481,7 +481,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   );
   const groupB = groupA;
   for (const spec of [
-    "redirect-source-url-patterns",
+    "source-url-redirect-regressions",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "multiverse-clipboard-reference-pattern",
