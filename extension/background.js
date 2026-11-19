@@ -3774,7 +3774,7 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
 async function isActiveTabContentScriptSender(sender) {
   if (!(await isAuthorizedContentScriptSender(sender))) return false;
   try {
-    const tabs = await chrome.tabs.query({active:true, currentWindow:true});
+    const tabs = await chrome.tabs.query({active:true, lastFocusedWindow:true});
     return tabs[0]?.id === sender.tab.id;
   } catch (_) {
     return false;
