@@ -24,8 +24,11 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
       const sourceSite = globalThis.BLBSourcePageCollectorSites?.[host]?.id || "";
       // The page-wide collection button is never shown on a site's homepage.
-      // This is a universal rule, not a per-host registry option.
-      const isSourceHomepage = location.pathname === "/" || location.pathname === "";
+      // This is a universal rule, not a per-host registry option. Cover common
+      // static home aliases as well as the canonical root path.
+      const normalizedSourcePath = location.pathname.replace(/\/+$/, "") || "/";
+      const isSourceHomepage = normalizedSourcePath === "/" ||
+        /^\/(?:index(?:\.html?)?|home(?:page)?|default(?:\.aspx|\.html?))$/i.test(normalizedSourcePath);
       if (sourceSite && !isSourceHomepage) {
         const buttonId = "blb-suite-" + sourceSite + "-multiverse";
         const statusId = "blb-suite-" + sourceSite + "-multiverse-status";
