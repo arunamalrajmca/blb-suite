@@ -7463,8 +7463,11 @@ async function installPdfSelectionContextMenu() {
       await chrome.contextMenus.create({
         id:'blb-suite-pdf-selection',
         title:'Show on BLB\tAlt+B',
+        // PDF viewers may expose a chrome-extension:// or browser-internal
+        // URL even when the original document is a remote HTTPS PDF. Keep the
+        // item globally registered and let focused-tab PDF classification plus
+        // the click-time preference check enforce visibility and eligibility.
         contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf'],
         visible:false
       });
       pdfSelectionMenuKnownPresent = true;
