@@ -2290,6 +2290,7 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
 
   // Alt+B uses the shared command handler and the selected live document text.
+  await page.bringToFront();
   await page.locator('#first-reference').evaluate(element => {
     element.textContent='Acts 4:12';
     const range=document.createRange();
@@ -2304,6 +2305,7 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/act/4/12/')).toBe(true);
 
   // Double-click must resolve a different reference on the same first-load page.
+  await page.bringToFront();
   await page.locator('#first-reference').evaluate(element => {
     element.innerHTML='Philippians 4:<span id="supply-first-verse">6</span>';
   });
