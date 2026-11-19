@@ -9,6 +9,25 @@ export const featureSpecs = [
     specs: ["tests/browser/shared-regex-patterns.spec.js"]
   },
   {
+    paths: ["extension/books.js", "extension/book-aliases.js"],
+    specs: ["tests/browser/extension-reference-actions.spec.js", "tests/browser/audit-defect-regressions.spec.js"]
+  },
+  {
+    paths: ["extension/case-sensitive-routing.js", "extension/case-sensitive-search-core.js"],
+    specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
+  },
+  {
+    paths: [
+      "extension/kjv-corpus-case-verse-index.js",
+      "extension/kjv-corpus-original-case.js",
+      "extension/kjv-corpus-phrase-index.js",
+      "extension/kjv-corpus-verses.js",
+      "extension/kjv-corpus-word-index.js",
+      "extension/kjv-corpus-word-verse-index.js"
+    ],
+    specs: ["tests/browser/kjv-corpus-lazy-loading.spec.js", "tests/browser/performance.spec.js"]
+  },
+  {
     paths: ["tests/pages/research-derived-smoke.html"],
     specs: ["tests/browser/research-dom-smoke.spec.js"]
   },
