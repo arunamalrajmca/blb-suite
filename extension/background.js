@@ -2909,6 +2909,10 @@ function isSensitiveSiteUrl(url) {
 }
 
 function contentScriptFilesForTab(tab, data) {
+  // Sensitive destinations must never receive extension content scripts,
+  // including the global redirect-only handlers. This is a hard boundary,
+  // not merely a restriction on the per-site selection features.
+  if (isSensitiveSiteUrl(tab?.url || '')) return [];
   const hostname = hostnameFromTabUrl(tab?.url);
   const key = normalizeSiteHostname(hostname);
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
@@ -3090,6 +3094,7 @@ function runtimeContentScriptIdForPattern(pattern) {
 }
 
 async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, permissionCheck = hasHostAccessForTab) {
+  if (isSensitiveSiteUrl(tab?.url || '')) return false;
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -3369,7 +3374,7 @@ async function ensureContentScriptInTab(tabId) {
   const operation = (async () => {
     try {
       let tab = await chrome.tabs.get(tabId);
-      if (!isHttpPageUrl(tab?.url)) return false;
+      if (!isHttpPageUrl(tab?.url) || isSensitiveSiteUrl(tab.url)) return false;
       const expectedOriginPattern = originPatternForUrl(tab.url);
       if (!expectedOriginPattern || !(await hasHostAccessForTab(tab))) return false;
 
@@ -3380,7 +3385,7 @@ async function ensureContentScriptInTab(tabId) {
         } catch (_) {
           return null;
         }
-        if (!isHttpPageUrl(current?.url) ||
+        if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url) ||
             originPatternForUrl(current.url) !== expectedOriginPattern) return null;
         // During cross-origin navigation Chrome may retain the committed URL
         // in url while exposing the destination in pendingUrl. Reject that
@@ -7526,7 +7531,7 @@ chrome.windows.onRemoved.addListener(() => {
   syncSelectionMenusForFocusedWindow().catch(() => {});
 });
 async function shouldInjectContentScriptForTab(tab, data) {
-  if (!tab?.url || !isHttpPageUrl(tab.url)) return false;
+  if (!tab?.url || !isHttpPageUrl(tab.url) || isSensitiveSiteUrl(tab.url)) return false;
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
@@ -7756,7 +7761,7 @@ async function injectRedirectEnabledTabs() {
   if (data.redirectEnabled !== true) return;
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (!tab?.id || !isHttpPageUrl(tab.url) || isSensitiveSiteUrl(tab.url)) continue;
     if (await hasHostAccessForTab(tab)) await ensureContentScriptInTab(tab.id);
   }
 }

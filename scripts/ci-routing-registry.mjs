@@ -39,7 +39,8 @@ export const featureSpecs = [
       "tests/browser/optional-host-permission-lifecycle.spec.js",
       "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
       "tests/browser/omnibox-dictionary-routing.spec.js",
-      "tests/browser/study-session-concurrency.spec.js"
+      "tests/browser/study-session-concurrency.spec.js",
+      "tests/browser/scripttagger-global-injection.spec.js"
     ]
   },
   {

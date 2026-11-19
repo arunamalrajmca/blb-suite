@@ -119,6 +119,10 @@ test.describe('global ScriptTagger content-script injection', () => {
       tab,
       { ...settings, redirectEnabled: false }
     )).toBe(false);
+    expect(await context.shouldInjectContentScriptForTab(
+      { ...tab, url: 'https://chrome.google.com/webstore/devconsole/40905445-1efc-480e-bbeb-d65a863d2c1c' },
+      settings
+    )).toBe(false);
   });
 
   test('turning the global toggle on injects all already-open tabs with granted host access', async () => {
@@ -128,12 +132,14 @@ test.describe('global ScriptTagger content-script injection', () => {
         { id: 11, url: 'https://sagacityweb.com/article', hostAccess: true },
         { id: 12, url: 'https://example.org/article', hostAccess: true },
         { id: 13, url: 'https://restricted.example/article', hostAccess: false },
-        { id: 14, url: 'chrome://settings', hostAccess: false }
+        { id: 14, url: 'chrome://settings', hostAccess: false },
+      { id: 15, url: 'https://chrome.google.com/webstore/devconsole/40905445-1efc-480e-bbeb-d65a863d2c1c', hostAccess: true }
       ]
     });
 
     await context.injectRedirectEnabledTabs();
     expect(injected).toEqual([11, 12]);
+    // Sensitive destinations are excluded even when global redirects and host access are enabled.
   });
 });
 
@@ -187,6 +193,11 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
   ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','source-page-collector-sites.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js']);
+
+  expect(Array.from(context.contentScriptFilesForTab(
+    {url:'https://chrome.google.com/webstore/devconsole/40905445-1efc-480e-bbeb-d65a863d2c1c'},
+    {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
+  ))).toEqual([]);
 });
 
 async function runMinimalScriptTaggerClick(settings, eventOverrides = {}) {
