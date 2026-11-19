@@ -2315,6 +2315,10 @@ test('a newer site opt-in recovers from an older in-flight OFF activation withou
     // The handoff can activate a BLB tab; restore the source tab before
     // exercising its real browser double-click gesture.
     await page.bringToFront();
+    await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),tabId);
+    await expect.poll(() => extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    )).toBe(tabId);
     await page.evaluate(() => {
       document.querySelector('#reference').innerHTML='Romans 8:<span id="verse-number">28</span>';
     });
