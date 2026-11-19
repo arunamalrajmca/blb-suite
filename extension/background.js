@@ -2631,7 +2631,7 @@ async function performReplacementTabIdentityMigration(addedTabId, removedTabId) 
         replacementActivatedTabIds.delete(addedTabId);
         return;
       }
-      const activated = await ensureContentScriptInTab(addedTabId);
+      const activated = await ensureContentScriptInTabWithRetry(addedTabId);
       if (!activated) replacementActivatedTabIds.delete(addedTabId);
     } catch (error) {
       replacementActivatedTabIds.delete(addedTabId);
@@ -3591,6 +3591,34 @@ async function ensureContentScriptInTab(tabId) {
     }
   }
 }
+async function ensureContentScriptInTabWithRetry(tabId, expectedUrl = '') {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  // A tab can be eligible while its document is still committing, and the
+  // content bundle may finish evaluating before its asynchronous initializer
+  // installs the message listener. Retry the same shared activation path while
+  // rechecking the live tab, permission, and current settings on every pass.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); } catch (_) { return false; }
+    if (!isHttpPageUrl(tab?.url) || isSensitiveSiteUrl(tab.url)) return false;
+    if (expectedUrl && tab.url !== expectedUrl) return false;
+    const settings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    if (settings.masterEnabled === false ||
+        !(await shouldInjectContentScriptForTab(tab, settings)) ||
+        !(await hasHostAccessForTab(tab))) return false;
+    if (await ensureContentScriptInTab(tabId)) return true;
+    if (attempt < 3) {
+      await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1)));
+    }
+  }
+  return false;
+}
+
 function isTrustedExtensionPageSender(sender, expectedPagePath = '') {
   if (!sender || sender.id !== chrome.runtime.id || typeof sender.url !== 'string') return false;
   try {
@@ -4516,7 +4544,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok:false, reason:'unsupported-page'});
         return true;
       }
-      const ok = await ensureContentScriptInTab(tabId);
+      const ok = await ensureContentScriptInTabWithRetry(tabId);
       sendResponse({ok, ...(ok ? {} : {reason:'activation-failed'})});
     } catch (error) {
       sendResponse({
@@ -7613,11 +7641,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             let current;
             try { current = await chrome.tabs.get(tabId); } catch (_) { return; }
             if (current?.url !== tab?.url || current?.status !== 'complete') return;
-            await ensureContentScriptInTab(tabId);
+            await ensureContentScriptInTabWithRetry(tabId, tab.url);
           }).catch(() => {});
           return earlierActivation;
         }
-        return ensureContentScriptInTab(tabId);
+        return ensureContentScriptInTabWithRetry(tabId, tab.url);
       }
       // BLB already has static manifest coverage; all other configured
       // hosts need their persistent registration before the next navigation.
@@ -7787,7 +7815,7 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
     const siteFeatureEnabled = grantCoversTab && (
       hasPageCollectorButton || pageSites[key] === true || doubleSites[key] === true
     );
-    if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
+    if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTabWithRetry(tab.id);
   }
 }
 
@@ -7798,7 +7826,7 @@ async function injectRedirectEnabledTabs() {
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url) || isSensitiveSiteUrl(tab.url)) continue;
-    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTab(tab.id);
+    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTabWithRetry(tab.id);
   }
 }
 
@@ -7827,7 +7855,7 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 
   const outcomes = await Promise.all(eligibleTabs.map(async tab => ({
     tabId:tab.id,
-    ok:await ensureContentScriptInTab(tab.id)
+    ok:await ensureContentScriptInTabWithRetry(tab.id, tab.url)
   })));
   const result = {
     eligibleTabIds:eligibleTabs.map(tab => tab.id),
