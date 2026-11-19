@@ -293,10 +293,18 @@ async function inspectBrowser(name) {
         await ordinary.target.close().catch(() => {});
       }
 
-      const sensitive = await openPopupDocumentForInspection(context, extensionId, 'data:text/html,<title>Medical record test</title><p>Private test page</p>');
+      // Use a URL containing a configured sensitive keyword. The page body is
+      // fulfilled locally so the test never depends on external DNS or network.
+      await context.route('https://medical-record.example/**', route => route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>Private test page</title><p>Private test page</p>'
+      }));
+      const sensitive = await openPopupDocumentForInspection(
+        context, extensionId, 'https://medical-record.example/record'
+      );
       try {
-        // The test URL includes a centrally configured sensitive keyword.
-        await sensitive.target.goto('data:text/html,<title>Medical record test</title><p>Private test page</p>', { waitUntil: 'load' });
+        // The active tab URL, rather than the document title, triggers the restriction.
         const page = sensitive.popup;
         await page.waitForFunction(() =>
           !document.body.classList.contains('popup-loading') &&
