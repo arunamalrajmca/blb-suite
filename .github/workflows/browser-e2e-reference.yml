@@ -244,7 +244,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*','https://supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
