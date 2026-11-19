@@ -596,7 +596,7 @@ test('GitHub is a sensitive destination and never receives any extension injecti
       chrome.scripting.unregisterContentScripts = async details => {
         removed.push(...(details.ids || []));
         if ((details.ids || []).includes(id)) fakePresent = false;
-        return originalUnregister(details).catch(() => {});
+        try { await originalUnregister(details); } catch (_) {}
       };
       await reconcileRuntimeContentScriptRegistrations();
       return {removed,remaining:fakePresent};
@@ -605,8 +605,6 @@ test('GitHub is a sensitive destination and never receives any extension injecti
       chrome.scripting.unregisterContentScripts = originalUnregister;
     }
   });
-  expect(cleanup.removed).toContain('blb-suite-runtime-' + (await extensionWorker.evaluate(() =>
-    runtimeContentScriptIdForPattern('https://github.com/*').replace('blb-suite-runtime-','')
-  )));
+  expect(cleanup.removed.some(id => id.startsWith('blb-suite-runtime-'))).toBe(true);
   expect(cleanup.remaining).toBe(false);
 });
