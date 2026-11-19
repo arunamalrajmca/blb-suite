@@ -9,7 +9,7 @@ test.describe('PDF selection context-menu regressions', () => {
         { tab: { url: 'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf', title: 'The Big Picture.pdf' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html', title: 'The Big Picture.pdf' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'brave://pdf-internals/', title: 'PDF internals' }, key: '__blb_pdf_viewer__', pdf: true },
-        { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: 'example.com', pdf: false },
+        { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'https://example.com/article', title: 'Article' }, key: 'example.com', pdf: false }
       ];
       return cases.map(({ tab, key, pdf }) => ({
