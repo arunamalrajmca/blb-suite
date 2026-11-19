@@ -1918,6 +1918,16 @@ test('worker-start recovery removes stale persisted host registrations even when
     siteHostAccessRevokedSites:{}
   }));
   try {
+    // Keep the permission lookup denied before changing the saved preference.
+    // The storage listener also reconciles registrations asynchronously; if
+    // the mock is installed only after the write, that normal path can race
+    // the deliberately seeded stale registration and create a duplicate ID.
+    await extensionWorker.evaluate(origin => {
+      const original = chrome.permissions.contains;
+      globalThis.__blbStaleRegistrationOriginalPermissionCheck = original;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(origin) ? false : original(details);
+    }, pattern);
     await extensionStorage.set({
       masterEnabled:true,
       redirectEnabled:false,
@@ -1925,6 +1935,11 @@ test('worker-start recovery removes stale persisted host registrations even when
       doubleClickBlbSites:{},
       pendingSiteFeatureToggles:{},
       siteFeaturePreferenceRequestIds:{}
+    });
+    // Let the normal storage-change reconciliation finish under the denied
+    // permission mock before seeding the deliberately stale registration.
+    await extensionWorker.evaluate(async () => {
+      await runtimeContentScriptReconciliationQueue;
     });
     // Seed the Chrome-persisted registration directly. This fixture represents
     // a registration left behind by an interrupted cleanup; it should not
@@ -1945,18 +1960,17 @@ test('worker-start recovery removes stale persisted host registrations even when
       registrationId
     )).toBe(true);
 
-    await extensionWorker.evaluate(async origin => {
-      const original = chrome.permissions.contains;
-      chrome.permissions.contains = async details =>
-        details?.origins?.includes(origin) ? false : original(details);
+    await extensionWorker.evaluate(async () => {
+      // Simulates a cold worker activation after the revocation callback
+      // failed or was interrupted; there is deliberately no pending intent.
       try {
-        // Simulates a cold worker activation after the revocation callback
-        // failed or was interrupted; there is deliberately no pending intent.
         await recoverRuntimeContentScriptRegistrationsAfterWorkerStart();
       } finally {
-        chrome.permissions.contains = original;
+        const original = globalThis.__blbStaleRegistrationOriginalPermissionCheck;
+        if (original) chrome.permissions.contains = original;
+        delete globalThis.__blbStaleRegistrationOriginalPermissionCheck;
       }
-    }, pattern);
+    });
 
     await expect.poll(() => extensionWorker.evaluate(async id =>
       (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 0,
@@ -1970,6 +1984,9 @@ test('worker-start recovery removes stale persisted host registrations even when
     expect(saved.siteFeaturePreferenceRequestIds).toEqual({});
   } finally {
     await extensionWorker.evaluate(async ({origin,settings}) => {
+      const original = globalThis.__blbStaleRegistrationOriginalPermissionCheck;
+      if (original) chrome.permissions.contains = original;
+      delete globalThis.__blbStaleRegistrationOriginalPermissionCheck;
       const id = runtimeContentScriptIdForPattern(origin);
       await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
       await chrome.storage.local.set(settings);

@@ -192,12 +192,12 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     ];
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
-    // The extension item is above the final Inspect item. End selects
-    // Inspect (or the final browser item), not the extension command.
-    // Start at the first native-menu item and advance through the six
-    // preceding selectable entries to "Show on BLB".
-    execFileSync('xdotool',['key','--clearmodifiers','Home']);
-    execFileSync('xdotool',['key','--clearmodifiers','Down','Down','Down','Down','Down','Down']);
+    // Chromium places the extension command immediately before the final
+    // Inspect item in this page context menu. Navigate relative to that stable
+    // anchor instead of hard-coding the number of built-in menu entries, which
+    // varies between Chromium builds and optional browser integrations.
+    execFileSync('xdotool',['key','--clearmodifiers','End']);
+    execFileSync('xdotool',['key','--clearmodifiers','Up']);
     execFileSync('xdotool',['key','--clearmodifiers','Return']);
 
     await expect.poll(async () => {

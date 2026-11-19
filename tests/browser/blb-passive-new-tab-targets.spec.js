@@ -15,6 +15,44 @@ async function serveLinks(context) {
   }));
 }
 
+test('apex BLB verse links open a new tab with the content script active on first load', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({masterEnabled:true});
+  await context.route('https://blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname === '/'
+      ? `<!doctype html><html><head><title>BLB apex fixture</title></head><body>
+          <a id="apex-kjv-verse" href="https://blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>
+        </body></html>`
+      : '<!doctype html><html><head><title>BLB first-load destination</title></head><body>John 3:16</body></html>';
+    return route.fulfill({status:200,contentType:'text/html; charset=utf-8',body});
+  });
+
+  await page.goto('https://blueletterbible.org/', {waitUntil:'domcontentloaded'});
+  const contentScriptLoadedForUrl = url => extensionWorker.evaluate(async targetUrl => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find(item => item.url === targetUrl || item.pendingUrl === targetUrl);
+    if (!Number.isInteger(tab?.id)) return false;
+    const [injected] = await chrome.scripting.executeScript({
+      target:{tabId:tab.id},
+      world:'ISOLATED',
+      func:() => window.__blbSuiteContentScriptLoadedV2 === true
+    });
+    return injected.result;
+  }, url);
+  await expect.poll(() => contentScriptLoadedForUrl('https://blueletterbible.org/')).toBe(true);
+  await expect(page.locator('#apex-kjv-verse')).toHaveAttribute('target','_blank');
+
+  const popupPromise = page.waitForEvent('popup');
+  await page.locator('#apex-kjv-verse').click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState('domcontentloaded');
+  await expect.poll(() => contentScriptLoadedForUrl('https://blueletterbible.org/kjv/jhn/3/16/')).toBe(true);
+  await expect(popup).toHaveURL(/blueletterbible\.org\/kjv\/jhn\/3\/16\//);
+});
+
 test('enabled Suite marks initial and dynamically added KJV verse links as new-tab targets only', async ({
   page, context, extensionStorage
 }) => {

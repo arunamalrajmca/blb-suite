@@ -915,6 +915,159 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
+  test('X.com popup toggles activate Show on BLB and Double-click in the already-open document without reloading', async ({
+    page, context, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await extensionWorker.evaluate(async () =>
+      unregisterRuntimeContentScriptForPattern('https://x.com/*')
+    );
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'x.com':false},
+      doubleClickBlbSites:{'x.com':false}
+    });
+    const initiallyRegistered = await extensionWorker.evaluate(async () =>
+      (await chrome.scripting.getRegisteredContentScripts({
+        ids:[runtimeContentScriptIdForPattern('https://x.com/*')]
+      })).length > 0
+    );
+    expect(initiallyRegistered).toBe(false);
+    await context.route('https://x.com/**', route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:`<!doctype html><html><head><title>X live-toggle fixture</title></head><body>
+        <main>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-live-show">Matthew</span> 22:37</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-live-double">Genesis</span> 17:8</span></div></article>
+        </main>
+      </body></html>`
+    }));
+    await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+    const originalTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    const tabId = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({url:'https://x.com/*'}))[0]?.id
+    );
+    expect(Number.isInteger(tabId)).toBe(true);
+
+    // Exercise the real popup toggle handlers while preserving X.com as the
+    // active browser tab. The test fixture already grants the optional host
+    // permission, so the request resolves without a native permission prompt.
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => popupPage.locator('body').evaluate(body =>
+      !body.classList.contains('popup-loading')
+    )).toBe(true);
+    await popupPage.evaluate(async activeTabId => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs,'query',{
+        configurable:true,
+        value:queryInfo => queryInfo?.active
+          ? Promise.resolve([{id:activeTabId,url:'https://x.com/',title:'X fixture'}])
+          : originalQuery(queryInfo)
+      });
+      Object.defineProperty(chrome.permissions,'request',{
+        configurable:true,
+        value:async () => true
+      });
+      render(await getState());
+    }, tabId);
+
+    await expect(popupPage.locator('#pageSetting')).toBeVisible();
+    await popupPage.locator('#pageSetting .slider').click();
+    await expect.poll(async () => extensionWorker.evaluate(() =>
+      chrome.storage.local.get({pageSelectionButtonSites:{}})
+    )).toMatchObject({pageSelectionButtonSites:{'x.com':true}});
+    await popupPage.locator('#doubleSetting .slider').click();
+    await expect.poll(async () => extensionWorker.evaluate(() =>
+      chrome.storage.local.get({doubleClickBlbSites:{}})
+    )).toMatchObject({doubleClickBlbSites:{'x.com':true}});
+    await popupPage.close();
+    await page.bringToFront();
+
+    const registration = await extensionWorker.evaluate(async () => {
+      const id = runtimeContentScriptIdForPattern('https://x.com/*');
+      const [script] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+      return script ? {
+        matches:script.matches,
+        persistAcrossSessions:script.persistAcrossSessions,
+        runAt:script.runAt,
+        files:script.js
+      } : null;
+    });
+    expect(registration, 'X.com must have a persistent registration for future first-load tabs').toMatchObject({
+      matches:['https://x.com/*'],
+      persistAcrossSessions:true,
+      runAt:'document_start'
+    });
+    expect(registration.files).toContain('content.js');
+
+    const readIsolatedActivation = () => extensionWorker.evaluate(async id => {
+      const [injected] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => ({
+          loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return injected.result;
+    }, tabId);
+    await expect.poll(() => readIsolatedActivation()).toMatchObject({
+      loaded:true,
+      doubleClickBound:true
+    });
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached();
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalTimeOrigin);
+
+    // A second X.com tab must receive the registered bundle on its first
+    // navigation, without relying on the background's post-load reinjection
+    // fallback or a manual reload.
+    const secondXPage = await context.newPage();
+    await secondXPage.goto('https://x.com/second-status', {waitUntil:'domcontentloaded'});
+    const secondXTabId = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({url:'https://x.com/second-status'}))[0]?.id
+    );
+    expect(Number.isInteger(secondXTabId)).toBe(true);
+    const secondTabActivation = () => extensionWorker.evaluate(async id => {
+      const [injected] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => ({
+          loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return injected.result;
+    }, secondXTabId);
+    await expect.poll(secondTabActivation).toMatchObject({loaded:true,doubleClickBound:true});
+    await expect(secondXPage.locator('#blb-suite-page-selection-button')).toBeAttached();
+    await secondXPage.close();
+    await page.bringToFront();
+
+    await page.locator('#x-live-show').evaluate(element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', {
+        bubbles:true, cancelable:true, view:window
+      }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({timeout:10000});
+    await button.click();
+    const showTab = await waitForBlbTabPath(extensionWorker, '/kjv/mat/22/37/');
+    expect(new URL(showTab.pendingUrl || showTab.url).pathname).toBe('/kjv/mat/22/37/');
+    await removeTabById(extensionWorker, showTab.id);
+
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.locator('#x-live-double').dblclick();
+    const doubleTab = await waitForBlbTabPath(extensionWorker, '/kjv/gen/17/8/');
+    expect(new URL(doubleTab.pendingUrl || doubleTab.url).pathname).toBe('/kjv/gen/17/8/');
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalTimeOrigin);
+  });
+
   test('X tweet text resolves book clicks from exact caret ranges through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
