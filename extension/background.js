@@ -3366,6 +3366,23 @@ function reconcileRuntimeContentScriptRegistrations() {
   return operation;
 }
 
+async function ensureContentScriptInTabAfterActivationLock(tabId, expectedUrl) {
+  const earlierActivation = contentScriptInjectionLocks.get(tabId);
+  if (earlierActivation) {
+    try { await earlierActivation; } catch (_) {}
+    // The map stores the inner operation promise. The caller removes that lock
+    // in a finally continuation after it settles, so yield one task before
+    // retrying to avoid accidentally joining the already-settled old promise.
+    if (contentScriptInjectionLocks.get(tabId) === earlierActivation) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+  let current;
+  try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+  if (!current || current.url !== expectedUrl || current.status !== 'complete') return false;
+  return ensureContentScriptInTab(tabId);
+}
+
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
@@ -7278,6 +7295,7 @@ function pageSelectionSettingKeyFromTab(tab) {
   try { decoded = decodeURIComponent(raw); } catch (_) {}
   const looksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded) || /\.pdf(?:$|\s)/i.test(title);
   if (/^file:/i.test(raw) && looksPdf) return '__blb_local_pdf__';
+  if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';
   if (/^(?:chrome|brave)-extension:/i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   if (/^(?:brave|chrome):\/\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   return hostnameFromTabUrl(raw);
@@ -7448,7 +7466,7 @@ async function installPdfSelectionContextMenu() {
         id:'blb-suite-pdf-selection',
         title:'Show on BLB\tAlt+B',
         contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf'],
+        documentUrlPatterns:['file:///*.pdf','http://*/*.pdf*','https://*/*.pdf*'],
         visible:false
       });
       pdfSelectionMenuKnownPresent = true;
@@ -7590,12 +7608,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         // static manifest bundle is already present, not an unconditional reinjection.
         const earlierActivation = contentScriptInjectionLocks.get(tabId);
         if (earlierActivation) {
-          earlierActivation.catch(() => {}).then(async () => {
-            let current;
-            try { current = await chrome.tabs.get(tabId); } catch (_) { return; }
-            if (current?.url !== tab?.url || current?.status !== 'complete') return;
-            await ensureContentScriptInTab(tabId);
-          }).catch(() => {});
+          // The earlier refresh may have acknowledged the outgoing document.
+          // Retry after its lock is actually released against the committed URL.
+          ensureContentScriptInTabAfterActivationLock(tabId, tab.url).catch(() => {});
           return earlierActivation;
         }
         return ensureContentScriptInTab(tabId);
