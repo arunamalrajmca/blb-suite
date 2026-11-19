@@ -242,6 +242,7 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
@@ -400,6 +401,7 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
@@ -612,6 +614,7 @@ jobs:
           console.log(`Preserved all ${before.length} original Playwright test/describe registrations.`);
           NODE
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -621,7 +624,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Install Chromium for extension browser tests
-        run: npx playwright install --with-deps chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
+        run: npx playwright install chromium
       - name: Run only changed focused behavior tests
         env:
           FOCUSED_SPECS: ${{ needs.change-detection.outputs.focused_specs }}
