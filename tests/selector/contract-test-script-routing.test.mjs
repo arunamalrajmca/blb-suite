@@ -1,6 +1,6 @@
 import test from "node:test";
 import {
-  featureSpecs, mappedSpecs, separatelyManagedSpecs, groupARequiredSpecs,
+  featureSpecs, mappedSpecs, separatelyManagedSpecs, groupARequiredSpecs, togglePermissionSpecs,
   groupBRequiredSpecs, referenceRequiredSpecs,
   referenceDelegatedSpecs, studySessionSpecs
 } from "../../scripts/ci-routing-registry.mjs";
@@ -137,10 +137,11 @@ test("critical first-load and activation-race regressions are actually selected 
 
 
 test("sensitive-site policy regressions are selected whenever shared URL policy changes", () => {
-  const group=referenceMatrix.find(item => item.group === "sensitive-site-policy-regressions");
-  assert.ok(group, "sensitive-site policy must have a dedicated reference-matrix entry");
-  assert.equal(group.file,"tests/browser/redirect-toggle-isolation.spec.js");
-  assert.match(group.grep,/^\.\*$/);
+  assert.ok(togglePermissionSpecs.has("tests/browser/redirect-toggle-isolation.spec.js"),
+    "GitHub sensitive-site coverage belongs to the dedicated toggle/permission gate");
+  assert.ok(featureSpecs.some(group => group.paths.includes("extension/regex-patterns.js") &&
+    group.specs.includes("tests/browser/redirect-toggle-isolation.spec.js")),
+    "shared sensitive-site policy changes must select the GitHub exclusion regression");
   assert.match(sensitivePolicySource,/GitHub and its subdomains are excluded by the shared sensitive-site policy/);
   const classifierGroup=referenceMatrix.find(item => item.group === "specialized-reference-smoke-batch");
   assert.ok(new RegExp(classifierGroup.grep).test("shared sensitive-site classifier covers known providers without keyword false positives"));
