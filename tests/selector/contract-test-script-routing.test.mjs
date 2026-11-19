@@ -126,8 +126,8 @@ test("critical activation recovery regressions are selected by the reference CI 
   const group = referenceMatrix.find(item => item.group === "service-worker-lifecycle");
   assert.ok(group?.grep, "service-worker lifecycle must have a focused CI selector");
   const selector = new RegExp(group.grep);
-  const criticalPattern = /(?:first X\\.com document activates|already-open X\\.com document activates|BLB verse link opened in a new tab|MultiVerse link opened from BLB in a new tab|X\\.com link opened in a new tab|shared activation retries transient readiness failures|optional redirect-script failure cannot block core selection activation|unrelated Supply of Grace pages activate|newer site opt-in recovers)/i;
-  const titles = [...lifecycleSource.matchAll(/test\\(['"`]([^'"`]+)['"`]/g)].map(match => match[1]);
+  const criticalPattern = /(?:first X\.com document activates|already-open X\.com document activates|BLB verse link opened in a new tab|MultiVerse link opened from BLB in a new tab|X\.com link opened in a new tab|shared activation retries transient readiness failures|optional redirect-script failure cannot block core selection activation|unrelated Supply of Grace pages activate|newer site opt-in recovers)/i;
+  const titles = [...lifecycleSource.matchAll(/test\(['"`]([^'"`]+)['"`]/g)].map(match => match[1]);
   const criticalTitles = titles.filter(title => criticalPattern.test(title));
   assert.ok(criticalTitles.length >= 8, "the lifecycle spec must retain its critical activation scenarios");
   for (const title of criticalTitles) {
