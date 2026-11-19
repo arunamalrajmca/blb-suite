@@ -933,11 +933,23 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
 
     // The click handler must re-read the durable OFF preference; a stale
     // visible native menu must not permit the PDF selection action.
-    await extensionWorker.evaluate(async tab => {
-      await handleBlbSelectionContextMenuClick({
-        menuItemId:'blb-suite-pdf-selection',
-        selectionText:'Revelation 21:4'
-      },tab);
+    const clickWasAllowed = await extensionWorker.evaluate(async tab => {
+      const originalOpen = openBlbPageSelection;
+      let opened = false;
+      openBlbPageSelection = async () => {
+        opened = true;
+        return {ok:true};
+      };
+      try {
+        await handleBlbSelectionContextMenuClick({
+          menuItemId:'blb-suite-pdf-selection',
+          selectionText:'Revelation 21:4'
+        },tab);
+        return opened;
+      } finally {
+        openBlbPageSelection = originalOpen;
+      }
     }, {id:987654,url:item.url,title:item.title});
+    expect(clickWasAllowed, 'PDF OFF must block the actual right-click action').toBe(false);
   }
 });
