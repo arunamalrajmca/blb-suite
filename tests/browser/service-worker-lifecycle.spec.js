@@ -2167,11 +2167,11 @@ test('optional redirect-script failure cannot block core selection activation on
     pageSelectionButtonSites:{'supplyofgrace.com':true},
     doubleClickBlbSites:{'supplyofgrace.com':true}
   });
-  await extensionWorker.evaluate(() => {
+  await extensionWorker.evaluate(async () => {
     globalThis.__blbOriginalEnsureRuntimeRegistration = ensureRuntimeContentScriptRegistered;
     globalThis.__blbOriginalExecuteScript = chrome.scripting.executeScript.bind(chrome.scripting);
     ensureRuntimeContentScriptRegistered = async () => false;
-    unregisterRuntimeContentScriptForPattern('https://www.supplyofgrace.com/*');
+    await unregisterRuntimeContentScriptForPattern('https://www.supplyofgrace.com/*');
     chrome.scripting.executeScript = async details => {
       if ((details.files || []).some(file =>
         file === 'redirect-scripttagger.js' || file === 'redirect-bibleref-ranges.js'
