@@ -14,6 +14,8 @@ const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.
 const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
+const lifecycleSource = readFileSync(new URL("../browser/service-worker-lifecycle.spec.js", import.meta.url), "utf8");
+const referenceMatrix = JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8"));
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -115,5 +117,19 @@ test("every feature-owned browser regression has an explicit CI classification",
   }
   for (const spec of groupARequiredSpecs) {
     assert.ok(classified.has(spec), "Group A gate ownership must remain classified: " + spec);
+  }
+});
+
+
+test("critical first-load and activation-race regressions are actually selected by the reference CI matrix", () => {
+  const group=referenceMatrix.find(item => item.group === "service-worker-lifecycle");
+  assert.ok(group?.grep, "service-worker lifecycle must have a focused CI selector");
+  const selector=new RegExp(group.grep);
+  const criticalPattern=/(?:first X\\.com document activates|already-open X\\.com document activates|BLB verse link opened in a new tab|MultiVerse link opened from BLB in a new tab|X\\.com link opened in a new tab|unrelated configured host activates|newer site opt-in recovers)/i;
+  const titles=[...lifecycleSource.matchAll(/test\\(['"`]([^'"`]+)['"`]/g)].map(match => match[1]);
+  const criticalTitles=titles.filter(title => criticalPattern.test(title));
+  assert.ok(criticalTitles.length >= 7, "the lifecycle spec must retain its critical activation scenarios");
+  for(const title of criticalTitles) {
+    assert.ok(selector.test(title), "critical lifecycle test is omitted from CI matrix: " + title);
   }
 });
