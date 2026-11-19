@@ -2075,13 +2075,15 @@ async function hasBlbPassage(extensionWorker, path) {
       try {
         const url = new URL(tab.pendingUrl || tab.url || '');
         if (url.hostname !== 'www.blueletterbible.org') return false;
-        const actualPath = url.pathname.replace(/\/+$/, '/');
-        // BLB may canonicalize a successfully opened passage by appending its
-        // verse-source identifier (for example, /kjv/act/4/12/s_1022012).
-        // Match that canonical form without accepting another passage path.
-        return actualPath === expectedPath ||
-          actualPath === expectedPath.replace(/\/+$/, '') + '/s_' + 
-            (actualPath.match(/\/s_([^/]+)\/$/)?.[1] || '__no_match__') + '/';
+        // Normalize both slash-present and slash-absent BLB URLs. A trailing
+        // slash replacement alone does not add a slash when none is present.
+        const actualPath = url.pathname.replace(/\\/+$/, '') + '/';
+        const expectedBase = expectedPath.replace(/\\/+$/, '');
+        // BLB may append a verse-source identifier to a canonical passage URL.
+        // Accept only that one extra segment, not arbitrary deeper paths.
+        const sourceSuffix = actualPath.match(/\\/s_[^/]+\\/$/)?.[0] || '';
+        return actualPath === expectedBase + '/' ||
+          (!!sourceSuffix && actualPath === expectedBase + sourceSuffix);
       } catch (_) {
         return false;
       }
@@ -2781,4 +2783,48 @@ test('an X.com link opened in a new tab activates Floating Button and Double-cli
     doubleClickBlbSites:{'x.com':false}
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
+
+
+test('PDF selection exposes only the PDF context-menu action, without a duplicate web item', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'__blb_pdf_viewer__':true}
+  });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const tab = {
+      id:940961,
+      url:'https://example.com/reference.pdf',
+      title:'reference.pdf'
+    };
+    await installPdfSelectionContextMenu();
+    const webEligible = await shouldShowBlbContextMenu(tab, 'John 3:16');
+    const pdfEligible = await shouldShowPdfSelectionContextMenu(tab);
+    return {webEligible, pdfEligible};
+  });
+
+  expect(result).toEqual({webEligible:false, pdfEligible:true});
+});
+
+test('selection destination activation retries only Chrome transient tab-drag failures', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    if (!Number.isInteger(tab?.id)) throw new Error('Expected an active browser tab');
+    let attempts = 0;
+    const activated = await activateTabWithTransientRetry(tab.id, async (id, properties) => {
+      attempts++;
+      if (attempts === 1) {
+        throw new Error('Tabs cannot be edited right now (user may be dragging a tab).');
+      }
+      return {id, ...properties};
+    });
+    return {attempts, activatedId:activated.id};
+  });
+
+  expect(result).toEqual({attempts:2, activatedId:expect.any(Number)});
 });
