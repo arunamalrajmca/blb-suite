@@ -139,3 +139,60 @@ test('reinjection restores only the passive new-tab target owned by the previous
     cleanupRegistryReleased: true
   });
 });
+
+test('www BLB verse-link tabs are feature-ready on first load without a manual reload', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'blueletterbible.org':true}
+  });
+  const homeUrl = 'https://www.blueletterbible.org/';
+  const verseUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const body = url.pathname === '/'
+      ? '<!doctype html><html><head><title>BLB www source</title></head><body>' +
+        '<a id="www-verse-link" href="' + verseUrl + '">John 3:16</a></body></html>'
+      : '<!doctype html><html><head><title>BLB www destination</title></head><body>' +
+        '<div id="bVerse_1"><a id="destination-bverse-link" href="' +
+        'https://www.blueletterbible.org/lexicon/g25/kjv/tr/0-1/">' +
+        "Strong's G25</a></div></body></html>";
+    return route.fulfill({status:200,contentType:'text/html; charset=utf-8',body});
+  });
+
+  await page.goto(homeUrl, {waitUntil:'domcontentloaded'});
+  await expect(page.locator('#www-verse-link')).toHaveAttribute('target','_blank');
+  const popupPromise = page.waitForEvent('popup');
+  await page.locator('#www-verse-link').click();
+  const destination = await popupPromise;
+  await destination.waitForLoadState('domcontentloaded');
+  await expect(destination).toHaveURL(/www\.blueletterbible\.org\/kjv\/jhn\/3\/16\//);
+
+  const tabId = await extensionWorker.evaluate(async url => {
+    const tabs = await chrome.tabs.query({url});
+    return tabs.find(tab => tab.active)?.id ?? tabs[0]?.id ?? null;
+  }, verseUrl);
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => window.__blbSuiteContentScriptLoadedV2 === true
+    });
+    return result.result;
+  }, tabId)).toBe(true);
+
+  // The runtime refresh handshake is the same readiness contract used by
+  // background activation. The target page must answer it on first load.
+  const refresh = await extensionWorker.evaluate(async id =>
+    chrome.tabs.sendMessage(id, {type:'blbSuiteRefreshSiteFeatures'})
+  , tabId);
+  expect(refresh?.ok).toBe(true);
+
+  // Verify the BLB verse-link navigation module is active in the new document,
+  // not merely that the top-level content.js file executed.
+  await expect(destination.locator('#destination-bverse-link')).toHaveAttribute('target','_blank');
+});
