@@ -22,7 +22,6 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
-      const sourceSiteConfig = globalThis.BLBSourcePageCollectorSites?.[host] || {};
       const sourceSite = globalThis.BLBSourcePageCollectorSites?.[host]?.id || "";
       // Most source-site homepages are general landing pages, not article/reference
       // pages. A registry entry can explicitly opt in when its homepage is useful.
