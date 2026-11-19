@@ -136,7 +136,7 @@ try {
   run(['git', 'config', 'user.name', 'CI Routing Test']);
   run(['git', 'config', 'user.email', 'ci-routing@example.invalid']);
   const fixtures = [
-    'tests/browser/source-bible-url-regressions.spec.js',
+    'tests/browser/redirect-hostnames.spec.js',
     'tests/browser/redirect-hostnames.spec.js',
     'tests/browser/blb-non-kjv-redirect.spec.js',
     'tests/browser/scripttagger-global-injection.spec.js',

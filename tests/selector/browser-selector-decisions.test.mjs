@@ -110,7 +110,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/context-menu-visibility-event-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/source-bible-url-regressions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/redirect-hostnames.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pr-422-feature-regressions.spec.js", "import { test } from '@playwright/test';\n");
@@ -986,10 +986,10 @@ test("reference-delegated redirect regressions retain every explicitly required 
 test("changed browser specs delegated to References are removed from Group A execution list", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
-    commitChange(root, "tests/browser/source-bible-url-regressions.spec.js", "// changed reference matrix regression\\n");
+    commitChange(root, "tests/browser/redirect-hostnames.spec.js", "// changed reference matrix regression\\n");
     const output = select(root, base);
     assert.match(output, /reference_required=true/);
-    assert.ok(output.includes("changed_browser_specs=tests/browser/source-bible-url-regressions.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-hostnames.spec.js"));
     assert.ok(output.includes("group_a_changed_browser_specs=" + "\n"));
     assert.match(output, /group_a_required=true/);
   });
