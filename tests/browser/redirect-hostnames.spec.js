@@ -85,15 +85,6 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
 
 
 // Source Bible redirect and page collector regression coverage.
-
-test('source redirect regression entrypoint is active', () => {
-  expect(true).toBe(true);
-});
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-
-const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
 const integrationSourceRedirectModule = read('extension/source-bible-redirect.js').replaceAll('location.replace(target);', 'globalThis.__redirectedTo = target;');
