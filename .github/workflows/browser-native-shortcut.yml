@@ -81,7 +81,6 @@ jobs:
         run: |
           set -euo pipefail
           if ! command -v Xvfb >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
-            sudo apt-get update
             sudo apt-get install -y xvfb xdotool
           else
             echo "Xvfb and xdotool are already installed; skipping apt installation."
