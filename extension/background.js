@@ -3429,6 +3429,31 @@ async function ensureContentScriptInTab(tabId) {
       // extension context, inject the current static bundle into that tab.
       const files = configuredFiles.length ? configuredFiles : (isBlbDestination ? BLB_CONTENT_SCRIPT_FILES : []);
       if (!files.length) return false;
+      // Optional redirect handlers must never make the core selection bundle
+      // fail atomically. A transient/unavailable redirect resource otherwise
+      // prevents Floating Button, Double-click, and all page listeners from
+      // being installed on an otherwise eligible first-load document.
+      const optionalRedirectFiles = files.filter(file =>
+        SCRIPT_TAGGER_CONTENT_SCRIPT_FILES.includes(file) ||
+        BIBLEREF_RANGE_CONTENT_SCRIPT_FILES.includes(file)
+      );
+      const primaryFiles = files.filter(file => !optionalRedirectFiles.includes(file));
+      const injectOptionalRedirectFiles = async () => {
+        if (!optionalRedirectFiles.length) return true;
+        const current = await getCurrentEligibleTab();
+        if (!current) return false;
+        try {
+          await chrome.scripting.executeScript({target:{tabId}, files:optionalRedirectFiles});
+          return true;
+        } catch (error) {
+          if (!isTabUnavailableError(error)) {
+            console.warn('KJV Scripture Tools optional redirect-script injection failed; core page features remain active:', JSON.stringify({
+              tabId, tabUrl:current.url, files:optionalRedirectFiles, ...describeScriptInjectionError(error)
+            }));
+          }
+          return false;
+        }
+      };
 
       const registrationReady = isBlbDestination
         ? true
@@ -3483,19 +3508,10 @@ async function ensureContentScriptInTab(tabId) {
             // that this tab still belongs to the origin whose bundle we chose.
             tab = await getCurrentEligibleTab();
             if (!tab) return false;
-            if (files.includes('redirect-scripttagger.js')) {
-              try {
-                tab = await getCurrentEligibleTab();
-                if (!tab) return false;
-                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
-              } catch (error) {
-                if (isTabUnavailableError(error)) return false;
-                console.error('KJV Scripture Tools ScriptTagger injection failed:', {
-                  tabId, tabUrl:tab.url, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, error:String(error)
-                });
-                return false;
-              }
-            }
+            // Refresh is the core activation acknowledgement. Optional
+            // redirect handlers are injected independently so their failure
+            // cannot undo a working page-selection feature.
+            await injectOptionalRedirectFiles();
             return true;
           }
         } catch (_) {}
@@ -3504,7 +3520,8 @@ async function ensureContentScriptInTab(tabId) {
       try {
         tab = await getCurrentEligibleTab();
         if (!tab) return false;
-        await chrome.scripting.executeScript({target:{tabId}, files});
+        const injectionFiles = files.includes('content.js') ? primaryFiles : files;
+        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
         // executeScript may complete as a navigation commits. Do not report
         // activation success for a document on a different origin.
         tab = await getCurrentEligibleTab();
@@ -3514,11 +3531,13 @@ async function ensureContentScriptInTab(tabId) {
         // This is a normal lifecycle race, not a broken extension resource.
         if (isTabUnavailableError(error)) return false;
         const errorDetails = describeScriptInjectionError(error);
-        const packagedFileChecks = await inspectPackagedScriptFiles(files);
+        const failedBundleFiles = files.includes('content.js') ? primaryFiles : files;
+        const packagedFileChecks = await inspectPackagedScriptFiles(failedBundleFiles);
         console.error('KJV Scripture Tools content-script injection failed: ' + JSON.stringify({
           tabId,
           tabUrl:tab.url,
-          files,
+          files:failedBundleFiles,
+          optionalRedirectFiles,
           ...errorDetails,
           packagedFileChecks
         }));
@@ -3530,25 +3549,19 @@ async function ensureContentScriptInTab(tabId) {
         // asynchronous storage initialization. Retry the refresh once after
         // the initial message, and don't mistake a missing response for a
         // verified activation.
-        for (let attempt = 0; attempt < 4; attempt++) {
-          // executeScript resolves when the files have been evaluated, but the
-          // content bundle's async initializer can still be installing its
-          // runtime listener. Give that listener a short bounded window to
-          // become ready instead of reporting a false activation failure that
-          // leaves the user thinking the page must be reloaded.
+        for (let attempt = 0; attempt < 9; attempt++) {
+          // Initialization includes asynchronous storage and page-feature
+          // setup. Keep retrying the document-scoped handshake for a bounded
+          // 3.6 seconds so slower sites/devices do not require a manual reload.
           if (attempt > 0) {
-            await new Promise(resolve => setTimeout(resolve, 75 * attempt));
+            await new Promise(resolve => setTimeout(resolve, 100 * attempt));
           }
           try {
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
               tab = await getCurrentEligibleTab();
               if (!tab) return false;
-              if (files.includes('redirect-scripttagger.js')) {
-                tab = await getCurrentEligibleTab();
-                if (!tab) return false;
-                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
-              }
+              await injectOptionalRedirectFiles();
               return true;
             }
           } catch (_) {}
