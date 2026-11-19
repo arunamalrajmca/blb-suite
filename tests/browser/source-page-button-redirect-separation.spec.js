@@ -560,6 +560,30 @@ test('every shared-registry page-button host shows the exact button on content p
   }
 });
 
+test('BibleProject common homepage aliases remain excluded while nested pages show the button', async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://bibleproject.com/**',route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>BibleProject homepage alias fixture</title></head><body><main>Content</main></body></html>'
+  }));
+  const button=page.locator('#blb-suite-bibleproject-multiverse');
+  for (const path of ['/','/index.html','/index.htm','/home','/homepage','/default.aspx']) {
+    const url='https://bibleproject.com'+path;
+    await page.goto(url,{waitUntil:'domcontentloaded'});
+    await expect(button,url+' must never display the collection button').toHaveCount(0);
+  }
+  await page.goto('https://bibleproject.com/articles/creation/',{waitUntil:'domcontentloaded'});
+  await expect(button).toHaveText('Open Bible References in BLB');
+});
+
 test('every specialized source-page collector has dedicated button-rendering regression coverage', async ({
   extensionPath
 }) => {
