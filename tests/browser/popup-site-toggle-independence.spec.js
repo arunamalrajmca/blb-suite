@@ -896,13 +896,35 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
     }, item);
     await expect(page.locator('#pageButton')).toBeEnabled();
     await expect(page.locator('#pageButton')).not.toBeChecked();
+    const initialPdfState = await page.evaluate(() => getState());
+    expect(initialPdfState, item.url).toMatchObject({
+      siteKey:item.siteKey,
+      isPdfContext:true,
+      isSensitiveSite:false
+    });
+    await page.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      window.__pdfPreferenceMessages = [];
+      chrome.runtime.sendMessage = (...args) => {
+        if (args[0]?.type === 'blbSuiteSetSiteFeaturePreference') {
+          window.__pdfPreferenceMessages.push(args[0]);
+        }
+        return original(...args);
+      };
+    });
 
     await page.locator('#pageSetting .slider').click();
     await expect(page.locator('#pageButton')).toBeChecked();
-    await expect.poll(async () => extensionWorker.evaluate(() => chrome.storage.local.get({
-      pageSelectionButtonSites:{}
-    }))).toMatchObject({
-      pageSelectionButtonSites:{[item.siteKey]:true}
+    await expect.poll(async () => ({
+      storage:await extensionWorker.evaluate(() => chrome.storage.local.get({
+        pageSelectionButtonSites:{}
+      })),
+      popupMessages:await page.evaluate(() => window.__pdfPreferenceMessages),
+      popupState:await page.evaluate(() => getState())
+    }), {message:'PDF ON preference must persist for ' + item.url}).toMatchObject({
+      storage:{pageSelectionButtonSites:{[item.siteKey]:true}},
+      popupMessages:[{siteKey:item.siteKey,feature:'pageButton',enabled:true}],
+      popupState:{siteKey:item.siteKey,isPdfContext:true,isSensitiveSite:false}
     });
 
     const eligibility = await extensionWorker.evaluate(async tab => {
