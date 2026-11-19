@@ -90,10 +90,15 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(/"thekingsbible\.com"\s*:\s*\{\s*collectorModule:\s*"kings-bible"/.test(registry));
   assert(/"webstersdictionary1828\.com"\s*:\s*\{\s*collectorModule:\s*"webster"/.test(registry));
   assert(read('kings-bible-collector.js').includes('kingsBibleCollectorConfig?.collectorModule === "kings-bible"'));
-  assert(read('webster-collector.js').includes('websterCollectorConfig?.collectorModule === "webster"'));
+  const websterCollector = read('webster-collector.js');
+  assert(websterCollector.includes('websterCollectorConfig?.collectorModule === "webster"'));
+  assert(websterCollector.includes('if (isWebsterHomepage()) return;'),
+    'specialized Webster collector must obey the universal homepage exclusion');
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
-  assert(collector.includes('sourceSiteConfig.showOnHomepage === true'), 'registry homepage opt-in must be honored');
-  assert(collector.includes('if (sourceSite && (!isSourceHomepage || sourceSiteConfig.showOnHomepage === true))'));
+  assert(collector.includes('if (sourceSite && !isSourceHomepage)'), 'every source-page homepage must be excluded by the shared rule');
+  assert(!collector.includes('showOnHomepage'), 'source-page homepage behavior must not be overridden per host');
+  assert(!registry.includes('showOnHomepage'), 'the source-page registry must not opt any homepage into button display');
+  assert(registry.includes('"bibleproject.com": { id:"bibleproject" }'), 'BibleProject must use the same universal homepage exclusion');
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
   assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
@@ -104,6 +109,30 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(background.includes("'source-page-collector-sites.js'"), 'background must import the shared collector registry');
   assert(background.includes('BLBSourcePageCollectorSites || {}'), 'runtime injection must consult the shared collector registry');
   assert(background.includes('collectorConfig?.mainWorldClickGuard === true'), 'optional MAIN-world click guards must come from shared registry metadata');
+});
+
+test('PDF preference keys and core injection are consistent across popup and background', () => {
+  const background = read('background.js');
+  const popup = read('popup.js');
+  assert(background.includes("if (/^https?:/i.test(raw) && looksPdf)"),
+    'background must classify hosted PDFs with the same synthetic key as popup.js');
+  assert(background.includes('const primaryFiles = files.filter(file => !optionalRedirectFiles.includes(file));'),
+    'optional redirect scripts must be separated from the core content bundle');
+  assert(background.includes('await injectOptionalRedirectFiles();'),
+    'optional redirect scripts must be attempted independently after core activation');
+  assert(popup.includes('urlLooksPdf || titleLooksPdf'),
+    'popup hosted-PDF classification remains the shared preference contract');
+  assert(popup.includes('if (!isBlbSite && !isPdfContext && currentSiteOrigin)'),
+    'PDF settings must not require host permissions for the underlying PDF server');
+  assert(!background.includes("documentUrlPatterns:['file:///*.pdf']"),
+    'PDF selection menu must support browser-managed remote PDF viewer URLs');
+});
+
+test('GitHub is a sensitive destination and must never receive runtime scripts', () => {
+  const shared = read('regex-patterns.js');
+  assert(shared.includes("'github.com'"), 'GitHub must be in the centralized sensitive-site domain suffix policy');
+  const background = read('background.js');
+  assert(background.includes("if (isSensitiveSiteUrl(tab?.url || '')) return [];"), 'sensitive destinations must be rejected before runtime script selection');
 });
 
 test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {

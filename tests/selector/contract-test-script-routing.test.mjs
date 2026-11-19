@@ -14,6 +14,9 @@ const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.
 const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
+const lifecycleSource = readFileSync(new URL("../browser/service-worker-lifecycle.spec.js", import.meta.url), "utf8");
+const sharedRegexSource = readFileSync(new URL("../browser/shared-regex-patterns.spec.js", import.meta.url), "utf8");
+const referenceMatrix = JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8"));
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -115,5 +118,52 @@ test("every feature-owned browser regression has an explicit CI classification",
   }
   for (const spec of groupARequiredSpecs) {
     assert.ok(classified.has(spec), "Group A gate ownership must remain classified: " + spec);
+  }
+});
+
+
+test("critical activation recovery regressions are selected by the reference CI matrix", () => {
+  const group = referenceMatrix.find(item => item.group === "service-worker-lifecycle");
+  assert.ok(group?.grep, "service-worker lifecycle must have a focused CI selector");
+  const selector = new RegExp(group.grep);
+  const criticalPattern = /(?:first X\.com document activates|already-open X\.com document activates|BLB verse link opened in a new tab|MultiVerse link opened from BLB in a new tab|X\.com link opened in a new tab|shared activation retries transient readiness failures|optional redirect-script failure cannot block core selection activation|unrelated Supply of Grace pages activate|newer site opt-in recovers)/i;
+  const titles = [...lifecycleSource.matchAll(/test\(['"`]([^'"`]+)['"`]/g)].map(match => match[1]);
+  const criticalTitles = titles.filter(title => criticalPattern.test(title));
+  assert.ok(criticalTitles.length >= 8, "the lifecycle spec must retain its critical activation scenarios");
+  for (const title of criticalTitles) {
+    assert.ok(selector.test(title), "critical lifecycle test is omitted from CI matrix: " + title);
+  }
+});
+
+test("shared sensitive-site policy changes select and execute GitHub exclusion coverage", () => {
+  assert.ok(featureSpecs.some(group =>
+    group.paths.includes("extension/regex-patterns.js") &&
+    group.specs.includes("tests/browser/shared-regex-patterns.spec.js")
+  ), "shared URL policy changes must select shared-regex browser coverage");
+  assert.match(sharedRegexSource, /githubDomain:[^,]*isSensitiveSiteUrl/);
+  assert.match(sharedRegexSource, /githubSubdomain:[^,]*isSensitiveSiteUrl/);
+  assert.match(lifecycleSource, /GitHub and all subdomains are excluded before any content-script injection/);
+  const group = referenceMatrix.find(item => item.group === "specialized-reference-smoke-batch");
+  assert.ok(new RegExp(group.grep).test("shared sensitive-site classifier covers known providers without keyword false positives"),
+    "the sensitive-site classifier regression must be selected by the reference matrix");
+});
+
+
+test("Bible data, case-sensitive routing, and KJV corpus modules retain direct CI ownership", () => {
+  const required = [
+    ["extension/books.js", "tests/browser/extension-reference-actions.spec.js"],
+    ["extension/book-aliases.js", "tests/browser/audit-defect-regressions.spec.js"],
+    ["extension/case-sensitive-routing.js", "tests/browser/case-sensitive-routing-behavior.spec.js"],
+    ["extension/case-sensitive-search-core.js", "tests/browser/case-sensitive-routing-behavior.spec.js"],
+    ["extension/kjv-corpus-case-verse-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-original-case.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-phrase-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-verses.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-word-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-word-verse-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"]
+  ];
+  for (const [path, spec] of required) {
+    assert.ok(featureSpecs.some(group => group.paths.includes(path) && group.specs.includes(spec)),
+      "runtime module lacks a direct feature regression mapping: " + path);
   }
 });

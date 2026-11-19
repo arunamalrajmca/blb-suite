@@ -45,6 +45,33 @@ export const featureSpecs = [
     ]
   },
   {
+    paths: ["extension/regex-patterns.js"],
+    specs: [
+      "tests/browser/shared-regex-patterns.spec.js",
+      "tests/browser/service-worker-lifecycle.spec.js",
+      "tests/browser/redirect-hostnames.spec.js"
+    ]
+  },
+  {
+    paths: ["extension/books.js", "extension/book-aliases.js"],
+    specs: ["tests/browser/extension-reference-actions.spec.js", "tests/browser/audit-defect-regressions.spec.js"]
+  },
+  {
+    paths: ["extension/case-sensitive-routing.js", "extension/case-sensitive-search-core.js"],
+    specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
+  },
+  {
+    paths: [
+      "extension/kjv-corpus-case-verse-index.js",
+      "extension/kjv-corpus-original-case.js",
+      "extension/kjv-corpus-phrase-index.js",
+      "extension/kjv-corpus-verses.js",
+      "extension/kjv-corpus-word-index.js",
+      "extension/kjv-corpus-word-verse-index.js"
+    ],
+    specs: ["tests/browser/kjv-corpus-lazy-loading.spec.js", "tests/browser/performance.spec.js"]
+  },
+  {
     paths: ["extension/kjv-case-sensitive-words.js"],
     specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
   },
@@ -288,6 +315,7 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/extension-reference-actions.spec.js",
   "tests/browser/selection-phase-performance.spec.js",
   "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
   "tests/browser/replaced-tab-lifecycle-races.spec.js",
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
@@ -327,6 +355,7 @@ export const referenceDelegatedSpecs = new Set([
   "tests/browser/right-panel-default-expanded.spec.js",
   "tests/browser/selection-phase-performance.spec.js",
   "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
   "tests/browser/replaced-tab-lifecycle-races.spec.js",
   "tests/browser/kjv-corpus-lazy-loading.spec.js",
   "tests/browser/known-host-extension.spec.js",

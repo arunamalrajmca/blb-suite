@@ -560,6 +560,30 @@ test('every shared-registry page-button host shows the exact button on content p
   }
 });
 
+test('BibleProject common homepage aliases remain excluded while nested pages show the button', async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://bibleproject.com/**',route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>BibleProject homepage alias fixture</title></head><body><main>Content</main></body></html>'
+  }));
+  const button=page.locator('#blb-suite-bibleproject-multiverse');
+  for (const path of ['/','/index','/index.html','/index.htm','/index.php','/index.asp','/index.aspx','/home','/homepage','/default','/default.aspx','/default.html','/default.php','/default.asp']) {
+    const url='https://bibleproject.com'+path;
+    await page.goto(url,{waitUntil:'domcontentloaded'});
+    await expect(button,url+' must never display the collection button').toHaveCount(0);
+  }
+  await page.goto('https://bibleproject.com/articles/creation/',{waitUntil:'domcontentloaded'});
+  await expect(button).toHaveText('Open Bible References in BLB');
+});
+
 test('every specialized source-page collector has dedicated button-rendering regression coverage', async ({
   extensionPath
 }) => {
@@ -814,7 +838,7 @@ test('source Bible redirect activates on the same page when the Suite master swi
   await expect(page).toHaveURL(sourceUrl);
 });
 
-test('BibleProject homepage and nested pages expose Open Bible References in BLB', async ({
+test('BibleProject homepage stays excluded while nested pages expose Open Bible References in BLB', async ({
   page, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
@@ -845,8 +869,12 @@ test('BibleProject homepage and nested pages expose Open Bible References in BLB
         '</title></head><body>' + fixture.body + '</body></html>'
     }));
     await page.goto(fixture.url, {waitUntil:'domcontentloaded'});
-    await expect(page.locator('#blb-suite-bibleproject-multiverse'))
-      .toHaveText('Open Bible References in BLB');
+    const button=page.locator('#blb-suite-bibleproject-multiverse');
+    if (new URL(fixture.url).pathname === '/') {
+      await expect(button).toHaveCount(0);
+    } else {
+      await expect(button).toHaveText('Open Bible References in BLB');
+    }
   }
 
   const registration = await extensionWorker.evaluate(async () => {

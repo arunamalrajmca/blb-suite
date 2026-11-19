@@ -290,13 +290,16 @@ test('PDF selection menu ignores stale asynchronous visibility results', async (
       chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
       isPdfViewerTab = () => true;
       isSuiteEnabled = async () => true;
-      isPageButtonEnabledForHostname = async hostname => {
-        if (hostname === 'slow.example') {
+      // Direct HTTP(S) PDFs and browser-managed PDFs share the synthetic
+      // __blb_pdf_viewer__ preference key. Distinguish the two concurrent tab
+      // snapshots by title, not by the preference key they intentionally share.
+      isPageButtonEnabledForHostname = async (_siteKey, title) => {
+        if (title === 'Slow PDF') {
           signalSlowStarted();
           await slowGate;
           return false;
         }
-        return hostname === 'fast.example';
+        return title === 'Fast PDF';
       };
 
       const slow = syncPdfSelectionContextMenuVisibility({url:'https://slow.example/document.pdf',title:'Slow PDF'});
@@ -357,3 +360,102 @@ test('web selection menu ignores stale asynchronous visibility results', async (
   expect(result).toEqual([{id:'blb-suite-web-selection',visible:true}]);
 });
 
+
+
+test('right-click action remains usable after the service worker restarts with a persisted visible menu', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originals = {
+      update:chrome.contextMenus.update,
+      knownPresent:selectionMenuKnownPresent,
+      suiteEnabled:isSuiteEnabled,
+      activeSelection:getActiveTabSelection,
+      eligibility:shouldShowBlbContextMenu,
+      contextualReference:getContextualSelectionReference,
+      openAction:openSharedSelectionAction,
+      clearSelection:clearPageSelectionAfterBlbAction
+    };
+    const updates = [];
+    const actions = [];
+    try {
+      // Simulate a fresh MV3 worker: its in-memory flag resets, while the
+      // browser-owned context-menu item and its visible state survive.
+      selectionMenuKnownPresent = false;
+      chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
+      isSuiteEnabled = async () => true;
+      getActiveTabSelection = async () => 'Romans 8:28';
+      shouldShowBlbContextMenu = async () => true;
+      getContextualSelectionReference = async () => null;
+      openSharedSelectionAction = async options => { actions.push(options); };
+      clearPageSelectionAfterBlbAction = async () => {};
+      const tab = {id:77,url:'https://example.com/article',title:'Example article'};
+      const menuReady = await ensureWebSelectionContextMenu();
+      await handleBlbSelectionContextMenuClick({
+        menuItemId:'blb-suite-web-selection',
+        selectionText:'Romans 8:28'
+      },tab);
+      return {menuReady,updates,actions};
+    } finally {
+      chrome.contextMenus.update = originals.update;
+      selectionMenuKnownPresent = originals.knownPresent;
+      isSuiteEnabled = originals.suiteEnabled;
+      getActiveTabSelection = originals.activeSelection;
+      shouldShowBlbContextMenu = originals.eligibility;
+      getContextualSelectionReference = originals.contextualReference;
+      openSharedSelectionAction = originals.openAction;
+      clearPageSelectionAfterBlbAction = originals.clearSelection;
+    }
+  });
+  expect(result.menuReady).toBe(true);
+  expect(result.updates).toEqual([
+    {id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B'}
+  ]);
+  expect(result.actions).toHaveLength(1);
+  expect(result.actions[0]).toMatchObject({
+    tabId:77,
+    tabUrl:'https://example.com/article',
+    text:'Romans 8:28',
+    behavior:{activeIfNew:true,activateExisting:true},
+    contextualReferenceResolved:true
+  });
+});
+
+test('worker restart preserves web menu visibility while click-time eligibility still blocks sensitive hosts', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalUpdate = chrome.contextMenus.update;
+    const originalKnownPresent = selectionMenuKnownPresent;
+    const originalSuiteEnabled = isSuiteEnabled;
+    const originalPermissionCheck = hasSelectionActionPermissionForTab;
+    const originalPageEnabled = isPageButtonEnabledForHostname;
+    const updates = [];
+    try {
+      // A restarted MV3 worker begins with this in-memory flag reset even
+      // though the browser-owned context-menu item and its visibility persist.
+      selectionMenuKnownPresent = false;
+      chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
+      const ensured = await ensureWebSelectionContextMenu();
+
+      isSuiteEnabled = async () => true;
+      hasSelectionActionPermissionForTab = async () => true;
+      isPageButtonEnabledForHostname = async () => true;
+      const sensitiveHostAllowed = await shouldShowBlbContextMenu(
+        {id:77,url:'https://github.com/arunamalrajmca/blb-suite'},
+        'John 3:16'
+      );
+      return {
+        ensured,
+        update:updates.find(item => item.id === 'blb-suite-web-selection'),
+        sensitiveHostAllowed
+      };
+    } finally {
+      chrome.contextMenus.update = originalUpdate;
+      selectionMenuKnownPresent = originalKnownPresent;
+      isSuiteEnabled = originalSuiteEnabled;
+      hasSelectionActionPermissionForTab = originalPermissionCheck;
+      isPageButtonEnabledForHostname = originalPageEnabled;
+    }
+  });
+
+  expect(result.ensured).toBe(true);
+  expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B'});
+  expect(result.sensitiveHostAllowed).toBe(false);
+});

@@ -885,7 +885,7 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
   const cases = [
     {siteKey:'__blb_local_pdf__',url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'},
     {siteKey:'__blb_pdf_viewer__',url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf',title:'PDF Viewer'},
-    {siteKey:'__blb_pdf_viewer__',url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=https%3A%2F%2Fstorage.snappages.site%2F75QP7C%2Fassets%2Ffiles%2FThe-Big-Picture.pdf',title:'PDF Viewer'}
+    {siteKey:'__blb_pdf_viewer__',url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=https%3A%2F%2Fstorage.snappages.site%2F75QP7C%2Fassets%2Ffiles%2FThe-Big-Picture.pdf',title:'PDF Viewer'},
   ];
   for (const item of cases) {
     await extensionStorage.set({pageSelectionButtonSites:{[item.siteKey]:false}});
@@ -928,5 +928,26 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
       return {menuVisible,enabled};
     }, {id:987654,url:item.url,title:item.title});
     expect(offEligibility).toEqual({menuVisible:false,enabled:false});
+
+    // The click handler must re-read the durable OFF preference; a stale
+    // visible native menu must not permit the PDF selection action.
+    const clickWasAllowed = await extensionWorker.evaluate(async tab => {
+      const originalOpen = openBlbPageSelection;
+      let opened = false;
+      openBlbPageSelection = async () => {
+        opened = true;
+        return {ok:true};
+      };
+      try {
+        await handleBlbSelectionContextMenuClick({
+          menuItemId:'blb-suite-pdf-selection',
+          selectionText:'Revelation 21:4'
+        },tab);
+        return opened;
+      } finally {
+        openBlbPageSelection = originalOpen;
+      }
+    }, {id:987654,url:item.url,title:item.title});
+    expect(clickWasAllowed, 'PDF OFF must block the actual right-click action').toBe(false);
   }
 });

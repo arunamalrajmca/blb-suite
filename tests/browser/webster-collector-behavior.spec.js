@@ -208,6 +208,27 @@ test.describe('Webster collector behavior', () => {
     expect(new URL(handoffUrl).searchParams.get('mvText')).toBe('john 3:16; romans 8:1');
   });
 
+  test('never shows the Webster collection button on its homepage', async ({ page, extensionStorage }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{}
+    });
+    await page.route('https://webstersdictionary1828.com/**',route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:'<!doctype html><html><head><title>Webster homepage fixture</title></head><body><main>Webster home</main></body></html>'
+    }));
+    const button=page.locator('#blb-suite-webster-multiverse');
+    for (const path of ['/','/index','/index.html','/index.htm','/index.php','/index.asp','/index.aspx','/home','/homepage','/default','/default.aspx','/default.html','/default.php','/default.asp']) {
+      await page.goto('https://webstersdictionary1828.com'+path,{waitUntil:'domcontentloaded'});
+      await expect(button,'Webster homepage '+path+' must not display the collection button').toHaveCount(0);
+    }
+    await page.goto('https://webstersdictionary1828.com/dictionary/Faith',{waitUntil:'domcontentloaded'});
+    await expect(page.locator('#blb-suite-webster-multiverse')).toBeVisible({timeout:10000});
+  });
+
   test('recreates the collector button after the page replaces its body', async ({ page, extensionStorage }) => {
     await extensionStorage.set({
       masterEnabled: true,

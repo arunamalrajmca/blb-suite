@@ -2631,7 +2631,7 @@ async function performReplacementTabIdentityMigration(addedTabId, removedTabId) 
         replacementActivatedTabIds.delete(addedTabId);
         return;
       }
-      const activated = await ensureContentScriptInTab(addedTabId);
+      const activated = await ensureContentScriptInTabWithRetry(addedTabId);
       if (!activated) replacementActivatedTabIds.delete(addedTabId);
     } catch (error) {
       replacementActivatedTabIds.delete(addedTabId);
@@ -3429,6 +3429,31 @@ async function ensureContentScriptInTab(tabId) {
       // extension context, inject the current static bundle into that tab.
       const files = configuredFiles.length ? configuredFiles : (isBlbDestination ? BLB_CONTENT_SCRIPT_FILES : []);
       if (!files.length) return false;
+      // Optional redirect handlers must never make the core selection bundle
+      // fail atomically. A transient/unavailable redirect resource otherwise
+      // prevents Floating Button, Double-click, and all page listeners from
+      // being installed on an otherwise eligible first-load document.
+      const optionalRedirectFiles = files.filter(file =>
+        SCRIPT_TAGGER_CONTENT_SCRIPT_FILES.includes(file) ||
+        BIBLEREF_RANGE_CONTENT_SCRIPT_FILES.includes(file)
+      );
+      const primaryFiles = files.filter(file => !optionalRedirectFiles.includes(file));
+      const injectOptionalRedirectFiles = async () => {
+        if (!optionalRedirectFiles.length) return true;
+        const current = await getCurrentEligibleTab();
+        if (!current) return false;
+        try {
+          await chrome.scripting.executeScript({target:{tabId}, files:optionalRedirectFiles});
+          return true;
+        } catch (error) {
+          if (!isTabUnavailableError(error)) {
+            console.warn('KJV Scripture Tools optional redirect-script injection failed; core page features remain active:', JSON.stringify({
+              tabId, tabUrl:current.url, files:optionalRedirectFiles, ...describeScriptInjectionError(error)
+            }));
+          }
+          return false;
+        }
+      };
 
       const registrationReady = isBlbDestination
         ? true
@@ -3483,19 +3508,10 @@ async function ensureContentScriptInTab(tabId) {
             // that this tab still belongs to the origin whose bundle we chose.
             tab = await getCurrentEligibleTab();
             if (!tab) return false;
-            if (files.includes('redirect-scripttagger.js')) {
-              try {
-                tab = await getCurrentEligibleTab();
-                if (!tab) return false;
-                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
-              } catch (error) {
-                if (isTabUnavailableError(error)) return false;
-                console.error('KJV Scripture Tools ScriptTagger injection failed:', {
-                  tabId, tabUrl:tab.url, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, error:String(error)
-                });
-                return false;
-              }
-            }
+            // Refresh is the core activation acknowledgement. Optional
+            // redirect handlers are injected independently so their failure
+            // cannot undo a working page-selection feature.
+            await injectOptionalRedirectFiles();
             return true;
           }
         } catch (_) {}
@@ -3504,7 +3520,8 @@ async function ensureContentScriptInTab(tabId) {
       try {
         tab = await getCurrentEligibleTab();
         if (!tab) return false;
-        await chrome.scripting.executeScript({target:{tabId}, files});
+        const injectionFiles = files.includes('content.js') ? primaryFiles : files;
+        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
         // executeScript may complete as a navigation commits. Do not report
         // activation success for a document on a different origin.
         tab = await getCurrentEligibleTab();
@@ -3514,11 +3531,13 @@ async function ensureContentScriptInTab(tabId) {
         // This is a normal lifecycle race, not a broken extension resource.
         if (isTabUnavailableError(error)) return false;
         const errorDetails = describeScriptInjectionError(error);
-        const packagedFileChecks = await inspectPackagedScriptFiles(files);
+        const failedBundleFiles = files.includes('content.js') ? primaryFiles : files;
+        const packagedFileChecks = await inspectPackagedScriptFiles(failedBundleFiles);
         console.error('KJV Scripture Tools content-script injection failed: ' + JSON.stringify({
           tabId,
           tabUrl:tab.url,
-          files,
+          files:failedBundleFiles,
+          optionalRedirectFiles,
           ...errorDetails,
           packagedFileChecks
         }));
@@ -3530,25 +3549,19 @@ async function ensureContentScriptInTab(tabId) {
         // asynchronous storage initialization. Retry the refresh once after
         // the initial message, and don't mistake a missing response for a
         // verified activation.
-        for (let attempt = 0; attempt < 4; attempt++) {
-          // executeScript resolves when the files have been evaluated, but the
-          // content bundle's async initializer can still be installing its
-          // runtime listener. Give that listener a short bounded window to
-          // become ready instead of reporting a false activation failure that
-          // leaves the user thinking the page must be reloaded.
+        for (let attempt = 0; attempt < 9; attempt++) {
+          // Initialization includes asynchronous storage and page-feature
+          // setup. Keep retrying the document-scoped handshake for a bounded
+          // 3.6 seconds so slower sites/devices do not require a manual reload.
           if (attempt > 0) {
-            await new Promise(resolve => setTimeout(resolve, 75 * attempt));
+            await new Promise(resolve => setTimeout(resolve, 100 * attempt));
           }
           try {
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
               tab = await getCurrentEligibleTab();
               if (!tab) return false;
-              if (files.includes('redirect-scripttagger.js')) {
-                tab = await getCurrentEligibleTab();
-                if (!tab) return false;
-                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
-              }
+              await injectOptionalRedirectFiles();
               return true;
             }
           } catch (_) {}
@@ -3578,6 +3591,34 @@ async function ensureContentScriptInTab(tabId) {
     }
   }
 }
+async function ensureContentScriptInTabWithRetry(tabId, expectedUrl = '') {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  // A tab can be eligible while its document is still committing, and the
+  // content bundle may finish evaluating before its asynchronous initializer
+  // installs the message listener. Retry the same shared activation path while
+  // rechecking the live tab, permission, and current settings on every pass.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let tab;
+    try { tab = await chrome.tabs.get(tabId); } catch (_) { return false; }
+    if (!isHttpPageUrl(tab?.url) || isSensitiveSiteUrl(tab.url)) return false;
+    if (expectedUrl && tab.url !== expectedUrl) return false;
+    const settings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    if (settings.masterEnabled === false ||
+        !(await shouldInjectContentScriptForTab(tab, settings)) ||
+        !(await hasHostAccessForTab(tab))) return false;
+    if (await ensureContentScriptInTab(tabId)) return true;
+    if (attempt < 3) {
+      await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1)));
+    }
+  }
+  return false;
+}
+
 function isTrustedExtensionPageSender(sender, expectedPagePath = '') {
   if (!sender || sender.id !== chrome.runtime.id || typeof sender.url !== 'string') return false;
   try {
@@ -3733,7 +3774,7 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
 async function isActiveTabContentScriptSender(sender) {
   if (!(await isAuthorizedContentScriptSender(sender))) return false;
   try {
-    const tabs = await chrome.tabs.query({active:true, currentWindow:true});
+    const tabs = await chrome.tabs.query({active:true, lastFocusedWindow:true});
     return tabs[0]?.id === sender.tab.id;
   } catch (_) {
     return false;
@@ -4412,7 +4453,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       const siteKey = message.siteKey;
-      await serializePendingSiteFeatureToggleMutation(async () => {
+      const ok = await serializePendingSiteFeatureToggleMutation(async () => {
         const data = await chrome.storage.local.get({
           masterEnabled:true,
           pageSelectionButtonSites:{}
@@ -4423,7 +4464,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         pageSites[siteKey] = message.enabled;
         await chrome.storage.local.set({pageSelectionButtonSites:pageSites});
         return true;
-      }).then(ok => sendResponse({ok:ok === true}));
+      });
+      // Synchronize the focused PDF's native menu before acknowledging the
+      // popup write. The storage listener remains the recovery path for other
+      // windows and worker wakeups.
+      if (ok) {
+        try {
+          const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+          if (tabs[0] && pageSelectionSettingKeyFromTab(tabs[0]) === siteKey) {
+            await syncPdfSelectionContextMenuVisibility(tabs[0]);
+          }
+        } catch (_) {}
+      }
+      sendResponse({ok:ok === true});
     } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
@@ -4503,7 +4556,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok:false, reason:'unsupported-page'});
         return true;
       }
-      const ok = await ensureContentScriptInTab(tabId);
+      const ok = await ensureContentScriptInTabWithRetry(tabId);
       sendResponse({ok, ...(ok ? {} : {reason:'activation-failed'})});
     } catch (error) {
       sendResponse({
@@ -7276,8 +7329,11 @@ function pageSelectionSettingKeyFromTab(tab) {
   const title = String(tab?.title || '');
   let decoded = raw;
   try { decoded = decodeURIComponent(raw); } catch (_) {}
-  const looksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded) || /\.pdf(?:$|\s)/i.test(title);
+  const looksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded) || /\.pdf(?:$|\s|[?#[\]])/i.test(title);
+  // Match popup.js getSiteKey(): hosted PDFs use one shared PDF preference,
+  // not a preference attached to the hostname serving the PDF bytes.
   if (/^file:/i.test(raw) && looksPdf) return '__blb_local_pdf__';
+  if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';
   if (/^(?:chrome|brave)-extension:/i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   if (/^(?:brave|chrome):\/\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   return hostnameFromTabUrl(raw);
@@ -7304,6 +7360,8 @@ async function isPageButtonEnabledForHostname(hostname) {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
+  // Use the same predicate before exposing the persistent menu and again at
+  // click time after a worker wake; stale visibility must never authorize an action.
   if (!(await isSuiteEnabled())) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
   // The right-click action is exactly the same site-based feature as the
@@ -7326,12 +7384,16 @@ let pdfSelectionVisibilitySyncGeneration = 0;
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
   try {
-    // Context-menu visibility can persist across service-worker restarts.
-    // Start hidden until the active tab's eligibility has been re-evaluated;
-    // otherwise a stale visible=true state can leak onto blueletterbible.org.
+    // The native context-menu item persists across service-worker restarts.
+    // Preserve its last synchronized visibility while refreshing the title:
+    // deliberately omit `visible` from this update because Chrome retains that
+    // browser-owned state even though this worker's in-memory flags are reset.
+    // Hiding it here would remove the only user action capable of waking an
+    // otherwise-idle worker for a right-click. The tabs.onActivated sync below
+    // re-evaluates visibility after restart, and the click handler independently
+    // rechecks global state, site preference, host permission, and sensitive-site policy.
     await chrome.contextMenus.update('blb-suite-web-selection', {
-      title:'Show on BLB\tAlt+B',
-      visible:false
+      title:'Show on BLB\tAlt+B'
     });
     selectionMenuKnownPresent = true;
     return true;
@@ -7447,8 +7509,11 @@ async function installPdfSelectionContextMenu() {
       await chrome.contextMenus.create({
         id:'blb-suite-pdf-selection',
         title:'Show on BLB\tAlt+B',
+        // PDF viewers may expose a chrome-extension:// or browser-internal
+        // URL even when the original document is a remote HTTPS PDF. Keep the
+        // item globally registered and let focused-tab PDF classification plus
+        // the click-time preference check enforce visibility and eligibility.
         contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf'],
         visible:false
       });
       pdfSelectionMenuKnownPresent = true;
@@ -7594,11 +7659,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
             let current;
             try { current = await chrome.tabs.get(tabId); } catch (_) { return; }
             if (current?.url !== tab?.url || current?.status !== 'complete') return;
-            await ensureContentScriptInTab(tabId);
+            await ensureContentScriptInTabWithRetry(tabId, tab.url);
           }).catch(() => {});
           return earlierActivation;
         }
-        return ensureContentScriptInTab(tabId);
+        return ensureContentScriptInTabWithRetry(tabId, tab.url);
       }
       // BLB already has static manifest coverage; all other configured
       // hosts need their persistent registration before the next navigation.
@@ -7768,7 +7833,7 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
     const siteFeatureEnabled = grantCoversTab && (
       hasPageCollectorButton || pageSites[key] === true || doubleSites[key] === true
     );
-    if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
+    if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTabWithRetry(tab.id);
   }
 }
 
@@ -7779,7 +7844,7 @@ async function injectRedirectEnabledTabs() {
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url) || isSensitiveSiteUrl(tab.url)) continue;
-    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTab(tab.id);
+    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTabWithRetry(tab.id);
   }
 }
 
@@ -7808,7 +7873,7 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 
   const outcomes = await Promise.all(eligibleTabs.map(async tab => ({
     tabId:tab.id,
-    ok:await ensureContentScriptInTab(tab.id)
+    ok:await ensureContentScriptInTabWithRetry(tab.id, tab.url)
   })));
   const result = {
     eligibleTabIds:eligibleTabs.map(tab => tab.id),

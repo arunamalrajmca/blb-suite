@@ -24,6 +24,11 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       location.hostname?.toLowerCase().replace(/^www\./, "")
     ];
     if (websterCollectorConfig?.collectorModule === "webster") {
+      const isWebsterHomepage = () => {
+        const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+        return normalizedPath === "/" ||
+          /^\/(?:index(?:\.(?:html?|php|asp|aspx))?|home(?:page)?|default(?:\.(?:html?|php|asp|aspx))?)$/i.test(normalizedPath);
+      };
       async function captureWebsterWord() {
         async function sendCaptureMessage(message) {
           let lastError = null;
@@ -110,6 +115,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       }
     
       async function addWebsterMultiVerseButton() {
+        if (isWebsterHomepage()) return;
         if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
         if (!document.body || document.getElementById("blb-suite-webster-multiverse")) return;
         const mount=document.body || document.documentElement;
@@ -175,6 +181,14 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       // hard refresh. The duplicate guard inside addWebsterMultiVerseButton()
       // keeps these retries harmless.
       const ensureWebsterButton=()=>{
+        if (isWebsterHomepage()) {
+          const button=document.getElementById("blb-suite-webster-multiverse");
+          button?.__blbDragCleanup?.();
+          button?.remove();
+          document.getElementById("blb-suite-webster-multiverse-reset-position")?.remove();
+          document.getElementById("blb-suite-webster-status")?.remove();
+          return;
+        }
         if (!isSuiteEnabledNow()) return;
         addWebsterMultiVerseButton().catch(()=>{});
       };
