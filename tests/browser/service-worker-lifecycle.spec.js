@@ -2124,6 +2124,71 @@ test('GitHub and all subdomains are excluded before any content-script injection
   }
 });
 
+test('optional redirect-script failure cannot block core selection activation on a first-load page', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{'supplyofgrace.com':true},
+    doubleClickBlbSites:{'supplyofgrace.com':true}
+  });
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbOriginalEnsureRuntimeRegistration = ensureRuntimeContentScriptRegistered;
+    globalThis.__blbOriginalExecuteScript = chrome.scripting.executeScript.bind(chrome.scripting);
+    ensureRuntimeContentScriptRegistered = async () => false;
+    chrome.scripting.executeScript = async details => {
+      if ((details.files || []).some(file =>
+        file === 'redirect-scripttagger.js' || file === 'redirect-bibleref-ranges.js'
+      )) throw new Error('simulated optional redirect resource failure');
+      return globalThis.__blbOriginalExecuteScript(details);
+    };
+  });
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Optional redirect failure fixture</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  try {
+    await page.goto('https://www.supplyofgrace.com/first-load-optional-failure',{waitUntil:'domcontentloaded'});
+    const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
+    expect(Number.isInteger(tabId)).toBe(true);
+    await expect.poll(() => contentScriptLoaded(extensionWorker,tabId),{
+      message:'core content must initialize even when optional redirect handlers fail to inject'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+    await page.locator('#reference').evaluate(element => {
+      const range=document.createRange();
+      range.selectNodeContents(element);
+      const selection=window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+    });
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible();
+    await page.locator('#blb-suite-page-selection-button').click();
+    await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbOriginalEnsureRuntimeRegistration) {
+        ensureRuntimeContentScriptRegistered=globalThis.__blbOriginalEnsureRuntimeRegistration;
+        delete globalThis.__blbOriginalEnsureRuntimeRegistration;
+      }
+      if (globalThis.__blbOriginalExecuteScript) {
+        chrome.scripting.executeScript=globalThis.__blbOriginalExecuteScript;
+        delete globalThis.__blbOriginalExecuteScript;
+      }
+    });
+    await extensionStorage.set({
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'supplyofgrace.com':false},
+      doubleClickBlbSites:{'supplyofgrace.com':false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  }
+});
+
 test('unrelated Supply of Grace pages activate selection features on first load and in a newly opened tab', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
