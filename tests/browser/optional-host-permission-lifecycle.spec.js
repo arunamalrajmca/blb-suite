@@ -1936,6 +1936,11 @@ test('worker-start recovery removes stale persisted host registrations even when
       pendingSiteFeatureToggles:{},
       siteFeaturePreferenceRequestIds:{}
     });
+    // Let the normal storage-change reconciliation finish under the denied
+    // permission mock before seeding the deliberately stale registration.
+    await extensionWorker.evaluate(async () => {
+      await runtimeContentScriptReconciliationQueue;
+    });
     // Seed the Chrome-persisted registration directly. This fixture represents
     // a registration left behind by an interrupted cleanup; it should not
     // depend on the normal registration eligibility path or a live tab grant.
