@@ -346,14 +346,18 @@ async function setRedirect(on) {
         if (generation !== redirectToggleGeneration) return;
         if (!activation?.ok) {
           render(await getState());
-          setStatus('Global redirects are enabled, but this page could not be activated. Reload the page to apply them.');
+          if (activation?.reason === 'unsupported-page') {
+            setStatus('Global redirects are enabled. This page does not support extension activation.');
+          } else {
+            setStatus('Global redirects are enabled, but this page could not be activated. Try reloading the page.');
+          }
           return;
         }
       }
     } catch (_) {
       if (generation !== redirectToggleGeneration) return;
       render(await getState());
-      setStatus('Global redirects are enabled, but this page could not be activated. Reload the page to apply them.');
+      setStatus('Global redirects are enabled, but the current page activation could not be confirmed. Reopen the popup and try again.');
       return;
     }
   }
