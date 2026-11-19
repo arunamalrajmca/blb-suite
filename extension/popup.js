@@ -64,7 +64,10 @@ async function getState() {
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
-  if (!isBlbSite && currentSiteOrigin) {
+  // PDF documents use the dedicated PDF preference key and do not need web
+  // host permission. Requiring an origin grant here made hosted PDF toggles
+  // appear OFF even after the preference was successfully saved.
+  if (!isBlbSite && !isPdfContext && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
       // Wildcard redirect permissions can satisfy contains() for a specific
