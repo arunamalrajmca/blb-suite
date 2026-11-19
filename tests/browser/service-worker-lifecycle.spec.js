@@ -2142,19 +2142,21 @@ test('GitHub and all subdomains are excluded before any content-script injection
       pageSelectionButtonSites:{},
       doubleClickBlbSites:{}
     });
-    return [
+    return await Promise.all([
       'https://github.com/arunamalrajmca/blb-suite/tree/main',
       'https://www.github.com/arunamalrajmca/blb-suite',
       'https://docs.github.com/en'
-    ].map(url => ({
+    ].map(async url => ({
       url,
       sensitive:isSensitiveSiteUrl(url),
-      files:contentScriptFilesForTab({url},settings)
-    }));
+      files:contentScriptFilesForTab({url},settings),
+      registrationAttempt:await registerRuntimeContentScriptForPattern({url},['redirect-scripttagger.js'])
+    })));
   });
   for (const result of results) {
     expect(result.sensitive, result.url).toBe(true);
     expect(result.files, result.url).toEqual([]);
+    expect(result.registrationAttempt, result.url).toBe(false);
   }
 });
 
