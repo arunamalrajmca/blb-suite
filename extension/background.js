@@ -7568,7 +7568,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       syncPdfSelectionContextMenuVisibility(activeTab, isCurrent).catch(() => {});
     }).catch(() => {});
   }
-  if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
+  // Start host registration as soon as Chrome reports the committed URL.
+  // Waiting only for "complete" can leave a fast follow-up navigation without
+  // its runtime content script on the first load. Keep the complete event as
+  // a second attempt for documents that are not injectable at commit time.
+  if ((changeInfo.url || changeInfo.status === 'complete') && tab?.url && isHttpPageUrl(tab.url)) {
     chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
       if (await shouldInjectContentScriptForTab(tab, data)) return ensureContentScriptInTab(tabId);
       return null;
