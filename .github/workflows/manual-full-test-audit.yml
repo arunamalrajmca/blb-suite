@@ -150,16 +150,17 @@ jobs:
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
           awk '
             index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
-            index($0, "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action") == 0
+            index($0, "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action") == 0 &&
+            index($0, "› Show on BLB performance benchmark") == 0
           ' "$test_list" > "$test_list.filtered"
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
           delegated=$((discovered_before_delegation - discovered_after_delegation))
-          if [[ "$delegated" -ne 2 ]]; then
-            echo "::error::Expected to delegate exactly 2 headed native-browser tests, found $delegated."
+          if [[ "$delegated" -ne 3 ]]; then
+            echo "::error::Expected to delegate exactly 3 native-browser/performance tests, found $delegated."
             exit 1
           fi
-          echo "Delegated headed native-browser tests: $delegated (covered by BLB Suite — Native Browser Shortcut E2E)."
+          echo "Delegated tests: $delegated (two headed cases use Native Browser Shortcut E2E; the performance benchmark uses Performance — PR)."
           total=$(wc -l < "$test_list" | tr -d ' ')
           echo "Browser test cases discovered after delegation: $total"
           if [[ "$total" -eq 0 ]]; then
