@@ -221,7 +221,7 @@ test.describe('Webster collector behavior', () => {
       body:'<!doctype html><html><head><title>Webster homepage fixture</title></head><body><main>Webster home</main></body></html>'
     }));
     const button=page.locator('#blb-suite-webster-multiverse');
-    for (const path of ['/','/index.html','/index.htm','/home','/homepage','/default.aspx']) {
+    for (const path of ['/','/index','/index.html','/index.htm','/index.php','/index.asp','/index.aspx','/home','/homepage','/default','/default.aspx','/default.html','/default.php','/default.asp']) {
       await page.goto('https://webstersdictionary1828.com'+path,{waitUntil:'domcontentloaded'});
       await expect(button,'Webster homepage '+path+' must not display the collection button').toHaveCount(0);
     }
