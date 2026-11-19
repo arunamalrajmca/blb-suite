@@ -38,6 +38,7 @@ export const featureSpecs = [
       "tests/browser/site-registration-opt-out-race.spec.js",
       "tests/browser/optional-host-permission-lifecycle.spec.js",
       "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
+      "tests/browser/blb-passive-new-tab-targets.spec.js",
       "tests/browser/omnibox-dictionary-routing.spec.js",
       "tests/browser/study-session-concurrency.spec.js",
       "tests/browser/scripttagger-global-injection.spec.js"
