@@ -192,10 +192,9 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     execFileSync('xdotool',['mousemove','--sync',String(clickX),String(clickY)]);
     execFileSync('xdotool',['click','3']);
     await page.waitForTimeout(350);
-    // Use Chromium's native menu type-ahead for the exact visible extension
-    // title instead of assuming its position among built-in menu entries.
-    execFileSync('xdotool',['type','--clearmodifiers','--delay','100','Show on BLB']);
-    execFileSync('xdotool',['key','--clearmodifiers','Return']);
+    // Chromium places the extension command immediately before the final
+    // Inspect item. Use a paced keyboard sequence after the menu has opened.
+    execFileSync('xdotool',['key','--clearmodifiers','--delay','100','End','Up','Return']);
 
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
