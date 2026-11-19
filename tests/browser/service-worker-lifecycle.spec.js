@@ -2432,6 +2432,13 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await expect.poll(() => contentScriptLoaded(extensionWorker,destinationTabId),{
     message:'a newly opened Supply of Grace tab must initialize on its first document without a manual reload'
   }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+  // A target=_blank page is not guaranteed to be the active tab in headed CI.
+  // Activate it before testing the user-facing selection action.
+  await destination.bringToFront();
+  await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
+  await expect.poll(() => extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  )).toBe(destinationTabId);
 
   await destination.locator('#target-reference').evaluate(element => {
     const range=document.createRange();
