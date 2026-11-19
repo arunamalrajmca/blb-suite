@@ -856,12 +856,13 @@ test('failed popup site-feature OFF persistence is reported and does not pretend
 });
 
 
-test('PDF popup Show on BLB toggle saves the PDF preference and enables the PDF right-click action', async ({
+
+test('PDF popup Show on BLB toggle saves local and browser-viewer preferences and enables right-click', async ({
   page, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    pageSelectionButtonSites:{'__blb_local_pdf__':false},
+    pageSelectionButtonSites:{'__blb_local_pdf__':false,'__blb_pdf_viewer__':false},
     doubleClickBlbSites:{},
     pendingSiteFeatureToggles:{}
   });
@@ -871,31 +872,41 @@ test('PDF popup Show on BLB toggle saves the PDF preference and enables the PDF 
   )).toBe(true);
   await page.evaluate(async () => {
     const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    window.__activePdfTab = {id:987654,url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'};
     Object.defineProperty(chrome.tabs,'query',{
       configurable:true,
       value:query => query?.active
-        ? Promise.resolve([{id:987654,url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'}])
+        ? Promise.resolve([window.__activePdfTab])
         : originalQuery(query)
     });
     render(await getState());
   });
-  await expect(page.locator('#pageButton')).toBeEnabled();
-  await expect(page.locator('#pageButton')).not.toBeChecked();
 
-  await page.locator('#pageSetting .slider').click();
-  await expect(page.locator('#pageButton')).toBeChecked();
-  await expect.poll(async () => extensionWorker.evaluate(() => chrome.storage.local.get({
-    pageSelectionButtonSites:{}
-  }))).toMatchObject({
-    pageSelectionButtonSites:{'__blb_local_pdf__':true}
-  });
+  const cases = [
+    {siteKey:'__blb_local_pdf__',url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'},
+    {siteKey:'__blb_pdf_viewer__',url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf',title:'PDF Viewer'}
+  ];
+  for (const item of cases) {
+    await extensionStorage.set({pageSelectionButtonSites:{[item.siteKey]:false}});
+    await page.evaluate(async tab => {
+      window.__activePdfTab = {id:987654,url:tab.url,title:tab.title};
+      render(await getState());
+    }, item);
+    await expect(page.locator('#pageButton')).toBeEnabled();
+    await expect(page.locator('#pageButton')).not.toBeChecked();
 
-  const eligibility = await extensionWorker.evaluate(async () => {
-    const pdfTab={id:987654,url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'};
-    return {
-      menuVisible:await shouldShowBlbContextMenu(pdfTab,'John 3:16'),
-      enabled:await isPageButtonEnabledForHostname('__blb_local_pdf__')
-    };
-  });
-  expect(eligibility).toEqual({menuVisible:true,enabled:true});
+    await page.locator('#pageSetting .slider').click();
+    await expect(page.locator('#pageButton')).toBeChecked();
+    await expect.poll(async () => extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{}
+    }))).toMatchObject({
+      pageSelectionButtonSites:{[item.siteKey]:true}
+    });
+
+    const eligibility = await extensionWorker.evaluate(async tab => ({
+      menuVisible:await shouldShowBlbContextMenu(tab,'John 3:16'),
+      enabled:await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab))
+    }), {id:987654,url:item.url,title:item.title});
+    expect(eligibility).toEqual({menuVisible:true,enabled:true});
+  }
 });
