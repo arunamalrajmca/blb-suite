@@ -3079,6 +3079,7 @@ function schedulePersistedRuntimeContentScriptAudit() {
 }
 
 const contentScriptInjectionLocks = new Map();
+const contentScriptInjectionRecoveryLocks = new Map();
 // Different tabs on the same origin can request the same persistent script
 // registration concurrently. Serialize by registration ID, not only by tab.
 const runtimeContentScriptRegistrationLocks = new Map();
@@ -3369,7 +3370,46 @@ function reconcileRuntimeContentScriptRegistrations() {
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
-  if (existing) return existing;
+  if (existing) {
+    // A concurrent activation may have started with an older OFF/permission
+    // snapshot or for the document that was navigating out. Returning that
+    // promise directly makes the newer popup request inherit a stale failure,
+    // roll its saved preference back, and leave the current page inert until
+    // the user reloads. Coalesce waiters, then re-evaluate the live tab and
+    // retry once against current settings after the old lock has been released.
+    const recovery = contentScriptInjectionRecoveryLocks.get(tabId);
+    if (recovery) return recovery;
+    const recoveryOperation = (async () => {
+      await existing.catch(() => false);
+      let current;
+      try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+      if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url) ||
+          !(await hasHostAccessForTab(current))) return false;
+      const latestSettings = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (latestSettings.masterEnabled === false ||
+          !(await shouldInjectContentScriptForTab(current, latestSettings))) return false;
+      // The original ensure wrapper removes its lock in the continuation that
+      // follows the operation promise. Let that cleanup run before retrying.
+      for (let attempt = 0; attempt < 3 && contentScriptInjectionLocks.get(tabId) === existing; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      if (contentScriptInjectionLocks.get(tabId) === existing) return false;
+      return ensureContentScriptInTab(tabId);
+    })();
+    contentScriptInjectionRecoveryLocks.set(tabId, recoveryOperation);
+    try {
+      return await recoveryOperation;
+    } finally {
+      if (contentScriptInjectionRecoveryLocks.get(tabId) === recoveryOperation) {
+        contentScriptInjectionRecoveryLocks.delete(tabId);
+      }
+    }
+  }
 
   const operation = (async () => {
     try {
