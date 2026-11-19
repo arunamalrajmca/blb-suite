@@ -7276,10 +7276,13 @@ function pageSelectionSettingKeyFromTab(tab) {
   const title = String(tab?.title || '');
   let decoded = raw;
   try { decoded = decodeURIComponent(raw); } catch (_) {}
-  const looksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded) || /\.pdf(?:$|\s)/i.test(title);
+  const looksPdf = /\\.pdf(?:$|[?#&\\/])/i.test(decoded) || /\\.pdf(?:$|\\s|[?#[\\]])/i.test(title);
+  // Match popup.js getSiteKey(): hosted PDFs use one shared PDF preference,
+  // not a preference attached to the hostname serving the PDF bytes.
   if (/^file:/i.test(raw) && looksPdf) return '__blb_local_pdf__';
+  if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';
   if (/^(?:chrome|brave)-extension:/i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
-  if (/^(?:brave|chrome):\/\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
+  if (/^(?:brave|chrome):\\/\\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   return hostnameFromTabUrl(raw);
 }
 
