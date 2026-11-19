@@ -79,10 +79,12 @@ test.describe('PDF selection context-menu regressions', () => {
 
         const localPdf = { url: 'file:///C:/Bible/notes.pdf', title: 'notes.pdf' };
         const browserPdf = { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=notes.pdf', title: 'PDF Viewer' };
+        const remotePdf = { url: 'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf', title: 'The Big Picture.pdf' };
         const ordinaryPage = { url: 'https://example.com/article', title: 'Article' };
 
         await syncPdfSelectionContextMenuVisibility(localPdf);
         await syncPdfSelectionContextMenuVisibility(browserPdf);
+        await syncPdfSelectionContextMenuVisibility(remotePdf);
         await syncPdfSelectionContextMenuVisibility(ordinaryPage);
 
         await chrome.storage.local.set({ masterEnabled: false });
@@ -91,9 +93,11 @@ test.describe('PDF selection context-menu regressions', () => {
         await chrome.storage.local.set({ masterEnabled: true, pageSelectionButtonSites: { '__blb_local_pdf__': false, '__blb_pdf_viewer__': true } });
         await syncPdfSelectionContextMenuVisibility(localPdf);
         await syncPdfSelectionContextMenuVisibility(browserPdf);
+        await syncPdfSelectionContextMenuVisibility(remotePdf);
         await chrome.storage.local.set({ pageSelectionButtonSites: { '__blb_local_pdf__': false, '__blb_pdf_viewer__': false } });
         await syncPdfSelectionContextMenuVisibility(localPdf);
         await syncPdfSelectionContextMenuVisibility(browserPdf);
+        await syncPdfSelectionContextMenuVisibility(remotePdf);
 
         return updates;
       } finally {
@@ -107,7 +111,7 @@ test.describe('PDF selection context-menu regressions', () => {
     expect(pdfUpdates.some(update => update.visible === true)).toBe(true);
     expect(pdfUpdates.at(-1).visible).toBe(false);
     expect(pdfUpdates.filter(update => update.visible === true).length).toBeGreaterThanOrEqual(2);
-    expect(pdfUpdates.slice(-2).every(update => update.visible === false)).toBe(true);
+    expect(pdfUpdates.slice(-3).every(update => update.visible === false)).toBe(true);
   });
 });
 
