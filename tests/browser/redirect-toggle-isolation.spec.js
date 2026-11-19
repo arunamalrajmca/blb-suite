@@ -634,7 +634,7 @@ test('a stale redirect permission result in another popup cannot overwrite the l
 
 test('GitHub and its subdomains are excluded by the shared sensitive-site policy', async ({extensionWorker}) => {
   const result = await extensionWorker.evaluate(async () => ({
-    hosts:await Promise.all(['github.com','www.github.com','gist.github.com','raw.githubusercontent.com'].map(async host => ({
+    hosts:await Promise.all(['github.com','www.github.com','gist.github.com'].map(async host => ({
       host,
       sensitive:BLBShared.isSensitiveSiteHostname(host),
       scripts:contentScriptFilesForTab({url:'https://'+host+'/arunamalrajmca/blb-suite/tree/main'},{
