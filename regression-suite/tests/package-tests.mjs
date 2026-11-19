@@ -92,8 +92,8 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(read('kings-bible-collector.js').includes('kingsBibleCollectorConfig?.collectorModule === "kings-bible"'));
   assert(read('webster-collector.js').includes('websterCollectorConfig?.collectorModule === "webster"'));
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
-  assert(collector.includes('sourceSiteConfig.showOnHomepage === true'), 'registry homepage opt-in must be honored');
-  assert(collector.includes('if (sourceSite && (!isSourceHomepage || sourceSiteConfig.showOnHomepage === true))'));
+  assert(collector.includes('if (sourceSite && !isSourceHomepage)'), 'source-page buttons must remain nested-page-only');
+  assert(!collector.includes('showOnHomepage'), 'no source-site homepage may opt into the collection button');
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
   assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
