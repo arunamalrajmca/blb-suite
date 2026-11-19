@@ -7382,12 +7382,13 @@ let pdfSelectionVisibilitySyncGeneration = 0;
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
   try {
-    // Context-menu visibility can persist across service-worker restarts.
-    // Start hidden until the active tab's eligibility has been re-evaluated;
-    // otherwise a stale visible=true state can leak onto blueletterbible.org.
+    // The native context-menu item persists across service-worker restarts.
+    // Preserve its last synchronized visibility while refreshing the title;
+    // hiding it here would make a right-click unable to wake this worker.
+    // The active-tab sync below re-evaluates visibility, and the click handler
+    // independently rechecks site preference, host permission, and eligibility.
     await chrome.contextMenus.update('blb-suite-web-selection', {
-      title:'Show on BLB\tAlt+B',
-      visible:false
+      title:'Show on BLB\tAlt+B'
     });
     selectionMenuKnownPresent = true;
     return true;
