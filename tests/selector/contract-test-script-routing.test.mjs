@@ -147,3 +147,23 @@ test("shared sensitive-site policy changes select and execute GitHub exclusion c
   assert.ok(new RegExp(group.grep).test("shared sensitive-site classifier covers known providers without keyword false positives"),
     "the sensitive-site classifier regression must be selected by the reference matrix");
 });
+
+
+test("Bible data, case-sensitive routing, and KJV corpus modules retain direct CI ownership", () => {
+  const required = [
+    ["extension/books.js", "tests/browser/extension-reference-actions.spec.js"],
+    ["extension/book-aliases.js", "tests/browser/audit-defect-regressions.spec.js"],
+    ["extension/case-sensitive-routing.js", "tests/browser/case-sensitive-routing-behavior.spec.js"],
+    ["extension/case-sensitive-search-core.js", "tests/browser/case-sensitive-routing-behavior.spec.js"],
+    ["extension/kjv-corpus-case-verse-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-original-case.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-phrase-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-verses.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-word-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"],
+    ["extension/kjv-corpus-word-verse-index.js", "tests/browser/kjv-corpus-lazy-loading.spec.js"]
+  ];
+  for (const [path, spec] of required) {
+    assert.ok(featureSpecs.some(group => group.paths.includes(path) && group.specs.includes(spec)),
+      "runtime module lacks a direct feature regression mapping: " + path);
+  }
+});
