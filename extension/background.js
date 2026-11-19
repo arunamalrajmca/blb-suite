@@ -7444,15 +7444,23 @@ function beginSelectionMenuContextSync() {
 }
 
 async function syncSelectionMenusAfterTabReplacement(addedTabId) {
-  const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-  const activeTab = tabs[0];
-  if (!activeTab || activeTab.id !== addedTabId) return false;
-  const isCurrent = beginSelectionMenuContextSync();
-  await Promise.all([
-    syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent),
-    syncPdfSelectionContextMenuVisibility(activeTab, isCurrent)
-  ]);
-  return true;
+  // A replacement can overlap a late activation/navigation visibility request.
+  // The per-menu generation guards correctly discard stale work, but that can
+  // also discard this replacement's web-menu update. Re-resolve the active tab
+  // and retry a bounded number of times while this replacement remains active.
+  // Never force visibility from a tab that has since lost focus.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    const activeTab = tabs[0];
+    if (!activeTab || activeTab.id !== addedTabId) return false;
+    const isCurrent = beginSelectionMenuContextSync();
+    const results = await Promise.all([
+      syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent),
+      syncPdfSelectionContextMenuVisibility(activeTab, isCurrent)
+    ]);
+    if (results.every(Boolean)) return true;
+  }
+  return false;
 }
 
 chrome.tabs.onReplaced.addListener(addedTabId => {
