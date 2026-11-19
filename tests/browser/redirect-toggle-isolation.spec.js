@@ -341,7 +341,7 @@ test('failed current-page activation reports that a reload is needed after redir
   await page.evaluate(() => setRedirect(true));
   await expect(page.locator('#redirectEnabled')).toBeChecked();
   await expect(page.locator('#studyStatus')).toContainText(
-    'Global redirects are enabled, but this page could not be activated. Reload the page'
+    'Global redirects are enabled, but this page could not be activated. Try reloading the page'
   );
 });
 
