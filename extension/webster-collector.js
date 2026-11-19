@@ -27,7 +27,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       const isWebsterHomepage = () => {
         const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
         return normalizedPath === "/" ||
-          /^\/(?:index(?:\.html?)?|home(?:page)?|default(?:\.aspx|\.html?))$/i.test(normalizedPath);
+          /^\/(?:index(?:\.(?:html?|php|asp|aspx))?|home(?:page)?|default(?:\.(?:html?|php|asp|aspx))?)$/i.test(normalizedPath);
       };
       async function captureWebsterWord() {
         async function sendCaptureMessage(message) {
