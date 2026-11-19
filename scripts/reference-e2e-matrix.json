@@ -109,5 +109,10 @@
     "group": "replaced-tab-lifecycle-races",
     "file": "tests/browser/replaced-tab-lifecycle-races.spec.js",
     "grep": ".*"
+  },
+  {
+    "group": "context-menu-visibility-lifecycle",
+    "file": "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
+    "grep": ".*"
   }
 ]
