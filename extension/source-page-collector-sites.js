@@ -1,5 +1,6 @@
 /* Shared registry for page-wide Bible-reference collection buttons and optional click guards. */
 globalThis.BLBSourcePageCollectorSites = Object.freeze({
+  "bibleproject.com": { id:"bibleproject" },
   "christianity.com": { id:"christianity", mainWorldClickGuard:true },
   "gotquestions.org": { id:"gotquestions", mainWorldClickGuard:true },
   "crosswalk.com": { id:"crosswalk", mainWorldClickGuard:true },
