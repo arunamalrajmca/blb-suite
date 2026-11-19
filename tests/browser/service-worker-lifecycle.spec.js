@@ -2439,6 +2439,9 @@ test('generic configured-site activation retries after an in-flight refresh race
   ), {message:'tabs.onUpdated must schedule a fresh activation after observing the in-flight lock'}).toBe(true);
 
   await extensionWorker.evaluate(() => globalThis.__supplyOfGraceResolveOldRefresh());
+  await expect.poll(() => extensionWorker.evaluate(() =>
+    globalThis.__supplyOfGraceRefreshCount
+  ), {message:'the fresh committed-document activation must perform a second refresh handshake'}).toBeGreaterThanOrEqual(2);
   await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
     message:'the committed same-origin document must be initialized after the outgoing document reports a stale successful refresh'
   }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
