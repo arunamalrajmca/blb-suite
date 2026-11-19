@@ -915,6 +915,67 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
+  test('X.com activates Show on BLB and Double-click in an already-open document without reloading', async ({
+    page, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'x.com':false},
+      doubleClickBlbSites:{'x.com':false}
+    });
+    await page.route('https://x.com/**', route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:`<!doctype html><html><head><title>X live-toggle fixture</title></head><body>
+        <main>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-live-show">Matthew</span> 22:37</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-live-double">Genesis</span> 17:8</span></div></article>
+        </main>
+      </body></html>`
+    }));
+    await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+    const originalTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+
+    // Simulate enabling both site features from the popup while X.com is
+    // already open. This must activate the current document, not just register
+    // scripts for its next navigation.
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'x.com':true},
+      doubleClickBlbSites:{'x.com':true}
+    });
+    await expect.poll(() => page.evaluate(() =>
+      window.__blbSuiteContentScriptLoadedV2 === true
+    )).toBe(true);
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached();
+    await expect.poll(() => page.evaluate(() =>
+      typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+    )).toBe(true);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalTimeOrigin);
+
+    await page.locator('#x-live-show').evaluate(element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', {
+       bubbles:true, cancelable:true, view:window
+      }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({timeout:10000});
+    await button.click();
+    const showTab = await waitForBlbTabPath(extensionWorker, '/kjv/mat/22/37/');
+    expect(new URL(showTab.pendingUrl || showTab.url).pathname).toBe('/kjv/mat/22/37/');
+    await removeTabById(extensionWorker, showTab.id);
+
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.locator('#x-live-double').dblclick();
+    const doubleTab = await waitForBlbTabPath(extensionWorker, '/kjv/gen/17/8/');
+    expect(new URL(doubleTab.pendingUrl || doubleTab.url).pathname).toBe('/kjv/gen/17/8/');
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalTimeOrigin);
+  });
+
   test('X tweet text resolves book clicks from exact caret ranges through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
