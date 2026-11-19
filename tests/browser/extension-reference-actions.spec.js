@@ -918,11 +918,20 @@ test.describe('core user-visible E2E', () => {
   test('X.com popup toggles activate Show on BLB and Double-click in the already-open document without reloading', async ({
     page, context, extensionId, extensionStorage, extensionWorker
   }) => {
+    await extensionWorker.evaluate(async () =>
+      unregisterRuntimeContentScriptForPattern('https://x.com/*')
+    );
     await extensionStorage.set({
       masterEnabled:true,
       pageSelectionButtonSites:{'x.com':false},
       doubleClickBlbSites:{'x.com':false}
     });
+    const initiallyRegistered = await extensionWorker.evaluate(async () =>
+      (await chrome.scripting.getRegisteredContentScripts({
+        ids:[runtimeContentScriptIdForPattern('https://x.com/*')]
+      })).length > 0
+    );
+    expect(initiallyRegistered).toBe(false);
     await context.route('https://x.com/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
