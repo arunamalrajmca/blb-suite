@@ -63,7 +63,7 @@
   {
     "group": "service-worker-lifecycle",
     "file": "tests/browser/service-worker-lifecycle.spec.js",
-    "grep": "(?:a redirect during eligibility checks cannot inject the previous host bundle into the new document|first X.com document activates Floating Button and Double-click without a manual reload|an already-open X.com document activates Floating Button and Double-click after site opt-in without a reload|a BLB verse link opened in a new tab activates passive targets on the first load|a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load|an X.com link opened in a new tab activates Floating Button and Double-click on first load)"
+    "grep": "(?:a redirect during eligibility checks cannot inject the previous host bundle into the new document|first X.com document activates Floating Button and Double-click without a manual reload|an already-open X.com document activates Floating Button and Double-click after site opt-in without a reload|a BLB verse link opened in a new tab activates passive targets on the first load|a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load|an X.com link opened in a new tab activates Floating Button and Double-click on first load|an unrelated configured host activates on its first load without site-specific code or a manual reload)"
   },
   {
     "group": "kjv-corpus-lazy-loading",
