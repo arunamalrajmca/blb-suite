@@ -10,7 +10,7 @@ test('a real MV3 service-worker termination is recovered by a content-script sel
   await page.waitForFunction(() => !!document.documentElement);
 
   const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   );
   expect(Number.isInteger(tabId)).toBe(true);
 
@@ -251,7 +251,7 @@ test('a real MV3 service-worker termination is recovered by the Alt+B command me
   });
 
   const tabId=await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   );
   expect(Number.isInteger(tabId)).toBe(true);
 
@@ -670,7 +670,7 @@ test('content-script requests are rejected when their originating document navig
   }));
   await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
   const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   );
   expect(Number.isInteger(tabId)).toBe(true);
   const originalDocumentId = await extensionWorker.evaluate(async id => {
@@ -779,7 +779,7 @@ test('content-script messages from subframes are rejected even when the frame ha
   await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
   await page.waitForFunction(() => document.querySelector('iframe')?.contentDocument?.readyState === 'complete');
   const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   );
   const frames = await extensionWorker.evaluate(async id =>
     chrome.scripting.executeScript({
@@ -817,7 +817,7 @@ test('asynchronous content-script handlers keep sendResponse open until delayed 
   }));
   await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
   const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   );
 
   await extensionWorker.evaluate(() => {
@@ -913,7 +913,7 @@ test('content-script requests are rejected when their originating tab closes dur
   }));
   await page.goto('https://www.blueletterbible.org/', {waitUntil:'domcontentloaded'});
   const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   );
 
   await extensionWorker.evaluate(() => {
@@ -2317,7 +2317,7 @@ test('a newer site opt-in recovers from an older in-flight OFF activation withou
     await page.bringToFront();
     await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),tabId);
     await expect.poll(() => extensionWorker.evaluate(async () =>
-      (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+      (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
     )).toBe(tabId);
     await page.evaluate(() => {
       document.querySelector('#reference').innerHTML='Romans 8:<span id="verse-number">28</span>';
@@ -2437,7 +2437,7 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await destination.bringToFront();
   await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
   await expect.poll(() => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   )).toBe(destinationTabId);
 
   await destination.locator('#target-reference').evaluate(element => {
@@ -2462,7 +2462,7 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await destination.bringToFront();
   await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
   await expect.poll(() => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
   )).toBe(destinationTabId);
   await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
     target:{tabId:id},
