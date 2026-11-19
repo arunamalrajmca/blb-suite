@@ -92,8 +92,10 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(read('kings-bible-collector.js').includes('kingsBibleCollectorConfig?.collectorModule === "kings-bible"'));
   assert(read('webster-collector.js').includes('websterCollectorConfig?.collectorModule === "webster"'));
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
-  assert(collector.includes('sourceSiteConfig.showOnHomepage === true'), 'registry homepage opt-in must be honored');
-  assert(collector.includes('if (sourceSite && (!isSourceHomepage || sourceSiteConfig.showOnHomepage === true))'));
+  assert(collector.includes('if (sourceSite && !isSourceHomepage)'), 'every source-page homepage must be excluded by the shared rule');
+  assert(!collector.includes('showOnHomepage'), 'source-page homepage behavior must not be overridden per host');
+  assert(!registry.includes('showOnHomepage'), 'the source-page registry must not opt any homepage into button display');
+  assert(/"bibleproject\\.com"\\s*:\\s*\\{\\s*id:\\s*"bibleproject"\\s*\\}/.test(registry), 'BibleProject must use the same universal homepage exclusion');
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
   assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
@@ -104,6 +106,13 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(background.includes("'source-page-collector-sites.js'"), 'background must import the shared collector registry');
   assert(background.includes('BLBSourcePageCollectorSites || {}'), 'runtime injection must consult the shared collector registry');
   assert(background.includes('collectorConfig?.mainWorldClickGuard === true'), 'optional MAIN-world click guards must come from shared registry metadata');
+});
+
+test('GitHub is a sensitive destination and must never receive runtime scripts', () => {
+  const shared = read('regex-patterns.js');
+  assert(shared.includes("'github.com'"), 'GitHub must be in the centralized sensitive-site domain suffix policy');
+  const background = read('background.js');
+  assert(background.includes("if (isSensitiveSiteUrl(tab?.url || '')) return [];"), 'sensitive destinations must be rejected before runtime script selection');
 });
 
 test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {
