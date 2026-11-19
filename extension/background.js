@@ -7393,6 +7393,14 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   return await isPageButtonEnabledForHostname(siteKey);
 }
 
+async function shouldShowPdfSelectionContextMenu(tab) {
+  if (!tab || !isPdfViewerTab(tab) || !(await isSuiteEnabled())) return false;
+  return await isPageButtonEnabledForHostname(
+    pageSelectionSettingKeyFromTab(tab),
+    tab.title || ''
+  );
+}
+
 let selectionMenuOperation = Promise.resolve();
 let selectionMenuKnownPresent = false;
 let pdfSelectionMenuKnownPresent = false;
@@ -7549,8 +7557,7 @@ async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true
   if (!pdfSelectionMenuKnownPresent) return false;
   const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
-    const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
-      (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
+    const enabled = await shouldShowPdfSelectionContextMenu(tab);
     // PDF menu visibility is global too. A slow eligibility lookup for an
     // earlier tab must not overwrite the result for the tab now in focus.
     if (generation !== pdfSelectionVisibilitySyncGeneration || !isCurrent()) return false;
@@ -7729,7 +7736,10 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
     }
   }
   if (!text) return;
-  if (!(await shouldShowBlbContextMenu(tab, text))) return;
+  const eligible = menuId === 'blb-suite-pdf-selection'
+    ? await shouldShowPdfSelectionContextMenu(tab)
+    : await shouldShowBlbContextMenu(tab, text);
+  if (!eligible) return;
   try {
     // PDF right-click selections already provide the selected text directly.
     // Avoid a content-script context lookup on protected PDF viewer tabs.
