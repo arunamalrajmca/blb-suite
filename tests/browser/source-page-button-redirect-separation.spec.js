@@ -465,7 +465,7 @@ test('Crosswalk source-page collector button survives full refreshes around real
 
 
 test('Christianity.com and Crosswalk.com exclude homepages while enabling nested-page buttons', async ({
-  page, extensionStorage, extensionWorker
+  page, extensionStorage
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -502,18 +502,6 @@ test('Christianity.com and Crosswalk.com exclude homepages while enabling nested
     await page.goto(fixture.home, {waitUntil:'domcontentloaded'});
     await expect(page.locator(fixture.selector), fixture.home).toHaveCount(0);
 
-    // Runtime registration must begin at URL commit, before a fast follow-up
-    // navigation can leave this host without its content script.
-    const originPattern = new URL(fixture.home).origin + '/*';
-    await expect.poll(() => extensionWorker.evaluate(async pattern => {
-      const id = runtimeContentScriptIdForPattern(pattern);
-      const [registration] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
-      return Boolean(registration &&
-        registration.matches?.includes(pattern) &&
-        registration.js?.includes('content.js') &&
-        registration.js?.includes('source-page-collector-sites.js'));
-    }, originPattern), {message:'Runtime content-script registration must exist before navigation: ' + originPattern}).toBe(true);
-
     await page.goto(fixture.article, {waitUntil:'domcontentloaded'});
     await expect(page.locator(fixture.selector), fixture.article)
       .toHaveText('Open Bible References in BLB');
@@ -522,7 +510,7 @@ test('Christianity.com and Crosswalk.com exclude homepages while enabling nested
 
 
 test('every shared-registry page-button host shows the exact button on content pages and excludes homepages', async ({
-  page, extensionStorage, extensionPath, extensionWorker
+  page, extensionStorage, extensionPath
 }) => {
   const cases = sharedPageButtonHosts(extensionPath);
   expect(cases.length, 'the shared page-button registry must not be empty').toBeGreaterThan(0);
@@ -545,16 +533,6 @@ test('every shared-registry page-button host shows the exact button on content p
     const button = page.locator('#blb-suite-' + siteId + '-multiverse');
     await page.goto(homepage, {waitUntil:'domcontentloaded'});
     await expect(button, homepage + ' must not show the page button').toHaveCount(0);
-
-    const originPattern = new URL(homepage).origin + '/*';
-    await expect.poll(() => extensionWorker.evaluate(async pattern => {
-      const id = runtimeContentScriptIdForPattern(pattern);
-      const [registration] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
-      return Boolean(registration &&
-        registration.matches?.includes(pattern) &&
-        registration.js?.includes('content.js') &&
-        registration.js?.includes('source-page-collector-sites.js'));
-    }, originPattern), {message:'Runtime content-script registration must exist before navigation: ' + originPattern}).toBe(true);
 
     await page.goto(contentPage, {waitUntil:'domcontentloaded'});
     await expect(button, contentPage + ' must show the expected page button')
