@@ -7985,6 +7985,15 @@ chrome.runtime.onInstalled.addListener(async details => {
     })
     .catch(() => {})).catch(() => {});
   if (details.reason === 'update') {
+    // Extension updates can leave persistent runtime registrations from the
+    // previous package in Chrome's registry. Reconcile first so newly sensitive
+    // hosts (and removed/renamed script resources) are pruned before any tab
+    // recovery work is started.
+    try {
+      await reconcileRuntimeContentScriptRegistrations();
+    } catch (error) {
+      console.error('KJV Scripture Tools extension-update runtime registration cleanup failed:', String(error));
+    }
     injectConfiguredTabsAfterExtensionUpdate().catch(error => {
       console.error('KJV Scripture Tools extension-update tab reconciliation failed:', String(error));
     });
