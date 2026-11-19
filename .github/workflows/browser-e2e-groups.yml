@@ -57,6 +57,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -72,6 +73,7 @@ jobs:
             ${{ runner.os }}-node22-npm-
       - run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
@@ -99,6 +101,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -114,6 +117,7 @@ jobs:
             ${{ runner.os }}-node22-npm-
       - run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
@@ -155,6 +159,7 @@ jobs:
       - run: npm install --prefer-offline --no-audit --no-fund
         if: ${{ inputs.group_a_required == 'true' }}
       - name: Install Playwright Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
         if: ${{ inputs.group_a_required == 'true' }}
       - name: Grant test-only generic host access
@@ -178,12 +183,23 @@ jobs:
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) }}
         run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
 
-      - name: Install headed-browser X11 dependencies
+      - name: Install missing headed-browser dependencies
         if: ${{ !cancelled() && contains(inputs.group_a_changed_browser_specs, 'tests/browser/service-worker-shortcut-headed.spec.js') }}
+        shell: bash
         run: |
-          npx playwright install-deps chromium
-          sudo apt-get update
-          sudo apt-get install -y xvfb xdotool
+          set -euo pipefail
+          browser_bin="$(find "$HOME/.cache/ms-playwright" -type f -path '*/chrome-linux*/chrome' -print -quit)"
+          if [[ -z "$browser_bin" ]] || ldd "$browser_bin" | grep -q 'not found'; then
+            npx playwright install-deps chromium
+          else
+            echo "Cached Chromium runtime dependencies are already present; skipping apt dependency installation."
+          fi
+          if ! command -v Xvfb >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb xdotool
+          else
+            echo "Xvfb and xdotool are already installed; skipping apt installation."
+          fi
       - name: Run every non-delegated changed browser spec
         if: ${{ !cancelled() && inputs.group_a_changed_browser_specs != '' }}
         env:
@@ -316,6 +332,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -331,6 +348,7 @@ jobs:
             ${{ runner.os }}-node22-npm-
       - run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
