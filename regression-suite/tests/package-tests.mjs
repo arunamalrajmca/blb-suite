@@ -90,7 +90,10 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(/"thekingsbible\.com"\s*:\s*\{\s*collectorModule:\s*"kings-bible"/.test(registry));
   assert(/"webstersdictionary1828\.com"\s*:\s*\{\s*collectorModule:\s*"webster"/.test(registry));
   assert(read('kings-bible-collector.js').includes('kingsBibleCollectorConfig?.collectorModule === "kings-bible"'));
-  assert(read('webster-collector.js').includes('websterCollectorConfig?.collectorModule === "webster"'));
+  const websterCollector = read('webster-collector.js');
+  assert(websterCollector.includes('websterCollectorConfig?.collectorModule === "webster"'));
+  assert(websterCollector.includes('if (isWebsterHomepage()) return;'),
+    'specialized Webster collector must obey the universal homepage exclusion');
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
   assert(collector.includes('if (sourceSite && !isSourceHomepage)'), 'every source-page homepage must be excluded by the shared rule');
   assert(!collector.includes('showOnHomepage'), 'source-page homepage behavior must not be overridden per host');
