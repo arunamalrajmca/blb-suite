@@ -2448,10 +2448,16 @@ test('unrelated Supply of Grace pages activate selection features on first load 
     selection.addRange(range);
     document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
   });
+  const destinationDiagnostics=[];
+  destination.on('console',message => destinationDiagnostics.push({type:message.type(),text:message.text()}));
+  destination.on('pageerror',error => destinationDiagnostics.push({type:'pageerror',text:String(error)}));
   const destinationFloating=destination.locator('#blb-suite-page-selection-button');
   await expect(destinationFloating).toBeVisible();
   await destinationFloating.click();
-  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/')).toBe(true);
+  await expect.poll(async () => ({
+    opened:await hasBlbPassage(extensionWorker,'/kjv/rom/8/28/'),
+    diagnostics:destinationDiagnostics.slice(-8)
+  }),{message:'new-tab Floating Button action must open Romans 8:28; inspect content-script diagnostics if it does not'}).toMatchObject({opened:true});
 
   await destination.bringToFront();
   await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
