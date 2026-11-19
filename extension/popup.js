@@ -1521,12 +1521,16 @@ async function setIndependentSiteFeature(feature, on) {
   if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
   const generation = (siteFeatureToggleGeneration[feature] || 0) + 1;
   siteFeatureToggleGeneration[feature] = generation;
-  const pinPromise = on ? pinSiteFeatureChoice(feature) : Promise.resolve();
+  const isPdfPageButton = feature === 'pageButton' &&
+    (currentSiteKey === '__blb_local_pdf__' || currentSiteKey === '__blb_pdf_viewer__');
+  // PDF preference keys are synthetic local settings, not web origins. Do not
+  // request host permission or create an origin-scoped pending toggle for them.
+  const pinPromise = on && !isPdfPageButton ? pinSiteFeatureChoice(feature) : Promise.resolve(null);
   const cancelPromise = on ? Promise.resolve() : persistSiteFeatureOffChoice(feature);
 
   // Keep permissions.request in the original change-handler call stack.
   let accessPromise = Promise.resolve(true);
-  if (on && currentSiteOrigin) {
+  if (on && currentSiteOrigin && !isPdfPageButton) {
     try {
       accessPromise = chrome.permissions.request({origins:[currentSiteOrigin]})
         .then(granted => granted === true).catch(() => false);
