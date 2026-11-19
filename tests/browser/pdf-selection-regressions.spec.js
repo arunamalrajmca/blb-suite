@@ -211,10 +211,12 @@ test('the active web-selection menu follows Show on BLB ON/OFF for a hosted PDF 
   });
   const result=await extensionWorker.evaluate(async () => {
     const originalUpdate=chrome.contextMenus.update;
+    const originalTabsQuery=chrome.tabs.query;
     const originalKnown=selectionMenuKnownPresent;
     const updates=[];
     try {
       selectionMenuKnownPresent=true;
+      chrome.tabs.query=async () => [];
       chrome.contextMenus.update=async (id,details) => {updates.push({id,visible:details.visible});};
       const pdfTab={id:987654,url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',title:'The-Big-Picture.pdf'};
       await syncWebSelectionContextMenuVisibility(pdfTab,false);
@@ -223,6 +225,7 @@ test('the active web-selection menu follows Show on BLB ON/OFF for a hosted PDF 
       return updates;
     } finally {
       chrome.contextMenus.update=originalUpdate;
+      chrome.tabs.query=originalTabsQuery;
       selectionMenuKnownPresent=originalKnown;
     }
   });
