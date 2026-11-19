@@ -3416,10 +3416,18 @@ async function ensureContentScriptInTab(tabId) {
       // or register it from the pre-check tab snapshot.
       tab = await getCurrentEligibleTab();
       if (!tab) return false;
-      const files = contentScriptFilesForTab(tab, settings);
+      const isBlbDestination = normalizeSiteHostname(hostnameFromTabUrl(tab.url)) === BLB_HOSTNAME;
+      const configuredFiles = contentScriptFilesForTab(tab, settings);
+      // BLB destinations already receive this bundle from manifest
+      // content_scripts. Reuse that static coverage instead of adding a
+      // duplicate dynamic registration; if an existing document has a stale
+      // extension context, inject the current static bundle into that tab.
+      const files = configuredFiles.length ? configuredFiles : (isBlbDestination ? BLB_CONTENT_SCRIPT_FILES : []);
       if (!files.length) return false;
 
-      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
+      const registrationReady = isBlbDestination
+        ? true
+        : await ensureRuntimeContentScriptRegistered(tab, files);
       tab = await getCurrentEligibleTab();
       if (!tab) return false;
       if (!registrationReady) {
@@ -3517,7 +3525,15 @@ async function ensureContentScriptInTab(tabId) {
         // asynchronous storage initialization. Retry the refresh once after
         // the initial message, and don't mistake a missing response for a
         // verified activation.
-        for (let attempt = 0; attempt < 2; attempt++) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          // executeScript resolves when the files have been evaluated, but the
+          // content bundle's async initializer can still be installing its
+          // runtime listener. Give that listener a short bounded window to
+          // become ready instead of reporting a false activation failure that
+          // leaves the user thinking the page must be reloaded.
+          if (attempt > 0) {
+            await new Promise(resolve => setTimeout(resolve, 75 * attempt));
+          }
           try {
             const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
             if (response?.ok === true) {
@@ -7522,8 +7538,11 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
     globalThis.BLBSourcePageCollectorSites || {}, key
   );
-  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton ||
-    (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
+  // BLB is a manifest-matched first-party destination. Existing BLB tabs
+  // must be reactivated after extension updates even when the user has no
+  // per-site Show on BLB preference and global redirects are OFF.
+  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (key === BLB_HOSTNAME || hasPageCollectorButton ||
+    (pageSites[key] === true || doubleSites[key] === true));
 
   // Global Redirect External Bible Links is intentionally available on any
   // HTTP(S) host for which the user granted host access. Do not limit runtime

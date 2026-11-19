@@ -465,7 +465,7 @@ test('Crosswalk source-page collector button survives full refreshes around real
 
 
 test('Christianity.com and Crosswalk.com exclude homepages while enabling nested-page buttons', async ({
-  page, extensionStorage
+  page, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -510,7 +510,7 @@ test('Christianity.com and Crosswalk.com exclude homepages while enabling nested
 
 
 test('every shared-registry page-button host shows the exact button on content pages and excludes homepages', async ({
-  page, extensionStorage, extensionPath
+  page, extensionStorage, extensionPath, extensionWorker
 }) => {
   const cases = sharedPageButtonHosts(extensionPath);
   expect(cases.length, 'the shared page-button registry must not be empty').toBeGreaterThan(0);

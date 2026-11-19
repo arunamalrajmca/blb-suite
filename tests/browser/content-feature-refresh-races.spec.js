@@ -437,6 +437,116 @@ test('repeated global master toggles disable and restore exactly one double-clic
 });
 
 
+test('X.com site activation waits for the content-script refresh listener without reloading', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'x.com':false},
+    doubleClickBlbSites:{'x.com':false},
+    redirectEnabled:false
+  });
+  await page.route('https://x.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>X activation handshake</title></head><body><p>John 3:16</p></body></html>'
+  }));
+  await page.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://x.com/*'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  // Model a content bundle whose runtime listener becomes ready shortly after
+  // executeScript completes. The activation handshake must wait for readiness
+  // instead of reporting a false failure and requiring a page reload.
+  await extensionWorker.evaluate(() => {
+    const originalSendMessage = chrome.tabs.sendMessage.bind(chrome.tabs);
+    const originalExecuteScript = chrome.scripting.executeScript.bind(chrome.scripting);
+    globalThis.__activationHandshakeOriginals = {originalSendMessage,originalExecuteScript};
+    globalThis.__activationHandshakeInjectedAt = 0;
+    chrome.tabs.sendMessage = async (...args) => {
+      const injectedAt = globalThis.__activationHandshakeInjectedAt;
+      if (injectedAt && Date.now() - injectedAt < 180) {
+        throw new Error('Could not establish connection. Receiving end does not exist.');
+      }
+      return originalSendMessage(...args);
+    };
+    chrome.scripting.executeScript = async details => {
+      const result = await originalExecuteScript(details);
+      if (details?.files?.includes('content.js')) globalThis.__activationHandshakeInjectedAt = Date.now();
+      return result;
+    };
+  });
+
+  try {
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'x.com':true},
+      doubleClickBlbSites:{'x.com':true}
+    });
+    await expect.poll(() => extensionWorker.evaluate(async id => {
+      const result = await ensureContentScriptInTab(id);
+      const [state] = await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:() => ({
+          loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+          button:!!document.getElementById('blb-suite-page-selection-button'),
+          doubleClick:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return {result,...state.result};
+    }, tabId), {timeout:15000}).toMatchObject({
+      result:true,loaded:true,button:true,doubleClick:true
+    });
+    expect(await page.evaluate(() => performance.timeOrigin)).toBeTruthy();
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const originals = globalThis.__activationHandshakeOriginals;
+      if (originals) {
+        chrome.tabs.sendMessage = originals.originalSendMessage;
+        chrome.scripting.executeScript = originals.originalExecuteScript;
+      }
+      delete globalThis.__activationHandshakeOriginals;
+      delete globalThis.__activationHandshakeInjectedAt;
+    });
+  }
+});
+
+test('existing www and apex BLB tabs are reactivated after extension update without site toggles', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  const body = '<!doctype html><html><head><title>BLB update recovery</title></head><body>John 3:16</body></html>';
+  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,contentType:'text/html; charset=utf-8',body
+  }));
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  const secondPage = await context.newPage();
+  await secondPage.route('https://blueletterbible.org/**', route => route.fulfill({
+    status:200,contentType:'text/html; charset=utf-8',body
+  }));
+  await secondPage.goto('https://blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  try {
+    const tabIds = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.filter(tab => /blueletterbible\.org\/kjv\/jhn\/3\/16\//.test(tab.url || ''))
+        .map(tab => tab.id);
+    });
+    expect(tabIds).toHaveLength(2);
+    const result = await extensionWorker.evaluate(() => injectConfiguredTabsAfterExtensionUpdate());
+    expect(result.eligibleTabIds).toEqual(expect.arrayContaining(tabIds));
+    expect(result.activatedTabIds).toEqual(expect.arrayContaining(tabIds));
+  } finally {
+    await secondPage.close();
+  }
+});
+
 test('per-site feature changes activate every already-open tab on the matching host', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
