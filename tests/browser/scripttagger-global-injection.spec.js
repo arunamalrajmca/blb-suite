@@ -123,6 +123,12 @@ test.describe('global ScriptTagger content-script injection', () => {
       { ...tab, url: 'https://chrome.google.com/webstore/devconsole/40905445-1efc-480e-bbeb-d65a863d2c1c' },
       settings
     )).toBe(false);
+    expect(await context.shouldInjectContentScriptForTab(
+      { ...tab, url: 'https://github.com/arunamalrajmca/blb-suite/tree/main' },
+      settings
+    )).toBe(false);
+    expect(context.BLBShared.isSensitiveSiteHostname('github.com')).toBe(true);
+    expect(context.BLBShared.isSensitiveSiteHostname('gist.github.com')).toBe(true);
   });
 
   test('turning the global toggle on injects all already-open tabs with granted host access', async () => {
