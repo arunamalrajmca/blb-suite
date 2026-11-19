@@ -5,6 +5,10 @@
  */
 export const featureSpecs = [
   {
+    paths: ["extension/regex-patterns.js"],
+    specs: ["tests/browser/shared-regex-patterns.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
+  },
+  {
     paths: ["tests/pages/research-derived-smoke.html"],
     specs: ["tests/browser/research-dom-smoke.spec.js"]
   },
