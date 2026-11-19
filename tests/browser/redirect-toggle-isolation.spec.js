@@ -633,8 +633,8 @@ test('a stale redirect permission result in another popup cannot overwrite the l
 
 
 test('GitHub and its subdomains are excluded by the shared sensitive-site policy', async ({extensionWorker}) => {
-  const result = await extensionWorker.evaluate(() => ({
-    hosts:['github.com','www.github.com','gist.github.com','raw.githubusercontent.com'].map(host => ({
+  const result = await extensionWorker.evaluate(async () => ({
+    hosts:await Promise.all(['github.com','www.github.com','gist.github.com','raw.githubusercontent.com'].map(async host => ({
       host,
       sensitive:BLBShared.isSensitiveSiteHostname(host),
       scripts:contentScriptFilesForTab({url:'https://'+host+'/arunamalrajmca/blb-suite/tree/main'},{
@@ -650,7 +650,7 @@ test('GitHub and its subdomains are excluded by the shared sensitive-site policy
         doubleClickBlbSites:{[host]:true}
       }),
       registrationAttempt:await registerRuntimeContentScriptForPattern({url:'https://'+host+'/arunamalrajmca/blb-suite/tree/main'},['redirect-scripttagger.js'])
-    }))
+    })))
   }));
   expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.sensitive)).toBe(true);
   expect(result.hosts.filter(item => item.host.endsWith('github.com')).every(item => item.scripts.length===0)).toBe(true);
