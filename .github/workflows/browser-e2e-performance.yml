@@ -32,6 +32,7 @@ on:
       - 'playwright.config.js'
       - 'playwright.config.ts'
       - '.github/workflows/browser-e2e-performance.yml'
+      - '.github/workflows/manual-full-test-audit.yml'
   workflow_dispatch:
 
 concurrency:
@@ -41,7 +42,7 @@ concurrency:
 jobs:
   performance:
     name: Measured performance qualification
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
