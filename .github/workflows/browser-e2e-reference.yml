@@ -342,7 +342,7 @@ jobs:
             # before execution if Playwright silently registers zero tests.
             discovery_log="$(mktemp)"
             node --check "$spec"
-    npx playwright test --config=playwright.config.js --list --reporter=list "$spec" 2>&1 | tee "$discovery_log"
+            npx playwright test --config=playwright.config.js --list --reporter=list "$spec" 2>&1 | tee "$discovery_log"
             if ! grep -Eq 'Running [1-9][0-9]* tests?|Listing tests:' "$discovery_log"; then
               echo "::error::Playwright discovered no tests in $spec."
               exit 1
