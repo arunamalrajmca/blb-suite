@@ -68,11 +68,11 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
+    specs: ["tests/browser/source-url-redirect-regressions.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/source-bible-redirect.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js"]
+    specs: ["tests/browser/source-url-redirect-regressions.spec.js", "tests/browser/redirect-hostnames.spec.js"]
   },
   {
     paths: ["extension/redirect-scripttagger.js"],
@@ -157,7 +157,7 @@ export const featureSpecs = [
 ];
 
 
-export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
+export const mappedSpecs = new Set(["tests/browser/source-url-redirect-regressions.spec.js",
   "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
@@ -238,7 +238,7 @@ export const togglePermissionSpecs = new Set([
 ]);
 
 export const groupARequiredSpecs = new Set([
-  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/source-url-redirect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
   "tests/browser/multiverse-contiguous-range-routing.spec.js",
@@ -294,7 +294,7 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/shared-regex-patterns.spec.js",
   "tests/browser/rediscover-sagacity-button.spec.js",
   "tests/browser/research-dom-smoke.spec.js",
-  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/source-url-redirect-regressions.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
@@ -309,7 +309,7 @@ export const referenceRequiredSpecs = new Set([
 // Browser specs delegated from the Group A changed-spec runner to the
 // References gate when that gate owns the selected change.
 export const referenceDelegatedSpecs = new Set([
-  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/source-url-redirect-regressions.spec.js",
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
