@@ -2869,3 +2869,68 @@ test('selection runtime messages survive repeated transient No SW dispatch failu
 
   expect(result).toEqual({attempts:5, response:{ok:true}});
 });
+
+
+test('extension-update recovery activates an already-open configured page without manual reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const host = 'supplyofgrace.com';
+  const pattern = 'https://www.supplyofgrace.com/*';
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{[host]:true},
+    doubleClickBlbSites:{[host]:true}
+  });
+  await extensionWorker.evaluate(async () => {
+    await reconcileRuntimeContentScriptRegistrations();
+    globalThis.__blbUpdateRecoveryOriginalEnsure = ensureContentScriptInTabWithRetry;
+    ensureContentScriptInTabWithRetry = async () => false;
+    await unregisterRuntimeContentScriptForPattern('https://www.supplyofgrace.com/*');
+  });
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Extension update recovery</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  try {
+    await page.goto('https://www.supplyofgrace.com/extension-update-recovery.html', {
+      waitUntil:'domcontentloaded'
+    });
+    const tabId = await getTabIdForUrl(extensionWorker, pattern);
+    expect(Number.isInteger(tabId)).toBe(true);
+    expect(await contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+      fileExecuted:false,
+      initialized:false,
+      doubleClickBound:false
+    });
+
+    const recovery = await extensionWorker.evaluate(async () => {
+      ensureContentScriptInTabWithRetry = globalThis.__blbUpdateRecoveryOriginalEnsure;
+      delete globalThis.__blbUpdateRecoveryOriginalEnsure;
+      return injectConfiguredTabsAfterExtensionUpdate();
+    });
+    expect(recovery.eligibleTabIds).toContain(tabId);
+    expect(recovery.activatedTabIds).toContain(tabId);
+    await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+      message:'extension-update reconciliation must restore the current document without requiring page.reload()'
+    }).toMatchObject({
+      fileExecuted:true,
+      initialized:true,
+      doubleClickBound:true
+    });
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbUpdateRecoveryOriginalEnsure) {
+        ensureContentScriptInTabWithRetry = globalThis.__blbUpdateRecoveryOriginalEnsure;
+        delete globalThis.__blbUpdateRecoveryOriginalEnsure;
+      }
+    });
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:false},
+      doubleClickBlbSites:{[host]:false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  }
+});
