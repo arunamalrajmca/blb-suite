@@ -2383,13 +2383,13 @@ test('generic supplyofgrace.com site opt-in activates the already-open document 
     doubleClickBlbSites:{'supplyofgrace.com':false}
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
-  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
     status:200,
     contentType:'text/html',
     body:'<!doctype html><html><head><title>Supply of Grace first-load fixture</title></head><body><p id="reference">John 3:16</p></body></html>'
   }));
-  await page.goto('https://supplyofgrace.com/',{waitUntil:'domcontentloaded'});
-  const tabId=await getTabIdForUrl(extensionWorker,'https://supplyofgrace.com/*');
+  await page.goto('https://www.supplyofgrace.com/',{waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
   expect(Number.isInteger(tabId)).toBe(true);
   await expect.poll(() => contentScriptLoaded(extensionWorker,tabId)).toMatchObject({
     fileExecuted:false,initialized:false,doubleClickBound:false
