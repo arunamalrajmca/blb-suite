@@ -4449,8 +4449,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteEnsureContentScript') {
-    const ok = await ensureContentScriptInTab(Number(message.tabId || sender?.tab?.id));
-    sendResponse({ok});
+    const tabId = Number(message.tabId || sender?.tab?.id);
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!isHttpPageUrl(tab?.url)) {
+        sendResponse({ok:false, reason:'unsupported-page'});
+        return true;
+      }
+      const ok = await ensureContentScriptInTab(tabId);
+      sendResponse({ok, ...(ok ? {} : {reason:'activation-failed'})});
+    } catch (error) {
+      sendResponse({
+        ok:false,
+        reason:isTabUnavailableError(error) ? 'tab-unavailable' : 'activation-failed',
+        error:String(error)
+      });
+    }
     return true;
   }
 

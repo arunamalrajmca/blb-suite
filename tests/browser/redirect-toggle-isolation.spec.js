@@ -341,8 +341,44 @@ test('failed current-page activation reports that a reload is needed after redir
   await page.evaluate(() => setRedirect(true));
   await expect(page.locator('#redirectEnabled')).toBeChecked();
   await expect(page.locator('#studyStatus')).toContainText(
-    'Global redirects are enabled, but this page could not be activated. Reload the page'
+    'Global redirects are enabled, but this page could not be activated. Try reloading the page'
   );
+});
+
+test('unsupported active tabs do not report that a reload is required after redirects are enabled', async ({
+  page, extensionId, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+
+  const unsupportedTab = await page.evaluate(async () => {
+    const tab = await chrome.tabs.create({url:'about:blank', active:true});
+    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable:true,
+      value:async query => query?.active && query?.currentWindow
+        ? [{id:tab.id, url:'about:blank'}]
+        : originalQuery(query)
+    });
+    Object.defineProperty(chrome.permissions, 'request', {configurable:true, value:async () => true});
+    Object.defineProperty(chrome.permissions, 'contains', {
+      configurable:true,
+      value:async ({origins = []}) => origins.includes('http://*/*') && origins.includes('https://*/*')
+    });
+    return tab.id;
+  });
+
+  try {
+    await page.evaluate(() => setRedirect(true));
+    await expect(page.locator('#redirectEnabled')).toBeChecked();
+    await expect(page.locator('#studyStatus')).toContainText(
+      'This page does not support extension activation'
+    );
+    await expect(page.locator('#studyStatus')).not.toContainText(/reload/i);
+  } finally {
+    await page.evaluate(async tabId => chrome.tabs.remove(tabId).catch(() => {}), unsupportedTab);
+  }
 });
 
 test('background redirect-rule refresh reports a Dynamic Rules API failure', async ({
