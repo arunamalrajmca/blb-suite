@@ -7,7 +7,7 @@ test.describe('PDF selection context-menu regressions', () => {
         { tab: { url: 'file:///C:/Bible/notes.pdf', title: 'notes.pdf' }, key: '__blb_local_pdf__', pdf: true },
         { tab: { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf', title: 'PDF Viewer' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'brave://pdf-internals/', title: 'PDF internals' }, key: '__blb_pdf_viewer__', pdf: true },
-        { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: 'example.com', pdf: false },
+        { tab: { url: 'https://storage.example.com/notes.pdf', title: 'Notes' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'https://example.com/article', title: 'Article' }, key: 'example.com', pdf: false }
       ];
       return cases.map(({ tab, key, pdf }) => ({
@@ -23,6 +23,22 @@ test.describe('PDF selection context-menu regressions', () => {
       expect(item.key, item.url).toBe(item.expectedKey);
       expect(item.isPdf, item.url).toBe(item.expectedPdf);
     }
+  });
+
+  test('direct HTTPS PDF URLs use the same saved PDF preference as the popup and disable the menu immediately when OFF', async ({extensionWorker,extensionStorage}) => {
+    const tab = {id:987654,url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',title:'The Big Picture.pdf'};
+    await extensionStorage.set({masterEnabled:true,pageSelectionButtonSites:{'__blb_pdf_viewer__':true}});
+    const enabled = await extensionWorker.evaluate(async value => ({
+      key:pageSelectionSettingKeyFromTab(value),
+      visible:await shouldShowBlbContextMenu(value,'John 3:16')
+    }),tab);
+    expect(enabled).toEqual({key:'__blb_pdf_viewer__',visible:true});
+
+    await extensionStorage.set({pageSelectionButtonSites:{'__blb_pdf_viewer__':false}});
+    await expect.poll(() => extensionWorker.evaluate(async value => ({
+      visible:await shouldShowBlbContextMenu(value,'John 3:16'),
+      enabled:await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(value))
+    }),tab)).toEqual({visible:false,enabled:false});
   });
 
   test('PDF menu visibility requires a PDF tab, master switch, and explicit Show on BLB preference', async ({ extensionWorker, extensionStorage }) => {
