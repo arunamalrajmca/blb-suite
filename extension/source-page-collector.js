@@ -23,7 +23,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
       const sourceSiteConfig = globalThis.BLBSourcePageCollectorSites?.[host] || {};
-      const sourceSite = sourceSiteConfig.id || "";
+      const sourceSite = globalThis.BLBSourcePageCollectorSites?.[host]?.id || "";
       // Most source-site homepages are general landing pages, not article/reference
       // pages. A registry entry can explicitly opt in when its homepage is useful.
       const isSourceHomepage = location.pathname === "/" || location.pathname === "";
