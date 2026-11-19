@@ -231,7 +231,7 @@ try {
   commit('change mapped redirect feature');
   let result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'mapped feature');
-  assert(result.values.changed_specs.includes('source-bible-url-regressions.spec.js'));
+  assert(result.values.changed_specs.includes('redirect-hostnames.spec.js'));
   assert(!result.values.changed_specs.includes('popup'), 'mapped feature should not pull in unrelated popup tests');
   console.log('PASS: mapped feature selects focused browser coverage');
 
@@ -438,7 +438,7 @@ try {
   commit('delete mapped feature file');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'deleted mapped feature');
-  assert(result.values.changed_specs.includes('source-bible-url-regressions.spec.js'));
+  assert(result.values.changed_specs.includes('redirect-hostnames.spec.js'));
   console.log('PASS: deleted mapped files retain feature coverage');
 
   // Browser-spec-only edits must not trigger the browser suite by themselves.
