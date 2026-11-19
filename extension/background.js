@@ -7304,7 +7304,7 @@ async function isPageButtonEnabledForHostname(hostname) {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
-  if (!(await isSuiteEnabled())) return false;
+  if (!(await isSuiteEnabled()) || isPdfViewerTab(tab)) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
   // The right-click action is exactly the same site-based feature as the
   // floating Show on BLB button. Do not require a content-script visibility
