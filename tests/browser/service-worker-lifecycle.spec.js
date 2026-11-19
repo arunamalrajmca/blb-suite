@@ -2204,6 +2204,7 @@ test('optional redirect-script failure cannot block core selection activation on
     await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible();
     await page.locator('#blb-suite-page-selection-button').click();
     await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/')).toBe(true);
+    await page.bringToFront();
     await page.locator('#reference').evaluate(element => {
       element.innerHTML='Romans 8:<span id="optional-failure-verse">28</span>';
     });
