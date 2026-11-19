@@ -2074,8 +2074,14 @@ async function hasBlbPassage(extensionWorker, path) {
     return tabs.some(tab => {
       try {
         const url = new URL(tab.pendingUrl || tab.url || '');
-        return url.hostname === 'www.blueletterbible.org' &&
-          url.pathname.replace(/\/+$/, '/') === expectedPath;
+        if (url.hostname !== 'www.blueletterbible.org') return false;
+        const actualPath = url.pathname.replace(/\/+$/, '/');
+        // BLB may canonicalize a successfully opened passage by appending its
+        // verse-source identifier (for example, /kjv/act/4/12/s_1022012).
+        // Match that canonical form without accepting another passage path.
+        return actualPath === expectedPath ||
+          actualPath === expectedPath.replace(/\/+$/, '') + '/s_' + 
+            (actualPath.match(/\/s_([^/]+)\/$/)?.[1] || '__no_match__') + '/';
       } catch (_) {
         return false;
       }
