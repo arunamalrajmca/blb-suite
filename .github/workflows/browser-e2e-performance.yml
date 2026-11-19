@@ -142,21 +142,34 @@ jobs:
           else
             SCENARIOS="paragraph-classify paragraph-two-tab selection fresh reuse"
           fi
-          # Alternate baseline/candidate for each individual sample so runner
-          # load, thermal drift, and browser warm-up cannot affect one entire
-          # variant block. Reverse the order on even samples to counterbalance
-          # first-run/startup effects. Each invocation runs one fresh test
-          # context; JSONL files preserve each variant's sample order for paired
-          # comparison. This intentionally uses 110 small invocations rather
-          # than batching all 11 baseline samples before all 11 candidate ones.
+          # Each sample uses an isolated browser context/process to keep A/B
+          # measurements independent. Report progress across the complete
+          # benchmark rather than showing every isolated Playwright process as 1/1.
+          scenario_count=$(wc -w <<< "$SCENARIOS")
+          total_samples=$((scenario_count * BLB_PERF_SAMPLES * 2))
+          progress=0
+          run_perf_sample() {
+            local variant="$1"
+            local extension_path="$2"
+            local output_path="$3"
+            progress=$((progress + 1))
+            printf '\n[%d/%d] scenario=%s variant=%s sample=%d/%d\n' \
+              "$progress" "$total_samples" "$scenario" "$variant" "$sample" "$BLB_PERF_SAMPLES"
+            BLB_PERF_AGGREGATE_PROGRESS=1 \
+              BLB_EXTENSION_PATH="$extension_path" \
+              BLB_PERF_OUTPUT="$output_path" \
+              BLB_PERF_SCENARIO="$scenario" \
+              BLB_PERF_VARIANT="$variant" \
+              npx playwright test tests/browser/performance.spec.js --workers=1
+          }
           for scenario in $SCENARIOS; do
             for ((sample = 1; sample <= BLB_PERF_SAMPLES; sample++)); do
               if (( sample % 2 == 1 )); then
-                BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" BLB_PERF_SCENARIO="$scenario" BLB_PERF_VARIANT=baseline npx playwright test tests/browser/performance.spec.js --workers=1
-                BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" BLB_PERF_VARIANT=candidate npx playwright test tests/browser/performance.spec.js --workers=1
+                run_perf_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+                run_perf_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
               else
-                BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" BLB_PERF_VARIANT=candidate npx playwright test tests/browser/performance.spec.js --workers=1
-                BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" BLB_PERF_SCENARIO="$scenario" BLB_PERF_VARIANT=baseline npx playwright test tests/browser/performance.spec.js --workers=1
+                run_perf_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+                run_perf_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
               fi
             done
           done

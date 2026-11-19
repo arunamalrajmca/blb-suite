@@ -589,7 +589,6 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
     assert.match(workflow, /^\s*-\s*['"]scripts\/\*\*['"]/m);
     for (const script of [
       "classify-ci-changes.mjs",
-      "select-browser-specs.mjs",
       "select-reference-matrix.mjs",
       "test-ci-routing-selector.js",
       "verify-store-assets.py",
@@ -610,8 +609,12 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
       assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
     }
     if (workflowPath.endsWith("browser-e2e-performance.yml")) {
+      assert.ok(workflow.includes("- '!scripts/select-browser-specs.mjs'"),
+        "performance-only workflow may ignore browser selector edits");
       assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "performance-only workflow may ignore reference matrix edits");
     } else {
+      assert.ok(!workflow.includes("- '!scripts/select-browser-specs.mjs'"),
+        "References workflow must run when browser selector changes");
       assert.ok(workflow.includes("- '.github/workflows/browser-e2e-reference.yml'"));
       assert.ok(workflow.includes("- '.github/workflows/browser-e2e-groups.yml'"));
       assert.ok(!workflow.includes("- '!scripts/reference-e2e-matrix.json'"),
@@ -624,6 +627,8 @@ test("reusable feature groups consume the caller's single browser classification
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
   assert.ok(workflow.includes("  workflow_call:"), "feature groups must be invoked as a reusable workflow");
+  assert.ok(workflow.includes("Run context-menu visibility and replacement lifecycle regressions"), "mapped context-menu lifecycle spec must have an explicit Group A runner");
+  assert.ok(workflow.includes("Run replacement-tab lifecycle race regressions"), "replacement-tab lifecycle race spec must have an explicit Group A runner");
   assert.ok(caller.includes("extension/**"), "References caller must retain the broad runtime fallback");
   assert.doesNotMatch(workflow, /^  change-detection:/m, "reusable workflow must not classify the same diff again");
   assert.doesNotMatch(workflow, /needs\.change-detection\.outputs\./, "jobs must consume workflow inputs");
@@ -691,6 +696,18 @@ test("mixed runtime and browser-spec change selects the whole changed spec", () 
     commitChange(root, "tests/browser/omnibox-boolean-operators.spec.js", "// changed with runtime\n");
     const output = select(root, base);
     assert.match(output, /changed_browser_specs=tests\/browser\/omnibox-boolean-operators\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+  });
+});
+
+test("performance benchmark specs stay in the dedicated interleaved runner", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// shared runtime change\\n");
+    commitChange(root, "tests/browser/performance.spec.js", "// benchmark regression change\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=true/);
+    assert.match(output, /changed_browser_specs=\n/);
+    assert.match(output, /group_a_changed_browser_specs=\n/);
     assert.match(output, /group_a_required=true/);
   });
 });

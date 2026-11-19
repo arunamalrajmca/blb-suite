@@ -161,6 +161,17 @@ jobs:
         if: ${{ inputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
 
+      # The global context-menu lifecycle spec is mapped to Group A and must
+      # have an explicit runner; otherwise mapped test-only edits are selected
+      # but silently omitted from both changed-browser and unmapped execution.
+      - name: Run context-menu visibility and replacement lifecycle regressions
+        if: ${{ !cancelled() && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/context-menu-visibility-event-lifecycle.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/context-menu-visibility-event-lifecycle.spec.js')) }}
+        run: npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js --max-failures=1
+
+      - name: Run replacement-tab lifecycle race regressions
+        if: ${{ !cancelled() && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/replaced-tab-lifecycle-races.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/replaced-tab-lifecycle-races.spec.js')) }}
+        run: npx playwright test tests/browser/replaced-tab-lifecycle-races.spec.js --max-failures=1
+
       # Run the dedicated MultiVerse tab-reuse regression in this existing runner.
       # Shared/unknown runtime changes retain this coverage via full_browser_suite.
       - name: Run MultiVerse tab reuse and 22-batch persistence regressions

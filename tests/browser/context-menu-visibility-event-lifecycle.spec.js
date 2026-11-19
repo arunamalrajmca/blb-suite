@@ -138,6 +138,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         item.id === 'blb-suite-pdf-selection'
       );
       const replacementUpdates = [...updates];
+      const replacementUpdatedMenuIds = [...new Set(replacementUpdates.map(item => item.id))].sort();
 
       // Replacements in a background tab must not change global menu state.
       updates.length = 0;
@@ -201,6 +202,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         backgroundReplacementIgnored,
         backgroundReplacementUpdates,
         replacementUpdates,
+        replacementUpdatedMenuIds,
         focusChangeHidesWebMenu,
         focusChangeShowsWebMenu,
         focusHandoffEmittedNone:focusEvents.includes(chrome.windows.WINDOW_ID_NONE),
@@ -242,11 +244,13 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.replacementSynced, JSON.stringify({
     replacementTabId:result.replacementTabId,
     activeTabBeforeReplacementSync:result.activeTabBeforeReplacementSync,
-    replacementUpdates:result.replacementUpdates
+    replacementUpdates:result.replacementUpdates,
+    replacementUpdatedMenuIds:result.replacementUpdatedMenuIds
   }, null, 2)).toBe(true);
   expect(result.replacementShowsWebMenu, JSON.stringify({
     replacementSynced:result.replacementSynced,
-    replacementUpdates:result.replacementUpdates
+    replacementUpdates:result.replacementUpdates,
+    replacementUpdatedMenuIds:result.replacementUpdatedMenuIds
   }, null, 2)).toBe(true);
   expect(result.replacementSynchronizesPdfMenu).toBe(true);
   expect(result.backgroundReplacementIgnored).toBe(true);
