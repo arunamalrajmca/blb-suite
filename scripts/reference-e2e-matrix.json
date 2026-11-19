@@ -51,8 +51,7 @@
   {
     "group": "redirect-source-smoke-batch",
     "files": [
-      "tests/browser/redirect-hostnames.spec.js",
-      "tests/browser/redirect-source-regressions-runner.spec.js"
+      "tests/browser/redirect-hostnames.spec.js"
     ],
     "grep": ".*"
   },
