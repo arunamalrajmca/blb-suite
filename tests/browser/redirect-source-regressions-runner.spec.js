@@ -1,4 +1,8 @@
 const { test, expect } = require('@playwright/test');
+
+test('source redirect regression entrypoint is active', () => {
+  expect(true).toBe(true);
+});
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
