@@ -2478,4 +2478,5 @@ test('generic configured-site activation retries after an in-flight refresh race
     delete globalThis.__supplyOfGraceResolveOldRefresh;
     delete globalThis.__supplyOfGraceActivation;
   });
+  await closeBlbTabs(extensionWorker);
 });
