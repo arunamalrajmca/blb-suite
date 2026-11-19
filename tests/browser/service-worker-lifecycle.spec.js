@@ -2423,9 +2423,12 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   await page.locator('#supply-first-verse').dblclick();
   await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/phl/4/6/')).toBe(true);
 
-  const newTabPromise=context.waitForEvent('page');
+  // Bind the popup wait to this source page. The earlier selection actions
+  // can asynchronously open BLB tabs, so a context-wide 'page' wait can capture
+  // one of those unrelated pages instead of the target=_blank article.
+  const destinationPromise=page.waitForEvent('popup');
   await page.locator('#open-supply-target').click();
-  const destination=await newTabPromise;
+  const destination=await destinationPromise;
   await destination.waitForLoadState('domcontentloaded');
   const destinationTabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/articles/reference-test');
   expect(Number.isInteger(destinationTabId)).toBe(true);
