@@ -2171,6 +2171,7 @@ test('optional redirect-script failure cannot block core selection activation on
     globalThis.__blbOriginalEnsureRuntimeRegistration = ensureRuntimeContentScriptRegistered;
     globalThis.__blbOriginalExecuteScript = chrome.scripting.executeScript.bind(chrome.scripting);
     ensureRuntimeContentScriptRegistered = async () => false;
+    unregisterRuntimeContentScriptForPattern('https://www.supplyofgrace.com/*');
     chrome.scripting.executeScript = async details => {
       if ((details.files || []).some(file =>
         file === 'redirect-scripttagger.js' || file === 'redirect-bibleref-ranges.js'
