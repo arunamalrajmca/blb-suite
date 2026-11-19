@@ -89,7 +89,7 @@ test('a real MV3 service-worker termination is recovered by the physical Alt+B b
 });
 
 
-test('a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action', async ({
+test('the physical right-click BLB context-menu action remains available after worker restart', async ({
   page, context, extensionStorage, extensionWorker, extensionId
 }) => {
   test.skip(!headedBrowserTests, 'requires the dedicated headed Chromium/X11 workflow');
@@ -135,6 +135,12 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     return syncWebSelectionContextMenuVisibility(tab,false,()=>true);
   },tabId);
   expect(menuSyncSucceeded,'Chrome must successfully register and show the eligible selection menu').toBe(true);
+  // Keep a second same-origin tab available so a normal tabs.onActivated event
+  // can wake the worker after forced termination. The right-click then tests
+  // the restored menu/action path, while Alt+B separately tests direct wake-up.
+  const wakePage=await context.newPage();
+  await wakePage.goto('https://example.com/worker-wake.html',{waitUntil:'domcontentloaded'});
+  await page.bringToFront();
 
   const browser=context.browser();
   expect(browser,'headed persistent context must expose its Chromium browser').not.toBeNull();
@@ -155,10 +161,23 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
       return current.some(target => target.targetId===workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
+    // A normal tab-activation event wakes the worker after forced termination.
+    await wakePage.bringToFront();
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target =>
+        target.type==='service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)
+      );
+    },{timeout:5000,intervals:[100,200,500]}).toBe(true);
+    await page.bringToFront();
+    await extensionWorker.evaluate(async id => {
+      const tab=await chrome.tabs.get(id);
+      return syncWebSelectionContextMenuVisibility(tab,false);
+    },tabId);
     // Open Chromium's native context menu with an X11 mouse event. Convert
     // viewport coordinates to screen coordinates using the visible browser
     // window and its measured chrome insets.
-    await page.bringToFront();
     await page.waitForTimeout(250);
     const focusedWindow=execFileSync('xdotool',['getwindowfocus'],{encoding:'utf8'}).trim();
     expect(Number.isInteger(Number(focusedWindow))).toBe(true);
@@ -195,14 +214,6 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
     // Chromium places the extension command immediately before the final
     // Inspect item. Use a paced keyboard sequence after the menu has opened.
     execFileSync('xdotool',['key','--clearmodifiers','--delay','100','End','Up','Return']);
-
-    await expect.poll(async () => {
-      const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target =>
-        target.type==='service_worker' &&
-        target.url.startsWith(`chrome-extension://${extensionId}/`)
-      );
-    },{timeout:5000,intervals:[100,200,500]}).toBe(true);
 
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
