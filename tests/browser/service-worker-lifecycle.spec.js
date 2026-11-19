@@ -1282,7 +1282,7 @@ test('browser startup reconciles multiple stale registrations and mixed expired,
     const validPattern = 'https://www.dailyverses.net/*';
     const expiredPattern = 'https://www.gotquestions.org/*';
     const stalePatternTwo = 'https://www.facebook.com/*';
-    const stalePatternThree = 'https://www.supplyofgrace.com/*';
+    const stalePatternThree = 'https://supplyofgrace.com/*';
     const missingPermissionPattern = 'https://no-permission-startup.invalid/*';
     const validRequestId = 'startup-valid-' + Date.now();
     const expiredRequestId = 'startup-expired-' + Date.now();
@@ -2383,13 +2383,13 @@ test('generic supplyofgrace.com site opt-in activates the already-open document 
     doubleClickBlbSites:{'supplyofgrace.com':false}
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
-  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
     status:200,
     contentType:'text/html',
     body:'<!doctype html><html><head><title>Supply of Grace first-load fixture</title></head><body><p id="reference">John 3:16</p></body></html>'
   }));
-  await page.goto('https://www.supplyofgrace.com/',{waitUntil:'domcontentloaded'});
-  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
+  await page.goto('https://supplyofgrace.com/',{waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://supplyofgrace.com/*');
   expect(Number.isInteger(tabId)).toBe(true);
   await expect.poll(() => contentScriptLoaded(extensionWorker,tabId)).toMatchObject({
     fileExecuted:false,initialized:false,doubleClickBound:false
