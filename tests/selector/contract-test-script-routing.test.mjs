@@ -15,6 +15,7 @@ const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.m
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
 const lifecycleSource = readFileSync(new URL("../browser/service-worker-lifecycle.spec.js", import.meta.url), "utf8");
+const sensitivePolicySource = readFileSync(new URL("../browser/redirect-toggle-isolation.spec.js", import.meta.url), "utf8");
 const referenceMatrix = JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8"));
 
 function git(cwd, ...args) {
@@ -132,4 +133,15 @@ test("critical first-load and activation-race regressions are actually selected 
   for(const title of criticalTitles) {
     assert.ok(selector.test(title), "critical lifecycle test is omitted from CI matrix: " + title);
   }
+});
+
+
+test("sensitive-site policy regressions are selected whenever shared URL policy changes", () => {
+  const group=referenceMatrix.find(item => item.group === "sensitive-site-policy-regressions");
+  assert.ok(group, "sensitive-site policy must have a dedicated reference-matrix entry");
+  assert.equal(group.file,"tests/browser/redirect-toggle-isolation.spec.js");
+  assert.match(group.grep,/^\.\*$/);
+  assert.match(sensitivePolicySource,/GitHub and its subdomains are excluded by the shared sensitive-site policy/);
+  const classifierGroup=referenceMatrix.find(item => item.group === "specialized-reference-smoke-batch");
+  assert.ok(new RegExp(classifierGroup.grep).test("shared sensitive-site classifier covers known providers without keyword false positives"));
 });
