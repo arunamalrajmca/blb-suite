@@ -575,7 +575,7 @@ test('BibleProject common homepage aliases remain excluded while nested pages sh
     body:'<!doctype html><html><head><title>BibleProject homepage alias fixture</title></head><body><main>Content</main></body></html>'
   }));
   const button=page.locator('#blb-suite-bibleproject-multiverse');
-  for (const path of ['/','/index.html','/index.htm','/home','/homepage','/default.aspx']) {
+  for (const path of ['/','/index','/index.html','/index.htm','/index.php','/index.asp','/index.aspx','/home','/homepage','/default','/default.aspx','/default.html','/default.php','/default.asp']) {
     const url='https://bibleproject.com'+path;
     await page.goto(url,{waitUntil:'domcontentloaded'});
     await expect(button,url+' must never display the collection button').toHaveCount(0);
