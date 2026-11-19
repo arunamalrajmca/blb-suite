@@ -3369,7 +3369,36 @@ function reconcileRuntimeContentScriptRegistrations() {
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
-  if (existing) return existing;
+  if (existing) {
+    // A tab-scoped lock can outlive the document that started it (same-origin
+    // navigation, SPA replacement, or an overlapping popup/storage activation).
+    // Never return that old result as proof that the current document is ready.
+    // Revalidate the live tab and its settings, request a fresh document-level
+    // refresh acknowledgement, and fall back to a new injection if no listener
+    // is present. This is deliberately generic for every optional-permission host.
+    return existing.catch(() => false).then(async () => {
+      if (contentScriptInjectionLocks.get(tabId) === existing) {
+        contentScriptInjectionLocks.delete(tabId);
+      }
+      let current;
+      try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+      if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url) ||
+          !(await hasHostAccessForTab(current))) return false;
+      const latestSettings = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (latestSettings.masterEnabled === false ||
+          !(await shouldInjectContentScriptForTab(current, latestSettings))) return false;
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+        if (response?.ok === true) return true;
+      } catch (_) {}
+      return ensureContentScriptInTab(tabId);
+    });
+  }
 
   const operation = (async () => {
     try {
@@ -7278,6 +7307,10 @@ function pageSelectionSettingKeyFromTab(tab) {
   try { decoded = decodeURIComponent(raw); } catch (_) {}
   const looksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded) || /\.pdf(?:$|\s)/i.test(title);
   if (/^file:/i.test(raw) && looksPdf) return '__blb_local_pdf__';
+  // The popup sees a directly hosted PDF as a PDF context even when Chromium
+  // keeps the original HTTPS URL in tabs.url. Use the same synthetic key for
+  // context-menu eligibility and the saved Show on BLB preference.
+  if (/^https?:/i.test(raw) && looksPdf) return '__blb_pdf_viewer__';
   if (/^(?:chrome|brave)-extension:/i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   if (/^(?:brave|chrome):\/\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   return hostnameFromTabUrl(raw);
