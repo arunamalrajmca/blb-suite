@@ -209,3 +209,31 @@ test('PDF identity and context-menu visibility stay aligned for direct hosted PD
   expect(result.saved.__blb_pdf_viewer__).toBe(false);
   expect(result.updates.filter(item => item.id==='blb-suite-pdf-selection').at(-1)?.visible).toBe(false);
 });
+
+
+test('PDF context-menu registration includes local and direct hosted PDF URL patterns', async ({ extensionWorker }) => {
+  const patterns = await extensionWorker.evaluate(async () => {
+    const originalCreate = chrome.contextMenus.create;
+    const originalRemove = chrome.contextMenus.remove;
+    let captured = null;
+    try {
+      chrome.contextMenus.create = async details => {
+        if (details.id === 'blb-suite-pdf-selection') captured = details.documentUrlPatterns;
+        return originalCreate(details);
+      };
+      chrome.contextMenus.remove = async id => {
+        try { return await originalRemove(id); } catch (_) { return; }
+      };
+      await installPdfSelectionContextMenu();
+      return captured;
+    } finally {
+      chrome.contextMenus.create = originalCreate;
+      chrome.contextMenus.remove = originalRemove;
+    }
+  });
+  expect(patterns).toEqual([
+    'file:///*.pdf',
+    'http://*/*.pdf*',
+    'https://*/*.pdf*'
+  ]);
+});
