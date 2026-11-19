@@ -984,11 +984,22 @@ test.describe('core user-visible E2E', () => {
     await popupPage.close();
     await page.bringToFront();
 
-    const registrationExists = await extensionWorker.evaluate(async () => {
+    const registration = await extensionWorker.evaluate(async () => {
       const id = runtimeContentScriptIdForPattern('https://x.com/*');
-      return (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length === 1;
+      const [script] = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+      return script ? {
+        matches:script.matches,
+        persistAcrossSessions:script.persistAcrossSessions,
+        runAt:script.runAt,
+        files:script.js
+      } : null;
     });
-    expect(registrationExists, 'X.com must have a persistent registration for future first-load tabs').toBe(true);
+    expect(registration, 'X.com must have a persistent registration for future first-load tabs').toMatchObject({
+      matches:['https://x.com/*'],
+      persistAcrossSessions:true,
+      runAt:'document_start'
+    });
+    expect(registration.files).toContain('content.js');
 
     const readIsolatedActivation = () => extensionWorker.evaluate(async id => {
       const [injected] = await chrome.scripting.executeScript({
