@@ -7,7 +7,8 @@ test.describe('PDF selection context-menu regressions', () => {
         { tab: { url: 'file:///C:/Bible/notes.pdf', title: 'notes.pdf' }, key: '__blb_local_pdf__', pdf: true },
         { tab: { url: 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf', title: 'PDF Viewer' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'brave://pdf-internals/', title: 'PDF internals' }, key: '__blb_pdf_viewer__', pdf: true },
-        { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: 'example.com', pdf: false },
+        { tab: { url: 'https://example.com/notes.pdf', title: 'Notes' }, key: '__blb_pdf_viewer__', pdf: true },
+        { tab: { url: 'https://example.com/document', title: 'Study Notes.pdf' }, key: '__blb_pdf_viewer__', pdf: true },
         { tab: { url: 'https://example.com/article', title: 'Article' }, key: 'example.com', pdf: false }
       ];
       return cases.map(({ tab, key, pdf }) => ({
@@ -163,4 +164,71 @@ test('local PDF context-menu handoff opens a selected full Bible reference throu
       before:beforeTabs
     });
   }
+});
+
+
+test('PDF OFF is enforced consistently for local, browser-viewer, and direct web PDFs', async ({extensionWorker, extensionStorage}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{
+      '__blb_local_pdf__':true,
+      '__blb_pdf_viewer__':true,
+      'example.com':true
+    }
+  });
+  const result = await extensionWorker.evaluate(async () => {
+    const tabs = [
+      {url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'},
+      {url:'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html?file=file%3A%2F%2F%2FC%3A%2FBible%2Fnotes.pdf',title:'PDF Viewer'},
+      {url:'https://example.com/notes.pdf',title:'notes.pdf'}
+    ];
+    const enabled = await Promise.all(tabs.map(tab => shouldShowBlbContextMenu(tab,'John 3:16')));
+    await chrome.storage.local.set({pageSelectionButtonSites:{
+      '__blb_local_pdf__':false,
+      '__blb_pdf_viewer__':false,
+      'example.com':true
+    }});
+    const disabled = await Promise.all(tabs.map(tab => shouldShowBlbContextMenu(tab,'John 3:16')));
+    return {
+      keys:tabs.map(pageSelectionSettingKeyFromTab),
+      enabled,
+      disabled,
+      directPdfIsPdf:isPdfViewerTab(tabs[2])
+    };
+  });
+  expect(result.keys).toEqual(['__blb_local_pdf__','__blb_pdf_viewer__','__blb_pdf_viewer__']);
+  expect(result.enabled).toEqual([true,true,true]);
+  expect(result.disabled).toEqual([false,false,false]);
+  expect(result.directPdfIsPdf).toBe(true);
+});
+
+
+test('the active web-selection menu follows Show on BLB ON/OFF for a hosted PDF tab', async ({extensionWorker,extensionStorage}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'__blb_pdf_viewer__':true},
+    doubleClickBlbSites:{}
+  });
+  const result=await extensionWorker.evaluate(async () => {
+    const originalUpdate=chrome.contextMenus.update;
+    const originalTabsQuery=chrome.tabs.query;
+    const originalKnown=selectionMenuKnownPresent;
+    const updates=[];
+    try {
+      selectionMenuKnownPresent=true;
+      chrome.tabs.query=async () => [];
+      chrome.contextMenus.update=async (id,details) => {updates.push({id,visible:details.visible});};
+      const pdfTab={id:987654,url:'https://storage.snappages.site/75QP7C/assets/files/The-Big-Picture.pdf',title:'The-Big-Picture.pdf'};
+      await syncWebSelectionContextMenuVisibility(pdfTab,false);
+      await chrome.storage.local.set({pageSelectionButtonSites:{'__blb_pdf_viewer__':false}});
+      await syncWebSelectionContextMenuVisibility(pdfTab,false);
+      return updates;
+    } finally {
+      chrome.contextMenus.update=originalUpdate;
+      chrome.tabs.query=originalTabsQuery;
+      selectionMenuKnownPresent=originalKnown;
+    }
+  });
+  const menuUpdates=result.filter(item=>item.id==='blb-suite-web-selection');
+  expect(menuUpdates.map(item=>item.visible)).toEqual([true,false]);
 });
