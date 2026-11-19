@@ -198,6 +198,14 @@ test('a real MV3 service-worker termination is recovered by the physical right-c
 
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target =>
+        target.type==='service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)
+      );
+    },{timeout:5000,intervals:[100,200,500]}).toBe(true);
+
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
       return current.some(target => {
         if(target.type!=='page') return false;
         try {
