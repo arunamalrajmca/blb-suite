@@ -2385,13 +2385,13 @@ test('an unrelated configured host activates on its first load without site-spec
     doubleClickBlbSites:{[host]:true}
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
-  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
     status:200,
     contentType:'text/html; charset=utf-8',
     body:'<!doctype html><html><head><title>Generic first-load activation</title></head><body><p id="reference">John 3:16</p></body></html>'
   }));
-  await page.goto('https://supplyofgrace.com/', {waitUntil:'domcontentloaded'});
-  const tabId=await getTabIdForUrl(extensionWorker,'https://supplyofgrace.com/*');
+  await page.goto('https://www.supplyofgrace.com/', {waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
   expect(Number.isInteger(tabId)).toBe(true);
   await expect.poll(() => contentScriptLoaded(extensionWorker,tabId), {
     message:'a normal non-special-case host must receive the same first-load content-script readiness handshake'
@@ -2437,13 +2437,13 @@ test('a newer site opt-in recovers from an older in-flight OFF activation withou
     pageSelectionButtonSites:{[host]:false},
     doubleClickBlbSites:{[host]:false}
   });
-  await page.route('https://supplyofgrace.com/**', route => route.fulfill({
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
     status:200,
     contentType:'text/html; charset=utf-8',
     body:'<!doctype html><html><head><title>Stale activation snapshot</title></head><body><p id="reference">John 3:16</p></body></html>'
   }));
-  await page.goto('https://supplyofgrace.com/activation-race.html', {waitUntil:'domcontentloaded'});
-  const tabId=await getTabIdForUrl(extensionWorker,'https://supplyofgrace.com/*');
+  await page.goto('https://www.supplyofgrace.com/activation-race.html', {waitUntil:'domcontentloaded'});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
   expect(Number.isInteger(tabId)).toBe(true);
 
   await extensionWorker.evaluate(async () => {
