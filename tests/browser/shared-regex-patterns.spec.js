@@ -571,4 +571,42 @@ test('GitHub is a sensitive destination and never receives any extension injecti
   expect(result.sensitive).toBe(true);
   expect(result.files).toEqual([]);
   expect(result.shouldInject).toBe(false);
+
+  const cleanup = await extensionWorker.evaluate(async () => {
+    const pattern = 'https://github.com/*';
+    const id = runtimeContentScriptIdForPattern(pattern);
+    const fakeRegistration = {
+      id,
+      matches:[pattern],
+      js:['redirect-scripttagger.js','redirect-bibleref-ranges.js'],
+      persistAcrossSessions:true
+    };
+    const originalGet = chrome.scripting.getRegisteredContentScripts.bind(chrome.scripting);
+    const originalUnregister = chrome.scripting.unregisterContentScripts.bind(chrome.scripting);
+    let fakePresent = true;
+    const removed = [];
+    try {
+      chrome.scripting.getRegisteredContentScripts = async options => {
+        if (options?.ids?.includes(id) || options?.ids?.includes(id + '-main-world')) {
+          return fakePresent && options.ids.includes(id) ? [fakeRegistration] : [];
+        }
+        const existing = await originalGet(options);
+        return !options ? [...existing,fakeRegistration] : existing;
+      };
+      chrome.scripting.unregisterContentScripts = async details => {
+        removed.push(...(details.ids || []));
+        if ((details.ids || []).includes(id)) fakePresent = false;
+        return originalUnregister(details).catch(() => {});
+      };
+      await reconcileRuntimeContentScriptRegistrations();
+      return {removed,remaining:fakePresent};
+    } finally {
+      chrome.scripting.getRegisteredContentScripts = originalGet;
+      chrome.scripting.unregisterContentScripts = originalUnregister;
+    }
+  });
+  expect(cleanup.removed).toContain('blb-suite-runtime-' + (await extensionWorker.evaluate(() =>
+    runtimeContentScriptIdForPattern('https://github.com/*').replace('blb-suite-runtime-','')
+  )));
+  expect(cleanup.remaining).toBe(false);
 });
