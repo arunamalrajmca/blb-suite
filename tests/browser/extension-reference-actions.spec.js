@@ -943,13 +943,25 @@ test.describe('core user-visible E2E', () => {
       pageSelectionButtonSites:{'x.com':true},
       doubleClickBlbSites:{'x.com':true}
     });
-    await expect.poll(() => page.evaluate(() =>
-      window.__blbSuiteContentScriptLoadedV2 === true
-    )).toBe(true);
+    const readIsolatedActivation = () => extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({});
+      const tab = tabs.find(item => (item.url || item.pendingUrl || '').startsWith('https://x.com/'));
+      if (!Number.isInteger(tab?.id)) return null;
+      const [injected] = await chrome.scripting.executeScript({
+        target:{tabId:tab.id},
+        world:'ISOLATED',
+        func:() => ({
+          loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        })
+      });
+      return injected.result;
+    });
+    await expect.poll(readIsolatedActivation).toMatchObject({
+      loaded:true,
+      doubleClickBound:true
+    });
     await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached();
-    await expect.poll(() => page.evaluate(() =>
-      typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
-    )).toBe(true);
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(originalTimeOrigin);
 
     await page.locator('#x-live-show').evaluate(element => {
