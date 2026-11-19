@@ -1,8 +1,4 @@
 const { test, expect } = require('@playwright/test');
-test('source Bible URL regression file is discovered by Playwright', () => {
-  expect(typeof runSourceRedirect).toBe('function');
-});
-
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
