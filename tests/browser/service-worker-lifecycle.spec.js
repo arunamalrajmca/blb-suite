@@ -2476,29 +2476,32 @@ test('a newer site opt-in recovers from an older in-flight OFF activation withou
     });
     globalThis.__staleSiteActivationGate={startedPromise,release,originalGet};
   });
-  const olderActivation=extensionWorker.evaluate(tabId => ensureContentScriptInTab(tabId),tabId);
-  await extensionWorker.evaluate(() => globalThis.__staleSiteActivationGate.startedPromise);
-  await extensionStorage.set({
-    pageSelectionButtonSites:{[host]:true},
-    doubleClickBlbSites:{[host]:true}
-  });
-  const newerActivation=extensionWorker.evaluate(tabId => ensureContentScriptInTab(tabId),tabId);
-  await extensionWorker.evaluate(() => globalThis.__staleSiteActivationGate.release());
-  await olderActivation;
-  const recovered=await newerActivation;
-  await expect.poll(() => contentScriptLoaded(extensionWorker,tabId), {
-    message:'a newer ON choice must not inherit an older OFF activation result or require reloading the page'
-  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
-  expect(recovered).toBe(true);
-
-  await extensionWorker.evaluate(() => {
-    const gate=globalThis.__staleSiteActivationGate;
-    if(gate) Object.defineProperty(chrome.storage.local,'get',{configurable:true,value:gate.originalGet});
-    delete globalThis.__staleSiteActivationGate;
-  });
-  await extensionStorage.set({
-    pageSelectionButtonSites:{[host]:false},
-    doubleClickBlbSites:{[host]:false}
-  });
-  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  try {
+    const olderActivation=extensionWorker.evaluate(tabId => ensureContentScriptInTab(tabId),tabId);
+    await extensionWorker.evaluate(async () => { await globalThis.__staleSiteActivationGate.startedPromise; });
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:true},
+      doubleClickBlbSites:{[host]:true}
+    });
+    const newerActivation=extensionWorker.evaluate(tabId => ensureContentScriptInTab(tabId),tabId);
+    await extensionWorker.evaluate(() => globalThis.__staleSiteActivationGate.release());
+    await olderActivation;
+    const recovered=await newerActivation;
+    await expect.poll(() => contentScriptLoaded(extensionWorker,tabId), {
+      message:'a newer ON choice must not inherit an older OFF activation result or require reloading the page'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+    expect(recovered).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      const gate=globalThis.__staleSiteActivationGate;
+      if(gate) Object.defineProperty(chrome.storage.local,'get',{configurable:true,value:gate.originalGet});
+      gate?.release?.();
+      delete globalThis.__staleSiteActivationGate;
+    });
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:false},
+      doubleClickBlbSites:{[host]:false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  }
 });
