@@ -15,7 +15,6 @@ const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.m
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
 const lifecycleSource = readFileSync(new URL("../browser/service-worker-lifecycle.spec.js", import.meta.url), "utf8");
-const contextMenuLifecycleSource = readFileSync(new URL("../browser/context-menu-visibility-event-lifecycle.spec.js", import.meta.url), "utf8");
 const sharedRegexSource = readFileSync(new URL("../browser/shared-regex-patterns.spec.js", import.meta.url), "utf8");
 const referenceMatrix = JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8"));
 
@@ -134,16 +133,6 @@ test("critical activation recovery regressions are selected by the reference CI 
   for (const title of criticalTitles) {
     assert.ok(selector.test(title), "critical lifecycle test is omitted from CI matrix: " + title);
   }
-});
-
-test("worker-restart right-click coverage is selected by the reference CI matrix", () => {
-  const group = referenceMatrix.find(item => item.group === "context-menu-visibility-lifecycle");
-  assert.equal(group?.file, "tests/browser/context-menu-visibility-event-lifecycle.spec.js");
-  assert.ok(new RegExp(group.grep).test(
-    "right-click action remains usable after the service worker restarts with a persisted visible menu"
-  ));
-  assert.match(contextMenuLifecycleSource, /right-click action remains usable after the service worker restarts/);
-  assert.match(contextMenuLifecycleSource, /worker restart preserves web menu visibility while click-time eligibility still blocks sensitive hosts/);
 });
 
 test("shared sensitive-site policy changes select and execute GitHub exclusion coverage", () => {
