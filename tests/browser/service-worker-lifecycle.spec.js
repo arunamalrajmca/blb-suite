@@ -2077,11 +2077,11 @@ async function hasBlbPassage(extensionWorker, path) {
         if (url.hostname !== 'www.blueletterbible.org') return false;
         // Normalize both slash-present and slash-absent BLB URLs. A trailing
         // slash replacement alone does not add a slash when none is present.
-        const actualPath = url.pathname.replace(/\\/+$/, '') + '/';
-        const expectedBase = expectedPath.replace(/\\/+$/, '');
+        const actualPath = url.pathname.replace(/\/+$/, '') + '/';
+        const expectedBase = expectedPath.replace(/\/+$/, '');
         // BLB may append a verse-source identifier to a canonical passage URL.
         // Accept only that one extra segment, not arbitrary deeper paths.
-        const sourceSuffix = actualPath.match(/\\/s_[^/]+\\/$/)?.[0] || '';
+        const sourceSuffix = actualPath.match(/\/s_[^/]+\/$/)?.[0] || '';
         return actualPath === expectedBase + '/' ||
           (!!sourceSuffix && actualPath === expectedBase + sourceSuffix);
       } catch (_) {
