@@ -20,8 +20,9 @@ function collectJavaScriptFiles(directory) {
   function walk(current) {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(absolute);
-      else if (entry.isFile() && entry.name.endsWith('.js')) files.push(absolute);
+      if (entry.isDirectory()) {
+        if (!['.git', 'node_modules', 'coverage', 'test-results', 'playwright-report', 'dist'].includes(entry.name)) walk(absolute);
+      } else if (entry.isFile() && entry.name.endsWith('.js')) files.push(absolute);
     }
   }
   walk(directory);
@@ -119,17 +120,43 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
     }));
 }
 
+function parseSource(source) {
+  try {
+    return {
+      ast: acorn.parse(source, {
+        ecmaVersion: 'latest',
+        sourceType: 'script',
+        allowHashBang: true,
+        locations: true,
+        ranges: true
+      }),
+      sourceType: 'script'
+    };
+  } catch (scriptError) {
+    try {
+      return {
+        ast: acorn.parse(source, {
+          ecmaVersion: 'latest',
+          sourceType: 'module',
+          allowHashBang: true,
+          locations: true,
+          ranges: true
+        }),
+        sourceType: 'module'
+      };
+    } catch (moduleError) {
+      moduleError.message = 'Unable to parse as script or module: ' + moduleError.message;
+      throw moduleError;
+    }
+  }
+}
+
 function analyzeSource(source, filename = '<source>', repositoryReferences = null) {
-  const ast = acorn.parse(source, {
-    ecmaVersion: 'latest',
-    sourceType: 'script',
-    allowHashBang: true,
-    locations: true,
-    ranges: true
-  });
+  const parsed = parseSource(source);
+  const ast = parsed.ast;
   const manager = eslintScope.analyze(ast, {
     ecmaVersion: 2022,
-    sourceType: 'script',
+    sourceType: parsed.sourceType,
     optimistic: false,
     ignoreEval: false,
     impliedStrict: false
@@ -183,17 +210,12 @@ function run(root = path.resolve(__dirname, '..')) {
   }
 
   const files = collectJavaScriptFiles(extension);
+  const referenceFiles = collectJavaScriptFiles(root);
   const repositoryReferences = new Set();
-  for (const file of files) {
+  for (const file of referenceFiles) {
     const source = fs.readFileSync(file, 'utf8');
-    const ast = acorn.parse(source, {
-      ecmaVersion: 'latest',
-      sourceType: 'script',
-      allowHashBang: true,
-      locations: true,
-      ranges: true
-    });
-    for (const name of collectStaticPropertyReferences(ast)) repositoryReferences.add(name);
+    const parsed = parseSource(source);
+    for (const name of collectStaticPropertyReferences(parsed.ast)) repositoryReferences.add(name);
   }
 
   const findings = [];
@@ -212,7 +234,7 @@ function run(root = path.resolve(__dirname, '..')) {
   const propertyFindings = findings.filter(item => item.scope === 'property-name-index');
   console.log('Potentially unread local declarations: ' + localFindings.length);
   console.log('Potentially unreferenced method/function properties: ' + propertyFindings.length);
-  console.log('Global declarations, parameters, and import reachability are not classified. Static property references are indexed across all scanned extension files.');
+  console.log('Function/local candidates are limited to extension files; static property references are indexed across repository JavaScript files. Global declarations, parameters, and import reachability are not classified.');
   console.log('A finding is not proof of dead code; inspect dynamic callbacks and runtime registration.');
 
   for (const finding of findings) {
@@ -235,4 +257,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { analyzeSource, analyzePropertyReferences, collectStaticPropertyReferences, collectJavaScriptFiles, run };
+module.exports = { analyzeSource, analyzePropertyReferences, collectStaticPropertyReferences, collectJavaScriptFiles, parseSource, run };
