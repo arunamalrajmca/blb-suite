@@ -178,3 +178,16 @@ test('run inventories local bindings across extension and non-extension reposito
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('retains reviewed VM-injected globals and Playwright reporter lifecycle hooks', () => {
+  const vmGlobal = analyzeSource(
+    'const sandbox = { hostnameFromTabUrl: value => value };',
+    'scripts/test-content-script-sender-document.js'
+  );
+  const reporterHook = analyzeSource(
+    'class ProgressReporter { onBegin() {} }',
+    'tests/browser/progress-reporter.js'
+  );
+  assert.deepEqual(vmGlobal, []);
+  assert.deepEqual(reporterHook, []);
+});
