@@ -86,10 +86,10 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
 
     if (node.type === 'Property' && node.value &&
         ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.value.type)) {
-      const name = staticPropertyName(node.key);
+      const name = staticPropertyName(node.key, node.computed);
       // Chrome scripting.executeScript consumes `func` as an API callback,
       // not as an ordinary object method/property reference.
-      if (name && name !== 'func' && !node.computed) {
+      if (name && name !== 'func') {
         definitions.push({ name, node: node.key, kind: 'object-function-property' });
       }
       return;
@@ -109,7 +109,7 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
 
     // Object destructuring reads a named property without a MemberExpression.
     if (node.type === 'Property' && parent && parent.type === 'ObjectPattern') {
-      const name = staticPropertyName(node.key);
+      const name = staticPropertyName(node.key, node.computed);
       if (name) references.add(name);
     }
   });
