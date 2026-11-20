@@ -310,3 +310,28 @@ A direct inspection of `tests/browser/service-worker-lifecycle.spec.js` on curre
 - The test was updated on head 8f17202f5cc17c51340add0015960b83488c1d14 to assert the observed same-tab identity and absence of both replacement events, while retaining the real prerender and extension-readiness assertions. The focused test passed (1/1), native browser shortcut E2E passed, and latest-main ancestry passed. HARD-GATE and the selected browser matrix were still running at the time of this ledger update; no full audit or performance run was selected.
 - Current Chrome API documentation describes tabs.onReplaced and webNavigation.onTabReplaced for replacement/prerender scenarios, but these two native Speculation Rules paths in this automated Chromium build did not emit either event. Do not claim a genuine replacement event has been reproduced. A separate legacy/Instant-style replacement trigger may be required, if still supported by current Chrome.
 - All PRs #967–#971 remain unmerged unless separately stated by the user. No production extension code, main branch, version, or release was changed by these experiments.
+
+
+### Chromium tab-replacement event investigation — PR #971 follow-up (2026-11-20)
+
+The source and API-history review explains why the two native Speculation Rules experiments did not produce replacement events:
+
+- Chromium's current WebNavigation router listens for the browser tab-strip replacement callback (TabReplacedAt / tab-strip model replacement) and dispatches webNavigation.onTabReplaced only from that callback. The current implementation also rejects invalid old/new URLs before dispatch. The extension event is therefore tied to a real browser tab-strip WebContents replacement, not simply a document activation or a navigation timing signal. See Chromium's current implementation: https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/extensions/api/web_navigation/web_navigation_api.cc
+- The current extension API schema still declares the event, and its description still says “usually previously pre-rendered”. The API's continued declaration does not establish that every modern prerender activation emits it.
+- Chromium's current Prerender2 README defines Speculation Rules as the current trigger and describes activation as a second navigation (prerender navigation followed by activation navigation). It separately labels the old prerender implementation as “Legacy Prerender” and says it is deprecated. https://chromium.googlesource.com/chromium/src/+/refs/heads/main/content/browser/preloading/prerender/README.md
+- Current Prerender2 same-tab activation was tested natively in PR #971 with no DevTools/CDP connection. It preserved the existing tab ID and did not produce a tab-strip replacement. The destination's activationStart, content-script execution, initialization, and Double-click binding were all verified.
+- The _blank Speculation Rules path is separately implemented through PrerenderNewTabHandle: Chromium creates a hidden WebContents for a new-tab target, then releases that object for the new-window/tab creation path. The native test observed a new tab ID and tabs.onCreated, not replacement of an existing tab. Chromium source: https://chromium.googlesource.com/chromium/src/+/286b3d20f5cf71f08db0bf7a74b857f891c1cf61/content/browser/preloading/prerender/prerender_new_tab_handle.cc
+- Chrome's own prerender documentation says the legacy <link rel="prerender"> mechanism was deprecated in favour of NoState Prefetch, and the modern full-prerender mechanism deliberately uses Speculation Rules instead. The current Prerender2 README also links legacy prerender deprecation bug 755921. https://developer.chrome.com/docs/web-platform/prerender-pages
+
+Assessment:
+- The modern Speculation Rules _self_ path is an in-place prerender activation within the existing tab, not a tab-strip replacement.
+- The modern Speculation Rules _blank_ path materializes a new tab, not a replacement of an existing tab.
+- The documented extension events remain available for actual tab-strip replacement, but the public web platform does not expose a supported mechanism to force the legacy hidden-prerendered-tab-to-existing-tab swap in current Chrome.
+- Chrome Instant is not a viable modern test trigger; historical Chrome Instant policy support was removed from Chrome 29 onward. Do not build a test around it.
+- Do not keep trying alternative Speculation Rules syntax or add more timing/retry complexity to PR #971. The evidence now supports treating genuine legacy-style replacement as unavailable through supported current web-facing prerender triggers. A separate Chromium browser-level integration test could exercise TabStripModel replacement internally, but that would not validate the end-to-end extension event in a normal user workflow.
+
+Decision:
+- Keep PR #971 as a test-only record of the two modern prerender activation modes and their actual tab identities/readiness.
+- The exact replacement-event assertion is not a meaningful acceptance criterion for these two Speculation Rules scenarios. The test should continue to assert the observed mode-specific behaviour and content-script readiness, not manufacture a replacement event.
+- Do not alter production replacement recovery code based on these tests. Its existing event handler remains relevant if Chrome emits a real TabStripModel replacement from another browser pathway.
+- PR #971 remains draft/open/unmerged. No production code, main branch, version, or release was changed.
