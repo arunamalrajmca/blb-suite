@@ -92,3 +92,34 @@ test('traces object parameters through an imported function and records dynamic 
   assert.ok(r.interprocedural.dynamicPropertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.flow==='interprocedural'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('keeps same-named parameters in separate function scopes attributed to their own objects',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-scope-'));
+ try{
+  fs.writeFileSync(path.join(root,'service-a.js'),'const serviceA = { alpha() {} }; export { serviceA };');
+  fs.writeFileSync(path.join(root,'service-b.js'),'const serviceB = { beta() {} }; export { serviceB };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function useA(target) { target.alpha(); } export function useB(target) { target.beta(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { serviceA as a } from './service-a.js'; import { serviceB as b } from './service-b.js'; import { useA, useB } from './helper.js'; useA(a); useB(b);");
+  const files=['service-a.js','service-b.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  const refs=r.interprocedural.propertyReferences;
+  assert.ok(refs.some(x=>x.from==='helper.js'&&x.to==='service-a.js'&&x.property==='alpha'));
+  assert.ok(refs.some(x=>x.from==='helper.js'&&x.to==='service-b.js'&&x.property==='beta'));
+  assert.ok(!refs.some(x=>x.from==='helper.js'&&x.to==='service-a.js'&&x.property==='beta'));
+  assert.ok(!refs.some(x=>x.from==='helper.js'&&x.to==='service-b.js'&&x.property==='alpha'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('preserves multiple object origins passed to the same helper parameter',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-multi-origin-'));
+ try{
+  fs.writeFileSync(path.join(root,'service-a.js'),'const serviceA = { start() {} }; export { serviceA };');
+  fs.writeFileSync(path.join(root,'service-b.js'),'const serviceB = { start() {} }; export { serviceB };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { serviceA as a } from './service-a.js'; import { serviceB as b } from './service-b.js'; import { invoke } from './helper.js'; invoke(a); invoke(b);");
+  const files=['service-a.js','service-b.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  const refs=r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.property==='start');
+  assert.ok(refs.some(x=>x.to==='service-a.js'));
+  assert.ok(refs.some(x=>x.to==='service-b.js'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
