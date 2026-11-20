@@ -3113,3 +3113,63 @@ test('live Supply of Grace Substack page supports Show on BLB and Double-click w
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
+
+test('BLB bVerse links clicked immediately on first paint initialize new tabs without waiting for target processing', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({masterEnabled:true,redirectEnabled:false});
+  await context.route('https://www.blueletterbible.org/**', route => {
+    const url = new URL(route.request().url());
+    const isFirstDestination = url.pathname.toLowerCase() === '/kjv/rom/8/28/';
+    const body = isFirstDestination
+      ? '<!doctype html><html><head><title>Immediate BLB destination</title></head><body><div id="bVerse_1"><p>Romans 8:28</p></div></body></html>'
+      : '<!doctype html><html><head><title>Immediate BLB source</title></head><body><div id="bVerse_1"><a id="immediate-first-link" target="_blank" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></div></body></html>';
+    return route.fulfill({status:200,contentType:'text/html',body});
+  });
+
+  // Do not wait for the extension's bVerse target pass or settings-ready
+  // callback. The page's native target is already _blank, so this isolates
+  // destination-tab startup from source-link target mutation timing.
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
+  const firstPopupPromise = context.waitForEvent('page');
+  await page.locator('#immediate-first-link').click();
+  const firstDestination = await firstPopupPromise;
+  await firstDestination.waitForLoadState('domcontentloaded');
+
+  const firstTabId = await getTabIdForUrl(
+    extensionWorker,
+    'https://www.blueletterbible.org/kjv/rom/8/28/*'
+  );
+  expect(Number.isInteger(firstTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, firstTabId), {
+    message:'an immediately clicked BLB bVerse destination must initialize on its first document without waiting or reloading'
+  }).toMatchObject({fileExecuted:true,initialized:true});
+
+  // Insert a native _blank bVerse link into the already-live destination and
+  // click it immediately. This covers a second navigation without waiting for
+  // the extension's MutationObserver/animation-frame target pass.
+  await firstDestination.evaluate(() => {
+    const container=document.createElement('div');
+    container.id='bVerse_2';
+    container.innerHTML='<a id="immediate-second-link" target="_blank" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a>';
+    document.body.appendChild(container);
+  });
+  const secondPopupPromise = context.waitForEvent('page');
+  await firstDestination.locator('#immediate-second-link').click();
+  const secondDestination = await secondPopupPromise;
+  await secondDestination.waitForLoadState('domcontentloaded');
+  expect(secondDestination.url()).toContain('/kjv/1co/13/4/');
+
+  const secondTabId = await getTabIdForUrl(
+    extensionWorker,
+    'https://www.blueletterbible.org/kjv/1co/13/4/*'
+  );
+  expect(Number.isInteger(secondTabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, secondTabId), {
+    message:'an immediately clicked dynamically inserted BLB bVerse destination must initialize without a manual reload'
+  }).toMatchObject({fileExecuted:true,initialized:true});
+
+  await closeBlbTabs(extensionWorker);
+});
+
