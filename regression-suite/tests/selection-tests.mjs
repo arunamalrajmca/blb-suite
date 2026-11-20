@@ -116,6 +116,11 @@ test('BLB native-event interception remains explicitly scoped', () => {
   const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + (abortableCaptureEnd >= 0 ? '}, { capture: true, signal: listenerController.signal });'.length : 8));
   assert(nowrap.includes('if (!link) return'), 'nowrap click override must reject unrelated clicks');
   assert(verseNavigation.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve the .109 master-setting and modified-click gate');
+  assert(
+    nowrap.indexOf('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;') <
+      nowrap.indexOf('event.preventDefault()'),
+    'BLB click interception must remain behind the .109 master-setting gate'
+  );
   assert(!verseNavigation.includes('if (!settingsReady) {'), 'nowrap override must not take ownership of clicks before the master setting is ready');
   assert(nowrap.includes('if (!link) return;'), 'nowrap override must ignore unrelated clicks before intercepting an eligible link');
   assert(nowrap.includes('event.preventDefault()') && nowrap.includes('event.stopImmediatePropagation()'), 'nowrap override must preserve scoped native-event interception');
