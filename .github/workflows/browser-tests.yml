@@ -75,6 +75,10 @@ jobs:
         run: |
           node --test scripts/ast-repository-reachability-audit.test.js
           node scripts/ast-repository-reachability-audit.js
+      - name: Test and run owner-aware AST and Node module reachability audit
+        run: |
+          node --test scripts/ast-owner-aware-node-reachability-audit.test.js
+          node scripts/ast-owner-aware-node-reachability-audit.js
       - name: Read manifest version
         id: version
         shell: bash
