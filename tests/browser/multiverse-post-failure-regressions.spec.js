@@ -217,7 +217,6 @@ test('the MultiVerse POST queue preserves its interval across a real MV3 worker 
 }) => {
   const extensionUrl = await extensionWorker.evaluate(() => chrome.runtime.getURL('multiverse-post.html'));
   const extensionPage = await context.newPage();
-  const key = 'blbSuiteLastMultiVersePostScheduledAt';
   let previousValue;
   let storageArea = 'local';
   const browser = context.browser();

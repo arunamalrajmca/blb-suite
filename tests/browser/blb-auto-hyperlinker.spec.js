@@ -167,7 +167,6 @@ test('BLB clipboard hyperlinker cancels delayed registration and restores its wr
       target: { tabId: id },
       world: 'ISOLATED',
       func: () => {
-        const audit = globalThis.__blbClipboardHyperlinkerAudit;
         globalThis.__blbClipboardHyperlinkerSecond = globalThis.BLBAutoHyperlinkerModule.initialize({
           BLBShared: {
             hostnames: { blb: 'blueletterbible.org' },

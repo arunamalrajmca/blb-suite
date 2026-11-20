@@ -177,8 +177,6 @@ test('overlapping chained replacements migrate tab-owned state to the final tab'
   extensionWorker
 }) => {
   const ids = {a:940101, b:940102, c:940103};
-  const logicalKey = 'replacement-chain-test|logical';
-  const scriptKey = 'replacement-chain-test|script';
   try {
     // These IDs model tabs in a deterministic migration-only test. Keep B and
     // C logically live so the production liveness guard does not treat the

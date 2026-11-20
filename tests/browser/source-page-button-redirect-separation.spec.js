@@ -150,7 +150,6 @@ test('source-page collector button survives full refreshes around real popup tog
   // Confirm this supported nested page is activated only through a persistent
   // runtime registration, not a test-only static content_scripts match.
   const registration = await extensionWorker.evaluate(async () => {
-    const manifest = chrome.runtime.getManifest();
     const registered = await chrome.scripting.getRegisteredContentScripts();
     return {
       runtime: registered.find(script =>
@@ -321,7 +320,6 @@ test('Crosswalk source-page collector button survives full refreshes around real
   // Confirm this supported nested page is activated only through a persistent
   // runtime registration, not a test-only static content_scripts match.
   const registration = await extensionWorker.evaluate(async () => {
-    const manifest = chrome.runtime.getManifest();
     const registered = await chrome.scripting.getRegisteredContentScripts();
     return {
       runtime: registered.find(script =>

@@ -4,16 +4,42 @@
 /**
  * Conservative, read-only AST audit for unused function-local bindings.
  *
- * This intentionally does not make repository-wide dead-code claims. Classic
- * extension scripts share globals across files, and Chrome APIs, callbacks,
- * dynamic registration, computed properties, and message dispatch are not
- * reliably modeled by a per-file static scope graph. Global-scope declarations
- * are therefore excluded rather than reported as unused.
+ * This intentionally does not make dead-code claims. It inventories local
+ * lexical bindings across every repository JavaScript file, while excluding
+ * global/module declarations that may be shared across files. Dynamic scopes
+ * (direct eval / with) are suppressed conservatively. Static property names
+ * are indexed repository-wide, but object identity and dynamic dispatch are
+ * not fully modeled; property findings remain low-confidence candidates.
  */
 const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
 const eslintScope = require('eslint-scope');
+
+const RETAINED_EXTERNAL_PROPERTY_CONSUMERS = new Set([
+  // These object properties are injected into node:vm contexts and consumed
+  // as global identifiers by source snippets, not as receiver.member reads.
+  'scripts/test-content-script-sender-document.js:hostnameFromTabUrl',
+  'scripts/test-study-session-export.js:btoa',
+  'tests/browser/extension-lifecycle.spec.js:recoverConfiguredTabsOnStartup',
+  'tests/browser/extension-lifecycle.spec.js:schedulePersistedRuntimeContentScriptAudit',
+  'tests/browser/redirect-toggle-isolation.spec.js:getSiteKey',
+  'tests/browser/redirect-toggle-isolation.spec.js:deriveSiteCaption',
+  'tests/browser/scripttagger-global-injection.spec.js:isHttpPageUrl',
+  'tests/browser/scripttagger-global-injection.spec.js:originPatternForUrl',
+  'tests/browser/scripttagger-global-injection.spec.js:normalizeSiteHostname',
+  'tests/browser/scripttagger-global-injection.spec.js:hostnameFromTabUrl',
+  'tests/browser/scripttagger-global-injection.spec.js:hasHostAccessForTab',
+  'tests/browser/scripttagger-global-injection.spec.js:ensureContentScriptInTabWithRetry',
+  'tests/browser/scripttagger-global-injection.spec.js:getLiveTabById',
+  'tests/browser/scripttagger-global-injection.spec.js:enqueueBlbTabCreation',
+  'tests/browser/source-page-collector-behavior.spec.js:clearTimeout',
+  // Playwright calls these reporter lifecycle hooks by interface contract.
+  'tests/browser/progress-reporter.js:onBegin',
+  'tests/browser/progress-reporter.js:onTestBegin',
+  'tests/browser/progress-reporter.js:onTestEnd',
+  'tests/browser/progress-reporter.js:onEnd'
+]);
 
 function collectJavaScriptFiles(directory) {
   const files = [];
@@ -115,7 +141,10 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
   });
 
   return definitions
-    .filter(definition => !references.has(definition.name))
+    .filter(definition =>
+      !references.has(definition.name) &&
+      !RETAINED_EXTERNAL_PROPERTY_CONSUMERS.has(filename + ':' + definition.name)
+    )
     .map(definition => ({
       file: filename,
       name: definition.name,
@@ -170,11 +199,18 @@ function analyzeSource(source, filename = '<source>', repositoryReferences = nul
     impliedStrict: false
   });
   const findings = analyzePropertyReferences(ast, filename, repositoryReferences);
+  let hasWithStatement = false;
+  walkAst(ast, node => {
+    if (node.type === 'WithStatement') hasWithStatement = true;
+  });
 
   for (const scope of manager.scopes) {
     // Global declarations may be consumed by another classic script or by
     // browser/extension infrastructure. Do not classify them as dead here.
     if (scope.type === 'global' || scope.type === 'module' || scope.type === 'class') continue;
+    // eslint-scope marks scopes affected by direct eval / with as dynamic.
+    // Their lexical names may be observed without ordinary static reads.
+    if (hasWithStatement || scope.dynamic) continue;
 
     for (const variable of scope.variables) {
       if (variable.references.some(reference => reference.isRead())) continue;
@@ -217,8 +253,8 @@ function run(root = path.resolve(__dirname, '..')) {
     throw new Error('Expected extension/ directory under repository root: ' + root);
   }
 
-  const files = collectJavaScriptFiles(extension);
   const referenceFiles = collectJavaScriptFiles(root);
+  const files = referenceFiles;
   const repositoryReferences = new Set();
   for (const file of referenceFiles) {
     const source = fs.readFileSync(file, 'utf8');
@@ -237,13 +273,14 @@ function run(root = path.resolve(__dirname, '..')) {
   }
 
   console.log('AST symbol-reference audit (candidate report only)');
-  console.log('Extension files analyzed: ' + files.length);
+  console.log('Repository JavaScript files analyzed for local bindings: ' + files.length);
+  console.log('Extension JavaScript files included: ' + files.filter(file => file.startsWith(extension + path.sep)).length);
   console.log('Repository JavaScript files indexed for static property references: ' + referenceFiles.length);
   const localFindings = findings.filter(item => item.scope !== 'property-name-index');
   const propertyFindings = findings.filter(item => item.scope === 'property-name-index');
   console.log('Potentially unread local declarations: ' + localFindings.length);
   console.log('Potentially unreferenced method/function properties: ' + propertyFindings.length);
-  console.log('Function/local candidates are limited to extension files; static property references are indexed across repository JavaScript files. Global declarations, parameters, and import reachability are not classified.');
+  console.log('Local-binding analysis covers repository JavaScript files; global declarations, parameters, object identity, and dynamic property dispatch are not proven. Dynamic lexical scopes are conservatively suppressed.');
   console.log('A finding is not proof of dead code; inspect dynamic callbacks and runtime registration.');
 
   for (const finding of findings) {

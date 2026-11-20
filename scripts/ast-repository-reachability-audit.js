@@ -193,7 +193,6 @@ function discoverContexts(root, sourceByFile) {
     while ((match = pattern.exec(html))) {
       const src = /\bsrc\s*=\s*["']([^"']+)["']/i.exec(match[1]);
       if (!src) continue;
-      const type = /\btype\s*=\s*["']module["']/i.test(match[1]) ? 'module' : 'classic-page-script';
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(relative(root, htmlFile)), src[1]));
       if (sourceByFile.has(resolved)) scripts.push(resolved);
     }
