@@ -3750,8 +3750,9 @@ async function isLiveContentScriptSenderDocument(sender) {
     // Chromium may update the tab snapshot while an async message is pending.
     // A retained/BFCache document can still be scriptable after navigation, so
     // documentId targeting alone is not enough to prove it remains current.
-    // Diagnostic isolation: bypass only the sender URL vs live-tab URL comparison.
-    // Keep the documentId and current-document URL checks below intact.
+    // Keep the initial sender/live-tab URL check. PR #976 isolates the
+    // final sender URL vs executing-document URL comparison separately.
+    if (!sameSenderDocumentUrl(requestUrl, liveUrl)) return false;
 
     if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
       // Read the current top-frame document identity and compare it with the
