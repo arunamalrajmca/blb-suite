@@ -758,7 +758,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     body:'<!doctype html><html><head><title>Source page refresh test</title></head><body><main>Source page</main></body></html>'
   }));
 
-  for (const {url, siteId} of cases) {
+  for (const {url, siteId, mainWorldClickGuard} of cases) {
     const homepage = new URL(url);
     homepage.pathname = '/';
     homepage.search = '';
