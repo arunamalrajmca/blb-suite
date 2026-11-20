@@ -2,7 +2,28 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { analyzeFile, discoverContexts } = require('./ast-repository-reachability-audit');
+const { analyzeFile, discoverContexts, findCrossContextReferencedGlobals } = require('./ast-repository-reachability-audit');
+
+test('a shared global used in one execution context is retained in every context', () => {
+  const contexts = [
+    { files: ['extension/shared.js'] },
+    { files: ['extension/shared.js', 'extension/worker.js'] }
+  ];
+  const analyses = new Map([
+    ['extension/shared.js', {
+      definitions: [{ name: 'sharedHelper', kind: 'function', line: 1 }],
+      ownReads: new Set(),
+      unresolvedReads: new Set()
+    }],
+    ['extension/worker.js', {
+      definitions: [],
+      ownReads: new Set(),
+      unresolvedReads: new Set(['sharedHelper'])
+    }]
+  ]);
+  const referenced = findCrossContextReferencedGlobals(contexts, analyses);
+  assert.ok(referenced.has('extension/shared.js:sharedHelper'));
+});
 
 test('collects top-level functions, classes, and function-valued globals', () => {
   const result = analyzeFile([
