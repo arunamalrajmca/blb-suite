@@ -7431,7 +7431,10 @@ async function ensureWebSelectionContextMenu() {
     // re-evaluates visibility after restart, and the click handler independently
     // rechecks global state, site preference, host permission, and sensitive-site policy.
     await chrome.contextMenus.update('blb-suite-web-selection', {
-      title:'Show on BLB\tAlt+B'
+      title:'Show on BLB\tAlt+B',
+      // Clear the old HTTP(S)-only restriction so the same persistent item
+      // can also appear in browser-managed PDF viewer documents.
+      documentUrlPatterns:[]
     });
     selectionMenuKnownPresent = true;
     return true;
