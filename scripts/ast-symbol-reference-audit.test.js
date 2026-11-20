@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { analyzeSource } = require('./ast-symbol-reference-audit');
+const { analyzeSource, run } = require('./ast-symbol-reference-audit');
 
 test('reports unread local declarations but not referenced bindings', () => {
   const source = [
@@ -151,4 +151,30 @@ test('suppresses local candidates in with-statement dynamic scopes', () => {
     '}'
   ].join('\n'), 'with-scope.js');
   assert.deepEqual(findings.filter(item => item.scope !== 'property-name-index'), []);
+});
+
+test('run inventories local bindings across extension and non-extension repository files', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-local-bindings-'));
+  const originalLog = console.log;
+  try {
+    fs.mkdirSync(path.join(root, 'extension'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'extension', 'runtime.js'),
+      'function host() { function unusedRuntimeHelper() {} }');
+    fs.writeFileSync(path.join(root, 'scripts', 'helper.js'),
+      'function testTool() { const unusedToolLocal = 1; }');
+    console.log = () => {};
+    const result = run(root);
+    const names = result.findings
+      .filter(item => item.scope !== 'property-name-index')
+      .map(item => item.name);
+    assert.equal(result.files, 2);
+    assert.deepEqual(names.sort(), ['unusedRuntimeHelper', 'unusedToolLocal']);
+  } finally {
+    console.log = originalLog;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
