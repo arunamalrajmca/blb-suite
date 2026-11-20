@@ -116,9 +116,9 @@ test('BLB native-event interception remains explicitly scoped', () => {
   const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + (abortableCaptureEnd >= 0 ? '}, { capture: true, signal: listenerController.signal });'.length : 8));
   assert(nowrap.includes('if (!link) return'), 'nowrap click override must reject unrelated clicks');
   assert(verseNavigation.includes('if (isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve modified-click behavior');
-  assert(verseNavigation.includes('if (!settingsReady) {'), 'nowrap override must defer first-load clicks until master settings are authoritative');
-  assert(verseNavigation.includes('if (isSuiteEnabledNow()) {'), 'nowrap override must route enabled first-load clicks through the BLB destination manager');
-  assert(verseNavigation.includes('if (!isSuiteEnabledNow()) return;'), 'nowrap override must preserve the global master-switch gate after settings readiness');
+  assert(!verseNavigation.includes('if (!settingsReady) {'), 'nowrap override must not take ownership of clicks before the master setting is ready');
+  assert(nowrap.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must leave clicks native until the master setting is enabled and preserve modified-click behavior');
+  assert(nowrap.includes('if (!link) return;'), 'nowrap override must ignore unrelated clicks before intercepting an eligible link');
   assert(nowrap.includes('event.preventDefault()') && nowrap.includes('event.stopImmediatePropagation()'), 'nowrap override must preserve scoped native-event interception');
 
   const pageSelection = read('blb-page-selection-button.js');
