@@ -181,9 +181,18 @@ chrome.runtime.onStartup.addListener(() => {
   __blbPrerenderTestInitialize().catch(() => {});
 });
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && new URL(tab.url).pathname === '/source') {
+  if (changeInfo.status !== 'complete' || !tab.url) return;
+  const pathname = new URL(tab.url).pathname;
+  if (pathname === '/source') {
     __blbPrerenderTestReport({
       type:'source-tab',
+      id:tabId,
+      url:tab.url,
+      active:tab.active
+    });
+  } else if (pathname === '/destination') {
+    __blbPrerenderTestReport({
+      type:'destination-tab',
       id:tabId,
       url:tab.url,
       active:tab.active
@@ -253,7 +262,12 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
       }
     }, 'the visible native Chromium source window');
     execFileSync('xdotool', ['windowfocus','--sync',windowId]);
-    execFileSync('xdotool', ['mousemove','--window',windowId,'180','150','click','1']);
+    execFileSync('xdotool', ['key','--clearmodifiers','Escape','Tab','Return']);
+
+    const destinationTab = await waitFor(() =>
+      events.find(event => event.type === 'destination-tab'),
+    'the browser to navigate the source tab to the destination link', 15000);
+    expect(destinationTab.url).toBe(destination);
 
     const replacement = await waitFor(() =>
       events.find(event => event.type === 'tab-replaced'),
