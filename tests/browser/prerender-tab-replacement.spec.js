@@ -1,4 +1,5 @@
 const { test, expect } = require('./fixtures');
+const http = require('node:http');
 
 test('Chromium prerender activation emits a real tabs.onReplaced event and initializes the surviving document', async ({
   context, extensionStorage, extensionWorker
@@ -7,14 +8,59 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},
-    doubleClickBlbSites:{'example.com':true}
+    pageSelectionButtonSites:{'127.0.0.1':true},
+    doubleClickBlbSites:{'127.0.0.1':true}
   });
+
+  const prerenderRequests = [];
+  let destination = '';
+  const server = http.createServer((request, response) => {
+    if (request.url === '/source') {
+      const rules = {
+        prerender:[{
+          source:'list',
+          urls:[destination],
+          eagerness:'immediate'
+        }]
+      };
+      response.writeHead(200, {
+        'Content-Type':'text/html; charset=utf-8',
+        'Cache-Control':'no-store'
+      });
+      response.end(`<!doctype html>
+<html><head><title>BLB prerender source</title>
+<script type="speculationrules">${JSON.stringify(rules)}</script>
+</head><body>Prerender source page</body></html>`);
+      return;
+    }
+    if (request.url === '/destination') {
+      const secPurpose = request.headers['sec-purpose'] || '';
+      if (secPurpose.includes('prerender')) {
+        prerenderRequests.push({ secPurpose, userAgent:request.headers['user-agent'] || '' });
+      }
+      response.writeHead(200, {
+        'Content-Type':'text/html; charset=utf-8',
+        'Cache-Control':'public, max-age=60'
+      });
+      response.end('<!doctype html><html><head><title>BLB prerender destination</title></head><body>Prerender destination</body></html>');
+      return;
+    }
+    response.writeHead(404);
+    response.end('Not found');
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  destination = `${origin}/destination`;
 
   const page = await context.newPage();
   try {
-    await page.goto('https://example.com/?blb-prerender-source=1', {waitUntil:'domcontentloaded'});
+    await page.goto(`${origin}/source`, {waitUntil:'domcontentloaded'});
     await page.bringToFront();
+
     const sourceVisibility = await page.evaluate(() => ({
       visibilityState:document.visibilityState,
       hasFocus:document.hasFocus()
@@ -37,16 +83,9 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
       });
       return {id:tab.id,url:tab.url,active:tab.active};
     });
-    expect(sourceTab).toMatchObject({
-      url:'https://example.com/?blb-prerender-source=1',
-      active:true
-    });
+    expect(sourceTab).toMatchObject({ url:`${origin}/source`, active:true });
     const sourceTabId = sourceTab.id;
 
-    // Do not attach a DevTools Protocol session: Chromium disables prerendering
-    // when DevTools is attached. The real extension tabs.onReplaced event is
-    // the browser-level proof that the prerendered tab replaced the source tab.
-    const destination = 'https://example.com/?blb-prerender-destination=1';
     const speculationRulesSupported = await page.evaluate(() =>
       typeof HTMLScriptElement.supports === 'function' &&
       HTMLScriptElement.supports('speculationrules')
@@ -54,26 +93,18 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     expect(speculationRulesSupported,
       'The selected Chromium build must support the Speculation Rules API'
     ).toBe(true);
-    await page.evaluate(url => {
-      const script = document.createElement('script');
-      script.type = 'speculationrules';
-      script.textContent = JSON.stringify({
-        prerender:[{source:'list',urls:[url],eagerness:'immediate'}]
-      });
-      document.head.appendChild(script);
-    }, destination);
 
-    // Give the browser time to fetch and prepare the speculative target. We do
-    // not use CDP to observe readiness because attaching DevTools suppresses
-    // prerendering in Chromium.
-    await page.waitForTimeout(2000);
+    // The server-side Sec-Purpose header proves Chromium actually requested
+    // the destination as a prerender, without attaching CDP to the source tab.
+    await expect.poll(() => prerenderRequests.length, {
+      timeout:15000,
+      message:'Chromium must request the destination with Sec-Purpose: prefetch;prerender'
+    }).toBeGreaterThan(0);
+
     await page.evaluate(url => { window.location.href = url; }, destination);
     await page.waitForURL(destination, {timeout:15000});
     await page.waitForLoadState('domcontentloaded');
 
-    // Navigation Timing exposes activationStart in the activated document.
-    // A normal network navigation reports zero, so this independently proves
-    // that the destination was actually prerendered and then activated.
     const activation = await page.evaluate(() => {
       const navigation = performance.getEntriesByType('navigation')[0];
       return {
@@ -83,7 +114,6 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
         userAgent:navigator.userAgent
       };
     });
-    console.log('BLB_PRERENDER_ACTIVATION_DIAGNOSTIC ' + JSON.stringify(activation));
     expect(activation.activationStart,
       'Destination must be a prerender-activated document, not a normal navigation: ' +
       JSON.stringify(activation)
@@ -139,11 +169,12 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
   } finally {
     await page.close().catch(() => {});
     await extensionStorage.set({
-      pageSelectionButtonSites:{'example.com':false},
-      doubleClickBlbSites:{'example.com':false}
+      pageSelectionButtonSites:{'127.0.0.1':false},
+      doubleClickBlbSites:{'127.0.0.1':false}
     });
     await extensionWorker.evaluate(() =>
       reconcileRuntimeContentScriptRegistrations().catch(() => {})
     );
+    await new Promise(resolve => server.close(resolve));
   }
 });
