@@ -50,16 +50,18 @@
     };
     global.__blbVerseLinkNavigationCleanup = cleanup;
 
+    function manageVerseLink(link) {
+      if (!link?.matches?.("a") || !link.href || link.closest(".parse-popup") ||
+          !link.closest('div[id^="bVerse_"]')) return;
+      if (!managedTargets.has(link)) {
+        managedTargets.set(link, link.getAttribute("target"));
+      }
+      link.target = "_blank";
+    }
+
     function modifyLinks(container) {
-      container.querySelectorAll("a").forEach(link => {
-        if (!link.href || link.closest(".parse-popup")) return;
-        if (link.closest('div[id^="bVerse_"]')) {
-          if (!managedTargets.has(link)) {
-            managedTargets.set(link, link.getAttribute("target"));
-          }
-          link.target = "_blank";
-        }
-      });
+      if (container.matches?.("a")) manageVerseLink(container);
+      container.querySelectorAll("a").forEach(manageVerseLink);
     }
 
     const process = (root = document) => {
@@ -69,6 +71,11 @@
         return;
       }
       if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
+      // A mutation may add an anchor (or a subtree) inside an existing verse
+      // container. Process that owning container too; searching only below the
+      // added node misses its bVerse ancestor.
+      const owningContainer = root.closest?.('div[id^="bVerse_"], .parse-popup');
+      if (owningContainer && owningContainer !== root) modifyLinks(owningContainer);
       root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
     };
 
@@ -114,7 +121,13 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("click", event => {
-      if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;
+      const enabled = isSuiteEnabledNow();
+      const clickedLink = event.target.closest?.("a");
+      // Do not depend exclusively on the MutationObserver's next animation
+      // frame: a verse link clicked immediately after insertion/load must
+      // already have its native new-tab target before the default action.
+      if (enabled && clickedLink) manageVerseLink(clickedLink);
+      if (!enabled || isModifiedLinkActivation(event)) return;
       const link = event.target.closest?.("a.nowrap");
       if (!link) return;
       // Criteria Search owns ordinary KJV verse links on its results page.
