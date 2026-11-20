@@ -73,14 +73,16 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
   walkAst(ast, (node, parent) => {
     if (node.type === 'MethodDefinition' && node.key) {
       const name = staticPropertyName(node.key);
-      if (name) definitions.push({ name, node: node.key, kind: 'class-method' });
+      if (name && name !== 'constructor') definitions.push({ name, node: node.key, kind: 'class-method' });
       return;
     }
 
     if (node.type === 'Property' && node.value &&
         ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.value.type)) {
       const name = staticPropertyName(node.key);
-      if (name && !node.computed) {
+      // Chrome scripting.executeScript consumes `func` as an API callback,
+      // not as an ordinary object method/property reference.
+      if (name && name !== 'func' && !node.computed) {
         definitions.push({ name, node: node.key, kind: 'object-function-property' });
       }
       return;
