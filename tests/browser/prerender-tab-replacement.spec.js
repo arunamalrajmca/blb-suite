@@ -39,9 +39,30 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
       document.head.appendChild(script);
     }, destination);
 
+    // Give the browser time to fetch and prepare the speculative target. We do
+    // not use CDP to observe readiness because attaching DevTools suppresses
+    // prerendering in Chromium.
+    await page.waitForTimeout(2000);
     await page.evaluate(url => { window.location.href = url; }, destination);
     await page.waitForURL(destination, {timeout:15000});
     await page.waitForLoadState('domcontentloaded');
+
+    // Navigation Timing exposes activationStart in the activated document.
+    // A normal network navigation reports zero, so this independently proves
+    // that the destination was actually prerendered and then activated.
+    const activation = await page.evaluate(() => {
+      const navigation = performance.getEntriesByType('navigation')[0];
+      return {
+        activationStart:navigation?.activationStart ?? null,
+        prerendering:document.prerendering,
+        visibilityState:document.visibilityState,
+        userAgent:navigator.userAgent
+      };
+    });
+    console.log('BLB_PRERENDER_ACTIVATION_DIAGNOSTIC ' + JSON.stringify(activation));
+    expect(activation.activationStart,
+      'Destination must be a prerender-activated document, not a normal navigation'
+    ).toBeGreaterThan(0);
 
     await expect.poll(() => extensionWorker.evaluate(() =>
       globalThis.__blbPrerenderReplacementEvents || []
