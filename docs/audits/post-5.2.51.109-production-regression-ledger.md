@@ -345,3 +345,33 @@ Decision:
 - The workflow's “Install headed-browser X11 dependencies” step was skipped for this selected spec. This is a CI environment/setup classification failure, not a failed assertion about tab replacement and not evidence of a production regression.
 - Do not rerun the same job unchanged; it will reproduce the missing-display failure. If retaining the native test, the workflow must classify prerender-tab-replacement.spec.js as a headed/X11 test and provision Xvfb plus xdotool before running it. Then rerun only the failed Group A job.
 - This CI setup repair was not made in this pass. No workflow or production code was changed. PR #971 remains draft/open/unmerged.
+
+
+
+### Manual downloaded-build evidence — PRs #876 and #880 (2026-11-20)
+
+The user downloaded and tested both builds against the two tracked production concerns (reload behaviour and new-tab behaviour):
+
+- **PR #876 — Audit BLB popup and passive new-tab event ownership: PASS.** Preserve this result as positive real-browser evidence. The patch restores original link targets only when the current value is still Suite-owned, and makes reinjection cleanup release per-link ownership and pending work. Do not roll this cleanup/ownership behavior back without a concrete counterexample. This pass does not establish that every reload or new-tab scenario is covered; retain the user's pass exactly at the reported scope.
+- **PR #880 — Fix cross-tab selection request deduplication: FAIL.** This is negative real-browser evidence against the merged implementation, even though the PR's focused unit-level collision test passed. The user has not yet specified the exact visible failure, so the failure must not be attributed to reload, new-tab creation, or any particular selection action without further evidence.
+- PR #880's production change scopes request IDs by tab and document identity, using `contentScriptSenderDocumentId(sender)`. Its test directly calls `shouldAcceptSelectionOpenRequest` with fabricated tab/document IDs and proves the map-key behavior; it does not send two actual runtime messages from real content-script documents, observe service-worker sender metadata, or assert the resulting tab/navigation action. This leaves a clear integration-coverage gap.
+- PR #880 was merged as `aef9db8b862db6ed939921320c6a3779ac9aae09`; the user's downloaded-build failure therefore warrants a focused production-path reproduction before any change. Do not revert the entire PR based only on the binary pass/fail note. First inspect the actual message sender/document identity values and the user-visible result in a real browser.
+- Keep #876 and #880 separate in the regression ledger: #876 is positive passive target ownership/reinjection evidence; #880 is a failed selection-open deduplication integration result. No evidence currently connects #880 to the #966 early-click queue or the genuine prerender/tab-replacement experiment.
+
+### PR #880 next diagnostic boundary
+
+A targeted test should exercise the actual message boundary rather than only the deduplication helper:
+1. Open two real tabs with the extension content script active and trigger a selection-open request from each in close succession.
+2. Capture each runtime message's `sender.tab.id`, `sender.documentId` (and any fallback used by `contentScriptSenderDocumentId`), generated `requestId`, dedup key, and acknowledgement.
+3. Assert each independent document's request reaches the intended open/navigation path exactly once, while a repeated delivery from the same document is still suppressed.
+4. Repeat with a same-tab document navigation/reload, ensuring an old document's retained dedup entry cannot suppress the new document.
+5. Keep this isolated from BLB link click interception and passive `target="_blank"` management unless the actual manual failure demonstrates an interaction.
+
+Until the exact manual symptom is known, classify #880 as **manual integration failure — cause undetermined**, not as a confirmed defect in document-ID scoping itself.
+
+### PR #971 updated status — 2026-11-20
+
+- The native Chromium/Xvfb setup correction was committed on the PR branch, and the native prerender scenario now runs under the headed/X11 workflow route. The test confirms modern Speculation Rules prerender activation and content-script readiness, but does not produce a tab-replacement event: `_self` keeps the same tab ID; `_blank` creates a new tab.
+- The latest test head is `ca72d0755b633325556325a7d0524221ee8d5d47`. HARD-GATE and latest-main ancestry passed; the native prerender test passed under Xvfb. However, the References & Double-click workflow still failed in the context-menu lifecycle spec at the separate focus-change assertion: `focusChangeHidesWebMenu` expected true but received false. The replacement-menu synchronization assertion was isolated, but this subsequent focus assertion remains unresolved.
+- This is test behavior/coverage to investigate separately; it is not evidence that production tab-replacement recovery is defective. Do not weaken the focus assertion or modify production code speculatively.
+- PR #971 remains draft/open/unmerged. No production code, main branch, version, or release was changed by this experiment.
