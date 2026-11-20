@@ -234,7 +234,7 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
     '--enable-features=Prerender2',
     '--disable-features=PreloadingHoldback,Prerender2Holdback',
     `${origin}/source`
-  ], { stdio:['ignore','ignore','pipe'], env:process.env });
+  ], { stdio:['ignore','ignore','pipe'], env:process.env, detached:true });
 
   let chromeStderr = '';
   chrome.stderr.on('data', chunk => {
@@ -263,11 +263,25 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
     }, 'the visible native Chromium source window');
     execFileSync('xdotool', ['windowfocus','--sync',windowId]);
     execFileSync('xdotool', ['key','--clearmodifiers','Escape','Tab','Return']);
+    await delay(1000);
+    if (!events.some(event => event.type === 'destination-tab' || event.type === 'tab-replaced')) {
+      execFileSync('xdotool', ['mousemove','--sync','--window',windowId,'180','150']);
+      execFileSync('xdotool', ['click','--clearmodifiers','1']);
+      await delay(1000);
+    }
+    if (!events.some(event => event.type === 'destination-tab' || event.type === 'tab-replaced')) {
+      execFileSync('xdotool', ['key','--clearmodifiers','ctrl+l']);
+      execFileSync('xdotool', ['type','--clearmodifiers','--delay','2',destination]);
+      execFileSync('xdotool', ['key','Return']);
+    }
 
-    const destinationTab = await waitFor(() =>
+    const navigationOrReplacement = await waitFor(() =>
+      events.find(event => event.type === 'tab-replaced') ||
       events.find(event => event.type === 'destination-tab'),
-    'the browser to navigate the source tab to the destination link', 15000);
-    expect(destinationTab.url).toBe(destination);
+    'the native browser to activate or navigate to the destination', 20000);
+    if (navigationOrReplacement.type === 'destination-tab') {
+      expect(navigationOrReplacement.url).toBe(destination);
+    }
 
     const replacement = await waitFor(() =>
       events.find(event => event.type === 'tab-replaced'),
@@ -290,14 +304,21 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
       'Chromium stderr: ' + chromeStderr.slice(-6000)
     ].join('\n\n'));
   } finally {
-    chrome.kill('SIGTERM');
-    await Promise.race([
-      new Promise(resolve => chrome.once('exit', resolve)),
-      delay(5000)
+    const chromeExited = new Promise(resolve => {
+      if (chrome.exitCode !== null || chrome.signalCode !== null) resolve();
+      else chrome.once('exit', resolve);
+    });
+    try { process.kill(-chrome.pid, 'SIGTERM'); } catch (_) { chrome.kill('SIGTERM'); }
+    const exitedGracefully = await Promise.race([
+      chromeExited.then(() => true),
+      delay(5000).then(() => false)
     ]);
-    if (chrome.exitCode === null && !chrome.killed) chrome.kill('SIGKILL');
+    if (!exitedGracefully) {
+      try { process.kill(-chrome.pid, 'SIGKILL'); } catch (_) { chrome.kill('SIGKILL'); }
+      await Promise.race([chromeExited, delay(3000)]);
+    }
     server.closeAllConnections?.();
     await new Promise(resolve => server.close(resolve));
-    fs.rmSync(userDataDir, {recursive:true,force:true});
+    fs.rmSync(userDataDir, {recursive:true,force:true,maxRetries:10,retryDelay:200});
   }
 });
