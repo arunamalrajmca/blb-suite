@@ -859,7 +859,6 @@ test('a pending permission grant cannot commit either site feature after the glo
 test('global redirect ON and OFF reconcile redirect-only runtime registrations on authorized tabs', async ({
   page, extensionWorker, extensionStorage
 }) => {
-  const hostname = 'example.com';
   const pattern = 'https://example.com/*';
   await extensionStorage.set({
     masterEnabled:true,
