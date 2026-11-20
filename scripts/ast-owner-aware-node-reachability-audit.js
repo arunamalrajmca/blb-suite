@@ -113,8 +113,10 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
   const owners = new Map();
   const ownerByNode = new Map();
   const classOwnerByNode = new Map();
+  const classStaticOwnerByNode = new Map();
   const variableOwners = new Map();
   const classVariables = new Map();
+  const classInstanceOwners = new Map();
 
   function addOwner(id, kind, node) {
     if (!owners.has(id)) owners.set(id, {
@@ -132,12 +134,17 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
       const nameNode = node.id || (declaration && declaration.id.type === 'Identifier' ? declaration.id : null);
       if (!nameNode) return;
       const id = 'class:' + filename + ':' + nameNode.name + ':' + node.loc.start.line;
-      addOwner(id, 'class', node);
-      classOwnerByNode.set(node, id);
+      const instanceOwner = id + ':instance';
+      const staticOwner = id + ':static';
+      addOwner(instanceOwner, 'class-instance', node);
+      addOwner(staticOwner, 'class-static', node);
+      classOwnerByNode.set(node, instanceOwner);
+      classStaticOwnerByNode.set(node, staticOwner);
       const variable = variableByDefinitionNode.get(nameNode);
       if (variable) {
-        variableOwners.set(variable, id);
-        classVariables.set(variable, id);
+        variableOwners.set(variable, staticOwner);
+        classVariables.set(variable, staticOwner);
+        classInstanceOwners.set(variable, instanceOwner);
       }
     }
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
@@ -149,7 +156,7 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         if (variable) variableOwners.set(variable, id);
       } else if (node.init.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
         const reference = referenceByNode.get(node.init.callee);
-        const classOwner = reference && reference.resolved ? classVariables.get(reference.resolved) : null;
+        const classOwner = reference && reference.resolved ? classInstanceOwners.get(reference.resolved) : null;
         const variable = variableByDefinitionNode.get(node.id);
         if (variable && classOwner) variableOwners.set(variable, classOwner);
       } else if (node.init.type === 'Identifier') {
@@ -168,8 +175,9 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
     const variable = variableByDefinitionNode.get(node.id);
     const owner = classOwnerByNode.get(node);
     if (variable && owner) {
-      variableOwners.set(variable, owner);
-      classVariables.set(variable, owner);
+      variableOwners.set(variable, classStaticOwnerByNode.get(node));
+      classVariables.set(variable, classStaticOwnerByNode.get(node));
+      classInstanceOwners.set(variable, owner);
     }
   });
 
@@ -181,22 +189,21 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
     const classOwner = classNode ? classOwnerByNode.get(classNode) : null;
     if (node.type === 'MethodDefinition' && classOwner && node.key) {
       const key = staticKey(node.key, node.computed);
-      if (key && key !== 'constructor') owners.get(classOwner).definitions.push({
+      const memberOwner = node.static ? classStaticOwnerByNode.get(classNode) : classOwner;
+      if (key && key !== 'constructor') owners.get(memberOwner).definitions.push({
         name: key, kind: 'class-method', line: node.key.loc.start.line
       });
     }
     if (node.type === 'PropertyDefinition' && classOwner && node.key) {
       const key = staticKey(node.key, node.computed);
-      if (key) owners.get(classOwner).definitions.push({
+      const memberOwner = node.static ? classStaticOwnerByNode.get(classNode) : classOwner;
+      if (key) owners.get(memberOwner).definitions.push({
         name: key, kind: 'class-field', line: node.key.loc.start.line
       });
     }
-    if (node.type === 'Property' && node.value && ancestors.some(item =>
-      item.type === 'ObjectExpression' && ownerByNode.has(item)
-    )) {
-      const objectNode = [...ancestors].reverse().find(item =>
-        item.type === 'ObjectExpression' && ownerByNode.has(item)
-      );
+    if (node.type === 'Property' && node.value && parent &&
+        parent.type === 'ObjectExpression' && ownerByNode.has(parent)) {
+      const objectNode = parent;
       const key = staticKey(node.key, node.computed);
       if (key) owners.get(ownerByNode.get(objectNode)).definitions.push({
         name: key,
