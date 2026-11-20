@@ -76,19 +76,8 @@ globalThis.BLBShared = Object.freeze({
     }
   },
   regex: Object.freeze({
-    // URL and hostname handling
-    trailingDot: () => /\.$/,
-    leadingWww: () => /^www\./i,
-    fileDocumentExtension: () => /\.(?:pdf|html?|xhtml)(?:$|[?#])/i,
-
-    // Text normalization and token boundaries
+    // Shared text normalization and search syntax.
     whitespace: () => /\s+/g,
-    leadingWhitespace: () => /^\s+/,
-    trailingWhitespace: () => /\s+$/,
-    escapedRegexMeta: () => /[.*+?^${}()|[\]\\]/g,
-
-    // Search syntax
-    encodedSpaces: () => /%20/g,
     booleanOperatorWords: () => /\b(?:and|or|not)\b/gi
   })
 });

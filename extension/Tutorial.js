@@ -62,7 +62,6 @@
 
     function buildRunUrl(raw) {
         let t = raw.trim();
-        const low = t.toLowerCase();
         if (!t) return 'https://www.blueletterbible.org/';
 
         const versionMatch = t.match(/\s+(kjv|nlt|niv|esv|nasb|nkjv|amp|csb|hcsb|asv|ylt|darby|web|webus|gnt|gnb|msg|net|nrsva|nrsv|rsv|rsvce|ceb|cev|ncv|nheb|isv|nasb95|nasb77|lsb|lamsa|brenton|jub|akjv|kj2000|mev|tlb|voice|ampc|nltse|nivuk|nkjvuk)\s*$/i);

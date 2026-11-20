@@ -6909,7 +6909,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // Give the destination-tab path its first asynchronous turn before
     // running residual-text / Criteria work. Keep that work after the
     // reference tab is opened, since it is optional to the primary action.
-    const referenceTab = await referenceOpen;
+    await referenceOpen;
     await studyCapture;
     await ensureKjvVerseCorpusLoaded();
 
@@ -6951,7 +6951,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const studyCapture = recordStudyRefs(
         contextualRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean)
       );
-      const referenceTab = await openBlbDestination(
+      await openBlbDestination(
         contextualRef.url,
         !!tabBehavior.activeIfNew,
         !!tabBehavior.activateExisting
