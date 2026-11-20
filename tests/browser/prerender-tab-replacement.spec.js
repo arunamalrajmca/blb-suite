@@ -155,9 +155,22 @@ async function __blbPrerenderTestReport(values) {
   } catch (_) {}
 }
 async function __blbPrerenderTestInitialize() {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const { masterEnabled } = await chrome.storage.local.get({masterEnabled:null});
+    if (masterEnabled !== null) break;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
   await chrome.storage.local.set(__blbPrerenderTestSettings);
   if (typeof reconcileRuntimeContentScriptRegistrations === 'function') {
     await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+  }
+  const sourceTabs = await chrome.tabs.query({url:'http://127.0.0.1/*'});
+  for (const tab of sourceTabs) {
+    if (tab.url && new URL(tab.url).pathname === '/source') {
+      await __blbPrerenderTestReport({
+        type:'source-tab', id:tab.id, url:tab.url, active:tab.active
+      });
+    }
   }
   await __blbPrerenderTestReport({type:'extension-ready'});
 }
