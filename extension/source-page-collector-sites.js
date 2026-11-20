@@ -1,4 +1,10 @@
-/* Shared registry for page-wide Bible-reference collection buttons and optional click guards. */
+/*
+ * Shared registry for source-page collection buttons and optional MAIN-world
+ * click interception. `id` enables the page-wide collector; `mainWorldClickGuard`
+ * additionally installs the early MAIN-world click guard on sites that need
+ * click interception before page handlers run. The flag does not control
+ * collector-button visibility or the global redirect preference.
+ */
 globalThis.BLBSourcePageCollectorSites = Object.freeze({
   "bibleproject.com": { id:"bibleproject" },
   "christianity.com": { id:"christianity", mainWorldClickGuard:true },

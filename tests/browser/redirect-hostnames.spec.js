@@ -73,12 +73,27 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
     .filter(([, config]) => config && config.mainWorldClickGuard === true)
     .map(([host]) => host)
     .sort();
-  expect(guardedHosts.length).toBeGreaterThan(0);
-  for (const host of guardedHosts) {
-    expect(registry[host].mainWorldClickGuard, host).toBe(true);
-  }
-  // The registry is the source of truth: newly guarded hosts automatically
-  // join this validation without another hardcoded hostname list.
+  expect(guardedHosts).toEqual([
+    'christianity.com',
+    'churchofjesuschrist.org',
+    'crosswalk.com',
+    'crossway.org',
+    'enduringword.com',
+    'gotquestions.org',
+    'mercyhouseministry.com',
+    'openbible.info',
+    'sarata.com'
+  ]);
+  const sharedCollectorHosts = Object.entries(registry)
+    .filter(([, config]) => config && typeof config.id === 'string' && config.id)
+    .map(([host]) => host);
+  expect(guardedHosts.every(host => sharedCollectorHosts.includes(host))).toBe(true);
+  expect(Object.entries(registry)
+    .filter(([host, config]) => sharedCollectorHosts.includes(host) && !guardedHosts.includes(host))
+    .every(([, config]) => config.mainWorldClickGuard !== true)).toBe(true);
+  // Specialized collector modules use their own click/collection handling.
+  expect(registry['thekingsbible.com'].mainWorldClickGuard).not.toBe(true);
+  expect(registry['webstersdictionary1828.com'].mainWorldClickGuard).not.toBe(true);
   expect(registry).not.toHaveProperty('esv.org');
 });
 
@@ -773,7 +788,10 @@ test.describe('real-browser source URL redirect regressions', () => {
       { url:'https://www.crosswalk.com/faith/bible-study/example.html', href:'/john-3-16', label:'John 3:16' },
       { url:'https://www.enduringword.com/bible-commentary/john-3/', href:'/john-3-16', label:'John 3:16' },
       { url:'https://www.churchofjesuschrist.org/study/scriptures/nt/matt/3?lang=eng', href:'/study/scriptures/nt/matt/3?id=p16&lang=eng', label:'Matt. 3:16' },
-      { url:'https://mercyhouseministry.com/bible-study/article/', href:'/bible/?b=John&c=3&v=16', label:'John 3:16' }
+      { url:'https://mercyhouseministry.com/bible-study/article/', href:'/bible/?b=John&c=3&v=16', label:'John 3:16' },
+      { url:'https://www.openbible.info/topics/scripture', href:'https://www.biblegateway.com/passage/?search=John%203%3A16', label:'John 3:16' },
+      { url:'https://www.crossway.org/articles/fixture/', href:'https://www.esv.org/John+3%3A16/', label:'John 3:16' },
+      { url:'https://sarata.com/bible/chapter/John.3.html', href:'/bible/verses/John.3.html#3:16', label:'John 3:16' }
     ]) {
       await loadProductionRedirect(page, source.url);
       await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });

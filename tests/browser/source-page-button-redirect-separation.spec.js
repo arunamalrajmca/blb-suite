@@ -24,7 +24,11 @@ function readSourcePageCollectorRegistry(extensionPath) {
 function sharedPageButtonHosts(extensionPath) {
   return Object.entries(readSourcePageCollectorRegistry(extensionPath))
     .filter(([, config]) => config && typeof config.id === 'string' && config.id)
-    .map(([host, config]) => ({host, siteId:config.id}));
+    .map(([host, config]) => ({
+      host,
+      siteId:config.id,
+      mainWorldClickGuard:config.mainWorldClickGuard === true
+    }));
 }
 
 function specializedCollectorHosts(extensionPath) {
@@ -736,9 +740,10 @@ test('same-tab redirect re-enable restores source-page buttons on every register
   page, extensionStorage, extensionPath, extensionWorker
 }) => {
   const cases = sharedPageButtonHosts(extensionPath)
-    .map(({host, siteId}) => ({
-      url:'https://' + host + '/__blb-suite-regression__/content',
-      siteId
+    .map(({host, siteId, mainWorldClickGuard}) => ({
+      url:'https://' + (host === 'christianity.com' ? 'www.' : '') + host + '/__blb-suite-regression__/content',
+      siteId,
+      mainWorldClickGuard
     }));
 
   await extensionStorage.set({
@@ -753,7 +758,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     body:'<!doctype html><html><head><title>Source page refresh test</title></head><body><main>Source page</main></body></html>'
   }));
 
-  for (const {url, siteId} of cases) {
+  for (const {url, siteId, mainWorldClickGuard} of cases) {
     const homepage = new URL(url);
     homepage.pathname = '/';
     homepage.search = '';
@@ -779,6 +784,61 @@ test('same-tab redirect re-enable restores source-page buttons on every register
         registration.js?.includes('content.js') &&
         registration.js?.includes('source-page-collector-sites.js'));
     }, originPattern)).toBe(true);
+
+    // The registry flag controls a second, persistent MAIN-world registration;
+    // it is independent of the isolated collector bundle and is intentionally
+    // absent for ordinary collector hosts. Poll separately because the isolated
+    // registration is created first and the MAIN-world registration follows it.
+    await expect.poll(() => extensionWorker.evaluate(async pattern => {
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const scripts = await chrome.scripting.getRegisteredContentScripts({
+        ids:[id + '-main-world']
+      });
+      return scripts.some(script => script.id === id + '-main-world');
+    }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
+
+    await expect.poll(() => extensionWorker.evaluate(async pattern => {
+      const [tab] = await chrome.tabs.query({url:pattern});
+      if (tab?.id == null) return false;
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:tab.id},
+        world:'MAIN',
+        func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
+      });
+      return result?.result === true;
+    }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
+
+    const guardState = await extensionWorker.evaluate(async pattern => {
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const scripts = await chrome.scripting.getRegisteredContentScripts({
+        ids:[id, id + '-main-world']
+      });
+      const isolated = scripts.find(script => script.id === id) || null;
+      const mainWorld = scripts.find(script => script.id === id + '-main-world') || null;
+      const [tab] = await chrome.tabs.query({url:pattern});
+      let mainWorldMarker = false;
+      if (tab?.id != null) {
+        const [result] = await chrome.scripting.executeScript({
+          target:{tabId:tab.id},
+          world:'MAIN',
+          func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
+        });
+        mainWorldMarker = result?.result === true;
+      }
+      return {isolated, mainWorld, mainWorldMarker};
+    }, originPattern);
+    expect(guardState.isolated?.js).toContain('content.js');
+    expect(Boolean(guardState.mainWorld), originPattern).toBe(mainWorldClickGuard);
+    expect(guardState.mainWorldMarker, originPattern).toBe(mainWorldClickGuard);
+    if (mainWorldClickGuard) {
+      expect(guardState.mainWorld).toMatchObject({
+        matches:[originPattern],
+        js:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
+        runAt:'document_start',
+        world:'MAIN',
+        persistAcrossSessions:true
+      });
+    }
 
     await page.goto(url, {waitUntil:'domcontentloaded'});
     await expect(button, url).toBeVisible();
@@ -885,4 +945,52 @@ test('BibleProject homepage stays excluded while nested pages expose Open Bible 
   });
   expect(registration?.js).toContain('source-page-collector.js');
   expect(registration?.js).toContain('content.js');
+});
+
+
+test('Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const sourceUrl = 'https://christianity.com/__blb-suite-regression__/master-toggle';
+  const originPattern = 'https://christianity.com/*';
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://christianity.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Guard registration lifecycle</title></head><body><main>Article</main></body></html>'
+  }));
+  await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
+
+  const readRegistrations = () => extensionWorker.evaluate(async pattern => {
+    const id = runtimeContentScriptIdForPattern(pattern);
+    const scripts = await chrome.scripting.getRegisteredContentScripts({
+      ids:[id, id + '-main-world']
+    });
+    return {
+      isolated:scripts.some(script => script.id === id),
+      mainWorld:scripts.some(script => script.id === id + '-main-world')
+    };
+  }, originPattern);
+
+  await expect.poll(readRegistrations, {timeout:15000}).toEqual({
+    isolated:true,
+    mainWorld:true
+  });
+
+  await extensionStorage.set({masterEnabled:false});
+  await expect.poll(readRegistrations, {timeout:15000}).toEqual({
+    isolated:false,
+    mainWorld:false
+  });
+
+  await extensionStorage.set({masterEnabled:true});
+  await expect.poll(readRegistrations, {timeout:15000}).toEqual({
+    isolated:true,
+    mainWorld:true
+  });
 });
