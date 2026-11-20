@@ -162,6 +162,12 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         variableOwners.set(variable, staticOwner);
         classVariables.set(variable, staticOwner);
         classInstanceOwners.set(variable, instanceOwner);
+        if (filename.startsWith('extension/') && variable.scope && variable.scope.type === 'global') {
+          owners.get(staticOwner).escaped = true;
+          owners.get(staticOwner).escapeReasons.add('top-level-classic-script-cross-file-contract');
+          owners.get(instanceOwner).escaped = true;
+          owners.get(instanceOwner).escapeReasons.add('top-level-classic-script-cross-file-contract');
+        }
       }
     }
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
@@ -172,7 +178,7 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         const variable = variableByDefinitionNode.get(node.id);
         if (variable) {
           variableOwners.set(variable, id);
-          if (variable.scope && variable.scope.type === 'global') {
+          if (filename.startsWith('extension/') && variable.scope && variable.scope.type === 'global') {
             owners.get(id).escaped = true;
             owners.get(id).escapeReasons.add('top-level-classic-script-cross-file-contract');
           }
@@ -339,6 +345,11 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
           if (owner) {
             owners.get(owner).escaped = true;
             owners.get(owner).escapeReasons.add('commonjs-export');
+          }
+          const exportedInstanceOwner = classInstanceOwnerByName.get(right.name);
+          if (exportedInstanceOwner && owners.has(exportedInstanceOwner)) {
+            owners.get(exportedInstanceOwner).escaped = true;
+            owners.get(exportedInstanceOwner).escapeReasons.add('commonjs-class-export');
           }
         }
       }
