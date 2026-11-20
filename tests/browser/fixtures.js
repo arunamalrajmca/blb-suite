@@ -142,6 +142,10 @@ const test = base.extend({
       headless: !headfulExtensionTests,
       args: [
         ...(headfulExtensionTests ? [] : ['--headless=new']),
+        ...(prerenderProfile ? [
+          '--enable-features=Prerender2',
+          '--disable-features=PreloadingHoldback,Prerender2Holdback'
+        ] : []),
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
         '--no-first-run',
