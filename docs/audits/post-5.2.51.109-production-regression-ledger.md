@@ -103,3 +103,50 @@ The web/PDF menu lifecycle was modified repeatedly, then #966 consolidated the w
 ## Status
 
 This is an initial inventory and hypothesis ledger, not a final causal verdict. The audit must continue through the remaining production patches and runtime traces before selecting changes for retention or isolation.
+
+
+## Additional patch-level findings
+
+### PR #937 — BLB startup settings readiness entered the navigation module
+
+This PR first passed `suiteSettingsReadyPromise` into `BLBVerseLinkNavigationModule.initialize()` and introduced managed target restoration, cleanup, and a settings-ready continuation. The original .109 click handler only intercepted when `isSuiteEnabledNow()` was already true. The current #966 code later extended this into an early-click queue that calls `preventDefault()` before settings resolve.
+
+This establishes a useful causal boundary:
+- #937 introduced the readiness dependency and lifecycle state.
+- #965 added immediate click-time target management and ancestor-container scanning.
+- #966 added the asynchronous early-click interception and replay path.
+
+The exact user-reported symptom—BLB verse link works after refreshing the page—must be tested against each of these stages separately. A likely recovery experiment is to keep safe cleanup/target restoration but remove only the early-click interception, restoring the .109 native navigation path until settings are ready. This is an experiment, not yet a committed code change.
+
+### PR #960 — core content activation was separated from optional redirect handlers
+
+#960 changed `ensureContentScriptInTab()` so ScriptTagger and BibleRef redirect files are injected separately from the primary content bundle. Its stated intent is to prevent an optional redirect-script failure from blocking the core page-selection features. This is a plausible independent improvement and should be retained unless the integration trace shows a conflict. It should not be rolled back merely because it is near the activation regression work.
+
+### PR #949 — overlapping activation promise recovery
+
+#949 detects an earlier activation promise for the same tab and runs another activation handshake after it settles, provided the tab still has the expected committed URL and complete status. This addresses the case where an activation began for the outgoing document and its promise was reused by the incoming document.
+
+The code is defensible, but it increases the number of overlapping asynchronous activation paths. Validate that it cannot inject into or acknowledge the wrong document during fast BLB navigation. It should be assessed with #943, #946, #960, #915, and #920 as one lifecycle sequence.
+
+### PR #856 / #860 / #874–#877 — reinjection cleanup framework
+
+These PRs add explicit cleanup functions for parse-popup listeners, passive new-tab targets, verse-link navigation, content settings subscriptions, page-selection controls, MultiVerse modules, Study capture, collectors, and auto-hyperlinking. Cleanup is generally desirable for MV3 reinjection, but correctness depends on ownership: a previous instance must not remove a DOM marker or listener that a current instance has already adopted, and cleanup must not restore an anchor target after a newer site-owned change.
+
+Keep the cleanup changes as a separate review group from startup readiness and navigation interception. Test repeated reinjection both before and after settings readiness, including the same physical anchor and dynamically inserted anchors.
+
+### PR #861 / #865 / #871 — selection listener lifecycle
+
+- #861 adds cleanup for draggable button observers and viewport/pointer listeners.
+- #865 changes Double-click disable logic to remove both the current handler and the older handler stored in the window guard, then delete the guard.
+- #871 adds all-open-tab activation for per-site preference changes and repairs stale Double-click handler state.
+
+These changes touch the selection features but have distinct purposes. The #966 early listener/replay logic should be isolated from the cleanup work rather than reverting all listener lifecycle improvements.
+
+## Updated initial priority order
+
+1. **BLB navigation regression isolation:** compare .109, #937, #965, and #966 click paths on the same real BLB page. Preserve the baseline native-link behaviour unless a trace proves the extension must own the click.
+2. **Activation lifecycle:** compare #764, #943, #946, #949, #960, #915, and #920 against a real first-load tab, with exact document identity recorded before/after each async operation.
+3. **Selection activation:** isolate #871/#872/#865/#966 and verify the four actions independently on X.com and Supply of Grace without reloading.
+4. **Context menu:** isolate #829–#835, #937, #961, and #966; compare the native menu structure on .109 and main.
+5. **Independent features:** preserve Study, MultiVerse POST, source-page collector, and redirect improvements unless a concrete dependency is found.
+
