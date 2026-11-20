@@ -48,3 +48,15 @@ test('attributes imported object property reads to the exported source owner',()
   assert.ok(r.dynamicPropertyReferences.some(x=>x.local==='api'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('classifies builtin and package imports as external, not unresolved local links',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'external-imports-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),"const fs = require('node:fs'); const pkg = require('some-package');");
+  const files=[path.join(root,'service.js')],r=analyzeCrossModule(root,files);
+  assert.equal(r.unresolved.length,0);assert.equal(r.externalImports.length,2);
+  const graph=buildModuleGraph(root),d=analyzeDynamicExecution(root,files,graph);
+  assert.equal(d.unresolvedReachable.length,0);
+  assert.ok(d.launches.every(x=>x.certainty==='external-static'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
