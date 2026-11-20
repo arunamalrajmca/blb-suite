@@ -122,51 +122,9 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("click", event => {
-      const clickedLink = event.target.closest?.("a");
-      // Do not depend exclusively on the MutationObserver's next animation
-      // frame: a verse link clicked immediately after insertion/load must
-      // already have its native new-tab target before the default action.
-      if (isSuiteEnabledNow() && clickedLink) manageVerseLink(clickedLink);
-      if (isModifiedLinkActivation(event)) return;
+      if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;
       const link = event.target.closest?.("a.nowrap");
       if (!link) return;
-
-      // The click listener is installed at document_start, but the initial
-      // master-setting read is asynchronous. Queue an early BLB link click
-      // rather than letting the browser navigate in the current tab before
-      // the extension learns whether it should own this navigation.
-      if (!settingsReady) {
-        const destination = link.href;
-        const originalTarget = link.getAttribute("target");
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        Promise.resolve(suiteSettingsReadyPromise).catch(() => {}).then(() => {
-          if (!active) {
-            if (!originalTarget || originalTarget.toLowerCase() === "_self") location.assign(destination);
-            else window.open(destination, originalTarget);
-            return;
-          }
-          if (isSuiteEnabledNow()) {
-            // Criteria Search owns ordinary KJV verse links on its results page.
-            if (
-              location.pathname.toLowerCase() === "/search/search.cfm" &&
-              /\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(destination)
-            ) {
-              if (!originalTarget || originalTarget.toLowerCase() === "_self") location.assign(destination);
-              else window.open(destination, originalTarget);
-              return;
-            }
-            openBlbDestinationFromContent(destination);
-          } else if (!originalTarget || originalTarget.toLowerCase() === "_self") {
-            location.assign(destination);
-          } else {
-            window.open(destination, originalTarget);
-          }
-        });
-        return;
-      }
-
-      if (!isSuiteEnabledNow()) return;
       // Criteria Search owns ordinary KJV verse links on its results page.
       if (
         location.pathname.toLowerCase() === "/search/search.cfm" &&
