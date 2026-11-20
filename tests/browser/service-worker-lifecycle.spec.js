@@ -3202,26 +3202,36 @@ test('BLB destination activation is retried after an overlapping same-origin act
     let release;
     const gate = new Promise(resolve => { release = resolve; });
     const originalRetry = ensureContentScriptInTabWithRetry;
-    globalThis.__blbOverlappingActivation = {release, originalRetry, retryCalls:0};
+    const state = {release, originalRetry, retryCalls:0, lockObserved:false};
+    // Preserve Promise-like behaviour while recording that the #949 branch
+    // actually attached its continuation to this specific in-flight lock.
+    const trackedLock = {
+      then: (...args) => gate.then(...args),
+      catch: (...args) => {
+        state.lockObserved = true;
+        return gate.catch(...args);
+      }
+    };
+    globalThis.__blbOverlappingActivation = state;
     ensureContentScriptInTabWithRetry = async (...args) => {
-      globalThis.__blbOverlappingActivation.retryCalls += 1;
+      state.retryCalls += 1;
       return originalRetry(...args);
     };
-    contentScriptInjectionLocks.set(id, gate);
+    contentScriptInjectionLocks.set(id, trackedLock);
   }, tabId);
 
   try {
     await page.goto('https://www.blueletterbible.org/kjv/rom/8/28/', {waitUntil:'load'});
     expect(page.url()).toContain('/kjv/rom/8/28/');
 
-    // The completed destination navigation must have observed the outstanding
-    // lock before it is released; otherwise this would not exercise #949's
-    // overlapping-activation branch.
-    await extensionWorker.evaluate(async id => {
+    // Wait until the #949 handler has attached its continuation to the
+    // outstanding lock. This proves the destination-complete event observed
+    // the outgoing activation before the test releases it.
+    await expect.poll(() => extensionWorker.evaluate(async id => {
       const tab = await chrome.tabs.get(id);
-      if (tab.status !== 'complete') throw new Error('Destination tab did not reach complete');
-      if (!contentScriptInjectionLocks.has(id)) throw new Error('Expected the outgoing activation lock to remain pending');
-    }, tabId);
+      return tab.status === 'complete' &&
+        globalThis.__blbOverlappingActivation.lockObserved === true;
+    }, tabId), {timeout:10000}).toBe(true);
 
     // Remove the simulated stale lock before releasing it so the detached
     // destination-document recovery can enter the real shared activation path.
