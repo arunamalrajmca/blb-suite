@@ -132,3 +132,23 @@ test('does not mistake dynamic computed class method names for static names', ()
   );
   assert.deepEqual(findings, []);
 });
+
+test('suppresses local candidates in direct-eval dynamic scopes', () => {
+  const findings = analyzeSource([
+    'function outer() {',
+    '  const visibleToEval = 1;',
+    '  eval("visibleToEval");',
+    '}'
+  ].join('\n'), 'eval-scope.js');
+  assert.deepEqual(findings.filter(item => item.scope !== 'property-name-index'), []);
+});
+
+test('suppresses local candidates in with-statement dynamic scopes', () => {
+  const findings = analyzeSource([
+    'function outer(target) {',
+    '  const potentiallyObserved = 1;',
+    '  with (target) { void potentiallyObserved; }',
+    '}'
+  ].join('\n'), 'with-scope.js');
+  assert.deepEqual(findings.filter(item => item.scope !== 'property-name-index'), []);
+});
