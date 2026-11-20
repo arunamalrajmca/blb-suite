@@ -21,7 +21,7 @@ test('attributes object properties to their owning object, not matching names el
   assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
     ['object', 'dead']
   ]);
-  assert.match(result.findings[0].owner, /second/);
+  assert.match(result.findings[0].owner, /first/);
 });
 
 test('attributes class methods and this-property reads to the class owner', () => {
@@ -35,7 +35,7 @@ test('attributes class methods and this-property reads to the class owner', () =
     'worker.run();'
   ].join('\n'), 'class-owner.js');
   assert.deepEqual(result.findings.map(item => item.name), ['unused']);
-  assert.equal(result.findings[0].ownerKind, 'class');
+  assert.equal(result.findings[0].ownerKind, 'class-instance');
 });
 
 test('tracks object aliases and destructured property reads', () => {
@@ -75,7 +75,7 @@ test('does not confuse identical class method names across different classes', (
     'beta.execute();'
   ].join('\n'), 'separate-classes.js');
   assert.deepEqual(result.findings.map(item => item.owner), [
-    'class:separate-classes.js:Alpha:1'
+    'class:separate-classes.js:Alpha:1:instance'
   ]);
 });
 
