@@ -1,21 +1,40 @@
 const { test, expect } = require('./fixtures');
+const { chromium } = require('@playwright/test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const http = require('node:http');
+const { spawn, execFileSync } = require('node:child_process');
 
-test('Chromium prerender activation emits a real tabs.onReplaced event and initializes the surviving document', async ({
-  context, extensionStorage, extensionWorker
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function waitFor(read, description, timeoutMs = 20000) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const value = read();
+    if (value) return value;
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for ${description}`);
+}
+
+test('native Chromium prerender activation emits tabs.onReplaced without a DevTools connection', async ({
+  extensionPath
 }) => {
-  test.setTimeout(90000);
-  await extensionStorage.set({
-    masterEnabled:true,
-    redirectEnabled:false,
-    pageSelectionButtonSites:{'127.0.0.1':true},
-    doubleClickBlbSites:{'127.0.0.1':true}
-  });
-
+  test.setTimeout(120000);
+  const events = [];
   const prerenderRequests = [];
   let destination = '';
+  let origin = '';
   const server = http.createServer((request, response) => {
-    if (request.url === '/source') {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    if (url.pathname === '/event') {
+      events.push(Object.fromEntries(url.searchParams.entries()));
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    if (url.pathname === '/source') {
       const rules = {
         prerender:[{
           source:'list',
@@ -30,17 +49,16 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
       response.end(`<!doctype html>
 <html><head><title>BLB prerender source</title>
 <script type="speculationrules">${JSON.stringify(rules)}</script>
-</head><body>
-<a id="activate-prerender" href="${destination}">Open prerendered destination</a>
-</body></html>`);
+<style>body{font:24px Arial}#activate{position:fixed;left:24px;top:24px;padding:24px;background:#ffe88a;color:#111;border:3px solid #333}</style>
+</head><body><a id="activate" href="${destination}">Activate prerendered destination</a></body></html>`);
       return;
     }
-    if (request.url === '/destination') {
+    if (url.pathname === '/destination') {
       const secPurpose = request.headers['sec-purpose'] || '';
       if (secPurpose.includes('prerender')) {
         const record = {
+          url:request.url,
           secPurpose,
-          userAgent:request.headers['user-agent'] || '',
           responseFinished:false
         };
         prerenderRequests.push(record);
@@ -61,148 +79,199 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
   });
-  const origin = `http://127.0.0.1:${server.address().port}`;
-  destination = `${origin}/destination`;
+  origin = `http://127.0.0.1:${server.address().port}`;
+  destination = `${origin}/destination?run=native-prerender`;
 
-  const page = await context.newPage();
-  try {
-    await page.goto(`${origin}/source`, {waitUntil:'domcontentloaded'});
-    await page.bringToFront();
+  const manifestPath = path.join(extensionPath, 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  manifest.host_permissions = [...new Set([
+    ...(manifest.host_permissions || []),
+    'http://127.0.0.1/*'
+  ])];
+  manifest.content_scripts = manifest.content_scripts || [];
+  manifest.content_scripts.push({
+    matches:['http://127.0.0.1/*'],
+    js:['prerender-test-observer.js'],
+    run_at:'document_idle'
+  });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
-    const sourceVisibility = await page.evaluate(() => ({
-      visibilityState:document.visibilityState,
-      hasFocus:document.hasFocus()
-    }));
-    expect(sourceVisibility.visibilityState,
-      'The source document must be foregrounded before requesting prerender'
-    ).toBe('visible');
-    expect(sourceVisibility.hasFocus,
-      'The source document must own the foreground window before requesting prerender'
-    ).toBe(true);
-
-    const sourceTab = await extensionWorker.evaluate(async () => {
-      const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-      if (!tab || !Number.isInteger(tab.id)) throw new Error('Unable to identify source tab');
-      globalThis.__blbPrerenderReplacementEvents = [];
-      chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
-        globalThis.__blbPrerenderReplacementEvents.push({
-          addedTabId, removedTabId, observedAt:Date.now()
-        });
-      });
-      return {id:tab.id,url:tab.url,active:tab.active};
-    });
-    expect(sourceTab).toMatchObject({ url:`${origin}/source`, active:true });
-    const sourceTabId = sourceTab.id;
-
-    const speculationRulesSupported = await page.evaluate(() =>
-      typeof HTMLScriptElement.supports === 'function' &&
-      HTMLScriptElement.supports('speculationrules')
-    );
-    expect(speculationRulesSupported,
-      'The selected Chromium build must support the Speculation Rules API'
-    ).toBe(true);
-
-    // The server-side Sec-Purpose header proves Chromium actually requested
-    // the destination as a prerender, without attaching CDP to the source tab.
-    await expect.poll(() =>
-      prerenderRequests.some(request => request.responseFinished), {
-      timeout:15000,
-      message:'Chromium must finish the destination response requested with Sec-Purpose: prefetch;prerender'
-    }).toBe(true);
-    // The completed HTTP response is not proof that the renderer has finished
-    // prerendering. Allow its document lifecycle to settle before activation.
-    await page.waitForTimeout(1500);
-
-    await Promise.all([
-      page.waitForURL(destination, {timeout:15000}),
-      page.locator('#activate-prerender').click()
-    ]);
-    await page.waitForLoadState('domcontentloaded');
-
-    const activation = await page.evaluate(() => {
-      const navigation = performance.getEntriesByType('navigation')[0];
-      return {
-        activationStart:navigation?.activationStart ?? null,
-        prerendering:document.prerendering,
-        visibilityState:document.visibilityState,
-        userAgent:navigator.userAgent
-      };
-    });
-    let prerenderHistogram = '';
-    const histogramPage = await context.newPage();
-    try {
-      await histogramPage.goto(
-        'chrome://histograms/Prerender.Experimental.PrerenderHostFinalStatus',
-        { waitUntil:'domcontentloaded', timeout:10000 }
-      );
-      prerenderHistogram = await histogramPage.locator('body').innerText({timeout:5000});
-    } catch (error) {
-      prerenderHistogram = 'Unable to read Chromium prerender histogram: ' + error.message;
-    } finally {
-      await histogramPage.close().catch(() => {});
+  const observerScript = `
+(() => {
+  const report = () => {
+    if (document.prerendering) {
+      document.addEventListener('prerenderingchange', report, { once:true });
+      return;
     }
-    expect(activation.activationStart,
-      'Destination must be a prerender-activated document, not a normal navigation: ' +
-      JSON.stringify({activation,prerenderRequests,prerenderHistogram:prerenderHistogram.slice(-5000)})
-    ).toBeGreaterThan(0);
+    let attempts = 0;
+    const send = () => {
+      const navigation = performance.getEntriesByType('navigation')[0];
+      const payload = {
+        type:'content-ready',
+        url:location.href,
+        activationStart:navigation?.activationStart || 0,
+        fileExecuted:!!globalThis.__blbSuiteContentScriptFileExecutedV3,
+        initialized:!!globalThis.__blbSuiteContentScriptLoadedV2,
+        doubleClickBound:!!globalThis.__blbSuiteDoubleClickBoundV2
+      };
+      if ((!payload.fileExecuted || !payload.initialized) && attempts++ < 50) {
+        setTimeout(send, 100);
+        return;
+      }
+      const query = new URLSearchParams(payload);
+      new Image().src = 'http://127.0.0.1:__PORT__/event?' + query.toString();
+    };
+    send();
+  };
+  if (document.prerendering) {
+    document.addEventListener('prerenderingchange', report, { once:true });
+  } else {
+    report();
+  }
+})();
+`.replace('__PORT__', String(server.address().port));
+  fs.writeFileSync(path.join(extensionPath, 'prerender-test-observer.js'), observerScript);
 
-    await expect.poll(() => extensionWorker.evaluate(() =>
-      globalThis.__blbPrerenderReplacementEvents || []
-    ), {
-      timeout:15000,
-      message:'The extension must receive the real chrome.tabs.onReplaced event'
-    }).toEqual(expect.arrayContaining([
-      expect.objectContaining({removedTabId:sourceTabId})
-    ]));
+  const backgroundPath = path.join(extensionPath, 'background.js');
+  const testPort = server.address().port;
+  const backgroundObserver = `
 
-    const replacementEvents = await extensionWorker.evaluate(() =>
-      globalThis.__blbPrerenderReplacementEvents || []
-    );
-    const replacement = replacementEvents.find(event => event.removedTabId === sourceTabId);
-    expect(replacement).toBeTruthy();
-    expect(replacement.addedTabId).not.toBe(sourceTabId);
-
-    await expect.poll(() => extensionWorker.evaluate(async tabId => {
-      const tab = await chrome.tabs.get(tabId).catch(() => null);
-      return tab ? {id:tab.id,url:tab.url,status:tab.status} : null;
-    }, replacement.addedTabId), {
-      timeout:10000,
-      message:'The replacement tab must remain live at the prerendered destination'
-    }).toMatchObject({
-      id:replacement.addedTabId,
-      url:destination,
-      status:'complete'
+// Test-only observer appended to the temporary extension copy. This code is
+// absent from the repository extension and reports through HTTP so the test
+// does not need to attach DevTools to Chromium.
+const __blbPrerenderTestPort = ${testPort};
+const __blbPrerenderTestSettings = {
+  masterEnabled:true,
+  redirectEnabled:false,
+  pageSelectionButtonSites:{'127.0.0.1':true},
+  doubleClickBlbSites:{'127.0.0.1':true}
+};
+async function __blbPrerenderTestReport(values) {
+  const query = new URLSearchParams(values);
+  try {
+    await fetch('http://127.0.0.1:' + __blbPrerenderTestPort + '/event?' + query.toString(), {
+      cache:'no-store'
     });
-
-    await expect.poll(() => extensionWorker.evaluate(async tabId => {
-      const results = await chrome.scripting.executeScript({
-        target:{tabId},
-        world:'ISOLATED',
-        func:() => ({
-          fileExecuted:!!globalThis.__blbSuiteContentScriptFileExecutedV3,
-          initialized:!!globalThis.__blbSuiteContentScriptLoadedV2,
-          doubleClickBound:!!globalThis.__blbSuiteDoubleClickBoundV2
-        })
-      }).catch(() => []);
-      return results[0]?.result || null;
-    }, replacement.addedTabId), {
-      timeout:15000,
-      message:'The surviving prerendered document must execute and initialize the extension content script'
-    }).toMatchObject({
-      fileExecuted:true,
-      initialized:true,
-      doubleClickBound:true
+  } catch (_) {}
+}
+async function __blbPrerenderTestInitialize() {
+  await chrome.storage.local.set(__blbPrerenderTestSettings);
+  if (typeof reconcileRuntimeContentScriptRegistrations === 'function') {
+    await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+  }
+  await __blbPrerenderTestReport({type:'extension-ready'});
+}
+chrome.runtime.onInstalled.addListener(() => {
+  __blbPrerenderTestInitialize().catch(() => {});
+});
+chrome.runtime.onStartup.addListener(() => {
+  __blbPrerenderTestInitialize().catch(() => {});
+});
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url && new URL(tab.url).pathname === '/source') {
+    __blbPrerenderTestReport({
+      type:'source-tab',
+      id:tabId,
+      url:tab.url,
+      active:tab.active
     });
+  }
+});
+chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  chrome.tabs.get(addedTabId).then(tab => {
+    __blbPrerenderTestReport({
+      type:'tab-replaced',
+      addedTabId,
+      removedTabId,
+      url:tab.url
+    });
+  }).catch(() => {
+    __blbPrerenderTestReport({type:'tab-replaced',addedTabId,removedTabId,url:''});
+  });
+});
+__blbPrerenderTestInitialize().catch(() => {});
+`;
+  fs.appendFileSync(backgroundPath, backgroundObserver);
+
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-native-prerender-profile-'));
+  fs.mkdirSync(path.join(userDataDir, 'Default'), { recursive:true });
+  fs.writeFileSync(path.join(userDataDir, 'Default', 'Preferences'), JSON.stringify({
+    net:{network_prediction_options:0}
+  }));
+
+  const chromePath = chromium.executablePath();
+  const chrome = spawn(chromePath, [
+    `--user-data-dir=${userDataDir}`,
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--window-size=1280,900',
+    '--window-position=0,0',
+    '--enable-features=Prerender2',
+    '--disable-features=PreloadingHoldback,Prerender2Holdback',
+    `${origin}/source`
+  ], { stdio:['ignore','ignore','pipe'], env:process.env });
+
+  let chromeStderr = '';
+  chrome.stderr.on('data', chunk => {
+    chromeStderr = (chromeStderr + chunk.toString()).slice(-12000);
+  });
+
+  try {
+    await waitFor(() => events.find(event => event.type === 'extension-ready'),
+      'the unpacked extension service worker to initialize its test settings');
+    const sourceTab = await waitFor(() => events.find(event => event.type === 'source-tab'),
+      'the source page to become the active browser tab');
+    expect(sourceTab.active).toBe('true');
+
+    await waitFor(() => prerenderRequests.find(request => request.responseFinished),
+      'the destination response requested with Sec-Purpose: prefetch;prerender');
+    await delay(2500);
+
+    const windowId = await waitFor(() => {
+      try {
+        return execFileSync('xdotool', [
+          'search','--onlyvisible','--name','BLB prerender source'
+        ], {encoding:'utf8'}).trim().split('\n')[0];
+      } catch (_) {
+        return null;
+      }
+    }, 'the visible native Chromium source window');
+    execFileSync('xdotool', ['windowfocus','--sync',windowId]);
+    execFileSync('xdotool', ['mousemove','--window',windowId,'180','150','click','1']);
+
+    const replacement = await waitFor(() =>
+      events.find(event => event.type === 'tab-replaced'),
+    'the real chrome.tabs.onReplaced event from the extension service worker', 20000);
+    expect(Number(replacement.addedTabId)).not.toBe(Number(replacement.removedTabId));
+    expect(replacement.url).toBe(destination);
+
+    const destinationReady = await waitFor(() =>
+      events.find(event => event.type === 'content-ready' && event.url === destination),
+    'the activated destination document and extension content-script readiness', 15000);
+    expect(Number(destinationReady.activationStart)).toBeGreaterThan(0);
+    expect(destinationReady.fileExecuted).toBe('true');
+    expect(destinationReady.initialized).toBe('true');
+    expect(destinationReady.doubleClickBound).toBe('true');
+  } catch (error) {
+    throw new Error([
+      error.message,
+      'Prerender requests: ' + JSON.stringify(prerenderRequests),
+      'Observed extension events: ' + JSON.stringify(events),
+      'Chromium stderr: ' + chromeStderr.slice(-6000)
+    ].join('\n\n'));
   } finally {
-    await page.close().catch(() => {});
-    await extensionStorage.set({
-      pageSelectionButtonSites:{'127.0.0.1':false},
-      doubleClickBlbSites:{'127.0.0.1':false}
-    });
-    await extensionWorker.evaluate(() =>
-      reconcileRuntimeContentScriptRegistrations().catch(() => {})
-    );
+    chrome.kill('SIGTERM');
+    await Promise.race([
+      new Promise(resolve => chrome.once('exit', resolve)),
+      delay(5000)
+    ]);
+    if (chrome.exitCode === null && !chrome.killed) chrome.kill('SIGKILL');
     server.closeAllConnections?.();
     await new Promise(resolve => server.close(resolve));
+    fs.rmSync(userDataDir, {recursive:true,force:true});
   }
 });
