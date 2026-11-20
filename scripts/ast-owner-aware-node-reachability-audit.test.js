@@ -192,3 +192,11 @@ test('inventories child-process script launches as dynamic module-loading sites'
   ].join('\n'), 'launcher.js', new Set(['launcher.js']));
   assert.deepEqual(result.dynamic.map(item => item.kind), ['child-process-launch']);
 });
+
+test('retains class methods consumed through a CommonJS class export', () => {
+  const result = ownerAwarePropertyAudit([
+    'class Reporter { onBegin() {} onEnd() {} }',
+    'module.exports = Reporter;'
+  ].join('\\n'), 'reporter.js');
+  assert.deepEqual(result.findings, []);
+});
