@@ -224,15 +224,25 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
       let owner = null;
       if (node.object.type === 'Identifier') owner = resolvedOwner(node.object);
       else if (node.object.type === 'ThisExpression') {
-        const classNode = [...ancestors].reverse().find(item =>
-          item.type === 'ClassDeclaration' || item.type === 'ClassExpression'
+        const ownerNode = [...ancestors].reverse().find(item =>
+          (item.type === 'ClassDeclaration' || item.type === 'ClassExpression') ||
+          (item.type === 'ObjectExpression' && ownerByNode.has(item))
         );
-        const methodNode = [...ancestors].reverse().find(item => item.type === 'MethodDefinition');
-        owner = classNode
-          ? (methodNode && methodNode.static
-            ? classStaticOwnerByNode.get(classNode)
-            : classOwnerByNode.get(classNode))
-          : null;
+        if (ownerNode && (ownerNode.type === 'ClassDeclaration' || ownerNode.type === 'ClassExpression')) {
+          const methodNode = [...ancestors].reverse().find(item => item.type === 'MethodDefinition');
+          owner = methodNode && methodNode.static
+            ? classStaticOwnerByNode.get(ownerNode)
+            : classOwnerByNode.get(ownerNode);
+        } else if (ownerNode) {
+          const methodProperty = [...ancestors].reverse().find(item =>
+            item.type === 'Property' && item.method && item.value &&
+            ['FunctionExpression', 'ArrowFunctionExpression'].includes(item.value.type)
+          );
+          const nestedOrdinaryFunction = methodProperty && ancestors.some(item =>
+            item.type === 'FunctionExpression' && item !== methodProperty.value
+          );
+          if (!nestedOrdinaryFunction) owner = ownerByNode.get(ownerNode);
+        }
       }
       if (!owner) return;
       const key = staticKey(node.property, node.computed);
