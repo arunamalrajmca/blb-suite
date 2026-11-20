@@ -165,6 +165,7 @@ try {
     'tests/browser/context-menu-visibility-event-lifecycle.spec.js',
     'tests/browser/bibleref-range-redirect-lifecycle.spec.js',
     'tests/browser/pdf-selection-regressions.spec.js',
+    'tests/browser/native-prerender-activation.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-session-concurrency.spec.js',
     'tests/browser/study-backup-restore.spec.js',
