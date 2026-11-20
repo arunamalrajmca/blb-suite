@@ -229,7 +229,8 @@ function run(root = path.resolve(__dirname, '..')) {
   }
 
   console.log('AST symbol-reference audit (candidate report only)');
-  console.log('Files parsed: ' + files.length);
+  console.log('Extension files analyzed: ' + files.length);
+  console.log('Repository JavaScript files indexed for static property references: ' + referenceFiles.length);
   const localFindings = findings.filter(item => item.scope !== 'property-name-index');
   const propertyFindings = findings.filter(item => item.scope === 'property-name-index');
   console.log('Potentially unread local declarations: ' + localFindings.length);
