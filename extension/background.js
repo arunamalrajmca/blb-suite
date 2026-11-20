@@ -3686,93 +3686,9 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteAcquireMultiVersePostSlot', 'multiverse-post.html']
 ]);
 
-// Every async message must have an explicit source classification. Popup and
-// options-page requests are bound to their exact extension page; the remaining
-// listed requests are content-script-only and receive tab/document validation
-// in isAuthorizedContentScriptSender below.
-const CONTENT_SCRIPT_MESSAGE_TYPES = new Set([
-  'blbSuiteOpenMultiVerseVerse',
-  'blbSuiteGetPendingMultiVerseRefs',
-  'blbSuiteConsumePendingMultiVerseRefs',
-  'blbSuiteOpenWebsterMultiVerse',
-  'blbSuiteOpenCurrentSelection',
-  'blbSuiteOpenSelectionText',
-  'blbSuiteOpenDoubleClickSelectionText',
-  'blbSuiteStudyCaptureActive',
-  'blbSuiteCaptureStudyRefs',
-  'blbSuiteCaptureStudySearchTerm',
-  'blbSuiteCaptureStudyStrong',
-  'blbSuiteSyncSelectionContextMenu',
-  'blbSuiteOpenScriptTaggerUrl',
-  'blbSuiteOpenBibleRefRange',
-  'blbSuiteOpenBackgroundUrl'
-]);
-
 function isAuthorizedExtensionPageMessage(message, sender) {
-  const type = message?.type;
-  if (typeof type !== 'string') return false;
-  const expectedPagePath = EXTENSION_PAGE_MESSAGE_SOURCES.get(type);
-  if (expectedPagePath) return isTrustedExtensionPageSender(sender, expectedPagePath);
-  return CONTENT_SCRIPT_MESSAGE_TYPES.has(type);
-}
-
-function sameSenderDocumentUrl(left, right) {
-  try {
-    const a = new URL(String(left || ''));
-    const b = new URL(String(right || ''));
-    // Fragments can change without replacing the document. Origin, path, and
-    // query identify the top-level document for the fallback used by older
-    // Chromium versions that do not expose MessageSender.documentId.
-    return a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
-  } catch (_) {
-    return false;
-  }
-}
-
-async function isLiveContentScriptSenderDocument(sender) {
-  if (!sender || !Number.isInteger(sender.tab?.id) ||
-      (Number.isInteger(sender.frameId) && sender.frameId !== 0)) return false;
-  // The manifest injects the content bundle into the top frame only. Reject
-  // subframe messages rather than treating a frame's URL as the tab's origin.
-  if (typeof sender.url !== 'string' || sender.url.startsWith(chrome.runtime.getURL(''))) return false;
-
-  // Local files and Chromium's PDF viewer use browser-managed documents.
-  // Their live identity is checked through the tab URL because executeScript
-  // cannot reliably target browser-owned PDF viewer documents.
-  const browserManagedDocument = /^file:\/\//i.test(sender.url) || isPdfViewerTab(sender.tab);
-  try {
-    const liveTab = await chrome.tabs.get(sender.tab.id);
-    const liveUrl = liveTab?.pendingUrl || liveTab?.url;
-    const requestUrl = browserManagedDocument
-      ? (sender.tab?.url || sender.url)
-      : sender.url;
-    // Check the URL captured on the MessageSender itself, not sender.tab.url:
-    // Chromium may update the tab snapshot while an async message is pending.
-    // A retained/BFCache document can still be scriptable after navigation, so
-    // documentId targeting alone is not enough to prove it remains current.
-    if (!sameSenderDocumentUrl(requestUrl, liveUrl)) return false;
-
-    if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
-      // Read the current top-frame document identity and compare it with the
-      // request's sender document. Targeting the old document ID could still
-      // succeed for a BFCache-retained page after a navigation.
-      const results = await chrome.scripting.executeScript({
-        target:{tabId:sender.tab.id, frameIds:[0]},
-        func:() => location.href
-      });
-      return results?.length === 1 &&
-        results[0]?.documentId === sender.documentId &&
-        sameSenderDocumentUrl(sender.url, results[0]?.result);
-    }
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function contentScriptSenderDocumentId(sender) {
-  if (!sender || /^file:\/\//i.test(sender.url || '') || isPdfViewerTab(sender.tab)) return null;
-  return typeof sender.documentId === 'string' && sender.documentId ? sender.documentId : null;
+  const expectedPagePath = EXTENSION_PAGE_MESSAGE_SOURCES.get(message?.type);
+  return !expectedPagePath || isTrustedExtensionPageSender(sender, expectedPagePath);
 }
 
 async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
@@ -3781,11 +3697,9 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
   if (sender.url.startsWith(chrome.runtime.getURL(''))) return false;
   const permissionTab = {...sender.tab, url:sender.url || sender.tab.url};
   if (!(await hasSelectionActionPermissionForTab(permissionTab))) return false;
-  if (allowedHosts) {
-    const host = normalizeSiteHostname(hostnameFromTabUrl(sender.url || sender.tab.url));
-    if (!allowedHosts.has(host)) return false;
-  }
-  return isLiveContentScriptSenderDocument(sender);
+  if (!allowedHosts) return true;
+  const host = normalizeSiteHostname(hostnameFromTabUrl(sender.url || sender.tab.url));
+  return allowedHosts.has(host);
 }
 
 async function isActiveTabContentScriptSender(sender) {
@@ -4158,10 +4072,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenCurrentSelection') {
-    // Reuse the command's complete site-policy path while pinning selection
-    // reads and selection clearing to the requesting document.
+    if (!(await isActiveTabContentScriptSender(sender))) {
+      sendResponse({ok:false, reason:'unauthorized-sender'});
+      return true;
+    }
+    // Use the same guarded handler as the registered Alt+B command. Returning
+    // its result makes the handoff deterministic for callers and regression
+    // tests instead of acknowledging the message before tab creation finishes.
     try {
-      const result = await handleOpenBibleSelectionCommand(sender);
+      const result = await handleOpenBibleSelectionCommand();
       sendResponse(result || {ok:false, reason:'selection-not-opened'});
     } catch (error) {
       console.error('KJV Scripture Tools Alt+B message:', error);
@@ -4320,10 +4239,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       const result = await openSharedSelectionAction({
         tabId:sender?.tab?.id,
-        tabUrl:sender?.url || sender?.tab?.url || '',
+        tabUrl:sender?.tab?.url || '',
         text,
         behavior,
-        documentId:contentScriptSenderDocumentId(sender),
         contextualReference:contextualReference || null,
         contextualReferenceResolved: message.contextualReferenceResolved === true || !!contextualReference,
         directUrl:message.directUrl || ''
@@ -6793,7 +6711,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
   try { return await operation; } finally { pendingBlbDestinations.delete(key); }
 }
 
-async function getContextualSelectionReference(tabId, selectionText, documentId = null) {
+async function getContextualSelectionReference(tabId, selectionText) {
   if (!Number.isInteger(tabId)) return null;
   const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
   const messageStartedAt = measureStage ? performance.now() : null;
@@ -6801,7 +6719,7 @@ async function getContextualSelectionReference(tabId, selectionText, documentId 
     const response = await chrome.tabs.sendMessage(tabId, {
       type: 'blbSuiteResolveContextualSelection',
       selectionText: String(selectionText || '')
-    }, typeof documentId === 'string' && documentId ? {documentId} : undefined);
+    });
     return response?.reference || null;
   } catch (_) {
     // Chrome/Brave PDF viewers and protected pages may reject content-script
@@ -7135,7 +7053,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   await openBlbDestination(`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
 }
 
-async function getActiveTabSelection(tabId, documentId = null) {
+async function getActiveTabSelection(tabId) {
   // Prefer the resident content script on normal web pages. This avoids a
   // scripting.executeScript round-trip and its injection/context overhead on
   // the latency-sensitive Alt+B path. Protected pages (notably PDF viewers)
@@ -7143,11 +7061,7 @@ async function getActiveTabSelection(tabId, documentId = null) {
   const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
   const messageStartedAt = measureStage ? performance.now() : null;
   try {
-    const response = await chrome.tabs.sendMessage(
-      tabId,
-      {type:'blbSuiteGetActiveSelectionText'},
-      typeof documentId === 'string' && documentId ? {documentId} : undefined
-    );
+    const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteGetActiveSelectionText'});
     if (response?.ok) return String(response.text || '').trim();
   } catch (_) {
   } finally {
@@ -7156,9 +7070,7 @@ async function getActiveTabSelection(tabId, documentId = null) {
   const fallbackStartedAt = measureStage ? performance.now() : null;
   try {
     const result = await chrome.scripting.executeScript({
-      target: typeof documentId === 'string' && documentId
-        ? {tabId, documentIds:[documentId]}
-        : {tabId},
+      target: {tabId},
       func: () => {
         const selection = window.getSelection?.();
         if (!selection || !selection.rangeCount) return '';
@@ -7215,8 +7127,7 @@ async function openSharedSelectionAction({
   behavior = {activeIfNew:true, activateExisting:true},
   contextualReference = null,
   contextualReferenceResolved = false,
-  directUrl = '',
-  documentId = null
+  directUrl = ''
 }) {
   if (normalizeSiteHostname(hostnameFromTabUrl(tabUrl)) === BLB_HOSTNAME) {
     const result = await openBlbPageSelection(text, behavior);
@@ -7254,7 +7165,7 @@ async function openSharedSelectionAction({
 
   if (numericOnlySelection && !contextualReference?.url) {
     if (!contextualReferenceResolved) {
-      const liveContext = await getContextualSelectionReference(tabId, text, documentId);
+      const liveContext = await getContextualSelectionReference(tabId, text);
       if (liveContext?.url) {
         await openSelectedPdfBibleRefs(text, behavior, liveContext);
         return {ok:true, contextual:true};
@@ -7297,7 +7208,7 @@ async function openSharedSelectionAction({
   }
 
   if (!direct && !strong && selectedRefs.length < 2 && contextualReferenceResolved !== true) {
-    const contextualRef = await getContextualSelectionReference(tabId, text, documentId);
+    const contextualRef = await getContextualSelectionReference(tabId, text);
     if (contextualRef?.url) {
       await openSelectedPdfBibleRefs(text, behavior, contextualRef);
       return {ok:true, contextual:true};
@@ -7314,14 +7225,14 @@ async function openSharedSelectionAction({
   return {ok:true};
 }
 
-async function openCurrentSelectionInBlb(tabId, tabUrl = '', documentId = null) {
-  const text = await getActiveTabSelection(tabId, documentId);
+async function openCurrentSelectionInBlb(tabId, tabUrl = '') {
+  const text = await getActiveTabSelection(tabId);
   if (!text) return {ok:false, reason:'empty-selection'};
 
   // Resolve positional DOM context while the user's live Range is still
   // available. Pass that exact result into the shared action instead of
   // relying on its later text-only fallback for a bare numeric token.
-  const contextualReference = await getContextualSelectionReference(tabId, text, documentId);
+  const contextualReference = await getContextualSelectionReference(tabId, text);
   return openSharedSelectionAction({
     tabId,
     tabUrl,
@@ -7762,16 +7673,12 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
 
 chrome.contextMenus.onClicked.addListener(handleBlbSelectionContextMenuClick);
 
-async function clearPageSelectionAfterBlbAction(tabId, documentId = null) {
+async function clearPageSelectionAfterBlbAction(tabId) {
   if (!Number.isInteger(tabId)) return;
   const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
   const clearStartedAt = measureStage ? performance.now() : null;
   try {
-    await chrome.tabs.sendMessage(
-      tabId,
-      {type:'blbSuiteClearPageSelection'},
-      typeof documentId === 'string' && documentId ? {documentId} : undefined
-    );
+    await chrome.tabs.sendMessage(tabId, {type:'blbSuiteClearPageSelection'});
   } catch (_) {
     // Some supported pages (notably PDF viewers) may not expose a content
     // script message endpoint; the BLB action itself should still complete.
@@ -7780,19 +7687,11 @@ async function clearPageSelectionAfterBlbAction(tabId, documentId = null) {
   }
 }
 
-async function handleOpenBibleSelectionCommand(sender = null) {
+async function handleOpenBibleSelectionCommand() {
   if (!(await isSuiteEnabled())) return {ok:false, reason:'disabled'};
   try {
-    let tab;
-    if (sender) {
-      if (!(await isActiveTabContentScriptSender(sender))) {
-        return {ok:false, reason:'unauthorized-sender'};
-      }
-      tab = sender.tab;
-    } else {
-      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-      tab = tabs[0];
-    }
+    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+    const tab = tabs[0];
     if (!tab?.id) return {ok:false, reason:'no-active-tab'};
 
     // Preserve the feature-policy result for excluded sites before checking
@@ -7803,28 +7702,22 @@ async function handleOpenBibleSelectionCommand(sender = null) {
     if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) {
       return {ok:false, reason:'site-disabled'};
     }
-    if (!sender && !(await hasSelectionActionPermissionForTab(tab))) {
+    if (!(await hasSelectionActionPermissionForTab(tab))) {
       return {ok:false, reason:'host-permission-revoked'};
     }
-    // Site-policy storage reads can yield. Recheck the original document
-    // afterward so a navigation during that await cannot continue the request.
-    if (sender && !(await isLiveContentScriptSenderDocument(sender))) {
-      return {ok:false, reason:'stale-sender-document'};
-    }
 
-    const documentId = contentScriptSenderDocumentId(sender);
     if (siteKey === BLB_HOSTNAME) {
-      const selectedText = await getActiveTabSelection(tab.id, documentId);
+      const selectedText = await getActiveTabSelection(tab.id);
       if (!selectedText) return {ok:false, reason:'empty-selection'};
       const result = await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
-      await clearPageSelectionAfterBlbAction(tab.id, documentId);
+      await clearPageSelectionAfterBlbAction(tab.id);
       return {ok:true, ...result};
     }
 
-    // Keep the command and its message bridge on one execution path while
-    // pinning all selection reads to the originating document when available.
-    const result = await openCurrentSelectionInBlb(tab.id, tab.url || sender?.url || '', documentId);
-    if (result?.ok) await clearPageSelectionAfterBlbAction(tab.id, documentId);
+    // Keep the command and its regression-test message on one execution path.
+    // This also returns only after contextual resolution and tab opening finish.
+    const result = await openCurrentSelectionInBlb(tab.id, tab.url || '');
+    if (result?.ok) await clearPageSelectionAfterBlbAction(tab.id);
     return result;
   } catch (err) {
     console.error('KJV Scripture Tools Alt+B:', err);
