@@ -27,7 +27,7 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
 
   const browser = context.browser();
   expect(browser, 'Chromium browser must expose a browser-level CDP session').not.toBeNull();
-  const cdp = await browser.newBrowserCDPSession();
+  const cdp = await context.newCDPSession(page);
   const statuses = [];
   const statusListener = event => {
     if (event.url && event.url.includes('blb-prerender-destination=1')) {
