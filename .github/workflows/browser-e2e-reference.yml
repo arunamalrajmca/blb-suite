@@ -573,7 +573,7 @@ jobs:
   focused-test-only-behavior:
     name: Focused behavior tests (test-only edits)
     needs: change-detection
-    if: ${{ github.event_name == 'pull_request' && needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '' }}
+    if: ${{ github.event_name == 'pull_request' && ((needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '') || contains(needs.change-detection.outputs.focused_specs, 'tests/browser/prerender-tab-replacement.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -647,7 +647,20 @@ jobs:
               echo "::error::Playwright discovered no tests in $spec."
               exit 1
             fi
-            npx playwright test --config=playwright.config.js "$spec"
+            if [[ "$spec" == "tests/browser/prerender-tab-replacement.spec.js" ]]; then
+              # Native prerender activation requires a visible browser and X11 input.
+              command -v xvfb-run >/dev/null || {
+                echo "::error::xvfb-run is required for the native prerender test."
+                exit 1
+              }
+              if ! command -v xdotool >/dev/null 2>&1; then
+                sudo apt-get update -qq
+                sudo apt-get install -y xdotool
+              fi
+              xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test --config=playwright.config.js "$spec"
+            else
+              npx playwright test --config=playwright.config.js "$spec"
+            fi
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
