@@ -14,7 +14,19 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
   const page = await context.newPage();
   try {
     await page.goto('https://example.com/?blb-prerender-source=1', {waitUntil:'domcontentloaded'});
-    const sourceTabId = await extensionWorker.evaluate(async () => {
+    await page.bringToFront();
+    const sourceVisibility = await page.evaluate(() => ({
+      visibilityState:document.visibilityState,
+      hasFocus:document.hasFocus()
+    }));
+    expect(sourceVisibility.visibilityState,
+      'The source document must be foregrounded before requesting prerender'
+    ).toBe('visible');
+    expect(sourceVisibility.hasFocus,
+      'The source document must own the foreground window before requesting prerender'
+    ).toBe(true);
+
+    const sourceTab = await extensionWorker.evaluate(async () => {
       const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
       if (!tab || !Number.isInteger(tab.id)) throw new Error('Unable to identify source tab');
       globalThis.__blbPrerenderReplacementEvents = [];
@@ -23,8 +35,13 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
           addedTabId, removedTabId, observedAt:Date.now()
         });
       });
-      return tab.id;
+      return {id:tab.id,url:tab.url,active:tab.active};
     });
+    expect(sourceTab).toMatchObject({
+      url:'https://example.com/?blb-prerender-source=1',
+      active:true
+    });
+    const sourceTabId = sourceTab.id;
 
     // Do not attach a DevTools Protocol session: Chromium disables prerendering
     // when DevTools is attached. The real extension tabs.onReplaced event is
