@@ -202,7 +202,6 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
     __blbPrerenderTestReport({type:'tab-replaced',addedTabId,removedTabId,url:''});
   });
 });
-__blbPrerenderTestInitialize().catch(() => {});
 `;
   fs.appendFileSync(backgroundPath, backgroundObserver);
 
