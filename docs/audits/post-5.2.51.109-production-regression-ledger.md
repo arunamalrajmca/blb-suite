@@ -150,3 +150,44 @@ These changes touch the selection features but have distinct purposes. The #966 
 4. **Context menu:** isolate #829–#835, #937, #961, and #966; compare the native menu structure on .109 and main.
 5. **Independent features:** preserve Study, MultiVerse POST, source-page collector, and redirect improvements unless a concrete dependency is found.
 
+
+
+### PR #880 / #881 — selection request identity and external redirect fallback
+
+- #880 scopes selection-open deduplication to both tab and document identity. This prevents one document's request from suppressing another document's selection action; it is a narrow correctness improvement.
+- #881 adds fallback navigation to the original BibleRef/ScriptTagger link when background routing rejects or fails. This is also narrow and should be retained unless testing finds a duplicate-navigation race.
+
+These are not obvious causes of BLB first-load navigation failure, but the fallback behaviour must be tested for exactly-once navigation.
+
+### PR #887–#890 — serialized master/redirect settings and popup synchronization
+
+These PRs move global master and redirect toggle coordination into the service worker and refresh other open popup instances when shared settings change. They alter settings ownership and cross-popup ordering, not the BLB verse-link click handler itself. Preserve them as a distinct settings-integrity group; validate master OFF/ON and Redirect OFF/ON with two open popups and existing tabs.
+
+### PR #907–#915 — permission-intent lifecycle and persistent registration recovery
+
+- #907 introduces request IDs so an older popup's delayed rollback cannot overwrite a newer explicit site-feature choice.
+- #908 invalidates pending opt-ins when host permission is revoked.
+- #909 recovers durable permission intents after worker restart.
+- #910 adds expiry cleanup for abandoned permission intents.
+- #914 drains registration reconciliation before reactivating a newly re-granted host, avoiding a delayed unregister racing the new grant.
+- #915 reconciles persisted runtime registrations on every worker startup.
+
+These changes form a connected permission/registration state machine. They should be reviewed together, especially around revocation followed immediately by re-grant, worker termination during reconciliation, and navigation while registration is in flight. Do not cherry-pick one without its dependent state transitions.
+
+### PR #937 / #943 / #946 / #949 / #960 / #965 / #966 — first-load navigation/activation chain
+
+This is the main regression investigation chain:
+- #937 added settings readiness to the BLB verse-link navigation module and changed its target-management lifecycle.
+- #943 added apex BLB host manifest coverage and first-navigation coverage.
+- #946 changed `ensureContentScriptInTab()` to treat BLB as static manifest coverage and expanded the readiness handshake from two immediate attempts to four delayed attempts. It also began processing pending destination URLs before commit.
+- #949 added a second activation handshake after an earlier activation promise settles, to avoid acknowledging an outgoing document.
+- #960 split primary content-script injection from optional redirect-script injection so an optional redirect resource cannot prevent core page features from activating.
+- #965 processes anchors immediately at click time and expands mutation handling to find the owning verse container.
+- #966 prevents default on early BLB `a.nowrap` clicks and replays navigation after settings resolve.
+
+The current tests for #966 include a fixture-driven module initialization with mocked dependencies and a synthetic `.click()`. That validates the module branch but does not prove the production manifest script, actual service-worker listener, actual background tab creation, and real page navigation work together. It must not be treated as equivalent to a real Brave reproduction.
+
+## Snapshot branches
+
+- `audit/v5.2.51.109-known-good`: exact .109 source baseline plus this audit document; no production changes.
+- `audit/main-2026-11-20-snapshot`: exact current-main commit `d803d33319d5cd7a83e2d20971a39582f38cc989`; untouched snapshot for later comparisons.
