@@ -79,3 +79,13 @@ test('recognizes string-literal computed member access', () => {
   );
   assert.deepEqual(findings, []);
 });
+
+
+test('uses static property references from other extension files', () => {
+  const findings = analyzeSource(
+    'const api = { sharedMethod: () => {} };',
+    'shared-api.js',
+    new Set(['sharedMethod'])
+  );
+  assert.deepEqual(findings, []);
+});
