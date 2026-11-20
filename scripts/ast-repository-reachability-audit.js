@@ -417,4 +417,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { analyzeFile, discoverContexts, parse, run };
+module.exports = { analyzeFile, discoverContexts, findCrossContextReferencedGlobals, parse, run };
