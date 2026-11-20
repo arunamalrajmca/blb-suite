@@ -179,7 +179,7 @@ jobs:
         run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
 
       - name: Install headed-browser X11 dependencies
-        if: ${{ !cancelled() && contains(inputs.group_a_changed_browser_specs, 'tests/browser/service-worker-shortcut-headed.spec.js') }}
+        if: ${{ !cancelled() && (contains(inputs.group_a_changed_browser_specs, 'tests/browser/service-worker-shortcut-headed.spec.js') || contains(inputs.group_a_changed_browser_specs, 'tests/browser/prerender-tab-replacement.spec.js')) }}
         run: |
           npx playwright install-deps chromium
           sudo apt-get update
@@ -192,16 +192,19 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$GROUP_A_CHANGED_BROWSER_SPECS"
-          headed_spec="tests/browser/service-worker-shortcut-headed.spec.js"
-          run_headed=false
+          headed_specs=(
+            "tests/browser/service-worker-shortcut-headed.spec.js"
+            "tests/browser/prerender-tab-replacement.spec.js"
+          )
+          run_headed=()
           normal_specs=()
           total="${#specs[@]}"
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
             printf '[%s/%s] Selected %s\n' "$((index + 1))" "$total" "$spec"
-            if [[ "$spec" == "$headed_spec" ]]; then
-              run_headed=true
+            if [[ " ${headed_specs[*]} " == *" $spec "* ]]; then
+              run_headed+=("$spec")
             else
               normal_specs+=("$spec")
             fi
@@ -209,9 +212,13 @@ jobs:
           if (( ${#normal_specs[@]} > 0 )); then
             npx playwright test "${normal_specs[@]}" --max-failures=1
           fi
-          if [[ "$run_headed" == true ]]; then
-            BLB_HEADFUL_EXTENSION_TESTS=1 xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test "$headed_spec" --max-failures=1
-          fi
+          for spec in "${run_headed[@]}"; do
+            if [[ "$spec" == "tests/browser/service-worker-shortcut-headed.spec.js" ]]; then
+              BLB_HEADFUL_EXTENSION_TESTS=1 xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test "$spec" --max-failures=1
+            else
+              xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test "$spec" --max-failures=1
+            fi
+          done
 
       - name: Run source URL parser regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')))) }}
