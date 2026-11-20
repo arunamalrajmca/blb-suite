@@ -60,3 +60,35 @@ test('classifies builtin and package imports as external, not unresolved local l
   assert.ok(d.launches.every(x=>x.certainty==='external-static'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('traces imported object identity through a cross-module function parameter',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-parameter-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api);");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'&&x.flow==='interprocedural'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('traces imported object identity through local function arguments and returned aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-return-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; function identity(value) { return value; } const result = identity(api); result.start();");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.property==='start'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('traces object parameters through an imported function and records dynamic property access',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-dynamic-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target, key) { target[key](); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api, selected);");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.dynamicPropertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.flow==='interprocedural'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
