@@ -227,7 +227,12 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         const classNode = [...ancestors].reverse().find(item =>
           item.type === 'ClassDeclaration' || item.type === 'ClassExpression'
         );
-        owner = classNode ? classOwnerByNode.get(classNode) : null;
+        const methodNode = [...ancestors].reverse().find(item => item.type === 'MethodDefinition');
+        owner = classNode
+          ? (methodNode && methodNode.static
+            ? classStaticOwnerByNode.get(classNode)
+            : classOwnerByNode.get(classNode))
+          : null;
       }
       if (!owner) return;
       const key = staticKey(node.property, node.computed);
