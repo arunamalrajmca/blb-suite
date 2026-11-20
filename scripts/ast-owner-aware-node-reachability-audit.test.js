@@ -154,3 +154,21 @@ test('reports dynamic module loading without treating it as a resolved dependenc
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('keeps static and instance class methods in separate owners', () => {
+  const result = ownerAwarePropertyAudit([
+    'class Registry {',
+    '  static initialize() { this.reset(); }',
+    '  static reset() {}',
+    '  static unusedStatic() {}',
+    '  run() {}',
+    '  unusedInstance() {}',
+    '}',
+    'Registry.initialize();',
+    'const registry = new Registry();',
+    'registry.run();'
+  ].join('\\n'), 'static-instance.js');
+  assert.deepEqual(result.findings.map(item => item.name).sort(), [
+    'unusedInstance', 'unusedStatic'
+  ]);
+});
