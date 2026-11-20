@@ -50,7 +50,7 @@ function staticPropertyName(node) {
 }
 
 function collectStaticPropertyReferences(ast) {
-  const references = new Set(repositoryReferences || []);
+  const references = new Set();
   walkAst(ast, (node, parent) => {
     if (node.type === 'MemberExpression') {
       const name = node.computed ? staticPropertyName(node.property) :
@@ -67,7 +67,7 @@ function collectStaticPropertyReferences(ast) {
 
 function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
   const definitions = [];
-  const references = new Set();
+  const references = new Set(repositoryReferences || []);
 
   walkAst(ast, (node, parent) => {
     if (node.type === 'MethodDefinition' && node.key) {
