@@ -115,7 +115,7 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing from verse-link navigation module');
   const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + (abortableCaptureEnd >= 0 ? '}, { capture: true, signal: listenerController.signal });'.length : 8));
   assert(nowrap.includes('if (!link) return'), 'nowrap click override must reject unrelated clicks');
-  assert(verseNavigation.includes('if (isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve modified-click behavior');
+  assert(nowrap.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve the .109 master-setting and modified-click gate');
   assert(!verseNavigation.includes('if (!settingsReady) {'), 'nowrap override must not take ownership of clicks before the master setting is ready');
   assert(nowrap.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must leave clicks native until the master setting is enabled and preserve modified-click behavior');
   assert(nowrap.includes('if (!link) return;'), 'nowrap override must ignore unrelated clicks before intercepting an eligible link');
