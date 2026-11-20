@@ -246,9 +246,10 @@ export const mappedSpecs = new Set(["tests/browser/redirect-hostnames.spec.js",
   "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
   "tests/browser/omnibox-dictionary-routing.spec.js",
   "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
-  "tests/browser/pdf-selection-regressions.spec.js"
+  "tests/browser/pdf-selection-regressions.spec.js",
+  "tests/browser/prerender-tab-replacement.spec.js"
 ]);
-export const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
+export const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js", "tests/browser/prerender-tab-replacement.spec.js"]);
 export const studySessionSpecs = new Set(["tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
