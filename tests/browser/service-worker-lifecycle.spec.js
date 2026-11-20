@@ -2934,3 +2934,83 @@ test('extension-update recovery activates an already-open configured page withou
     await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
   }
 });
+
+
+// Repeatedly alternate between first-navigation registration races and
+// activation of an already-open X.com document. The test intentionally does
+// not reconcile registrations after opting in: that is the asynchronous path
+// used by the popup when a site feature is enabled.
+test('X.com first-load and existing-document activation survive repeated opt-in races', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await context.route('https://x.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>X.com activation race</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  const openedPages = [];
+  try {
+    for (let cycle = 0; cycle < 4; cycle++) {
+      await extensionStorage.set({
+        masterEnabled:true,
+        redirectEnabled:false,
+        pageSelectionButtonSites:{'x.com':false},
+        doubleClickBlbSites:{'x.com':false}
+      });
+      await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+
+      const targetPage = await context.newPage();
+      openedPages.push(targetPage);
+
+      if (cycle % 2 === 0) {
+        // Existing-document path: load X.com with both site features OFF,
+        // then opt in without navigating or refreshing the document.
+        await targetPage.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+        const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+        expect(Number.isInteger(tabId)).toBe(true);
+        await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+          fileExecuted:false,
+          initialized:false,
+          doubleClickBound:false
+        });
+        await extensionStorage.set({
+          pageSelectionButtonSites:{'x.com':true},
+          doubleClickBlbSites:{'x.com':true}
+        });
+        await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+          message:`X.com existing-document activation failed without reload on cycle ${cycle + 1}`
+        }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+        const token = `xcom-existing-${cycle}`;
+        await targetPage.evaluate(value => { window.__xcomActivationToken = value; }, token);
+        expect(await targetPage.evaluate(() => window.__xcomActivationToken)).toBe(token);
+      } else {
+        // First-navigation path: opt in and navigate immediately. Do not wait
+        // for runtime registration; tabs.onUpdated/current-document injection
+        // must recover if navigation overlaps registration.
+        await extensionStorage.set({
+          pageSelectionButtonSites:{'x.com':true},
+          doubleClickBlbSites:{'x.com':true}
+        });
+        await targetPage.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+        const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+        expect(Number.isInteger(tabId)).toBe(true);
+        await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+          message:`X.com first-document activation failed during registration race on cycle ${cycle + 1}`
+        }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+      }
+
+      await targetPage.close();
+      openedPages.pop();
+    }
+  } finally {
+    for (const targetPage of openedPages) await targetPage.close().catch(() => {});
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'x.com':false},
+      doubleClickBlbSites:{'x.com':false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+    await closeBlbTabs(extensionWorker);
+  }
+});
