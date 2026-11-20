@@ -49,7 +49,7 @@ async function runNativePrerenderActivation({ extensionPath, targetHint }) {
 <html><head><title>BLB prerender source</title>
 <script type="speculationrules">${JSON.stringify(rules)}</script>
 <style>body{font:24px Arial}#activate{position:fixed;left:24px;top:24px;padding:24px;background:#ffe88a;color:#111;border:3px solid #333}</style>
-</head><body><a id="activate" target="_self" href="${destination}">Activate prerendered destination</a></body></html>`);
+</head><body><a id="activate" target="${targetHint}" href="${destination}">Activate prerendered destination</a></body></html>`);
       return;
     }
     if (url.pathname === '/destination') {
