@@ -74,8 +74,8 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
     .map(([host]) => host)
     .sort();
   expect(guardedHosts).toEqual([
-    'churchofjesuschrist.org',
     'christianity.com',
+    'churchofjesuschrist.org',
     'crosswalk.com',
     'crossway.org',
     'enduringword.com',
