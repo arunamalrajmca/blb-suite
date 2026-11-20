@@ -39,7 +39,8 @@ test('native Chromium prerender activation emits tabs.onReplaced without a DevTo
         prerender:[{
           source:'list',
           urls:[destination],
-          eagerness:'immediate'
+          eagerness:'immediate',
+          target_hint:'_blank'
         }]
       };
       response.writeHead(200, {
@@ -50,7 +51,7 @@ test('native Chromium prerender activation emits tabs.onReplaced without a DevTo
 <html><head><title>BLB prerender source</title>
 <script type="speculationrules">${JSON.stringify(rules)}</script>
 <style>body{font:24px Arial}#activate{position:fixed;left:24px;top:24px;padding:24px;background:#ffe88a;color:#111;border:3px solid #333}</style>
-</head><body><a id="activate" href="${destination}">Activate prerendered destination</a></body></html>`);
+</head><body><a id="activate" target="_blank" href="${destination}">Activate prerendered destination</a></body></html>`);
       return;
     }
     if (url.pathname === '/destination') {
@@ -269,12 +270,6 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
       execFileSync('xdotool', ['click','--clearmodifiers','1']);
       await delay(1000);
     }
-    if (!events.some(event => event.type === 'destination-tab' || event.type === 'tab-replaced')) {
-      execFileSync('xdotool', ['key','--clearmodifiers','ctrl+l']);
-      execFileSync('xdotool', ['type','--clearmodifiers','--delay','2',destination]);
-      execFileSync('xdotool', ['key','Return']);
-    }
-
     const navigationOrReplacement = await waitFor(() =>
       events.find(event => event.type === 'tab-replaced') ||
       events.find(event => event.type === 'destination-tab'),
@@ -287,6 +282,8 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
       events.find(event => event.type === 'tab-replaced'),
     'the real chrome.tabs.onReplaced event from the extension service worker', 20000);
     expect(Number(replacement.addedTabId)).not.toBe(Number(replacement.removedTabId));
+    expect(Number(replacement.addedTabId)).not.toBe(Number(sourceTab.id));
+    expect(Number(replacement.removedTabId)).not.toBe(Number(sourceTab.id));
     expect(replacement.url).toBe(destination);
 
     const destinationReady = await waitFor(() =>
