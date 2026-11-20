@@ -46,7 +46,7 @@ function createHarness({liveTab, currentDocumentId, tabsError = null, executeScr
       }
     }
   };
-  vm.runInNewContext(source + '\nglobalThis.__checkSender = isLiveContentScriptSenderDocument;', sandbox);
+  vm.runInNewContext(pdfHelpers + '\n' + source + '\nglobalThis.__checkSender = isLiveContentScriptSenderDocument;', sandbox);
   return {
     check: sender => sandbox.__checkSender(sender),
     get executeScriptCalls() { return executeScriptCalls; }
