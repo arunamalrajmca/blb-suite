@@ -38,3 +38,44 @@ test('does not report a local binding that is read by a nested closure', () => {
 test('syntax errors are surfaced rather than silently ignored', () => {
   assert.throws(() => analyzeSource('function broken( {'));
 });
+
+
+test('recognizes class and object methods referenced through static member access', () => {
+  const source = [
+    'class Worker {',
+    '  run() {}',
+    '  stop() {}',
+    '}',
+    'const worker = new Worker();',
+    'worker.run();',
+    'const service = {',
+    '  start: () => {},',
+    '  stop: function () {}',
+    '};',
+    'service.start();'
+  ].join('\n');
+  const findings = analyzeSource(source, 'properties.js');
+  assert.deepEqual(
+    findings.filter(item => item.scope === 'property-name-index').map(item => item.name),
+    ['stop', 'stop']
+  );
+});
+
+test('reports unreferenced static method names only as review candidates', () => {
+  const findings = analyzeSource(
+    'class Example { unusedMethod() {} }',
+    'unused-property.js'
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].name, 'unusedMethod');
+  assert.equal(findings[0].confidence, 'candidate-only');
+  assert.match(findings[0].reason, /dynamic\/computed\/reflection-based access/);
+});
+
+test('recognizes string-literal computed member access', () => {
+  const findings = analyzeSource(
+    'class Example { run() {} } const instance = new Example(); instance["run"]();',
+    'computed-static.js'
+  );
+  assert.deepEqual(findings, []);
+});
