@@ -35,7 +35,7 @@ function collectExportsAndImports(ast){
   const exports=new Map(),imports=[];
   visit(ast,n=>{
     if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
-    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:null,commonjs:true});
+    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true});
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
       for(const s of n.specifiers||[]){if(n.source)imports.push({source:n.source.value,imported:s.local.name||s.local.value,exported:s.exported.name||s.exported.value,reexport:true});else exports.set(s.exported.name||s.exported.value,s.local.name||s.local.value);}
@@ -54,8 +54,9 @@ function collectExportsAndImports(ast){
   return {exports,imports};
 }
 function analyzeCrossModule(root,files){
-  const meta=new Map(files.map(f=>[f,collectExportsAndImports(parse(fs.readFileSync(f,'utf8'),f))]));
-  const links=[],unresolved=[];
+  const asts=new Map(files.map(f=>[f,parse(fs.readFileSync(f,'utf8'),f)]));
+  const meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast)]));
+  const links=[],unresolved=[],propertyReferences=[],dynamicPropertyReferences=[];
   for(const [file,data] of meta)for(const i of data.imports){
     const target=resolveLocal(file,i.source,new Set(files));
     if(!target){unresolved.push({file:path.relative(root,file),source:i.source});continue;}
@@ -64,7 +65,18 @@ function analyzeCrossModule(root,files){
     const local=exp.get(i.imported);
     links.push({from:path.relative(root,file),to:path.relative(root,target),imported:i.imported,local:i.local||null,exportedLocal:local===undefined?null:local,unresolvedExport:i.imported!=='*'&&local===undefined});
   }
-  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved};
+  for(const [file,data] of meta) for(const item of data.imports){
+    if(!item.local||item.imported==='*') continue;
+    const target=resolveLocal(file,item.source,new Set(files)); if(!target) continue;
+    const exportedLocal=meta.get(target).exports.get(item.imported); if(!exportedLocal) continue;
+    visit(asts.get(file),n=>{
+      if(n.type!=='MemberExpression'||n.object.type!=='Identifier'||n.object.name!==item.local)return;
+      const property=n.computed?(n.property.type==='Literal'&&(typeof n.property.value==='string'||typeof n.property.value==='number')?String(n.property.value):null):(n.property.name||null);
+      const entry={from:path.relative(root,file),to:path.relative(root,target),local:item.local,exportedLocal,property,line:n.loc.start.line};
+      if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
+    });
+  }
+  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,propertyReferences,dynamicPropertyReferences};
 }
 function analyzeDynamicExecution(root,files,graph){
   const set=new Set(files),launches=[],extra=[];
@@ -114,6 +126,8 @@ function run(root=path.resolve(__dirname,'..')){
   console.log('Modules with exports: '+crossModule.modulesWithExports);
   console.log('Cross-module links: '+crossModule.links.length);
   console.log('Unresolved import/export links: '+crossModule.unresolved.length);
+  console.log('Cross-module property references: '+crossModule.propertyReferences.length);
+  console.log('Dynamic imported-property references: '+crossModule.dynamicPropertyReferences.length);
   console.log('Dynamic loader/process sites: '+dynamic.launches.length);
   console.log('Resolved dynamic execution edges: '+dynamic.resolvedLaunchEdges.length);
   console.log('Unresolved dynamic sites in reachable modules: '+dynamic.unresolvedReachable.length);
