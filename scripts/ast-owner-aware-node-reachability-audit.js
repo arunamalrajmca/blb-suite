@@ -117,6 +117,14 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
   const variableOwners = new Map();
   const classVariables = new Map();
   const classInstanceOwners = new Map();
+  const classInstanceOwnerByName = new Map();
+  const classStaticOwnerByName = new Map();
+  const ownerByIdentifierName = new Map();
+
+  function bindIdentifierOwner(name, owner) {
+    if (!ownerByIdentifierName.has(name)) ownerByIdentifierName.set(name, owner);
+    else if (ownerByIdentifierName.get(name) !== owner) ownerByIdentifierName.set(name, null);
+  }
 
   function addOwner(id, kind, node) {
     if (!owners.has(id)) owners.set(id, {
@@ -140,6 +148,9 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
       addOwner(staticOwner, 'class-static', node);
       classOwnerByNode.set(node, instanceOwner);
       classStaticOwnerByNode.set(node, staticOwner);
+      classInstanceOwnerByName.set(nameNode.name, instanceOwner);
+      classStaticOwnerByName.set(nameNode.name, staticOwner);
+      bindIdentifierOwner(nameNode.name, staticOwner);
       const variable = variableByDefinitionNode.get(nameNode) ||
         (node.type === 'ClassDeclaration'
           ? manager.scopes.flatMap(scope => scope.variables || []).find(candidate =>
@@ -160,17 +171,23 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         ownerByNode.set(node.init, id);
         const variable = variableByDefinitionNode.get(node.id);
         if (variable) variableOwners.set(variable, id);
+        bindIdentifierOwner(node.id.name, id);
       } else if (node.init.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
         const reference = referenceByNode.get(node.init.callee);
-        const classOwner = reference && reference.resolved ? classInstanceOwners.get(reference.resolved) : null;
+        const classOwner = (reference && reference.resolved
+          ? classInstanceOwners.get(reference.resolved) : null) ||
+          classInstanceOwnerByName.get(node.init.callee.name) || null;
         const variable = variableByDefinitionNode.get(node.id);
         if (variable && classOwner) variableOwners.set(variable, classOwner);
+        if (classOwner) bindIdentifierOwner(node.id.name, classOwner);
       } else if (node.init.type === 'Identifier') {
         const sourceReference = referenceByNode.get(node.init);
         const targetVariable = variableByDefinitionNode.get(node.id);
-        const sourceOwner = sourceReference && sourceReference.resolved
-          ? variableOwners.get(sourceReference.resolved) : null;
+        const sourceOwner = (sourceReference && sourceReference.resolved
+          ? variableOwners.get(sourceReference.resolved) : null) ||
+          ownerByIdentifierName.get(node.init.name) || null;
         if (targetVariable && sourceOwner) variableOwners.set(targetVariable, sourceOwner);
+        if (sourceOwner) bindIdentifierOwner(node.id.name, sourceOwner);
       }
     }
   });
@@ -185,6 +202,7 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
       classVariables.set(variable, classStaticOwnerByNode.get(node));
       classInstanceOwners.set(variable, owner);
     }
+    bindIdentifierOwner(node.id.name, classStaticOwnerByName.get(node.id.name));
   });
 
   // A function's lexical class owner is used to resolve this.method accesses.
@@ -221,7 +239,11 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
 
   function resolvedOwner(identifier) {
     const reference = referenceByNode.get(identifier);
-    return reference && reference.resolved ? variableOwners.get(reference.resolved) || null : null;
+    const resolved = reference && reference.resolved
+      ? variableOwners.get(reference.resolved) || null
+      : null;
+    return resolved || ownerByIdentifierName.get(identifier.name) ||
+      classStaticOwnerByName.get(identifier.name) || null;
   }
 
   // Attribute member reads/writes to their receiver owner.
