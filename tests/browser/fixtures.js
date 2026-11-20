@@ -123,30 +123,11 @@ const test = base.extend({
   }, { scope: 'worker' }],
   context: async ({ extensionPath }, use) => {
     const launchStartedAt = process.hrtime.bigint();
-    // Prerender is controlled by Chrome's per-profile
-    // net.network_prediction_options preference. The isolated profile is
-    // created only for the dedicated prerender experiment; ordinary browser
-    // tests continue using Playwright's standard temporary profile.
-    const prerenderProfile = process.env.BLB_ENABLE_PRERENDER_TESTS === '1';
-    const userDataDir = prerenderProfile
-      ? fs.mkdtempSync(path.join(os.tmpdir(), 'blb-suite-prerender-profile-'))
-      : '';
-    if (prerenderProfile) {
-      const defaultProfile = path.join(userDataDir, 'Default');
-      fs.mkdirSync(defaultProfile, { recursive: true });
-      fs.writeFileSync(path.join(defaultProfile, 'Preferences'), JSON.stringify({
-        net: { network_prediction_options: 0 }
-      }) + '\\n');
-    }
-    const context = await chromium.launchPersistentContext(userDataDir, {
+    const context = await chromium.launchPersistentContext('', {
       channel: 'chromium',
       headless: !headfulExtensionTests,
       args: [
         ...(headfulExtensionTests ? [] : ['--headless=new']),
-        ...(prerenderProfile ? [
-          '--enable-features=Prerender2',
-          '--disable-features=PreloadingHoldback,Prerender2Holdback'
-        ] : []),
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
         '--no-first-run',
@@ -157,7 +138,6 @@ const test = base.extend({
     await use(context);
     const closeStartedAt = process.hrtime.bigint();
     await context.close();
-    if (prerenderProfile) fs.rmSync(userDataDir, { recursive: true, force: true });
     profileFixture('persistent-context-close', closeStartedAt);
   },
   extensionId: async ({ context }, use) => {
