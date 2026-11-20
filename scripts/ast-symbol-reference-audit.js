@@ -123,7 +123,7 @@ function analyzeSource(source, filename = '<source>') {
   for (const scope of manager.scopes) {
     // Global declarations may be consumed by another classic script or by
     // browser/extension infrastructure. Do not classify them as dead here.
-    if (scope.type === 'global' || scope.type === 'module') continue;
+    if (scope.type === 'global' || scope.type === 'module' || scope.type === 'class') continue;
 
     for (const variable of scope.variables) {
       if (variable.references.some(reference => reference.isRead())) continue;
