@@ -108,9 +108,10 @@ function staticImportScriptNames(ast) {
         // const files = ["a.js", "b.js"]; for (const file of files) importScripts(file)
         walkAst(ast, loop => {
           if (loop.type !== 'ForOfStatement' || loop.right.type !== 'Identifier' ||
-              loop.right.name !== argument.name || loop.left.type !== 'VariableDeclaration') return;
+              loop.left.type !== 'VariableDeclaration') return;
           const declaration = loop.left.declarations[0];
-          if (!declaration || declaration.id.type !== 'Identifier') return;
+          if (!declaration || declaration.id.type !== 'Identifier' ||
+              declaration.id.name !== argument.name) return;
           const variable = declaration.id.name;
           let importsLoopVariable = false;
           walkAst(loop.body, child => {
@@ -120,8 +121,8 @@ function staticImportScriptNames(ast) {
               importsLoopVariable = true;
             }
           });
-          if (importsLoopVariable && constantArrays.has(argument.name)) {
-            names.push(...constantArrays.get(argument.name));
+          if (importsLoopVariable && constantArrays.has(loop.right.name)) {
+            names.push(...constantArrays.get(loop.right.name));
           }
         });
       }
