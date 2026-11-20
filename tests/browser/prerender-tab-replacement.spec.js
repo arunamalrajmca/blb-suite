@@ -40,7 +40,7 @@ test('native Chromium prerender activation emits tabs.onReplaced without a DevTo
           source:'list',
           urls:[destination],
           eagerness:'immediate',
-          target_hint:'_blank'
+          target_hint:'_self'
         }]
       };
       response.writeHead(200, {
@@ -51,7 +51,7 @@ test('native Chromium prerender activation emits tabs.onReplaced without a DevTo
 <html><head><title>BLB prerender source</title>
 <script type="speculationrules">${JSON.stringify(rules)}</script>
 <style>body{font:24px Arial}#activate{position:fixed;left:24px;top:24px;padding:24px;background:#ffe88a;color:#111;border:3px solid #333}</style>
-</head><body><a id="activate" target="_blank" href="${destination}">Activate prerendered destination</a></body></html>`);
+</head><body><a id="activate" target="_self" href="${destination}">Activate prerendered destination</a></body></html>`);
       return;
     }
     if (url.pathname === '/destination') {
