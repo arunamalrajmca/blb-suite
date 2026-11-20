@@ -156,6 +156,11 @@ function expandImportScripts(root, entryFile, sourceByFile) {
 }
 
 const RETAINED_SHARED_API_PROPERTIES = new Set([
+  // BLBShared is deliberately exposed as a cross-context extension API. Its
+  // methods are consumed by separate service-worker, content-script, popup,
+  // and options-page contexts, so per-context absence is not dead-code proof.
+  'extension/regex-patterns.js:isSensitiveSiteHostname',
+  'extension/regex-patterns.js:isSensitiveSiteUrl',
   'extension/regex-patterns.js:whitespace',
   'extension/regex-patterns.js:booleanOperatorWords'
 ]);
