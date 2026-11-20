@@ -905,10 +905,11 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
     });
 
     const eligibility = await extensionWorker.evaluate(async tab => ({
-      menuVisible:await shouldShowBlbContextMenu(tab,'John 3:16'),
+      pdfMenuVisible:await shouldShowPdfSelectionContextMenu(tab),
+      webMenuVisible:await shouldShowBlbContextMenu(tab,'John 3:16'),
       enabled:await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab))
     }), {id:987654,url:item.url,title:item.title});
-    expect(eligibility).toEqual({menuVisible:true,enabled:true});
+    expect(eligibility).toEqual({pdfMenuVisible:true,webMenuVisible:false,enabled:true});
 
     // OFF must persist for both browser-managed and direct HTTP(S) PDFs.
     await page.locator('#pageSetting .slider').click();
@@ -923,11 +924,12 @@ test('PDF popup Show on BLB toggle saves local and browser-viewer preferences an
     );
 
     const offEligibility = await extensionWorker.evaluate(async tab => {
-      const menuVisible = await shouldShowBlbContextMenu(tab,'John 3:16');
+      const pdfMenuVisible = await shouldShowPdfSelectionContextMenu(tab);
+      const webMenuVisible = await shouldShowBlbContextMenu(tab,'John 3:16');
       const enabled = await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab));
-      return {menuVisible,enabled};
+      return {pdfMenuVisible,webMenuVisible,enabled};
     }, {id:987654,url:item.url,title:item.title});
-    expect(offEligibility).toEqual({menuVisible:false,enabled:false});
+    expect(offEligibility).toEqual({pdfMenuVisible:false,webMenuVisible:false,enabled:false});
 
     // The click handler must re-read the durable OFF preference; a stale
     // visible native menu must not permit the PDF selection action.

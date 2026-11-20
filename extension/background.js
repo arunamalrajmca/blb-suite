@@ -841,11 +841,28 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
 // lookup/creation steps; locking and activation policy stay centralized.
 const pendingBlbDestinationOperations = new Map();
 
+async function activateTabWithTransientRetry(tabId, updateTab = (id, properties) => chrome.tabs.update(id, properties)) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await updateTab(tabId, {active:true});
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      const isTabDragRace = /tabs cannot be edited right now.*(?:dragging a tab|being dragged)/i.test(message);
+      if (!isTabDragRace || attempt >= 3) throw error;
+      // Chrome temporarily rejects tab edits while the user drags a tab.
+      // Retry only this documented transient condition; never mask a real
+      // permissions, tab-closed, or API failure.
+      if (!(await getLiveTabById(tabId))) throw error;
+      await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+}
+
 async function activateOrRecoverBlbDestination(result, create) {
   if (result?.tab?.id == null) return {tab:await create(), reused:false};
   const tabId = result.tab.id;
   try {
-    await chrome.tabs.update(tabId, {active:true});
+    await activateTabWithTransientRetry(tabId);
     const liveTab = await chrome.tabs.get(tabId);
     if (liveTab?.id == null) return {tab:await create(), reused:false};
     if (liveTab.windowId != null) {
@@ -2809,7 +2826,7 @@ async function openBlbDestination(url, activeIfNew = false, activateExisting = a
     const result = await createBlbTabGeneric(target, !!activeIfNew);
     const tab = result.tab;
     if (result.reused && activateExisting && tab?.id != null) {
-      await chrome.tabs.update(tab.id, {active:true});
+      await activateTabWithTransientRetry(tab.id);
       if (tab.windowId != null) {
         try { await chrome.windows.update(tab.windowId, {focused:true}); } catch (_) {}
       }
@@ -2833,7 +2850,7 @@ async function openBlbHomeNoDuplicate(activeIfNew = true, activateExisting = act
     const result = await createBlbTabGeneric(DEFAULT_HOMEPAGE_URL, !!activeIfNew);
     const tab = result.tab;
     if (result.reused && activateExisting && tab?.id != null) {
-      await chrome.tabs.update(tab.id, {active:true});
+      await activateTabWithTransientRetry(tab.id);
       if (tab.windowId != null) {
         try { await chrome.windows.update(tab.windowId, {focused:true}); } catch (_) {}
       }
@@ -6764,7 +6781,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
     const tab = result.tab;
     if (tab?.id != null && !tabBehavior.forceNew) rememberBlbTab(key, tab.id);
     if (result.reused && tabBehavior.activateExisting && tab?.id != null) {
-      await chrome.tabs.update(tab.id, {active:true});
+      await activateTabWithTransientRetry(tab.id);
       if (tab.windowId != null) {
         try { await chrome.windows.update(tab.windowId, {focused:true}); } catch (_) {}
       }
@@ -7360,6 +7377,10 @@ async function isPageButtonEnabledForHostname(hostname) {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
+  // PDF viewers have their own browser-level selection menu. Showing the web
+  // item as well creates duplicate "Show on BLB" entries in Chromium's
+  // extension submenu because both items share the same visible title.
+  if (isPdfViewerTab(tab)) return false;
   // Use the same predicate before exposing the persistent menu and again at
   // click time after a worker wake; stale visibility must never authorize an action.
   if (!(await isSuiteEnabled())) return false;
@@ -7370,6 +7391,14 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   if (isSensitiveSiteUrl(tab?.url || '')) return false;
   if (!(await hasSelectionActionPermissionForTab(tab))) return false;
   return await isPageButtonEnabledForHostname(siteKey);
+}
+
+async function shouldShowPdfSelectionContextMenu(tab) {
+  if (!tab || !isPdfViewerTab(tab) || !(await isSuiteEnabled())) return false;
+  return await isPageButtonEnabledForHostname(
+    pageSelectionSettingKeyFromTab(tab),
+    tab.title || ''
+  );
 }
 
 let selectionMenuOperation = Promise.resolve();
@@ -7528,8 +7557,7 @@ async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true
   if (!pdfSelectionMenuKnownPresent) return false;
   const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
-    const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
-      (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
+    const enabled = await shouldShowPdfSelectionContextMenu(tab);
     // PDF menu visibility is global too. A slow eligibility lookup for an
     // earlier tab must not overwrite the result for the tab now in focus.
     if (generation !== pdfSelectionVisibilitySyncGeneration || !isCurrent()) return false;
@@ -7708,7 +7736,10 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
     }
   }
   if (!text) return;
-  if (!(await shouldShowBlbContextMenu(tab, text))) return;
+  const eligible = menuId === 'blb-suite-pdf-selection'
+    ? await shouldShowPdfSelectionContextMenu(tab)
+    : await shouldShowBlbContextMenu(tab, text);
+  if (!eligible) return;
   try {
     // PDF right-click selections already provide the selected text directly.
     // Avoid a content-script context lookup on protected PDF viewer tabs.

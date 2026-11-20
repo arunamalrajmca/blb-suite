@@ -135,11 +135,13 @@ test('local PDF context-menu handoff opens a selected full Bible reference throu
       const pdfTab = {id:tabId,url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'};
       return {
         siteKey:pageSelectionSettingKeyFromTab(pdfTab),
-        menuVisible:await shouldShowBlbContextMenu(pdfTab,'John 3:16')
+        webMenuVisible:await shouldShowBlbContextMenu(pdfTab,'John 3:16'),
+        pdfMenuVisible:await shouldShowPdfSelectionContextMenu(pdfTab)
       };
     }, sourceTabId);
     expect(eligibility.siteKey).toBe('__blb_local_pdf__');
-    expect(eligibility.menuVisible).toBe(true);
+    expect(eligibility.webMenuVisible).toBe(false);
+    expect(eligibility.pdfMenuVisible).toBe(true);
 
     await extensionWorker.evaluate(async tabId => {
       await handleBlbSelectionContextMenuClick({

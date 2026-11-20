@@ -2074,8 +2074,16 @@ async function hasBlbPassage(extensionWorker, path) {
     return tabs.some(tab => {
       try {
         const url = new URL(tab.pendingUrl || tab.url || '');
-        return url.hostname === 'www.blueletterbible.org' &&
-          url.pathname.replace(/\/+$/, '/') === expectedPath;
+        if (url.hostname !== 'www.blueletterbible.org') return false;
+        // Normalize both slash-present and slash-absent BLB URLs. A trailing
+        // slash replacement alone does not add a slash when none is present.
+        const actualPath = url.pathname.replace(/\/+$/, '') + '/';
+        const expectedBase = expectedPath.replace(/\/+$/, '');
+        // BLB may append a verse-source identifier to a canonical passage URL.
+        // Accept only that one extra segment, not arbitrary deeper paths.
+        const sourceSuffix = actualPath.match(/\/s_[^/]+\/$/)?.[0] || '';
+        return actualPath === expectedBase + '/' ||
+          (!!sourceSuffix && actualPath === expectedBase + sourceSuffix);
       } catch (_) {
         return false;
       }
@@ -2775,4 +2783,154 @@ test('an X.com link opened in a new tab activates Floating Button and Double-cli
     doubleClickBlbSites:{'x.com':false}
   });
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+});
+
+
+test('PDF selection exposes only the PDF context-menu action, without a duplicate web item', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'__blb_pdf_viewer__':true}
+  });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const tab = {
+      id:940961,
+      url:'https://example.com/reference.pdf',
+      title:'reference.pdf'
+    };
+    await installPdfSelectionContextMenu();
+    const webEligible = await shouldShowBlbContextMenu(tab, 'John 3:16');
+    const pdfEligible = await shouldShowPdfSelectionContextMenu(tab);
+    return {webEligible, pdfEligible};
+  });
+
+  expect(result).toEqual({webEligible:false, pdfEligible:true});
+});
+
+test('selection destination activation retries only Chrome transient tab-drag failures', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    if (!Number.isInteger(tab?.id)) throw new Error('Expected an active browser tab');
+    let attempts = 0;
+    const activated = await activateTabWithTransientRetry(tab.id, async (id, properties) => {
+      attempts++;
+      if (attempts === 1) {
+        throw new Error('Tabs cannot be edited right now (user may be dragging a tab).');
+      }
+      return {id, ...properties};
+    });
+    return {attempts, activatedId:activated.id};
+  });
+
+  expect(result).toEqual({attempts:2, activatedId:expect.any(Number)});
+});
+
+
+test('selection runtime messages survive repeated transient No SW dispatch failures', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://example.com/');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    fileExecuted:true,
+    initialized:true
+  });
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:async () => {
+        let attempts = 0;
+        const response = await sendRuntimeMessageWithRetry({
+          type:'blbSuiteOpenSelectionText',
+          requestId:'no-sw-retry-regression-john-3-16',
+          text:'John 3:16'
+        }, async () => {
+          attempts++;
+          if (attempts < 5) throw new Error('No SW');
+          return {ok:true};
+        });
+        return {attempts, response};
+      }
+    });
+    return injected?.result;
+  }, tabId);
+
+  expect(result).toEqual({attempts:5, response:{ok:true}});
+});
+
+
+test('extension-update recovery activates an already-open configured page without manual reload', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const host = 'supplyofgrace.com';
+  const pattern = 'https://www.supplyofgrace.com/*';
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{[host]:true},
+    doubleClickBlbSites:{[host]:true}
+  });
+  await extensionWorker.evaluate(async () => {
+    await reconcileRuntimeContentScriptRegistrations();
+    globalThis.__blbUpdateRecoveryOriginalEnsure = ensureContentScriptInTabWithRetry;
+    ensureContentScriptInTabWithRetry = async () => false;
+    await unregisterRuntimeContentScriptForPattern('https://www.supplyofgrace.com/*');
+  });
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Extension update recovery</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  try {
+    await page.goto('https://www.supplyofgrace.com/extension-update-recovery.html', {
+      waitUntil:'domcontentloaded'
+    });
+    const tabId = await getTabIdForUrl(extensionWorker, pattern);
+    expect(Number.isInteger(tabId)).toBe(true);
+    expect(await contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+      fileExecuted:false,
+      initialized:false,
+      doubleClickBound:false
+    });
+
+    const recovery = await extensionWorker.evaluate(async () => {
+      ensureContentScriptInTabWithRetry = globalThis.__blbUpdateRecoveryOriginalEnsure;
+      delete globalThis.__blbUpdateRecoveryOriginalEnsure;
+      return injectConfiguredTabsAfterExtensionUpdate();
+    });
+    expect(recovery.eligibleTabIds).toContain(tabId);
+    expect(recovery.activatedTabIds).toContain(tabId);
+    await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+      message:'extension-update reconciliation must restore the current document without requiring page.reload()'
+    }).toMatchObject({
+      fileExecuted:true,
+      initialized:true,
+      doubleClickBound:true
+    });
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbUpdateRecoveryOriginalEnsure) {
+        ensureContentScriptInTabWithRetry = globalThis.__blbUpdateRecoveryOriginalEnsure;
+        delete globalThis.__blbUpdateRecoveryOriginalEnsure;
+      }
+    });
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:false},
+      doubleClickBlbSites:{[host]:false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  }
 });
