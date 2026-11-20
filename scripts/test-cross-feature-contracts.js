@@ -54,6 +54,10 @@ try {
   // eligibility from the active tab rather than creating a second item.
   has(background, /async function shouldShowSelectionContextMenu\(tab, selectionText = ''\)/,
     'one tab-aware selection-menu eligibility path serves web and PDF pages');
+  has(background, /documentUrlPatterns:\[\]/,
+    'the shared native selection menu clears its legacy HTTP-only URL restriction');
+  has(pageSelectionButton, /function enableBlbPageButtonMonitoring\(\)[\s\S]{0,2200}scheduleFinalBlbPageSelectionButtonUpdate\(\);/,
+    'Show on BLB reconciles an already-live selection when monitoring starts');
   const registeredSelectionMenuIds = [...background.matchAll(/chrome\.contextMenus\.create\(\{[\s\S]{0,320}?id:\s*['"]([^'"]+)['"]/g)]
     .map(match => match[1]);
   assert.deepEqual(registeredSelectionMenuIds, ['blb-suite-web-selection'],
