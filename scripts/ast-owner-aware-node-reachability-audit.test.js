@@ -167,7 +167,7 @@ test('keeps static and instance class methods in separate owners', () => {
     'Registry.initialize();',
     'const registry = new Registry();',
     'registry.run();'
-  ].join('\\n'), 'static-instance.js');
+  ].join('\n'), 'static-instance.js');
   assert.deepEqual(result.findings.map(item => item.name).sort(), [
     'unusedInstance', 'unusedStatic'
   ]);
@@ -181,6 +181,6 @@ test('tracks this-property references in object literal methods', () => {
     '  unused() {}',
     '};',
     'api.run();'
-  ].join('\\n'), 'object-this.js');
+  ].join('\n'), 'object-this.js');
   assert.deepEqual(result.findings.map(item => item.name), ['unused']);
 });
