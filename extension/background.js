@@ -7557,7 +7557,7 @@ async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true
   if (!pdfSelectionMenuKnownPresent) return false;
   const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
-    const enabled = await shouldShowPdfSelectionContextMenu(tab);
+    const enabled = await shouldShowSelectionContextMenu(tab, '');
     // PDF menu visibility is global too. A slow eligibility lookup for an
     // earlier tab must not overwrite the result for the tab now in focus.
     if (generation !== pdfSelectionVisibilitySyncGeneration || !isCurrent()) return false;
