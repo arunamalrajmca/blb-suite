@@ -134,6 +134,7 @@ function discoverContexts(root, sourceByFile) {
           const name = memberName(callee);
           if (name === 'registerContentScripts') dynamic.push({ file: filename, line: node.loc.start.line, api: 'chrome.scripting.registerContentScripts', certainty: 'runtime-registered-content-script' });
           if (name === 'executeScript') dynamic.push({ file: filename, line: node.loc.start.line, api: 'chrome.scripting.executeScript', certainty: 'runtime-injected-script-or-function' });
+          if (name === 'addListener' || name === 'addEventListener') dynamic.push({ file: filename, line: node.loc.start.line, api: name, certainty: 'runtime-callback-registration' });
         }
       }
     });
