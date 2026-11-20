@@ -291,3 +291,11 @@ A direct inspection of `tests/browser/service-worker-lifecycle.spec.js` on curre
 2. Replace the #920 stub-only test with a real replacement/prerender lifecycle scenario that asserts the replacement document's `contentScriptLoaded` state and at least one real user action, not just helper dispatch.
 3. Keep these tests isolated from the PR #968 overlapping-lock test. Do not change production activation code until one of these controlled browser tests demonstrates a failure.
 4. PR #968's focused behavior job remains in progress at the latest status check; ancestry and HARD-GATE are successful. Do not call the PR fully passing while the focused job is still running.
+
+
+### Follow-up experiment status — 2026-11-20
+
+- PR #968 (`audit/activation-overlap-document-identity`) focused behavior job completed successfully on head `4f9a96fe9efa75babc9786e467d80b08105f7acc`. HARD-GATE and latest-main ancestry also succeeded. The feature-group matrix and full audit/performance workflows were skipped by workflow selection; this is a successful focused test run, not a full regression-suite pass.
+- PR #969 (`audit/registration-failure-navigation-readiness`) created as a draft, based on current `main` at `d803d33319d5cd7a83e2d20971a39582f38cc989`. It adds one test-only scenario forcing persistent registration rejection and separately checking current-document and subsequent same-tab document initialization. Head: `9b46d9c7f3d875e0e9e4f82a55a43f38afd96fc7`.
+- At ledger update time, PR #969's References & Double-click run was queued; HARD-GATE and latest-main ancestry were in progress. No result is claimed yet.
+- Neither PR #968 nor #969 is merged. No production code changed, no version bump, and no release.
