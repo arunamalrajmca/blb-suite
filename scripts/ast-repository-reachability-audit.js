@@ -358,16 +358,19 @@ function run(root = path.resolve(__dirname, '..')) {
 
     const globals = [];
     for (const [name, items] of definitions) {
-      if (!unresolvedReads.has(name) && !crossContextReferencedGlobals.has(item.file + ':' + name)) {
-        for (const item of items) globals.push({
-          ...item,
-          context: context.id,
-          classification: hasDynamicRisk ? 'unresolved-dynamic-risk' : 'unreferenced-global-candidate',
-          confidence: 'candidate-only',
-          evidence: hasDynamicRisk
-            ? 'No static read found; this execution context contains eval/with/dynamic global-property access, so reachability cannot be excluded.'
-            : 'No same-context static identifier read found across the inventoried files.'
-        });
+      if (!unresolvedReads.has(name)) {
+        for (const item of items) {
+          if (crossContextReferencedGlobals.has(item.file + ':' + name)) continue;
+          globals.push({
+            ...item,
+            context: context.id,
+            classification: hasDynamicRisk ? 'unresolved-dynamic-risk' : 'unreferenced-global-candidate',
+            confidence: 'candidate-only',
+            evidence: hasDynamicRisk
+              ? 'No static read found; this execution context contains eval/with/dynamic global-property access, so reachability cannot be excluded.'
+              : 'No same-context static identifier read found across the inventoried files.'
+          });
+        }
       }
     }
 
