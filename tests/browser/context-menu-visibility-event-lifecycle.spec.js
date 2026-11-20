@@ -65,9 +65,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
 
       // A real tab activation must make both global menus reflect the active tab.
       await chrome.tabs.update(enabledTab.id, {active:true});
-      for (let attempt=0; attempt<100 && (!updates.some(item =>
-        item.id === 'blb-suite-web-selection' && item.visible === true
-      ) || !updates.some(item => item.id === 'blb-suite-web-selection')); attempt++) {
+      for (let attempt=0; attempt<100 && updates.filter(item =>
+        item.id === 'blb-suite-web-selection'
+      ).length < 2; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       const activationUpdates = [...updates];
@@ -82,9 +82,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const activationShowsWebMenu = activationUpdates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
-      const activationSynchronizesPdfMenu = activationUpdates.some(item =>
+      const activationSynchronizesPdfMenu = activationUpdates.filter(item =>
         item.id === 'blb-suite-web-selection'
-      );
+      ).length >= 2;
 
       // A navigation in an inactive tab must not change global menu visibility.
       updates.length = 0;
@@ -117,10 +117,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // Let the real activation listener finish before isolating the explicit
       // replacement synchronization; otherwise its asynchronous visibility
       // update can race this direct helper invocation and invalidate its result.
-      for (let attempt=0; attempt<100 && (
-        !updates.some(item => item.id === 'blb-suite-web-selection' && item.visible === true) ||
-        !updates.some(item => item.id === 'blb-suite-web-selection')
-      ); attempt++) {
+      for (let attempt=0; attempt<100 && updates.filter(item =>
+        item.id === 'blb-suite-web-selection'
+      ).length < 2; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       // Activation drives the two menu synchronizers independently. Wait for
@@ -134,9 +133,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const replacementShowsWebMenu = updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
-      const replacementSynchronizesPdfMenu = updates.some(item =>
+      const replacementSynchronizesPdfMenu = updates.filter(item =>
         item.id === 'blb-suite-web-selection'
-      );
+      ).length >= 2;
       const replacementUpdates = [...updates];
       const replacementUpdatedMenuIds = [...new Set(replacementUpdates.map(item => item.id))].sort();
 
