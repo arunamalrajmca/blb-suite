@@ -2189,7 +2189,7 @@ test('persistent registration failure keeps current and subsequent same-tab docu
     masterEnabled:true,
     redirectEnabled:false,
     pageSelectionButtonSites:{[host]:true},
-    doubleClickBlbSites:{}
+    doubleClickBlbSites:{[host]:true}
   });
   await extensionWorker.evaluate(async value => {
     await unregisterRuntimeContentScriptForPattern(value);
