@@ -89,6 +89,10 @@ test('native Chromium prerender activation emits tabs.onReplaced without a DevTo
     ...(manifest.host_permissions || []),
     'http://127.0.0.1/*'
   ])];
+  manifest.permissions = [...new Set([
+    ...(manifest.permissions || []),
+    'webNavigation'
+  ])];
   manifest.content_scripts = manifest.content_scripts || [];
   manifest.content_scripts.push({
     matches:['http://127.0.0.1/*'],
@@ -173,7 +177,7 @@ async function __blbPrerenderTestInitialize() {
       });
     }
   }
-  await __blbPrerenderTestReport({type:'extension-ready'});
+  await __blbPrerenderTestReport({type:'extension-ready',tabsReplacedListenerRegistered:chrome.tabs.onReplaced.hasListener(__blbTabsReplacedListener)});
 }
 chrome.runtime.onInstalled.addListener(() => {
   __blbPrerenderTestInitialize().catch(() => {});
@@ -200,7 +204,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     });
   }
 });
-chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+chrome.tabs.onCreated.addListener(tab => {
+  __blbPrerenderTestReport({
+    type:'tab-created',
+    id:tab.id,
+    url:tab.url || '',
+    pendingUrl:tab.pendingUrl || ''
+  });
+});
+const __blbTabsReplacedListener = (addedTabId, removedTabId) => {
   chrome.tabs.get(addedTabId).then(tab => {
     __blbPrerenderTestReport({
       type:'tab-replaced',
@@ -210,6 +222,14 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
     });
   }).catch(() => {
     __blbPrerenderTestReport({type:'tab-replaced',addedTabId,removedTabId,url:''});
+  });
+};
+chrome.tabs.onReplaced.addListener(__blbTabsReplacedListener);
+chrome.webNavigation.onTabReplaced.addListener(details => {
+  __blbPrerenderTestReport({
+    type:'webnavigation-tab-replaced',
+    tabId:details.tabId,
+    replacedTabId:details.replacedTabId
   });
 });
 `;
