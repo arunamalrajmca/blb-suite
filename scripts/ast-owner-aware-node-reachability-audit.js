@@ -170,7 +170,13 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         addOwner(id, 'object', node.init);
         ownerByNode.set(node.init, id);
         const variable = variableByDefinitionNode.get(node.id);
-        if (variable) variableOwners.set(variable, id);
+        if (variable) {
+          variableOwners.set(variable, id);
+          if (variable.scope && variable.scope.type === 'global') {
+            owners.get(id).escaped = true;
+            owners.get(id).escapeReasons.add('top-level-classic-script-cross-file-contract');
+          }
+        }
         bindIdentifierOwner(node.id.name, id);
       } else if (node.init.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
         const reference = referenceByNode.get(node.init.callee);
@@ -318,7 +324,28 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
     }
   });
 
-  // Exports are external consumers even when no in-repository member read exists.
+  // CommonJS exports are external consumers even when no in-repository
+  // member read exists (for example, Playwright reporter lifecycle methods).
+  walkAst(ast, node => {
+    if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+        node.left.type === 'MemberExpression') {
+      const objectName = node.left.object.type === 'Identifier' ? node.left.object.name : null;
+      const propertyName = staticKey(node.left.property, node.left.computed);
+      if ((objectName === 'module' && propertyName === 'exports') ||
+          (objectName === 'exports' && propertyName)) {
+        const right = node.right;
+        if (right.type === 'Identifier') {
+          const owner = resolvedOwner(right);
+          if (owner) {
+            owners.get(owner).escaped = true;
+            owners.get(owner).escapeReasons.add('commonjs-export');
+          }
+        }
+      }
+    }
+  });
+
+  // ES module exports are external consumers even when no in-repository member read exists.
   walkAst(ast, node => {
     if (node.type === 'ExportDefaultDeclaration' && node.declaration.type === 'Identifier') {
       const owner = resolvedOwner(node.declaration);
@@ -468,13 +495,24 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
     }
   }
   // Shell wrappers invoked by CI can launch Node scripts that are not imported
-  // into the wrapper's own module graph.
+  // into the wrapper's own module graph. Recognize root-relative script paths
+  // even when the shell expands a variable such as $ROOT_DIR before execution.
   for (const shellFile of shellEntrypoints) {
     if (!fs.existsSync(shellFile)) continue;
     const text = fs.readFileSync(shellFile, 'utf8');
     for (const match of text.matchAll(/(?:node|npm\s+exec\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
       add(path.resolve(path.dirname(shellFile), match[1]), 'shell-wrapper:' + relative(root, shellFile));
     }
+    for (const match of text.matchAll(/((?:scripts|tests|regression-suite)\/[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      add(path.resolve(root, match[1]), 'shell-wrapper-path:' + relative(root, shellFile));
+    }
+  }
+
+  const configFile = path.join(root, 'playwright.config.js');
+  if (fs.existsSync(configFile)) {
+    const config = fs.readFileSync(configFile, 'utf8');
+    const reporter = /reporter\s*:\s*\[\s*\[\s*['"]([^'"]+\.(?:c?js|mjs))['"]/.exec(config);
+    if (reporter) add(path.resolve(root, reporter[1]), 'playwright-reporter');
   }
 
   // JSON manifests may launch Node test scripts by path (for example the
@@ -509,7 +547,9 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
 }
 
 function buildModuleGraph(root) {
-  const fileList = walkFiles(root, file => /\.(?:js|cjs|mjs)$/.test(file));
+  const fileList = walkFiles(root, file =>
+    /\.(?:js|cjs|mjs)$/.test(file) && !relative(root, file).startsWith('extension/')
+  );
   const files = new Set(fileList);
   const sourceByFile = new Map(fileList.map(file => [file, fs.readFileSync(file, 'utf8')]));
   const edges = [];
