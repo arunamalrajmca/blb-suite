@@ -78,7 +78,13 @@ function analyzePropertyReferences(ast, filename) {
 
     if (node.type === 'MemberExpression') {
       const name = node.computed ? staticPropertyName(node.property) :
-        (node.property && node.property.type === 'Identifier' ? node.property.name : null);
+        (node.property && ['Identifier', 'PrivateIdentifier'].includes(node.property.type) ? node.property.name : null);
+      if (name) references.add(name);
+    }
+
+    // Object destructuring reads a named property without a MemberExpression.
+    if (node.type === 'Property' && parent && parent.type === 'ObjectPattern') {
+      const name = staticPropertyName(node.key);
       if (name) references.add(name);
     }
   });
@@ -169,7 +175,10 @@ function run(root = path.resolve(__dirname, '..')) {
 
   console.log('AST symbol-reference audit (candidate report only)');
   console.log('Files parsed: ' + files.length);
-  console.log('Potentially unread local declarations: ' + findings.length);
+  const localFindings = findings.filter(item => item.scope !== 'property-name-index');
+  const propertyFindings = findings.filter(item => item.scope === 'property-name-index');
+  console.log('Potentially unread local declarations: ' + localFindings.length);
+  console.log('Potentially unreferenced method/function properties: ' + propertyFindings.length);
   console.log('Global declarations, parameters, imports, and cross-file reachability are not classified.');
   console.log('A finding is not proof of dead code; inspect dynamic callbacks and runtime registration.');
 
