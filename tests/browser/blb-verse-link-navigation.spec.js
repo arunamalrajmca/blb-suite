@@ -138,7 +138,7 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
 });
 
 
-test('a BLB range cross-reference clicked before initial settings readiness is queued instead of navigating in the same tab', async ({
+test('BLB links are not intercepted until the master setting is ready', async ({
   page, context, extensionWorker, extensionStorage
 }) => {
   await extensionStorage.set({masterEnabled:true});
@@ -152,8 +152,7 @@ test('a BLB range cross-reference clicked before initial settings readiness is q
 
   const result = await extensionWorker.evaluate(async id => {
     const [injected] = await chrome.scripting.executeScript({
-      target:{tabId:id},
-      world:'ISOLATED',
+      target:{tabId:id}, world:'ISOLATED',
       func:async () => {
         const state = {enabled:false,opened:[]};
         let resolveSettings;
@@ -165,21 +164,29 @@ test('a BLB range cross-reference clicked before initial settings readiness is q
           openBlbDestinationFromContent:url => state.opened.push(url),
           suiteSettingsReadyPromise:pendingSettings
         });
-        document.getElementById('range-cross-reference').click();
-        const stayedOnSourcePage = location.pathname === '/';
+        const link = document.getElementById('range-cross-reference');
+        const earlyEvent = new MouseEvent('click',{bubbles:true,cancelable:true,view:window});
+        link.dispatchEvent(earlyEvent);
+        const earlyClickPrevented = earlyEvent.defaultPrevented;
+        const earlyOpened = [...state.opened];
         state.enabled = true;
         resolveSettings();
         await new Promise(resolve => setTimeout(resolve, 0));
-        const opened = [...state.opened];
+        const readyEvent = new MouseEvent('click',{bubbles:true,cancelable:true,view:window});
+        link.dispatchEvent(readyEvent);
+        const readyClickPrevented = readyEvent.defaultPrevented;
+        const readyOpened = [...state.opened];
         navigation.cleanup();
-        return {stayedOnSourcePage,opened};
+        return {earlyClickPrevented,earlyOpened,readyClickPrevented,readyOpened};
       }
     });
     return injected.result;
   }, tabId);
 
-  expect(result.stayedOnSourcePage).toBe(true);
-  expect(result.opened).toEqual([
+  expect(result.earlyClickPrevented).toBe(false);
+  expect(result.earlyOpened).toEqual([]);
+  expect(result.readyClickPrevented).toBe(true);
+  expect(result.readyOpened).toEqual([
     'https://www.blueletterbible.org/kjv/gen/1/1-31/'
   ]);
 });
