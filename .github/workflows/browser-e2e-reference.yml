@@ -655,7 +655,7 @@ jobs:
                 echo "::error::xvfb-run is required for the headed prerender test."
                 exit 1
               }
-              xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 \
+              xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 BLB_ENABLE_PRERENDER_TESTS=1 \
                 npx playwright test --config=playwright.config.js "$spec"
             else
               npx playwright test --config=playwright.config.js "$spec"
