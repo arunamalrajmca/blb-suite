@@ -205,8 +205,15 @@ function analyzeFile(source, filename) {
   });
 
   const ownReads = new Set();
-  for (const variable of (globalScope && globalScope.variables) || []) {
-    if (variable.references.some(reference => reference.isRead())) ownReads.add(variable.name);
+  // A same-named read in any lexical scope is treated as evidence against
+  // declaring the global unused. This can create false negatives when a local
+  // binding shadows a global, but avoids unsafe false-positive dead-code claims.
+  for (const scope of manager.scopes) {
+    for (const reference of scope.references || []) {
+      if (reference.isRead() && reference.identifier && reference.identifier.name) {
+        ownReads.add(reference.identifier.name);
+      }
+    }
   }
   const unresolvedReads = new Set();
   for (const reference of (globalScope && globalScope.through) || []) {
