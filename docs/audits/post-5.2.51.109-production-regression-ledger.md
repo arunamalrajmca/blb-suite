@@ -274,3 +274,20 @@ At the latest check:
 - References & Double-click — PR: queued.
 - Full Test Audit and Performance: skipped by workflow configuration.
 - No merge or production change. PR #968 remains draft/open; PR #967 remains open/unmerged.
+
+
+### Additional validation gap review — replaced-tab and registration-failure paths
+
+A direct inspection of `tests/browser/service-worker-lifecycle.spec.js` on current `main` found:
+
+- The replaced-prerendered-tab test (around lines 557–598) replaces `ensureContentScriptInTab` with a stub returning `true`, then asserts only that the helper was called with the original tab ID. It does not verify that the replacement tab/document executes `content.js`, initializes, or has the page-selection and Double-click listeners. Treat #920 as dispatch-only coverage until a real readiness test exists.
+- The suite has strong real-browser coverage for worker restart, startup registration serialization, tab closure during eligibility, cross-origin redirect during eligibility, and extension-update current-document recovery. However, the lifecycle file contains no explicit test that forces `registerRuntimeContentScriptForPattern` / `ensureRuntimeContentScriptRegistered` to fail and then independently checks both current-document activation and the next same-tab navigation.
+- Current `ensureContentScriptInTab` revalidates the tab's origin and eligibility after asynchronous operations, and explicitly permits direct injection when persistent registration fails. That current-document fallback must not be mistaken for durable future-navigation coverage.
+- The .109 implementation instead returns false when persistent registration fails, with an explicit warning that current-document injection alone would leave future navigations without the configured feature. This is a material contract change, not merely extra diagnostics.
+
+### Next controlled test additions (test-only)
+
+1. Add a registration-failure scenario that makes the persistent registration API reject for a permitted host, verifies whether the current document is injected on current `main`, then navigates the same tab and verifies the actual next-document outcome. Keep separate assertions for current and future documents.
+2. Replace the #920 stub-only test with a real replacement/prerender lifecycle scenario that asserts the replacement document's `contentScriptLoaded` state and at least one real user action, not just helper dispatch.
+3. Keep these tests isolated from the PR #968 overlapping-lock test. Do not change production activation code until one of these controlled browser tests demonstrates a failure.
+4. PR #968's focused behavior job remains in progress at the latest status check; ancestry and HARD-GATE are successful. Do not call the PR fully passing while the focused job is still running.
