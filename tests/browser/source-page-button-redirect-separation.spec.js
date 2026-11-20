@@ -787,7 +787,27 @@ test('same-tab redirect re-enable restores source-page buttons on every register
 
     // The registry flag controls a second, persistent MAIN-world registration;
     // it is independent of the isolated collector bundle and is intentionally
-    // absent for ordinary collector hosts.
+    // absent for ordinary collector hosts. Poll separately because the isolated
+    // registration is created first and the MAIN-world registration follows it.
+    await expect.poll(() => extensionWorker.evaluate(async pattern => {
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const scripts = await chrome.scripting.getRegisteredContentScripts({
+        ids:[id + '-main-world']
+      });
+      return scripts.some(script => script.id === id + '-main-world');
+    }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
+
+    await expect.poll(() => extensionWorker.evaluate(async pattern => {
+      const [tab] = await chrome.tabs.query({url:pattern});
+      if (tab?.id == null) return false;
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:tab.id},
+        world:'MAIN',
+        func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
+      });
+      return result?.result === true;
+    }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
+
     const guardState = await extensionWorker.evaluate(async pattern => {
       const id = runtimeContentScriptIdForPattern(pattern);
       const scripts = await chrome.scripting.getRegisteredContentScripts({
