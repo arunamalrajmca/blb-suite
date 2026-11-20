@@ -741,7 +741,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
 }) => {
   const cases = sharedPageButtonHosts(extensionPath)
     .map(({host, siteId, mainWorldClickGuard}) => ({
-      url:'https://' + host + '/__blb-suite-regression__/content',
+      url:'https://' + (host === 'christianity.com' ? 'www.' : '') + host + '/__blb-suite-regression__/content',
       siteId,
       mainWorldClickGuard
     }));
