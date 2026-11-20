@@ -335,3 +335,13 @@ Decision:
 - The exact replacement-event assertion is not a meaningful acceptance criterion for these two Speculation Rules scenarios. The test should continue to assert the observed mode-specific behaviour and content-script readiness, not manufacture a replacement event.
 - Do not alter production replacement recovery code based on these tests. Its existing event handler remains relevant if Chrome emits a real TabStripModel replacement from another browser pathway.
 - PR #971 remains draft/open/unmerged. No production code, main branch, version, or release was changed.
+
+
+### PR #971 latest CI environment failure — 2026-11-20
+
+- Latest workflow run on test head 8f17202f5cc17c51340add0015960b83488c1d14: References & Double-click failed; HARD-GATE and latest-main ancestry passed; Native Browser Shortcut E2E passed; Full Test Audit and Performance were skipped.
+- All 12 replaced-tab lifecycle race tests passed. The 5 context-menu visibility/replacement lifecycle tests passed. The focused behavior job passed.
+- The selected Group A job failed only when launching the native prerender test: Chromium stderr reported “Missing X server or $DISPLAY” followed by “The platform failed to initialize.” The test received no extension events and no prerender request because Chromium exited before startup.
+- The workflow's “Install headed-browser X11 dependencies” step was skipped for this selected spec. This is a CI environment/setup classification failure, not a failed assertion about tab replacement and not evidence of a production regression.
+- Do not rerun the same job unchanged; it will reproduce the missing-display failure. If retaining the native test, the workflow must classify prerender-tab-replacement.spec.js as a headed/X11 test and provision Xvfb plus xdotool before running it. Then rerun only the failed Group A job.
+- This CI setup repair was not made in this pass. No workflow or production code was changed. PR #971 remains draft/open/unmerged.
