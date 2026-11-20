@@ -1632,11 +1632,22 @@ test('startup recovery includes tabs created after registration reconciliation h
   const firstPage = await context.newPage();
   await firstPage.goto(url,{waitUntil:'domcontentloaded'});
   let secondPage;
-  await extensionStorage.set({
-    masterEnabled:true,redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
-  });
+  // Suppress the ordinary storage-change reconciliation while configuring the
+  // test. Otherwise it can race the explicit startup-recovery call below and
+  // consume the registration before the gate is installed.
   await extensionWorker.evaluate(async value => {
+    globalThis.__createdDuringStartupOriginalReconcile = reconcileRuntimeContentScriptRegistrations;
+    globalThis.__createdDuringStartupOriginalInject = injectConfiguredTabsAfterExtensionUpdate;
+    reconcileRuntimeContentScriptRegistrations = async () => {};
+    injectConfiguredTabsAfterExtensionUpdate = async () => ({eligibleTabIds:[],activatedTabIds:[],failedTabIds:[]});
+    await chrome.storage.local.set({
+      masterEnabled:true,redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+    });
+    reconcileRuntimeContentScriptRegistrations = globalThis.__createdDuringStartupOriginalReconcile;
+    injectConfiguredTabsAfterExtensionUpdate = globalThis.__createdDuringStartupOriginalInject;
+    delete globalThis.__createdDuringStartupOriginalReconcile;
+    delete globalThis.__createdDuringStartupOriginalInject;
     await unregisterRuntimeContentScriptForPattern(value);
     const api = chrome.scripting;
     const original = api.registerContentScripts;
