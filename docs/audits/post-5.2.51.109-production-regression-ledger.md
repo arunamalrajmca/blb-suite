@@ -242,3 +242,15 @@ Do not change production activation code yet. First add one isolated browser reg
 - the result remains correct with the service worker terminated and restarted during the transition.
 
 This isolates the #949 promise-coalescing boundary from host-permission, persistent-registration, and optional-redirect behaviour. Keep PR #967 open and unmerged; do not merge or version-bump anything.
+
+
+### Follow-up audit experiment — PR #968
+
+- Draft PR: https://github.com/arunamalrajmca/blb-suite/pull/968
+- Branch: `audit/activation-overlap-document-identity`
+- Base: `main` at `d803d33319d5cd7a83e2d20971a39582f38cc989`
+- Head: `4f9a96fe9efa75babc9786e467d80b08105f7acc`
+- Scope: one browser test file only; no production code changes.
+- Test holds a Promise-like per-tab activation lock during same-origin BLB navigation, verifies that the #949 continuation attaches to the lock, releases it, then requires the follow-up shared activation helper and destination content-script readiness.
+- The CI workflow/status endpoints had not yet reported runs or checks when this entry was written. Do not infer a pass from an empty status response.
+- PR #968 is intentionally draft/open. Do not merge it. PR #967 also remains open/unmerged. No production branch, version, or release has been changed.
