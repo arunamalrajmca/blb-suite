@@ -110,6 +110,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/context-menu-visibility-event-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/prerender-tab-replacement.spec.js", "const { test } = require('./fixtures');\n");
   put(root, "tests/browser/redirect-hostnames.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
@@ -725,6 +726,18 @@ test("unknown runtime file conservatively selects broad browser coverage", () =>
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
     assert.match(output, /study_sessions_required=true/);
+  });
+});
+
+test("prerender replacement experiment remains a separately managed focused browser spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "tests/browser/prerender-tab-replacement.spec.js", "const { test } = require('./fixtures');\\n// focused prerender test edit\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=\\n/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=false/);
   });
 });
 
