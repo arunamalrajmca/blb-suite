@@ -205,3 +205,40 @@ A controlled experiment should compare:
 3. The #937 cleanup/settings-ready implementation with only the #966 early-click queue removed.
 
 Capture the runtime message result and resulting tab count/URLs. Do not add another retry/fallback as part of this audit; first determine whether restoring the old click ownership model removes the regression.
+
+
+## Activation lifecycle comparison — source-level findings (2026-11-20)
+
+This pass compared the exact .109 implementation with current `main` and inspected the production commits behind #764, #871–#872, #915, #920, #943, #946, #949, and #960. These are code-path findings and test-coverage observations, not yet a real-Brave causal verdict.
+
+### Findings by change
+
+| Change | Concrete production difference | Current assessment |
+|---|---|---|
+| #764 | When persistent registration fails, .109 returned `false` and stopped. Current code logs the failure but continues to inject the bundle into the current document. | Behavioural contract changed: current-document success no longer proves future-navigation registration. Keep as a distinct fallback experiment; validate a persistent registration failure followed by same-tab and new-tab navigations. |
+| #871 | Per-site preference changes now activate every eligible already-open tab instead of only the active tab. It also removes the prior Double-click handler retained in the window guard when disabling. | Two independent changes in one PR. The all-tab activation is useful; the handler cleanup is defensive. Neither should be reverted without a targeted failure. |
+| #872 | Adds persisted revoked-host state, serialized updates, storage broadcasts, and guards against an older settings refresh re-enabling a revoked site's listeners. | Permission/security correctness. Preserve unless an observed race implicates this state machine. |
+| #915 | Adds worker-start reconciliation of persisted runtime registrations, including removal of stale registrations after interrupted revocation cleanup. | Registration cleanup only; this code does not itself inject or activate a page. Not a direct explanation for a first-load missing listener. |
+| #920 | A replaced/prerendered tab is rechecked and passed through the shared activation function after identity migration. | Recovery path is reasonable; verify with real prerender/replacement rather than relying only on a stubbed `ensureContentScriptInTab` test. |
+| #943 | Adds apex BLB host permission and manifest content-script coverage, plus live X.com preference activation tests. | Host coverage change is independently necessary for apex BLB. Test fixtures verify activation state, but not all four real user gestures. |
+| #946 | Treats BLB as statically manifest-covered, registers non-BLB destination patterns when `pendingUrl` changes, and extends the post-injection refresh handshake from 2 to 4 attempts. | A substantial timing change. The synthetic handshake test delays the message receiver; it does not fully model Chrome's real document commit, service-worker wake, and permission transitions. |
+| #949 | When a BLB `onUpdated` activation finds an existing per-tab activation promise, it schedules a second activation after the earlier promise settles, but returns the earlier promise to the current caller. | Important concurrency boundary: the current caller can observe the outgoing activation's result before the detached follow-up finishes. The follow-up checks exact URL and complete status, which is good, but its failure is swallowed. Add a real navigation-during-activation test that asserts destination listener readiness, not merely the returned promise. |
+| #960 | Adds `ensureContentScriptInTabWithRetry` (4 outer attempts), extends the inner content-script refresh handshake to 9 attempts with increasing delays, and routes several activation entry points through the retry helper. It also separates optional redirect-script injection from the core selection bundle. | The optional-script separation is an independent resilience improvement and should be preserved. The nested retry strategy can extend activation latency and multiply attempts; measure and trace it rather than reverting it wholesale. |
+
+### Newly identified test-coverage gaps
+
+1. The #764 fallback test verifies current-document activation when registration fails, but the key contract to verify separately is what happens on the *next* navigation while registration continues to fail or recovers.
+2. The #920 replacement-tab test replaces `ensureContentScriptInTab` with a stub that returns true. It validates dispatch to the recovery helper, not actual script readiness in the replacement document.
+3. The #946 handshake test instruments `chrome.tabs.sendMessage` and `chrome.scripting.executeScript` in the worker to simulate a delayed receiver. This is useful unit/integration coverage, but it does not reproduce the real browser's navigation commit ordering.
+4. The #949 overlapping-activation branch needs an assertion that the destination document's content-script marker, floating button, and Double-click listener are ready after navigation. The existing detached retry is not sufficient evidence by itself.
+5. The four-action requirement must be checked on the same first-load document. Existing activation assertions that only inspect a button or the Double-click listener do not establish Right-click and Alt+B behaviour.
+
+### Next controlled experiment
+
+Do not change production activation code yet. First add one isolated browser regression scenario (on an audit/recovery branch, not main) that deliberately holds an activation promise open while a tab navigates to a second document on the same origin. Assert:
+- the first document's activation cannot satisfy the second document's readiness check;
+- the second document has the content-script marker and page button;
+- Double-click, Right-click, and Alt+B each open the expected reference on that destination document;
+- the result remains correct with the service worker terminated and restarted during the transition.
+
+This isolates the #949 promise-coalescing boundary from host-permission, persistent-registration, and optional-redirect behaviour. Keep PR #967 open and unmerged; do not merge or version-bump anything.
