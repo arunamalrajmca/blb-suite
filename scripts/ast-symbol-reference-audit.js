@@ -171,7 +171,10 @@ function analyzeSource(source, filename = '<source>', repositoryReferences = nul
     impliedStrict: false
   });
   const findings = analyzePropertyReferences(ast, filename, repositoryReferences);
-  const dynamicScopeRisk = manager.scopes.some(scope => scope.dynamic);
+  let hasWithStatement = false;
+  walkAst(ast, node => {
+    if (node.type === 'WithStatement') hasWithStatement = true;
+  });
 
   for (const scope of manager.scopes) {
     // Global declarations may be consumed by another classic script or by
@@ -179,7 +182,7 @@ function analyzeSource(source, filename = '<source>', repositoryReferences = nul
     if (scope.type === 'global' || scope.type === 'module' || scope.type === 'class') continue;
     // eslint-scope marks scopes affected by direct eval / with as dynamic.
     // Their lexical names may be observed without ordinary static reads.
-    if (dynamicScopeRisk || scope.dynamic) continue;
+    if (hasWithStatement || scope.dynamic) continue;
 
     for (const variable of scope.variables) {
       if (variable.references.some(reference => reference.isRead())) continue;
