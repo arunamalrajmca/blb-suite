@@ -18,6 +18,7 @@ test('attributes object properties to their owning object, not matching names el
     'first.used();',
     'second.dead();'
   ].join('\n'), 'owners.js');
+  console.log('OWNER DEBUG OBJECT', JSON.stringify(result.owners));
   assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
     ['object', 'dead']
   ]);
@@ -46,6 +47,7 @@ test('tracks object aliases and destructured property reads', () => {
     'const { stop } = service;',
     'void stop;'
   ].join('\n'), 'alias.js');
+  console.log('OWNER DEBUG ALIAS', JSON.stringify(result.owners));
   assert.deepEqual(result.findings.map(item => item.name), ['reset']);
 });
 
@@ -182,5 +184,6 @@ test('tracks this-property references in object literal methods', () => {
     '};',
     'api.run();'
   ].join('\n'), 'object-this.js');
+  console.log('OWNER DEBUG THIS', JSON.stringify(result.owners));
   assert.deepEqual(result.findings.map(item => item.name), ['unused']);
 });
