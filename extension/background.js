@@ -5297,10 +5297,6 @@ function isKjvVocabularySelection(selectionText) {
   });
 }
 
-function normalizeSingleWordForKjvVocabulary(selectionText) {
-  return globalThis.BLBSelectionTextHelpers.normalizeSingleWordForKjvVocabulary(selectionText);
-}
-
 const selectionBookNamePatterns = (() => {
   const escapeRegex = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const aliases = new Set();
