@@ -447,6 +447,19 @@ function collectModuleEdges(source, filename, files) {
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require' });
       }
+    } else if (node.type === 'CallExpression') {
+      const callName = node.callee.type === 'Identifier'
+        ? node.callee.name
+        : (node.callee.type === 'MemberExpression'
+          ? staticKey(node.callee.property, node.callee.computed) : null);
+      if (['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'].includes(callName)) {
+        dynamic.push({
+          file: filename,
+          line: node.loc.start.line,
+          kind: 'child-process-launch',
+          note: 'The launched script may be selected through variables, arrays, or path expressions.'
+        });
+      }
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
                node.callee.object.type === 'Identifier' && node.callee.object.name === 'module' &&
                node.callee.property.name === 'require') {
