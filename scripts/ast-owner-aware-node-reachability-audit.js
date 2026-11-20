@@ -140,7 +140,13 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
       addOwner(staticOwner, 'class-static', node);
       classOwnerByNode.set(node, instanceOwner);
       classStaticOwnerByNode.set(node, staticOwner);
-      const variable = variableByDefinitionNode.get(nameNode);
+      const variable = variableByDefinitionNode.get(nameNode) ||
+        (node.type === 'ClassDeclaration'
+          ? manager.scopes.flatMap(scope => scope.variables || []).find(candidate =>
+              candidate.name === nameNode.name &&
+              candidate.defs.some(definition => definition.type === 'ClassName')
+            )
+          : null);
       if (variable) {
         variableOwners.set(variable, staticOwner);
         classVariables.set(variable, staticOwner);
@@ -425,7 +431,10 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
     }
   }
 
-  const workflowFiles = walkFiles(path.join(root, '.github', 'workflows'), file => /\.(?:yml|yaml)$/.test(file));
+  const workflowRoot = path.join(root, '.github', 'workflows');
+  const workflowFiles = fs.existsSync(workflowRoot)
+    ? walkFiles(workflowRoot, file => /\.(?:yml|yaml)$/.test(file))
+    : [];
   const shellEntrypoints = new Set();
   for (const workflow of workflowFiles) {
     const text = fs.readFileSync(workflow, 'utf8');
