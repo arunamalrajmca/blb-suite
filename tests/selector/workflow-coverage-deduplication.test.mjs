@@ -37,7 +37,7 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   assert.ok(changedRunner.includes('run_headed+=("$spec")'));
   assert.ok(changedRunner.includes('for spec in "${run_headed[@]}"; do'));
   assert.ok(changedRunner.includes('BLB_HEADFUL_EXTENSION_TESTS=1 xvfb-run -a'));
-  assert.ok(changedRunner.includes('xvfb-run -a --server-args=\' -screen 0 1280x900x24\' npx playwright test "$spec" --max-failures=1'));
+  assert.ok(changedRunner.includes('xvfb-run -a --server-args=\'-screen 0 1280x900x24\' npx playwright test "$spec" --max-failures=1'));
   assert.equal(changedRunner.split("npx playwright test").length - 1, 3);
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ steps.browser-select.outputs.group_a_changed_browser_specs }}"));
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ needs.change-detection.outputs.group_a_changed_browser_specs }}"));
