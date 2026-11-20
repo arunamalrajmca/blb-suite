@@ -81,7 +81,13 @@ async function runNativePrerenderActivation({ extensionPath, targetHint }) {
   origin = `http://127.0.0.1:${server.address().port}`;
   destination = `${origin}/destination?run=native-prerender`;
 
-  const manifestPath = path.join(extensionPath, 'manifest.json');
+  // The Playwright extension fixture is worker-scoped. Each scenario must mutate
+  // its own copy because this test appends a port-specific observer to background.js.
+  const isolatedExtensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-native-prerender-extension-'));
+  const testExtensionPath = path.join(isolatedExtensionRoot, 'extension');
+  fs.cpSync(extensionPath, testExtensionPath, {recursive:true});
+
+  const manifestPath = path.join(testExtensionPath, 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   manifest.host_permissions = [...new Set([
     ...(manifest.host_permissions || []),
@@ -133,9 +139,9 @@ async function runNativePrerenderActivation({ extensionPath, targetHint }) {
   }
 })();
 `.replace('__PORT__', String(server.address().port));
-  fs.writeFileSync(path.join(extensionPath, 'prerender-test-observer.js'), observerScript);
+  fs.writeFileSync(path.join(testExtensionPath, 'prerender-test-observer.js'), observerScript);
 
-  const backgroundPath = path.join(extensionPath, 'background.js');
+  const backgroundPath = path.join(testExtensionPath, 'background.js');
   const testPort = server.address().port;
   const backgroundObserver = `
 
@@ -242,8 +248,8 @@ chrome.webNavigation.onTabReplaced.addListener(details => {
   const chromePath = chromium.executablePath();
   const chrome = spawn(chromePath, [
     `--user-data-dir=${userDataDir}`,
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
+    `--disable-extensions-except=${testExtensionPath}`,
+    `--load-extension=${testExtensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--no-sandbox',
@@ -342,6 +348,7 @@ chrome.webNavigation.onTabReplaced.addListener(details => {
     server.closeAllConnections?.();
     await new Promise(resolve => server.close(resolve));
     fs.rmSync(userDataDir, {recursive:true,force:true,maxRetries:10,retryDelay:200});
+    fs.rmSync(isolatedExtensionRoot, {recursive:true,force:true,maxRetries:10,retryDelay:200});
   }
 }
 
