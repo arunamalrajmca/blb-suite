@@ -98,3 +98,12 @@ test('parses module syntax when repository files use import or export', () => {
   );
   assert.deepEqual(findings, []);
 });
+
+
+test('does not treat Chrome executeScript func callbacks as object methods', () => {
+  const findings = analyzeSource(
+    'chrome.scripting.executeScript({ target: { tabId: 1 }, func: () => true });',
+    'execute-script-callback.js'
+  );
+  assert.deepEqual(findings, []);
+});
