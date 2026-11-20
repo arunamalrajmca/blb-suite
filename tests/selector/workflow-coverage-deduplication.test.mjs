@@ -127,7 +127,7 @@ test("split reference matrix groups preserve the former test-title coverage exac
   }
 });
 
-test("native same-tab prerender experiment is separately managed and runs headed under Xvfb", () => {
+test("native prerender activation scenarios are separately managed and run headed under Xvfb", () => {
   const registry = readFileSync(
     new URL("../../scripts/ci-routing-registry.mjs", import.meta.url),
     "utf8"
@@ -136,9 +136,9 @@ test("native same-tab prerender experiment is separately managed and runs headed
     new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
     "utf8"
   );
-  assert.ok(registry.includes('"tests/browser/prerender-tab-replacement.spec.js"'));
-  assert.ok(separatelyManagedSpecs.has("tests/browser/prerender-tab-replacement.spec.js"));
-  assert.ok(workflow.includes("contains(needs.change-detection.outputs.focused_specs, 'tests/browser/prerender-tab-replacement.spec.js')"));
+  assert.ok(registry.includes('"tests/browser/native-prerender-activation.spec.js"'));
+  assert.ok(separatelyManagedSpecs.has("tests/browser/native-prerender-activation.spec.js"));
+  assert.ok(workflow.includes("contains(needs.change-detection.outputs.focused_specs, 'tests/browser/native-prerender-activation.spec.js')"));
   assert.ok(workflow.includes('command -v xvfb-run'));
   assert.ok(workflow.includes('sudo apt-get install -y xdotool'));
   assert.ok(workflow.includes('xvfb-run -a --server-args=\'-screen 0 1280x900x24\' npx playwright test --config=playwright.config.js "$spec"'));
