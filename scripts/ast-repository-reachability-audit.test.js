@@ -13,7 +13,7 @@ test('collects top-level functions, classes, and function-valued globals', () =>
     'function outer() { function localOnly() {} }'
   ].join('\n'), 'globals.js');
   assert.deepEqual(result.definitions.map(item => item.name), [
-    'topFunction', 'TopClass', 'callback', 'Klass'
+    'topFunction', 'TopClass', 'callback', 'Klass', 'outer'
   ]);
 });
 
