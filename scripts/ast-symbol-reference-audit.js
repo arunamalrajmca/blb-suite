@@ -49,7 +49,23 @@ function staticPropertyName(node) {
   return null;
 }
 
-function analyzePropertyReferences(ast, filename) {
+function collectStaticPropertyReferences(ast) {
+  const references = new Set(repositoryReferences || []);
+  walkAst(ast, (node, parent) => {
+    if (node.type === 'MemberExpression') {
+      const name = node.computed ? staticPropertyName(node.property) :
+        (node.property && ['Identifier', 'PrivateIdentifier'].includes(node.property.type) ? node.property.name : null);
+      if (name) references.add(name);
+    }
+    if (node.type === 'Property' && parent && parent.type === 'ObjectPattern') {
+      const name = staticPropertyName(node.key);
+      if (name) references.add(name);
+    }
+  });
+  return references;
+}
+
+function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
   const definitions = [];
   const references = new Set();
 
@@ -103,7 +119,7 @@ function analyzePropertyReferences(ast, filename) {
     }));
 }
 
-function analyzeSource(source, filename = '<source>') {
+function analyzeSource(source, filename = '<source>', repositoryReferences = null) {
   const ast = acorn.parse(source, {
     ecmaVersion: 'latest',
     sourceType: 'script',
@@ -118,7 +134,7 @@ function analyzeSource(source, filename = '<source>') {
     ignoreEval: false,
     impliedStrict: false
   });
-  const findings = analyzePropertyReferences(ast, filename);
+  const findings = analyzePropertyReferences(ast, filename, repositoryReferences);
 
   for (const scope of manager.scopes) {
     // Global declarations may be consumed by another classic script or by
@@ -167,10 +183,27 @@ function run(root = path.resolve(__dirname, '..')) {
   }
 
   const files = collectJavaScriptFiles(extension);
+  const repositoryReferences = new Set();
+  for (const file of files) {
+    const source = fs.readFileSync(file, 'utf8');
+    const ast = acorn.parse(source, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowHashBang: true,
+      locations: true,
+      ranges: true
+    });
+    for (const name of collectStaticPropertyReferences(ast)) repositoryReferences.add(name);
+  }
+
   const findings = [];
   for (const file of files) {
     const relative = path.relative(root, file).split(path.sep).join('/');
-    findings.push(...analyzeSource(fs.readFileSync(file, 'utf8'), relative));
+    findings.push(...analyzeSource(
+      fs.readFileSync(file, 'utf8'),
+      relative,
+      repositoryReferences
+    ));
   }
 
   console.log('AST symbol-reference audit (candidate report only)');
@@ -179,7 +212,7 @@ function run(root = path.resolve(__dirname, '..')) {
   const propertyFindings = findings.filter(item => item.scope === 'property-name-index');
   console.log('Potentially unread local declarations: ' + localFindings.length);
   console.log('Potentially unreferenced method/function properties: ' + propertyFindings.length);
-  console.log('Global declarations, parameters, imports, and cross-file reachability are not classified.');
+  console.log('Global declarations, parameters, and import reachability are not classified. Static property references are indexed across all scanned extension files.');
   console.log('A finding is not proof of dead code; inspect dynamic callbacks and runtime registration.');
 
   for (const finding of findings) {
@@ -202,4 +235,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { analyzeSource, analyzePropertyReferences, collectJavaScriptFiles, run };
+module.exports = { analyzeSource, analyzePropertyReferences, collectStaticPropertyReferences, collectJavaScriptFiles, run };
