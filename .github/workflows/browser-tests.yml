@@ -65,6 +65,12 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Install pinned AST audit dependencies
+        run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
+      - name: Test and run conservative AST symbol audit
+        run: |
+          node --test scripts/ast-symbol-reference-audit.test.js
+          node scripts/ast-symbol-reference-audit.js
       - name: Read manifest version
         id: version
         shell: bash
