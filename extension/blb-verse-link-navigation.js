@@ -16,7 +16,6 @@
     const listenerController = new AbortController();
     const managedTargets = new Map();
     let observer = null, processScheduled = false, scheduledFrame = 0, active = true;
-    let settingsReady = false;
     const pendingRoots = [];
 
     // Restore only target values this module changed. Preserve a site's
@@ -152,7 +151,6 @@
     // authoritative initial settings read, then process the already-existing
     // BLB links without requiring the user to reload the page.
     Promise.resolve(suiteSettingsReadyPromise).catch(() => {}).then(() => {
-      settingsReady = true;
       if (!active) return;
       if (isSuiteEnabledNow()) scheduleProcess();
       else restoreManagedTargets();
