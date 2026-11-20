@@ -331,6 +331,9 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
 function resolveModuleSpecifier(fromFile, specifier, files) {
   if (!specifier.startsWith('.')) return { external: true, specifier };
   const base = path.resolve(path.dirname(fromFile), specifier);
+  if (path.extname(base) === '.json' && fs.existsSync(base)) {
+    return { external: true, dataDependency: true, specifier };
+  }
   const candidates = [];
   if (path.extname(base)) candidates.push(base);
   else {
@@ -413,11 +416,42 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
   }
 
   const workflowFiles = walkFiles(path.join(root, '.github', 'workflows'), file => /\.(?:yml|yaml)$/.test(file));
+  const shellEntrypoints = new Set();
   for (const workflow of workflowFiles) {
     const text = fs.readFileSync(workflow, 'utf8');
     for (const match of text.matchAll(/(?:node|npm\s+exec\s+node|npx\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
       add(path.resolve(root, match[1]), 'workflow:' + relative(root, workflow));
     }
+    for (const match of text.matchAll(/(?:bash|sh)\s+([A-Za-z0-9_./-]+\.sh)\b/g)) {
+      shellEntrypoints.add(path.resolve(root, match[1]));
+    }
+  }
+  // Shell wrappers invoked by CI can launch Node scripts that are not imported
+  // into the wrapper's own module graph.
+  for (const shellFile of shellEntrypoints) {
+    if (!fs.existsSync(shellFile)) continue;
+    const text = fs.readFileSync(shellFile, 'utf8');
+    for (const match of text.matchAll(/(?:node|npm\s+exec\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      add(path.resolve(path.dirname(shellFile), match[1]), 'shell-wrapper:' + relative(root, shellFile));
+    }
+  }
+
+  // JSON manifests may launch Node test scripts by path (for example the
+  // deterministic validation-test manifest); these are entrypoints even
+  // though no static require/import edge exists.
+  for (const manifest of walkFiles(root, file => file.endsWith('.json'))) {
+    let value;
+    try { value = JSON.parse(fs.readFileSync(manifest, 'utf8')); } catch (_) { continue; }
+    const visitManifest = item => {
+      if (Array.isArray(item)) return item.forEach(visitManifest);
+      if (!item || typeof item !== 'object') return;
+      for (const [key, child] of Object.entries(item)) {
+        if (key === 'script' && typeof child === 'string' && /\.(?:c?js|mjs)$/.test(child)) {
+          add(path.resolve(path.dirname(manifest), child), 'json-script-manifest:' + relative(root, manifest));
+        } else visitManifest(child);
+      }
+    };
+    visitManifest(value);
   }
 
   const playwrightConfig = path.join(root, 'playwright.config.js');
