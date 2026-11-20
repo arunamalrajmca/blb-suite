@@ -3173,3 +3173,81 @@ test('BLB bVerse links clicked immediately on first paint initialize new tabs wi
   await closeBlbTabs(extensionWorker);
 });
 
+
+test('BLB destination activation is retried after an overlapping same-origin activation settles', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>BLB overlapping activation</title></head><body><p>John 3:16</p></body></html>'
+  }));
+
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'load'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://www.blueletterbible.org/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId))
+    .toMatchObject({fileExecuted:true, initialized:true});
+
+  // Hold the per-tab activation lock to model a startup/master-toggle pass
+  // that began for the outgoing document and is still pending during navigation.
+  await extensionWorker.evaluate(id => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const originalRetry = ensureContentScriptInTabWithRetry;
+    globalThis.__blbOverlappingActivation = {release, originalRetry, retryCalls:0};
+    ensureContentScriptInTabWithRetry = async (...args) => {
+      globalThis.__blbOverlappingActivation.retryCalls += 1;
+      return originalRetry(...args);
+    };
+    contentScriptInjectionLocks.set(id, gate);
+  }, tabId);
+
+  try {
+    await page.goto('https://www.blueletterbible.org/kjv/rom/8/28/', {waitUntil:'load'});
+    expect(page.url()).toContain('/kjv/rom/8/28/');
+
+    // The completed destination navigation must have observed the outstanding
+    // lock before it is released; otherwise this would not exercise #949's
+    // overlapping-activation branch.
+    await extensionWorker.evaluate(async id => {
+      const tab = await chrome.tabs.get(id);
+      if (tab.status !== 'complete') throw new Error('Destination tab did not reach complete');
+      if (!contentScriptInjectionLocks.has(id)) throw new Error('Expected the outgoing activation lock to remain pending');
+    }, tabId);
+
+    // Remove the simulated stale lock before releasing it so the detached
+    // destination-document recovery can enter the real shared activation path.
+    await extensionWorker.evaluate(id => {
+      const state = globalThis.__blbOverlappingActivation;
+      contentScriptInjectionLocks.delete(id);
+      state.release();
+    }, tabId);
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbOverlappingActivation.retryCalls
+    ), {timeout:15000}).toBeGreaterThan(0);
+    await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+      timeout:15000,
+      message:'the destination document must be initialized by the follow-up activation, not by the outgoing promise'
+    }).toMatchObject({fileExecuted:true, initialized:true});
+  } finally {
+    await extensionWorker.evaluate(id => {
+      const state = globalThis.__blbOverlappingActivation;
+      if (state) {
+        contentScriptInjectionLocks.delete(id);
+        state.release();
+        ensureContentScriptInTabWithRetry = state.originalRetry;
+        delete globalThis.__blbOverlappingActivation;
+      }
+    }, tabId).catch(() => {});
+    await closeBlbTabs(extensionWorker);
+  }
+});
