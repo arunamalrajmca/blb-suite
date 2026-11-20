@@ -455,6 +455,6 @@ test('worker restart preserves web menu visibility while click-time eligibility 
   });
 
   expect(result.ensured).toBe(true);
-  expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B'});
+  expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B',documentUrlPatterns:[]});
   expect(result.sensitiveHostAllowed).toBe(false);
 });
