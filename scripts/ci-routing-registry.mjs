@@ -97,11 +97,11 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
-    specs: ["tests/browser/redirect-hostnames.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
+    specs: ["tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/source-bible-redirect.js"],
-    specs: ["tests/browser/redirect-hostnames.spec.js", "tests/browser/redirect-hostnames.spec.js"]
+    specs: ["tests/browser/redirect-hostnames.spec.js"]
   },
   {
     paths: ["extension/redirect-scripttagger.js"],
@@ -209,7 +209,6 @@ export const mappedSpecs = new Set(["tests/browser/redirect-hostnames.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
   "tests/browser/tutorial-page-behavior.spec.js",
  
-  "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
   "tests/browser/scripttagger-global-injection.spec.js",
   "tests/browser/shared-regex-patterns.spec.js",
@@ -340,7 +339,6 @@ export const referenceRequiredSpecs = new Set([
 // Browser specs delegated from the Group A changed-spec runner to the
 // References gate when that gate owns the selected change.
 export const referenceDelegatedSpecs = new Set([
-  "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
