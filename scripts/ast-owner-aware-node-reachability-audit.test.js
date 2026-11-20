@@ -197,6 +197,6 @@ test('retains class methods consumed through a CommonJS class export', () => {
   const result = ownerAwarePropertyAudit([
     'class Reporter { onBegin() {} onEnd() {} }',
     'module.exports = Reporter;'
-  ].join('\\n'), 'reporter.js');
+  ].join('\n'), 'reporter.js');
   assert.deepEqual(result.findings, []);
 });
