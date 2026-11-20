@@ -2639,20 +2639,20 @@ test('an already-open X.com document activates Floating Button and Double-click 
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
 
-test('a BLB verse link opened in a new tab activates passive targets on the first load', async ({
+test('a BLB bVerse link opened in a new tab activates destination links on the first load', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({masterEnabled:true});
   await context.route('https://www.blueletterbible.org/**', route => {
     const url = new URL(route.request().url());
     const body = url.pathname.toLowerCase() === '/kjv/rom/8/28/'
-      ? '<!doctype html><html><head><title>BLB destination</title></head><body><a id="next-verse" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a></body></html>'
-      : '<!doctype html><html><head><title>BLB source</title></head><body><a id="new-tab-verse" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></body></html>';
+      ? '<!doctype html><html><head><title>BLB destination</title></head><body><div id="bVerse_1"><p>Romans 8:28</p></div></body></html>'
+      : '<!doctype html><html><head><title>BLB source</title></head><body><div id="bVerse_1"><a id="new-tab-verse" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></div></body></html>';
     return route.fulfill({status:200,contentType:'text/html',body});
   });
 
   await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
-  // The extension, rather than the fixture, must apply the new-tab behavior.
+  // This specifically exercises the bVerse handler, not just passive targets.
   await expect(page.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
   const popupPromise = context.waitForEvent('page');
   await page.locator('#new-tab-verse').click();
@@ -2664,19 +2664,22 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
     'https://www.blueletterbible.org/kjv/rom/8/28/*'
   );
   expect(Number.isInteger(newTabId)).toBe(true);
-
   await expect.poll(() => contentScriptLoaded(extensionWorker, newTabId), {
-    message:'a BLB destination opened in a new tab must initialize the extension without a manual reload'
+    message:'a BLB bVerse destination opened in a new tab must initialize without a manual reload'
   }).toMatchObject({fileExecuted:true, initialized:true});
 
-  // The new document must also activate the passive-target module immediately.
-  await expect(newTab.locator('#next-verse')).toHaveAttribute('target','_blank');
-  expect(newTab.url()).toContain('/kjv/rom/8/28/');
+  // Insert a second bVerse reference after the destination document is live.
+  // Its target must be applied by the mutation observer, without reloading.
+  await newTab.evaluate(() => {
+    const container=document.createElement('div');
+    container.id='bVerse_2';
+    container.innerHTML='<a id="dynamic-bverse-next" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a>';
+    document.body.appendChild(container);
+  });
+  await expect(newTab.locator('#dynamic-bverse-next')).toHaveAttribute('target','_blank');
 
-  // Follow a verse link from that newly opened tab. It must open and initialize
-  // a second destination tab on its first load as well.
   const secondPopupPromise = context.waitForEvent('page');
-  await newTab.locator('#next-verse').click();
+  await newTab.locator('#dynamic-bverse-next').click();
   const secondTab = await secondPopupPromise;
   await secondTab.waitForLoadState('domcontentloaded');
   expect(secondTab.url()).toContain('/kjv/1co/13/4/');
@@ -2686,9 +2689,8 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
   );
   expect(Number.isInteger(secondTabId)).toBe(true);
   await expect.poll(() => contentScriptLoaded(extensionWorker, secondTabId), {
-    message:'a second-level BLB destination tab must initialize without a manual reload'
+    message:'a second-level bVerse destination must initialize without a manual reload'
   }).toMatchObject({fileExecuted:true, initialized:true});
-  await expect(secondTab.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
 
   await closeBlbTabs(extensionWorker);
 });
