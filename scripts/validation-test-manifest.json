@@ -68,5 +68,10 @@
     "script": "test-study-session-export.js",
     "failure": "Study Sessions export contract tests failed\\n",
     "success": "Study Sessions export contracts validated"
+  },
+  {
+    "script": "test-content-script-sender-document.js",
+    "failure": "content-script sender-document authorization tests failed\\n",
+    "success": "content-script sender-document authorization behavior validated"
   }
 ]
