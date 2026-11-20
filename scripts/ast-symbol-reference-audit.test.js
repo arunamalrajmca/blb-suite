@@ -89,3 +89,12 @@ test('uses static property references from other extension files', () => {
   );
   assert.deepEqual(findings, []);
 });
+
+
+test('parses module syntax when repository files use import or export', () => {
+  const findings = analyzeSource(
+    'export function exportedHelper() {}',
+    'module-file.js'
+  );
+  assert.deepEqual(findings, []);
+});
