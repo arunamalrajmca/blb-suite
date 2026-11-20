@@ -652,10 +652,14 @@ jobs:
               # activation. Run this one browser-capability test headed under
               # Xvfb; all other focused tests keep their existing headless mode.
               command -v xvfb-run >/dev/null || {
-                echo "::error::xvfb-run is required for the headed prerender test."
+                echo "::error::xvfb-run is required for the native prerender test."
                 exit 1
               }
-              xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 BLB_ENABLE_PRERENDER_TESTS=1 \
+              if ! command -v xdotool >/dev/null 2>&1; then
+                sudo apt-get update -qq
+                sudo apt-get install -y xdotool
+              fi
+              xvfb-run -a --server-args='-screen 0 1280x900x24' \
                 npx playwright test --config=playwright.config.js "$spec"
             else
               npx playwright test --config=playwright.config.js "$spec"
