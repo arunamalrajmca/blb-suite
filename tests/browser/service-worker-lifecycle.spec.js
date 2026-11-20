@@ -2221,11 +2221,11 @@ test('persistent registration failure keeps current and subsequent same-tab docu
       message:'current-document fallback must initialize the core content script after persistent registration fails'
     }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
 
-    const firstState=await extensionWorker.evaluate(async ({id,pattern})=>({
+    const firstState=await extensionWorker.evaluate(async ({id,tabId})=>({
       attempts:globalThis.__registrationFailureAudit?.attempts||0,
       registered:(await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length>0,
-      tab:(await chrome.tabs.get(tabIdForCheck)).url
-    }),{id:registrationId,pattern,tabIdForCheck:tabId});
+      tab:(await chrome.tabs.get(tabId)).url
+    }),{id:registrationId,tabId});
     expect(firstState.attempts).toBeGreaterThan(0);
     expect(firstState.registered).toBe(false);
     expect(firstState.tab).toContain('/registration-failure-first');
