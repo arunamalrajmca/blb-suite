@@ -144,9 +144,10 @@ test('a BLB range cross-reference clicked before initial settings readiness is q
   await extensionStorage.set({masterEnabled:true});
   await serveBlbFixture(context);
   await page.goto(HOME_URL, {waitUntil:'domcontentloaded'});
-  const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({url:HOME_URL}))[0]?.id
-  );
+  const tabId = await extensionWorker.evaluate(async sourceUrl =>
+    (await chrome.tabs.query({url:'https://www.blueletterbible.org/*'}))
+      .find(tab => (tab.url || tab.pendingUrl) === sourceUrl)?.id,
+  HOME_URL);
   expect(Number.isInteger(tabId)).toBe(true);
 
   const result = await extensionWorker.evaluate(async id => {
