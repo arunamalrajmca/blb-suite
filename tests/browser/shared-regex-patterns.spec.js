@@ -435,7 +435,6 @@ test('Facebook reference selections survive canonical MultiVerse expansion throu
     ].join('\n');
     const explicit = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(facebookText));
     const expanded = expandMultiVerseRefsToVerses(explicit);
-    const verseKeys = new Set(expanded.map(ref => `${ref.book}|\${ref.chapter}|\${ref.from}`));
     const finalVerseRefs = [
       ['2 corinthians', 13, 14], ['colossians', 4, 18],
       ['2 timothy', 4, 22], ['titus', 3, 15]
