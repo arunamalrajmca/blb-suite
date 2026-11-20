@@ -122,6 +122,10 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("click", event => {
+      // Preserve the synchronous new-tab target for verse links inserted and
+      // clicked before the MutationObserver's next animation frame.
+      const clickedLink = event.target.closest?.("a");
+      if (isSuiteEnabledNow() && clickedLink) manageVerseLink(clickedLink);
       if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;
       const link = event.target.closest?.("a.nowrap");
       if (!link) return;
