@@ -43,23 +43,30 @@ function walkAst(node, visit, parent = null) {
   }
 }
 
-function staticPropertyName(node) {
+function staticPropertyName(node, computed = false) {
   if (!node) return null;
-  if (node.type === 'Identifier' || node.type === 'PrivateIdentifier') return node.name;
-  if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (!computed && (node.type === 'Identifier' || node.type === 'PrivateIdentifier')) return node.name;
+  if (computed && node.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (computed && node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0].value.cooked;
+  }
   return null;
+}
+
+function memberPropertyName(node) {
+  if (!node || node.type !== 'MemberExpression') return null;
+  return staticPropertyName(node.property, node.computed);
 }
 
 function collectStaticPropertyReferences(ast) {
   const references = new Set();
   walkAst(ast, (node, parent) => {
     if (node.type === 'MemberExpression') {
-      const name = node.computed ? staticPropertyName(node.property) :
-        (node.property && ['Identifier', 'PrivateIdentifier'].includes(node.property.type) ? node.property.name : null);
+      const name = memberPropertyName(node);
       if (name) references.add(name);
     }
     if (node.type === 'Property' && parent && parent.type === 'ObjectPattern') {
-      const name = staticPropertyName(node.key);
+      const name = staticPropertyName(node.key, node.computed);
       if (name) references.add(name);
     }
   });
@@ -72,7 +79,7 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
 
   walkAst(ast, (node, parent) => {
     if (node.type === 'MethodDefinition' && node.key) {
-      const name = staticPropertyName(node.key);
+      const name = staticPropertyName(node.key, node.computed);
       if (name && name !== 'constructor') definitions.push({ name, node: node.key, kind: 'class-method' });
       return;
     }
@@ -90,14 +97,13 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
 
     if (node.type === 'PropertyDefinition' && node.value &&
         ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.value.type)) {
-      const name = staticPropertyName(node.key);
+      const name = staticPropertyName(node.key, node.computed);
       if (name) definitions.push({ name, node: node.key, kind: 'class-function-field' });
       return;
     }
 
     if (node.type === 'MemberExpression') {
-      const name = node.computed ? staticPropertyName(node.property) :
-        (node.property && ['Identifier', 'PrivateIdentifier'].includes(node.property.type) ? node.property.name : null);
+      const name = memberPropertyName(node);
       if (name) references.add(name);
     }
 
@@ -118,7 +124,7 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
       column: definition.node.loc.start.column + 1,
       scope: 'property-name-index',
       confidence: 'candidate-only',
-      reason: 'No matching static member access was found in this file; dynamic/computed/reflection-based access may be invisible.'
+      reason: 'No matching static member access was found in the repository-wide property-name index; dynamic/computed/reflection-based access may be invisible.'
     }));
 }
 
