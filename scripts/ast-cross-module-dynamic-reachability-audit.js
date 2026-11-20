@@ -56,10 +56,10 @@ function collectExportsAndImports(ast){
 function analyzeCrossModule(root,files){
   const asts=new Map(files.map(f=>[f,parse(fs.readFileSync(f,'utf8'),f)]));
   const meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast)]));
-  const links=[],unresolved=[],propertyReferences=[],dynamicPropertyReferences=[];
+  const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
   for(const [file,data] of meta)for(const i of data.imports){
     const target=resolveLocal(file,i.source,new Set(files));
-    if(!target){unresolved.push({file:path.relative(root,file),source:i.source});continue;}
+    if(!target){const item={file:path.relative(root,file),source:i.source};if(i.source.startsWith('.')||path.isAbsolute(i.source))unresolved.push(item);else externalImports.push(item);continue;}
     const exp=meta.get(target).exports;
     if(i.reexportAll){for(const [name,local] of exp)links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:local,reexport:true});continue;}
     const local=exp.get(i.imported);
@@ -76,7 +76,7 @@ function analyzeCrossModule(root,files){
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
     });
   }
-  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,propertyReferences,dynamicPropertyReferences};
+  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,externalImports,propertyReferences,dynamicPropertyReferences};
 }
 function analyzeDynamicExecution(root,files,graph){
   const set=new Set(files),launches=[],extra=[];
@@ -92,8 +92,9 @@ function analyzeDynamicExecution(root,files,graph){
     const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)&&(c.type==='Identifier'||object==='module'||object==='Module');
     if(loader){
       const spec=literalString(n.arguments[0],file);
-      const target=spec?resolveLocal(file,spec.startsWith('.')?spec:'./'+spec,set):null;
-      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':'unresolved-dynamic-or-external'});
+      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set)):null;
+      const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
+      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
       if(target)extra.push({from:file,to:target});
     }
     if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(method)){
@@ -126,6 +127,7 @@ function run(root=path.resolve(__dirname,'..')){
   console.log('Modules with exports: '+crossModule.modulesWithExports);
   console.log('Cross-module links: '+crossModule.links.length);
   console.log('Unresolved import/export links: '+crossModule.unresolved.length);
+  console.log('External package/builtin imports: '+crossModule.externalImports.length);
   console.log('Cross-module property references: '+crossModule.propertyReferences.length);
   console.log('Dynamic imported-property references: '+crossModule.dynamicPropertyReferences.length);
   console.log('Dynamic loader/process sites: '+dynamic.launches.length);
