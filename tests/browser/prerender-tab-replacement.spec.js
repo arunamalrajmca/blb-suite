@@ -30,7 +30,9 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
       response.end(`<!doctype html>
 <html><head><title>BLB prerender source</title>
 <script type="speculationrules">${JSON.stringify(rules)}</script>
-</head><body>Prerender source page</body></html>`);
+</head><body>
+<a id="activate-prerender" href="${destination}">Open prerendered destination</a>
+</body></html>`);
       return;
     }
     if (request.url === '/destination') {
@@ -111,8 +113,10 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     // prerendering. Allow its document lifecycle to settle before activation.
     await page.waitForTimeout(1500);
 
-    await page.evaluate(url => { window.location.href = url; }, destination);
-    await page.waitForURL(destination, {timeout:15000});
+    await Promise.all([
+      page.waitForURL(destination, {timeout:15000}),
+      page.locator('#activate-prerender').click()
+    ]);
     await page.waitForLoadState('domcontentloaded');
 
     const activation = await page.evaluate(() => {
