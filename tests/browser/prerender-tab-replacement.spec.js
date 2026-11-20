@@ -30,10 +30,13 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
   const cdp = await context.newCDPSession(page);
   const statuses = [];
   const statusListener = event => {
-    if (event.url && event.url.includes('blb-prerender-destination=1')) {
+    const url = event.prerenderingUrl || event.url || '';
+    const status = typeof event.status === 'string' ? event.status : event.status?.status;
+    if (url.includes('blb-prerender-destination=1')) {
       statuses.push({
-        status:event.status,
-        url:event.url,
+        status,
+        url,
+        rawStatus:event.status,
         prerenderingAttemptId:event.prerenderingAttemptId
       });
     }
@@ -60,7 +63,7 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
 
     await expect.poll(() => statuses.some(item => item.status === 'Ready'), {
       timeout:20000,
-      message:'Chromium must report the destination prerender as Ready before activation'
+      message:'Chromium must report the destination prerender as Ready before activation; observed CDP statuses: ' + JSON.stringify(statuses)
     }).toBe(true);
 
     // A normal same-tab navigation activates the browser-created prerender.
