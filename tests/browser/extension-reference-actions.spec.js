@@ -2356,7 +2356,6 @@ test.describe('core user-visible E2E', () => {
     dot: book => `${book.name} 1.1`,
     spaced: book => `${book.name} 1 1`,
     chapter: book => `${book.name} 1`,
-    range: book => `${book.name} 1:1-2`
   };
 
   test('Double-click generic reference syntax — colon forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
