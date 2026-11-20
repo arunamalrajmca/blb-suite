@@ -449,7 +449,7 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
   // JSON manifests may launch Node test scripts by path (for example the
   // deterministic validation-test manifest); these are entrypoints even
   // though no static require/import edge exists.
-  for (const manifest of walkFiles(root, file => file.endsWith('.json'))) {
+  for (const manifest of walkFiles(root, file => file.endsWith('.json') && (path.basename(file) === 'package.json' || /manifest/i.test(path.basename(file)))) {
     let value;
     try { value = JSON.parse(fs.readFileSync(manifest, 'utf8')); } catch (_) { continue; }
     const visitManifest = item => {
