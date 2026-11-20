@@ -406,7 +406,7 @@ test('right-click action remains usable after the service worker restarts with a
   });
   expect(result.menuReady).toBe(true);
   expect(result.updates).toEqual([
-    {id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B'}
+    {id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B',documentUrlPatterns:[]}
   ]);
   expect(result.actions).toHaveLength(1);
   expect(result.actions[0]).toMatchObject({
