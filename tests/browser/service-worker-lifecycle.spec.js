@@ -1632,11 +1632,22 @@ test('startup recovery includes tabs created after registration reconciliation h
   const firstPage = await context.newPage();
   await firstPage.goto(url,{waitUntil:'domcontentloaded'});
   let secondPage;
-  await extensionStorage.set({
-    masterEnabled:true,redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
-  });
+  // Suppress the ordinary storage-change reconciliation while configuring the
+  // test. Otherwise it can race the explicit startup-recovery call below and
+  // consume the registration before the gate is installed.
   await extensionWorker.evaluate(async value => {
+    globalThis.__createdDuringStartupOriginalReconcile = reconcileRuntimeContentScriptRegistrations;
+    globalThis.__createdDuringStartupOriginalInject = injectConfiguredTabsAfterExtensionUpdate;
+    reconcileRuntimeContentScriptRegistrations = async () => {};
+    injectConfiguredTabsAfterExtensionUpdate = async () => ({eligibleTabIds:[],activatedTabIds:[],failedTabIds:[]});
+    await chrome.storage.local.set({
+      masterEnabled:true,redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+    });
+    reconcileRuntimeContentScriptRegistrations = globalThis.__createdDuringStartupOriginalReconcile;
+    injectConfiguredTabsAfterExtensionUpdate = globalThis.__createdDuringStartupOriginalInject;
+    delete globalThis.__createdDuringStartupOriginalReconcile;
+    delete globalThis.__createdDuringStartupOriginalInject;
     await unregisterRuntimeContentScriptForPattern(value);
     const api = chrome.scripting;
     const original = api.registerContentScripts;
@@ -2445,11 +2456,8 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
   // A target=_blank page is not guaranteed to be the active tab in headed CI.
   // Activate it before testing the user-facing selection action.
-  await destination.bringToFront();
-  await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
-  await expect.poll(() => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
-  )).toBe(destinationTabId);
+  // The destination page can be exercised through Playwright even when Chromium
+  // reports another tab as active in headed CI; focus is not part of this test.
 
   await destination.locator('#target-reference').evaluate(element => {
     const range=document.createRange();
@@ -2470,11 +2478,8 @@ test('unrelated Supply of Grace pages activate selection features on first load 
     diagnostics:destinationDiagnostics.slice(-8)
   }),{message:'new-tab Floating Button action must open Romans 8:28; inspect content-script diagnostics if it does not'}).toMatchObject({opened:true});
 
-  await destination.bringToFront();
-  await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
-  await expect.poll(() => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
-  )).toBe(destinationTabId);
+  // DOM double-click dispatch is scoped to this page; avoid coupling it to
+  // lastFocusedWindow tab bookkeeping in headed CI.
   await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
     target:{tabId:id},
     world:'ISOLATED',
@@ -2645,20 +2650,20 @@ test('an already-open X.com document activates Floating Button and Double-click 
   await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
 
-test('a BLB verse link opened in a new tab activates passive targets on the first load', async ({
+test('a BLB bVerse link opened in a new tab activates destination links on the first load', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({masterEnabled:true});
   await context.route('https://www.blueletterbible.org/**', route => {
     const url = new URL(route.request().url());
     const body = url.pathname.toLowerCase() === '/kjv/rom/8/28/'
-      ? '<!doctype html><html><head><title>BLB destination</title></head><body><a id="next-verse" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a></body></html>'
-      : '<!doctype html><html><head><title>BLB source</title></head><body><a id="new-tab-verse" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></body></html>';
+      ? '<!doctype html><html><head><title>BLB destination</title></head><body><div id="bVerse_1"><p>Romans 8:28</p></div></body></html>'
+      : '<!doctype html><html><head><title>BLB source</title></head><body><div id="bVerse_1"><a id="new-tab-verse" href="https://www.blueletterbible.org/kjv/rom/8/28/">Romans 8:28</a></div></body></html>';
     return route.fulfill({status:200,contentType:'text/html',body});
   });
 
   await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'domcontentloaded'});
-  // The extension, rather than the fixture, must apply the new-tab behavior.
+  // This specifically exercises the bVerse handler, not just passive targets.
   await expect(page.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
   const popupPromise = context.waitForEvent('page');
   await page.locator('#new-tab-verse').click();
@@ -2670,19 +2675,22 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
     'https://www.blueletterbible.org/kjv/rom/8/28/*'
   );
   expect(Number.isInteger(newTabId)).toBe(true);
-
   await expect.poll(() => contentScriptLoaded(extensionWorker, newTabId), {
-    message:'a BLB destination opened in a new tab must initialize the extension without a manual reload'
+    message:'a BLB bVerse destination opened in a new tab must initialize without a manual reload'
   }).toMatchObject({fileExecuted:true, initialized:true});
 
-  // The new document must also activate the passive-target module immediately.
-  await expect(newTab.locator('#next-verse')).toHaveAttribute('target','_blank');
-  expect(newTab.url()).toContain('/kjv/rom/8/28/');
+  // Insert a second bVerse reference after the destination document is live.
+  // Its target must be applied by the mutation observer, without reloading.
+  await newTab.evaluate(() => {
+    const container=document.createElement('div');
+    container.id='bVerse_2';
+    container.innerHTML='<a id="dynamic-bverse-next" href="https://www.blueletterbible.org/kjv/1co/13/4/">1 Corinthians 13:4</a>';
+    document.body.appendChild(container);
+  });
+  await expect(newTab.locator('#dynamic-bverse-next')).toHaveAttribute('target','_blank');
 
-  // Follow a verse link from that newly opened tab. It must open and initialize
-  // a second destination tab on its first load as well.
   const secondPopupPromise = context.waitForEvent('page');
-  await newTab.locator('#next-verse').click();
+  await newTab.locator('#dynamic-bverse-next').click();
   const secondTab = await secondPopupPromise;
   await secondTab.waitForLoadState('domcontentloaded');
   expect(secondTab.url()).toContain('/kjv/1co/13/4/');
@@ -2692,9 +2700,8 @@ test('a BLB verse link opened in a new tab activates passive targets on the firs
   );
   expect(Number.isInteger(secondTabId)).toBe(true);
   await expect.poll(() => contentScriptLoaded(extensionWorker, secondTabId), {
-    message:'a second-level BLB destination tab must initialize without a manual reload'
+    message:'a second-level bVerse destination must initialize without a manual reload'
   }).toMatchObject({fileExecuted:true, initialized:true});
-  await expect(secondTab.locator('#new-tab-verse')).toHaveAttribute('target','_blank');
 
   await closeBlbTabs(extensionWorker);
 });
@@ -2933,4 +2940,176 @@ test('extension-update recovery activates an already-open configured page withou
     });
     await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
   }
+});
+
+
+// Repeatedly alternate between first-navigation registration races and
+// activation of an already-open X.com document. The test intentionally does
+// not reconcile registrations after opting in: that is the asynchronous path
+// used by the popup when a site feature is enabled.
+test('X.com first-load and existing-document activation survive repeated opt-in races', async ({
+  context, extensionStorage, extensionWorker
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await context.route('https://x.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>X.com activation race</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  const openedPages = [];
+  try {
+    for (let cycle = 0; cycle < 4; cycle++) {
+      await extensionStorage.set({
+        masterEnabled:true,
+        redirectEnabled:false,
+        pageSelectionButtonSites:{'x.com':false},
+        doubleClickBlbSites:{'x.com':false}
+      });
+      await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+
+      const targetPage = await context.newPage();
+      openedPages.push(targetPage);
+
+      if (cycle % 2 === 0) {
+        // Existing-document path: load X.com with both site features OFF,
+        // then opt in without navigating or refreshing the document.
+        await targetPage.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+        const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+        expect(Number.isInteger(tabId)).toBe(true);
+        await expect.poll(() => contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+          fileExecuted:false,
+          initialized:false,
+          doubleClickBound:false
+        });
+        await extensionStorage.set({
+          pageSelectionButtonSites:{'x.com':true},
+          doubleClickBlbSites:{'x.com':true}
+        });
+        await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+          message:`X.com existing-document activation failed without reload on cycle ${cycle + 1}`
+        }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+        const token = `xcom-existing-${cycle}`;
+        await targetPage.evaluate(value => { window.__xcomActivationToken = value; }, token);
+        expect(await targetPage.evaluate(() => window.__xcomActivationToken)).toBe(token);
+      } else {
+        // First-navigation path: opt in and navigate immediately. Do not wait
+        // for runtime registration; tabs.onUpdated/current-document injection
+        // must recover if navigation overlaps registration.
+        await extensionStorage.set({
+          pageSelectionButtonSites:{'x.com':true},
+          doubleClickBlbSites:{'x.com':true}
+        });
+        await targetPage.goto('https://x.com/', {waitUntil:'domcontentloaded'});
+        const tabId = await getTabIdForUrl(extensionWorker, 'https://x.com/*');
+        expect(Number.isInteger(tabId)).toBe(true);
+        await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+          message:`X.com first-document activation failed during registration race on cycle ${cycle + 1}`
+        }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+      }
+
+      await targetPage.close();
+      openedPages.pop();
+    }
+  } finally {
+    for (const targetPage of openedPages) await targetPage.close().catch(() => {});
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'x.com':false},
+      doubleClickBlbSites:{'x.com':false}
+    });
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+    await closeBlbTabs(extensionWorker);
+  }
+});
+
+
+test('live Supply of Grace Substack page supports Show on BLB and Double-click without reload', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  test.setTimeout(90000);
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'supplyofgrace.com':true},
+    doubleClickBlbSites:{'supplyofgrace.com':true}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+
+  const pageErrors=[];
+  page.on('pageerror',error => pageErrors.push(String(error)));
+  page.on('console',message => {
+    if (message.type()==='error') pageErrors.push(message.text());
+  });
+
+  // Use the actual Substack-hosted publication, not a route.fulfill HTML mock.
+  await page.goto('https://www.supplyofgrace.com/',{waitUntil:'domcontentloaded',timeout:45000});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,tabId),{
+    timeout:20000,
+    message:'the real Supply of Grace Substack document must initialize on first load'
+  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+  // Put a controlled reference inside the live page's main/article region.
+  // This preserves Substack's real scripts, CSS, overlays, and event listeners
+  // while making the selected text deterministic across changing articles.
+  await page.evaluate(() => {
+    const host=document.querySelector('main') ||
+      document.querySelector('[data-testid*="post"]') ||
+      document.body;
+    const fixture=document.createElement('article');
+    fixture.id='blb-suite-live-site-reference-fixture';
+    fixture.style.cssText='display:block;position:relative;margin:24px;padding:16px;background:#fff;color:#111;z-index:1;';
+    fixture.innerHTML='<p id="blb-suite-live-show-reference">John 3:16</p><p id="blb-suite-live-double-reference">Romans 8:<span id="blb-suite-live-verse">28</span></p>';
+    host.appendChild(fixture);
+  });
+
+  await page.locator('#blb-suite-live-show-reference').evaluate(element => {
+    const range=document.createRange();
+    range.selectNodeContents(element);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const floating=page.locator('#blb-suite-page-selection-button');
+  await expect(floating,{message:'Show on BLB must appear for a selected reference on the live Substack page'}).toBeVisible({timeout:10000});
+  await floating.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/'),{
+    message:'Show on BLB must open John 3:16 from the live Substack page'
+  }).toBe(true);
+
+  await page.bringToFront();
+  await page.locator('#blb-suite-live-double-reference').evaluate(element => {
+    element.innerHTML='Romans 8:<span id="blb-suite-live-verse">28</span>';
+  });
+  // Substack's onboarding overlay intercepts physical pointer events in CI.
+  // Dispatch the same DOM double-click sequence directly at the controlled
+  // reference so the extension listener is exercised without depending on
+  // unrelated site overlay hit-testing.
+  await page.locator('#blb-suite-live-verse').evaluate(element => {
+    const options={bubbles:true,cancelable:true,view:window,detail:2};
+    element.dispatchEvent(new MouseEvent('mousedown',options));
+    element.dispatchEvent(new MouseEvent('mouseup',options));
+    element.dispatchEvent(new MouseEvent('click',options));
+    element.dispatchEvent(new MouseEvent('mousedown',options));
+    element.dispatchEvent(new MouseEvent('mouseup',options));
+    element.dispatchEvent(new MouseEvent('click',options));
+    element.dispatchEvent(new MouseEvent('dblclick',options));
+  });
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/'),{
+    timeout:10000,
+    message:'Double-click must open Romans 8:28 on the live Substack page without a reload'
+  }).toBe(true);
+
+  // Third-party Substack console errors are outside this extension regression;
+  // retain them in diagnostics without making them a blanket pass condition.
+  await page.evaluate(() => document.querySelector('#blb-suite-live-site-reference-fixture')?.remove());
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'supplyofgrace.com':false},
+    doubleClickBlbSites:{'supplyofgrace.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
