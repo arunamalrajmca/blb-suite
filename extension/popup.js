@@ -693,7 +693,6 @@ function updateStudyButtons() {
   const refs = Number(topicStat.refs || 0);
   const strongs = Number(topicStat.strongs || 0);
   const searchTerms = Number(topicStat.searchTerms || 0);
-  const notes = Number(topicStat.notes || 0);
   multiViewButton.disabled = !hasTopic;
   historyVerseRefsButton.disabled = refs < 2;
   historyStrongsButton.disabled = strongs < 1;

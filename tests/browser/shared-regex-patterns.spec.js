@@ -13,7 +13,8 @@ test('shared regex catalog exposes stable BLB constants and independent regex in
       origin: BLBShared.urls.blbOrigin,
       search: BLBShared.urls.blbSearch,
       independentState,
-      operatorMatches
+      operatorMatches,
+      regexProperties: Object.keys(BLBShared.regex).sort()
     };
   });
 
@@ -22,6 +23,7 @@ test('shared regex catalog exposes stable BLB constants and independent regex in
   expect(result.search).toBe('https://www.blueletterbible.org/search/search.cfm');
   expect(result.independentState).toBe(true);
   expect(result.operatorMatches).toEqual(['AND', 'or']);
+  expect(result.regexProperties).toEqual(['booleanOperatorWords', 'whitespace']);
 });
 
 

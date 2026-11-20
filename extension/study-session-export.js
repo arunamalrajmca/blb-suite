@@ -93,7 +93,6 @@
     
       const pageWidth = 595, pageHeight = 842;
       const left = 54, right = 541, top = 782;
-      const footerTop = 92;
       const contentBottom = 108;
       const lines = safeText.split(/\r?\n/);
     
@@ -150,12 +149,9 @@
       const tableFill = '0.94 0.96 0.98';
     
       const contentObjs = [];
-      const pageCommands = [];
       let pages = [];
       let commands = null;
       let y = top;
-      let activeTopic = null;
-      let pageIsContinuation = false;
     
       const finishCurrentPage = () => {
         if (commands && commands.length) {
@@ -166,8 +162,6 @@
     
       const startPage = (topic, continuation = false) => {
         finishCurrentPage();
-        activeTopic = topic;
-        pageIsContinuation = continuation;
         commands = [];
         y = top;
         commands.push(`${blue} rg`);
@@ -203,7 +197,7 @@
       };
     
       const drawReferences = topic => {
-        const tableX = left, col1 = 126, tableMid = tableX + col1, tableW = right-left, refX = tableMid+10, refWidth = right-refX-8, headerH = 25, rowPad = 8;
+        const tableX = left, col1 = 126, tableMid = tableX + col1, tableW = right-left, refX = tableMid+10, refWidth = right-refX-8, headerH = 25;
         const firstBook = topic.books[0];
         const firstRefs = firstBook ? firstBook.refs.join(', ').replace(/\s*,\s*/g, ', ') : '';
         const firstRefLines = firstBook ? (firstRefs ? wrapToWidth(firstRefs, refWidth, 12, false) : ['']) : [];
@@ -233,7 +227,6 @@
         ensureSpace(headerH + 10, topic);
         drawHeader(false);
     
-        let firstRowOnPage = true;
         for (const book of topic.books) {
           const refs = book.refs.join(', ').replace(/\s*,\s*/g, ', ');
           const refLines = refs ? wrapToWidth(refs, refWidth, 12, false) : [''];
@@ -241,7 +234,6 @@
           if (y - rowH < contentBottom) {
             startPage(topic, true);
             drawHeader(true);
-            firstRowOnPage = true;
           }
           const canonicalBookName = studyBookDisplayName(book.name);
           const bookName = canonicalBookName === 'Psalms' ? 'Psalm' : canonicalBookName;
@@ -253,7 +245,6 @@
           commands.push('BT','/F4 12.2 Tf',`${tableX+8} ${y-18} Td`,`(${esc(bookName)}) Tj`,'ET');
           for (let i=0;i<refLines.length;i++) drawJustifiedLine('F1',12,refX,y-18-(i*15),refLines[i],refWidth,false,i===refLines.length-1);
           y -= rowH;
-          firstRowOnPage = false;
         }
         commands.push(`${lightLine} RG`,'0.7 w',`${tableX} ${y} m ${right} ${y} l S`);
       };
