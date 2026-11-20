@@ -28,6 +28,75 @@ function collectJavaScriptFiles(directory) {
   return files.sort();
 }
 
+
+function walkAst(node, visit, parent = null) {
+  if (!node || typeof node !== 'object') return;
+  if (typeof node.type === 'string') visit(node, parent);
+  for (const [key, value] of Object.entries(node)) {
+    if (key === 'loc' || key === 'range' || key === 'start' || key === 'end') continue;
+    if (Array.isArray(value)) {
+      for (const child of value) walkAst(child, visit, node);
+    } else if (value && typeof value === 'object' && typeof value.type === 'string') {
+      walkAst(value, visit, node);
+    }
+  }
+}
+
+function staticPropertyName(node) {
+  if (!node) return null;
+  if (node.type === 'Identifier' || node.type === 'PrivateIdentifier') return node.name;
+  if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
+  return null;
+}
+
+function analyzePropertyReferences(ast, filename) {
+  const definitions = [];
+  const references = new Set();
+
+  walkAst(ast, (node, parent) => {
+    if (node.type === 'MethodDefinition' && node.key) {
+      const name = staticPropertyName(node.key);
+      if (name) definitions.push({ name, node: node.key, kind: 'class-method' });
+      return;
+    }
+
+    if (node.type === 'Property' && node.value &&
+        ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.value.type)) {
+      const name = staticPropertyName(node.key);
+      if (name && !node.computed) {
+        definitions.push({ name, node: node.key, kind: 'object-function-property' });
+      }
+      return;
+    }
+
+    if (node.type === 'PropertyDefinition' && node.value &&
+        ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.value.type)) {
+      const name = staticPropertyName(node.key);
+      if (name) definitions.push({ name, node: node.key, kind: 'class-function-field' });
+      return;
+    }
+
+    if (node.type === 'MemberExpression') {
+      const name = node.computed ? staticPropertyName(node.property) :
+        (node.property && node.property.type === 'Identifier' ? node.property.name : null);
+      if (name) references.add(name);
+    }
+  });
+
+  return definitions
+    .filter(definition => !references.has(definition.name))
+    .map(definition => ({
+      file: filename,
+      name: definition.name,
+      definition: definition.kind,
+      line: definition.node.loc.start.line,
+      column: definition.node.loc.start.column + 1,
+      scope: 'property-name-index',
+      confidence: 'candidate-only',
+      reason: 'No matching static member access was found in this file; dynamic/computed/reflection-based access may be invisible.'
+    }));
+}
+
 function analyzeSource(source, filename = '<source>') {
   const ast = acorn.parse(source, {
     ecmaVersion: 'latest',
@@ -43,7 +112,7 @@ function analyzeSource(source, filename = '<source>') {
     ignoreEval: false,
     impliedStrict: false
   });
-  const findings = [];
+  const findings = analyzePropertyReferences(ast, filename);
 
   for (const scope of manager.scopes) {
     // Global declarations may be consumed by another classic script or by
@@ -124,4 +193,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { analyzeSource, collectJavaScriptFiles, run };
+module.exports = { analyzeSource, analyzePropertyReferences, collectJavaScriptFiles, run };
