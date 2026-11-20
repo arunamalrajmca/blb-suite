@@ -447,7 +447,18 @@ function collectModuleEdges(source, filename, files) {
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require' });
       }
-    } else if (node.type === 'CallExpression') {
+    } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+               node.callee.object.type === 'Identifier' && node.callee.object.name === 'module' &&
+               node.callee.property.name === 'require') {
+      if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
+          typeof node.arguments[0].value === 'string') {
+        specifier = node.arguments[0].value;
+        kind = 'module.require';
+      } else {
+        dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-module-require' });
+      }
+    }
+    if (node.type === 'CallExpression') {
       const callName = node.callee.type === 'Identifier'
         ? node.callee.name
         : (node.callee.type === 'MemberExpression'
@@ -459,16 +470,6 @@ function collectModuleEdges(source, filename, files) {
           kind: 'child-process-launch',
           note: 'The launched script may be selected through variables, arrays, or path expressions.'
         });
-      }
-    } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
-               node.callee.object.type === 'Identifier' && node.callee.object.name === 'module' &&
-               node.callee.property.name === 'require') {
-      if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
-        kind = 'module.require';
-      } else {
-        dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-module-require' });
       }
     }
     if (specifier !== null) {
