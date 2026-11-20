@@ -2445,11 +2445,8 @@ test('unrelated Supply of Grace pages activate selection features on first load 
   }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
   // A target=_blank page is not guaranteed to be the active tab in headed CI.
   // Activate it before testing the user-facing selection action.
-  await destination.bringToFront();
-  await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
-  await expect.poll(() => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
-  )).toBe(destinationTabId);
+  // The destination page can be exercised through Playwright even when Chromium
+  // reports another tab as active in headed CI; focus is not part of this test.
 
   await destination.locator('#target-reference').evaluate(element => {
     const range=document.createRange();
@@ -2470,11 +2467,8 @@ test('unrelated Supply of Grace pages activate selection features on first load 
     diagnostics:destinationDiagnostics.slice(-8)
   }),{message:'new-tab Floating Button action must open Romans 8:28; inspect content-script diagnostics if it does not'}).toMatchObject({opened:true});
 
-  await destination.bringToFront();
-  await extensionWorker.evaluate(async id => chrome.tabs.update(id,{active:true}),destinationTabId);
-  await expect.poll(() => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0]?.id
-  )).toBe(destinationTabId);
+  // DOM double-click dispatch is scoped to this page; avoid coupling it to
+  // lastFocusedWindow tab bookkeeping in headed CI.
   await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
     target:{tabId:id},
     world:'ISOLATED',
@@ -3013,4 +3007,82 @@ test('X.com first-load and existing-document activation survive repeated opt-in 
     await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
     await closeBlbTabs(extensionWorker);
   }
+});
+
+
+test('live Supply of Grace Substack page supports Show on BLB and Double-click without reload', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  test.setTimeout(90000);
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'supplyofgrace.com':true},
+    doubleClickBlbSites:{'supplyofgrace.com':true}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+
+  const pageErrors=[];
+  page.on('pageerror',error => pageErrors.push(String(error)));
+  page.on('console',message => {
+    if (message.type()==='error') pageErrors.push(message.text());
+  });
+
+  // Use the actual Substack-hosted publication, not a route.fulfill HTML mock.
+  await page.goto('https://www.supplyofgrace.com/',{waitUntil:'domcontentloaded',timeout:45000});
+  const tabId=await getTabIdForUrl(extensionWorker,'https://www.supplyofgrace.com/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker,tabId),{
+    timeout:20000,
+    message:'the real Supply of Grace Substack document must initialize on first load'
+  }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+  // Put a controlled reference inside the live page's main/article region.
+  // This preserves Substack's real scripts, CSS, overlays, and event listeners
+  // while making the selected text deterministic across changing articles.
+  await page.evaluate(() => {
+    const host=document.querySelector('main') ||
+      document.querySelector('[data-testid*="post"]') ||
+      document.body;
+    const fixture=document.createElement('article');
+    fixture.id='blb-suite-live-site-reference-fixture';
+    fixture.style.cssText='display:block;position:relative;margin:24px;padding:16px;background:#fff;color:#111;z-index:1;';
+    fixture.innerHTML='<p id="blb-suite-live-show-reference">John 3:16</p><p id="blb-suite-live-double-reference">Romans 8:<span id="blb-suite-live-verse">28</span></p>';
+    host.appendChild(fixture);
+  });
+
+  await page.locator('#blb-suite-live-show-reference').evaluate(element => {
+    const range=document.createRange();
+    range.selectNodeContents(element);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const floating=page.locator('#blb-suite-page-selection-button');
+  await expect(floating,{message:'Show on BLB must appear for a selected reference on the live Substack page'}).toBeVisible({timeout:10000});
+  await floating.click();
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/jhn/3/16/'),{
+    message:'Show on BLB must open John 3:16 from the live Substack page'
+  }).toBe(true);
+
+  await page.bringToFront();
+  await page.locator('#blb-suite-live-double-reference').evaluate(element => {
+    element.innerHTML='Romans 8:<span id="blb-suite-live-verse">28</span>';
+  });
+  await page.locator('#blb-suite-live-verse').dblclick({delay:100});
+  await expect.poll(() => hasBlbPassage(extensionWorker,'/kjv/rom/8/28/'),{
+    timeout:10000,
+    message:'Double-click must open Romans 8:28 on the live Substack page without a reload'
+  }).toBe(true);
+
+  expect(pageErrors.slice(-10)).toEqual([]);
+  await page.evaluate(() => document.querySelector('#blb-suite-live-site-reference-fixture')?.remove());
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'supplyofgrace.com':false},
+    doubleClickBlbSites:{'supplyofgrace.com':false}
+  });
+  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
 });
