@@ -25,7 +25,7 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
       };
       response.writeHead(200, {
         'Content-Type':'text/html; charset=utf-8',
-        'Cache-Control':'no-store'
+        'Cache-Control':'public, max-age=60'
       });
       response.end(`<!doctype html>
 <html><head><title>BLB prerender source</title>
@@ -36,7 +36,13 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     if (request.url === '/destination') {
       const secPurpose = request.headers['sec-purpose'] || '';
       if (secPurpose.includes('prerender')) {
-        prerenderRequests.push({ secPurpose, userAgent:request.headers['user-agent'] || '' });
+        const record = {
+          secPurpose,
+          userAgent:request.headers['user-agent'] || '',
+          responseFinished:false
+        };
+        prerenderRequests.push(record);
+        response.once('finish', () => { record.responseFinished = true; });
       }
       response.writeHead(200, {
         'Content-Type':'text/html; charset=utf-8',
@@ -96,10 +102,14 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
 
     // The server-side Sec-Purpose header proves Chromium actually requested
     // the destination as a prerender, without attaching CDP to the source tab.
-    await expect.poll(() => prerenderRequests.length, {
+    await expect.poll(() =>
+      prerenderRequests.some(request => request.responseFinished), {
       timeout:15000,
-      message:'Chromium must request the destination with Sec-Purpose: prefetch;prerender'
-    }).toBeGreaterThan(0);
+      message:'Chromium must finish the destination response requested with Sec-Purpose: prefetch;prerender'
+    }).toBe(true);
+    // The completed HTTP response is not proof that the renderer has finished
+    // prerendering. Allow its document lifecycle to settle before activation.
+    await page.waitForTimeout(1500);
 
     await page.evaluate(url => { window.location.href = url; }, destination);
     await page.waitForURL(destination, {timeout:15000});
@@ -175,6 +185,7 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     await extensionWorker.evaluate(() =>
       reconcileRuntimeContentScriptRegistrations().catch(() => {})
     );
+    server.closeAllConnections?.();
     await new Promise(resolve => server.close(resolve));
   }
 });
