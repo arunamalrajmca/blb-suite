@@ -3746,27 +3746,23 @@ async function isLiveContentScriptSenderDocument(sender) {
     const requestUrl = browserManagedDocument
       ? (sender.tab?.url || sender.url)
       : sender.url;
-    // Check the URL captured on the MessageSender itself, not sender.tab.url:
-    // Chromium may update the tab snapshot while an async message is pending.
-    // A retained/BFCache document can still be scriptable after navigation, so
-    // documentId targeting alone is not enough to prove it remains current.
-    // Diagnostic isolation: bypass only the sender URL vs live-tab URL comparison.
-    // Keep the documentId and current-document URL checks below intact.
 
+    // For ordinary web pages, the browser's documentId is the authoritative
+    // identity. URL snapshots can disagree transiently while Chrome updates
+    // tabs/navigation state, so do not reject a sender solely on either URL
+    // comparison when the browser supplies a document ID.
     if (!browserManagedDocument && typeof sender.documentId === 'string' && sender.documentId) {
-      // Read the current top-frame document identity and compare it with the
-      // request's sender document. Targeting the old document ID could still
-      // succeed for a BFCache-retained page after a navigation.
       const results = await chrome.scripting.executeScript({
         target:{tabId:sender.tab.id, frameIds:[0]},
-        func:() => location.href
+        func:() => true
       });
-      // Diagnostic isolation: trust the browser's current documentId match
-      // without the additional sender URL vs executing-document URL comparison.
       return results?.length === 1 &&
         results[0]?.documentId === sender.documentId;
     }
-    return true;
+
+    // Preserve URL-based validation for browser-managed documents and older
+    // Chromium versions that do not provide MessageSender.documentId.
+    return sameSenderDocumentUrl(requestUrl, liveUrl);
   } catch (_) {
     return false;
   }
