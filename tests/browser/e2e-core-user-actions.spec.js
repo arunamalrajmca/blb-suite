@@ -1615,8 +1615,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const lri = '\\u2066';
-    const pdi = '\\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
     article.innerHTML =
@@ -1673,25 +1671,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     element.dispatchEvent(new MouseEvent(eventType, {bubbles:true,cancelable:true,view:window,detail:eventType === 'dblclick' ? 2 : 1}));
   }, { value: token, eventType });
 
-  // Use real browser mouse input for the baseline. Dispatching a synthetic
-  // dblclick after manually installing a Range does not reproduce the browser's
-  // native word-selection behavior.
-  const doubleClickToken = async token => {
-    const point = await page.locator('#fb-luke-citation').evaluate((element, value) => {
-      const textNode = element.firstChild;
-      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
-      const start = textNode.nodeValue.indexOf(value);
-      if (start < 0) throw new Error('Token not found in Facebook text node: ' + value);
-      const range = document.createRange();
-      range.setStart(textNode, start);
-      range.setEnd(textNode, start + value.length);
-      const rect = range.getBoundingClientRect();
-      if (!rect.width || !rect.height) throw new Error('Token has no visible browser selection rectangle: ' + value);
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    }, token);
-    await page.mouse.dblclick(point.x, point.y);
-  };
-
   // Floating Show on BLB must use only the selected token's second line.
   // This is deliberately sequential: the first successful click clears its
   // selection, then a fresh selection must make the same button work again.
@@ -1708,9 +1687,9 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
   }
 
   // Exercise the registered Alt+B command handler for the same second-line tokens.
-  for (const [selector,text,label] of [
-    ['Luke','Luke','Alt+B Luke'],
-    ['22','22','Alt+B 22']
+  for (const [selector,label] of [
+    ['Luke','Alt+B Luke'],
+    ['22','Alt+B 22']
   ]) {
     await selectToken('#fb-luke-citation', selector);
     await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
