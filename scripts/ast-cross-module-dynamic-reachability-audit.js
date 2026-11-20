@@ -76,8 +76,90 @@ function analyzeCrossModule(root,files){
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
     });
   }
-  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,externalImports,propertyReferences,dynamicPropertyReferences};
+  const interprocedural=analyzeInterproceduralObjectFlow(root,files,asts,meta);
+  for(const item of interprocedural.propertyReferences)if(!propertyReferences.some(x=>x.from===item.from&&x.to===item.to&&x.local===item.local&&x.property===item.property&&x.line===item.line))propertyReferences.push(item);
+  for(const item of interprocedural.dynamicPropertyReferences)if(!dynamicPropertyReferences.some(x=>x.from===item.from&&x.to===item.to&&x.local===item.local&&x.line===item.line))dynamicPropertyReferences.push(item);
+  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,externalImports,propertyReferences,dynamicPropertyReferences,interprocedural};
 }
+
+function analyzeInterproceduralObjectFlow(root,files,asts,meta){
+  const parent=new Map(),find=x=>{if(!parent.has(x))parent.set(x,x);if(parent.get(x)!==x)parent.set(x,find(parent.get(x)));return parent.get(x);};
+  const union=(a,b)=>{const x=find(a),y=find(b);if(x!==y)parent.set(y,x);};
+  const binding=(file,name)=>file+'::'+name;
+  const importsByLocal=new Map(),functions=new Map(),exportedFunctions=new Map();
+  for(const [file,data] of meta)for(const item of data.imports){
+    if(!item.local)continue;
+    const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
+    const exportedLocal=meta.get(target).exports.get(item.imported);
+    if(!exportedLocal)continue;
+    importsByLocal.set(binding(file,item.local),{target,exportedLocal,imported:item.imported});
+  }
+  function addFunction(file,name,node){
+    if(!name||!node||!['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
+    functions.set(binding(file,name),{file,name,node,params:node.params||[]});
+  }
+  for(const [file,ast] of asts){
+    for(const statement of ast.body){
+      const d=statement.type==='ExportNamedDeclaration'?statement.declaration:statement;
+      if(!d)continue;
+      if(d.type==='FunctionDeclaration'&&d.id)addFunction(file,d.id.name,d);
+      if(d.type==='VariableDeclaration')for(const item of d.declarations||[])if(item.id.type==='Identifier')addFunction(file,item.id.name,item.init);
+    }
+  }
+  for(const [file,data] of meta)for(const [exported,local] of data.exports){
+    if(local&&functions.has(binding(file,local)))exportedFunctions.set(binding(file,exported),functions.get(binding(file,local)));
+  }
+  const resolveFunction=(file,name)=>{
+    const local=functions.get(binding(file,name));if(local)return local;
+    const imported=importsByLocal.get(binding(file,name));if(imported)return exportedFunctions.get(binding(imported.target,imported.imported))||functions.get(binding(imported.target,imported.exportedLocal))||null;
+    return null;
+  };
+  // Imported object bindings and their exporting declarations share identity.
+  const objectImports=[];
+  for(const [file,data] of meta)for(const item of data.imports){
+    if(!item.local||item.imported==='*')continue;
+    const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
+    const exportedLocal=meta.get(target).exports.get(item.imported);if(!exportedLocal)continue;
+    if(resolveFunction(target,exportedLocal))continue;
+    union(binding(file,item.local),binding(target,exportedLocal));
+    objectImports.push({file,local:item.local,target,exportedLocal});
+  }
+  const calls=[];
+  for(const [file,ast] of asts)visit(ast,(n,parentNode)=>{
+    if(n.type!=='CallExpression'||n.callee.type!=='Identifier')return;
+    const fn=resolveFunction(file,n.callee.name);if(!fn)return;
+    for(let i=0;i<Math.min(fn.params.length,n.arguments.length);i++){
+      const param=fn.params[i],arg=n.arguments[i];
+      if(param.type==='Identifier'&&arg.type==='Identifier')union(binding(fn.file,param.name),binding(file,arg.name));
+    }
+    const assigned=parentNode&&parentNode.type==='VariableDeclarator'&&parentNode.init===n&&parentNode.id.type==='Identifier'?parentNode.id.name:null;
+    if(assigned)calls.push({file,assigned,fn});
+  });
+  // A returned identifier and the receiving variable represent the same object.
+  for(const call of calls){
+    const returned=[];
+    visit(call.fn.node.body,n=>{
+      if(n.type==='ReturnStatement'&&n.argument&&n.argument.type==='Identifier')returned.push(n.argument.name);
+    });
+    for(const name of returned)union(binding(call.file,call.assigned),binding(call.fn.file,name));
+  }
+  const origins=new Map();
+  for(const item of objectImports){
+    const key=find(binding(item.file,item.local));
+    if(!origins.has(key))origins.set(key,item);
+  }
+  const propertyReferences=[],dynamicPropertyReferences=[];
+  for(const [file,ast] of asts)visit(ast,n=>{
+    if(n.type!=='MemberExpression'||n.object.type!=='Identifier')return;
+    const origin=origins.get(find(binding(file,n.object.name)));if(!origin)return;
+    const property=n.computed?(n.property.type==='Literal'&&(typeof n.property.value==='string'||typeof n.property.value==='number')?String(n.property.value):null):(n.property.name||null);
+    const entry={from:path.relative(root,file),to:path.relative(root,origin.target),local:n.object.name,exportedLocal:origin.exportedLocal,property,line:n.loc.start.line,flow:'interprocedural'};
+    if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
+  });
+  const dedupe=items=>[...new Map(items.map(x=>[JSON.stringify(x),x])).values()];
+  return {propertyReferences:dedupe(propertyReferences),dynamicPropertyReferences:dedupe(dynamicPropertyReferences),objectImports:objectImports.length};
+}
+
 function analyzeDynamicExecution(root,files,graph){
   const set=new Set(files),launches=[],extra=[];
   for(const file of files)visit(parse(fs.readFileSync(file,'utf8'),file),n=>{
@@ -130,6 +212,8 @@ function run(root=path.resolve(__dirname,'..')){
   console.log('External package/builtin imports: '+crossModule.externalImports.length);
   console.log('Cross-module property references: '+crossModule.propertyReferences.length);
   console.log('Dynamic imported-property references: '+crossModule.dynamicPropertyReferences.length);
+  console.log('Interprocedural object-flow property references: '+crossModule.interprocedural.propertyReferences.length);
+  console.log('Interprocedural dynamic property references: '+crossModule.interprocedural.dynamicPropertyReferences.length);
   console.log('Dynamic loader/process sites: '+dynamic.launches.length);
   console.log('Resolved dynamic execution edges: '+dynamic.resolvedLaunchEdges.length);
   console.log('Unresolved dynamic sites in reachable modules: '+dynamic.unresolvedReachable.length);
