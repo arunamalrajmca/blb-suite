@@ -15,6 +15,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
     const originalSelectionPermissionCheck = hasSelectionActionPermissionForTab;
+    const originalSelectionEligibilityCheck = shouldShowSelectionContextMenu;
     const createdTabIds = [];
     const createdWindowIds = [];
     const updates = [];
@@ -129,6 +130,10 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       await new Promise(resolve => setTimeout(resolve, 100));
       const activeTabBeforeReplacementSync = await chrome.tabs.query({active:true,lastFocusedWindow:true});
       updates.length = 0;
+      // This assertion covers replacement dispatch and both menu writes. Keep
+      // eligibility deterministic here; its async storage/permission behavior
+      // is covered by the dedicated stale-result and click-time tests below.
+      shouldShowSelectionContextMenu = async () => true;
       const replacementSynced = await syncSelectionMenusAfterTabReplacement(replacementTab.id);
       const replacementShowsWebMenu = updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
@@ -215,6 +220,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
       hasSelectionActionPermissionForTab = originalSelectionPermissionCheck;
+      shouldShowSelectionContextMenu = originalSelectionEligibilityCheck;
       if (recordFocusEvent) {
         chrome.windows.onFocusChanged.removeListener(recordFocusEvent);
       }
