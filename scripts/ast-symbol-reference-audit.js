@@ -33,7 +33,8 @@ function analyzeSource(source, filename = '<source>') {
     ecmaVersion: 'latest',
     sourceType: 'script',
     allowHashBang: true,
-    locations: true
+    locations: true,
+    ranges: true
   });
   const manager = eslintScope.analyze(ast, {
     ecmaVersion: 2022,
