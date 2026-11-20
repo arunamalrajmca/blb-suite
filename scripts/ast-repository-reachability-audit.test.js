@@ -55,10 +55,11 @@ test('marks eval and computed global access as dynamic-analysis risks', () => {
 test('discovers manifest and HTML execution contexts plus runtime registration sites', () => {
   const root = require('node:os').tmpdir();
   const source = new Map([
-    ['extension/background.js', 'chrome.scripting.registerContentScripts([]); importScripts("later.js");'],
+    ['extension/background.js', 'const STARTUP_IMPORTS = ["later.js"]; for (const scriptFile of STARTUP_IMPORTS) importScripts(scriptFile); chrome.scripting.registerContentScripts([]);'],
+    ['extension/later.js', 'importScripts("nested.js"); function importedGlobal() {}'],
+    ['extension/nested.js', 'function nestedGlobal() {}'],
     ['extension/content.js', 'function contentGlobal() {}'],
-    ['extension/popup.js', 'function popupGlobal() {}'],
-    ['extension/late.js', 'function lateGlobal() {}']
+    ['extension/popup.js', 'function popupGlobal() {}']
   ]);
   const fakeRoot = require('node:fs').mkdtempSync(require('node:path').join(root, 'reachability-'));
   try {
@@ -70,7 +71,9 @@ test('discovers manifest and HTML execution contexts plus runtime registration s
     }));
     require('node:fs').writeFileSync(require('node:path').join(fakeRoot, 'extension/popup.html'), '<script src="popup.js"></script>');
     const result = discoverContexts(fakeRoot, source);
-    assert.ok(result.groups.some(group => group.id === 'mv3-service-worker'));
+    const worker = result.groups.find(group => group.id === 'mv3-service-worker');
+    assert.ok(worker);
+    assert.deepEqual(worker.files, ['extension/nested.js', 'extension/later.js', 'extension/background.js']);
     assert.ok(result.groups.some(group => group.id === 'manifest-content-script-0'));
     assert.ok(result.groups.some(group => group.id === 'html:extension/popup.html'));
     assert.ok(result.dynamic.some(item => item.api === 'chrome.scripting.registerContentScripts'));
