@@ -254,3 +254,23 @@ This isolates the #949 promise-coalescing boundary from host-permission, persist
 - Test holds a Promise-like per-tab activation lock during same-origin BLB navigation, verifies that the #949 continuation attaches to the lock, releases it, then requires the follow-up shared activation helper and destination content-script readiness.
 - The CI workflow/status endpoints had not yet reported runs or checks when this entry was written. Do not infer a pass from an empty status response.
 - PR #968 is intentionally draft/open. Do not merge it. PR #967 also remains open/unmerged. No production branch, version, or release has been changed.
+
+
+### First-load four-action coverage review
+
+The existing Supply of Grace lifecycle test does exercise all four action paths on a first-load document, but the coverage is not fully equivalent to four real browser gestures:
+- Floating Button is clicked through the page UI.
+- Double-click is performed through a real Playwright DOM double-click.
+- Right-click invokes `handleBlbSelectionContextMenuClick` directly after separately checking `shouldShowBlbContextMenu`; it does not open and choose the native Chromium context menu.
+- Alt+B invokes `handleOpenBibleSelectionCommand()` directly; it does not dispatch the real keyboard shortcut through the browser.
+
+Therefore, keep the existing test, but add a separate real-browser gesture test for native right-click menu selection and Alt+B keyboard dispatch on the same first-load Supply of Grace document. Do not replace the existing direct-handler tests; they remain useful lower-level coverage.
+
+### PR #968 CI update
+
+At the latest check:
+- HARD-GATE — PR: success.
+- Require latest main ancestry: success.
+- References & Double-click — PR: queued.
+- Full Test Audit and Performance: skipped by workflow configuration.
+- No merge or production change. PR #968 remains draft/open; PR #967 remains open/unmerged.
