@@ -554,44 +554,51 @@ test('a replaced MV3 tab migrates extension-owned destination and MultiVerse sta
   });
 });
   
-test('a replaced prerendered tab is activated when startup registration recovery may have missed it', async ({
+test('replaced-tab recovery initializes the real surviving document', async ({
   context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
     pageSelectionButtonSites:{'example.com':true},
-    doubleClickBlbSites:{}
+    doubleClickBlbSites:{'example.com':true}
   });
-  const page = await context.newPage();
-  await page.goto('https://example.com/?replacement-recovery=1', {waitUntil:'domcontentloaded'});
-  const tabId = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-    return tabs[0]?.id;
-  });
-  expect(tabId).toBeTruthy();
+  const sourcePage = await context.newPage();
+  const destinationPage = await context.newPage();
+  await sourcePage.goto('https://example.com/?replacement-source=1', {waitUntil:'domcontentloaded'});
+  await destinationPage.goto('https://example.com/?replacement-destination=1', {waitUntil:'domcontentloaded'});
+  const [sourceTabId,destinationTabId] = await Promise.all([
+    extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      return tabs.find(tab => tab.url.includes('replacement-source=1'))?.id ?? null;
+    }),
+    extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      return tabs.find(tab => tab.url.includes('replacement-destination=1'))?.id ?? null;
+    })
+  ]);
+  expect(Number.isInteger(sourceTabId)).toBe(true);
+  expect(Number.isInteger(destinationTabId)).toBe(true);
+  expect(destinationTabId).not.toBe(sourceTabId);
 
   try {
-    const activated = await extensionWorker.evaluate(async id => {
-      const original = ensureContentScriptInTab;
-      const calls = [];
-      ensureContentScriptInTab = async tabId => {
-        calls.push(tabId);
-        return true;
-      };
-      try {
-        await handleReplacedTabIdentity(id, 940003);
-        return calls;
-      } finally {
-        ensureContentScriptInTab = original;
-      }
-    }, tabId);
-    expect(activated).toContain(tabId);
+    // Exercise migration and activation against a live destination tab. This
+    // does not synthesize Chrome's tabs.onReplaced event.
+    await extensionWorker.evaluate(async ({sourceId,destinationId}) => {
+      await handleReplacedTabIdentity(destinationId,sourceId);
+    }, {sourceId:sourceTabId,destinationId:destinationTabId});
+
+    await expect.poll(() => contentScriptLoaded(extensionWorker,destinationTabId), {
+      message:'replacement recovery must initialize the surviving document, not merely request activation'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
   } finally {
-    await page.close().catch(() => {});
+    await Promise.all([
+      sourcePage.close().catch(() => {}),
+      destinationPage.close().catch(() => {})
+    ]);
     await extensionStorage.set({
       pageSelectionButtonSites:{'example.com':false},
-      doubleClickBlbSites:{}
+      doubleClickBlbSites:{'example.com':false}
     });
     await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations().catch(() => {}));
   }
@@ -2179,6 +2186,79 @@ test('GitHub and all subdomains are excluded before any content-script injection
   }
 });
 
+test('persistent registration failure keeps current and subsequent same-tab documents independently activatable', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const host='example.com';
+  const pattern='https://example.com/*';
+  const registrationId=await extensionWorker.evaluate(value => runtimeContentScriptIdForPattern(value),pattern);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{[host]:true},
+    doubleClickBlbSites:{[host]:true}
+  });
+  await extensionWorker.evaluate(async value => {
+    await unregisterRuntimeContentScriptForPattern(value);
+    const api=chrome.scripting;
+    const original=api.registerContentScripts;
+    globalThis.__registrationFailureAudit={original,attempts:0};
+    api.registerContentScripts=async function(scripts) {
+      if((scripts||[]).some(script => (script.matches||[]).includes('https://example.com/*'))) {
+        globalThis.__registrationFailureAudit.attempts++;
+        throw new Error('simulated persistent registration rejection');
+      }
+      return original.call(api,scripts);
+    };
+  },pattern);
+  await page.route('https://example.com/**',route=>route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Registration failure audit</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  try {
+    await page.goto('https://example.com/registration-failure-first',{waitUntil:'domcontentloaded'});
+    const tabId=await getTabIdForUrl(extensionWorker,pattern);
+    expect(Number.isInteger(tabId)).toBe(true);
+    await expect.poll(()=>contentScriptLoaded(extensionWorker,tabId),{
+      message:'current-document fallback must initialize the core content script after persistent registration fails'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+    const firstState=await extensionWorker.evaluate(async ({id,tabId})=>({
+      attempts:globalThis.__registrationFailureAudit?.attempts||0,
+      registered:(await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length>0,
+      tab:(await chrome.tabs.get(tabId)).url
+    }),{id:registrationId,tabId});
+    expect(firstState.attempts).toBeGreaterThan(0);
+    expect(firstState.registered).toBe(false);
+    expect(firstState.tab).toContain('/registration-failure-first');
+
+    await page.goto('https://example.com/registration-failure-next',{waitUntil:'domcontentloaded'});
+    await expect.poll(()=>contentScriptLoaded(extensionWorker,tabId),{
+      message:'the committed next document must independently activate despite the still-failing persistent registration'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+    const secondState=await extensionWorker.evaluate(async id=>({
+      attempts:globalThis.__registrationFailureAudit?.attempts||0,
+      registered:(await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length>0
+    }),registrationId);
+    expect(secondState.attempts).toBeGreaterThan(firstState.attempts);
+    expect(secondState.registered).toBe(false);
+  } finally {
+    await extensionWorker.evaluate(async value=>{
+      const audit=globalThis.__registrationFailureAudit;
+      if(audit?.original) chrome.scripting.registerContentScripts=audit.original;
+      delete globalThis.__registrationFailureAudit;
+      await unregisterRuntimeContentScriptForPattern(value).catch(()=>{});
+    },pattern).catch(()=>{});
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:false},
+      doubleClickBlbSites:{}
+    });
+    await extensionWorker.evaluate(()=>reconcileRuntimeContentScriptRegistrations().catch(()=>{}));
+  }
+});
+
 test('optional redirect-script failure cannot block core selection activation on a first-load page', async ({
   page, extensionStorage, extensionWorker
 }) => {
@@ -3173,3 +3253,80 @@ test('BLB bVerse links clicked immediately on first paint initialize new tabs wi
   await closeBlbTabs(extensionWorker);
 });
 
+test('BLB destination activation is retried after an overlapping same-origin activation settles', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await closeBlbTabs(extensionWorker);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>BLB overlapping activation</title></head><body><p>John 3:16</p></body></html>'
+  }));
+
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {waitUntil:'load'});
+  const tabId = await getTabIdForUrl(extensionWorker, 'https://www.blueletterbible.org/*');
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => contentScriptLoaded(extensionWorker, tabId))
+    .toMatchObject({fileExecuted:true, initialized:true});
+
+  await extensionWorker.evaluate(id => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const originalRetry = ensureContentScriptInTabWithRetry;
+    const state = {release, originalRetry, retryCalls:0, lockObserved:false};
+    const trackedLock = {
+      then: (...args) => gate.then(...args),
+      catch: (...args) => {
+        state.lockObserved = true;
+        return gate.catch(...args);
+      }
+    };
+    globalThis.__blbOverlappingActivation = state;
+    ensureContentScriptInTabWithRetry = async (...args) => {
+      state.retryCalls += 1;
+      return originalRetry(...args);
+    };
+    contentScriptInjectionLocks.set(id, trackedLock);
+  }, tabId);
+
+  try {
+    await page.goto('https://www.blueletterbible.org/kjv/rom/8/28/', {waitUntil:'load'});
+    expect(page.url()).toContain('/kjv/rom/8/28/');
+    await expect.poll(() => extensionWorker.evaluate(async id => {
+      const tab = await chrome.tabs.get(id);
+      return tab.status === 'complete' &&
+        globalThis.__blbOverlappingActivation.lockObserved === true;
+    }, tabId), {timeout:10000}).toBe(true);
+
+    await extensionWorker.evaluate(id => {
+      const state = globalThis.__blbOverlappingActivation;
+      contentScriptInjectionLocks.delete(id);
+      state.release();
+    }, tabId);
+
+    await expect.poll(() => extensionWorker.evaluate(() =>
+      globalThis.__blbOverlappingActivation.retryCalls
+    ), {timeout:15000}).toBeGreaterThan(0);
+    await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
+      timeout:15000,
+      message:'the destination document must be initialized by the follow-up activation, not by the outgoing promise'
+    }).toMatchObject({fileExecuted:true, initialized:true});
+  } finally {
+    await extensionWorker.evaluate(id => {
+      const state = globalThis.__blbOverlappingActivation;
+      if (state) {
+        contentScriptInjectionLocks.delete(id);
+        state.release();
+        ensureContentScriptInTabWithRetry = state.originalRetry;
+        delete globalThis.__blbOverlappingActivation;
+      }
+    }, tabId).catch(() => {});
+    await closeBlbTabs(extensionWorker);
+  }
+});
