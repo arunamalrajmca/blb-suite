@@ -25,46 +25,23 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     return tab.id;
   });
 
-  const browser = context.browser();
-  expect(browser, 'Chromium browser must expose a browser-level CDP session').not.toBeNull();
-  const cdp = await context.newCDPSession(page);
-  const statuses = [];
-  const statusListener = event => {
-    const url = event.key?.url || event.prerenderingUrl || event.url || '';
-    if (url.includes('blb-prerender-destination=1')) {
-      statuses.push({
-        status:event.status,
-        prerenderStatus:event.prerenderStatus,
-        url,
-        key:event.key,
-        rawEvent:event
-      });
-    }
-  };
-
-  try {
-    await cdp.send('Preload.enable');
-    cdp.on('Preload.prerenderStatusUpdated', statusListener);
-
-    const destination = 'https://example.com/?blb-prerender-destination=1';
-    await page.evaluate(url => {
-      const rules = {
-        prerender:[{
-          source:'list',
-          urls:[url],
-          eagerness:'immediate'
-        }]
-      };
-      const script = document.createElement('script');
-      script.type = 'speculationrules';
-      script.textContent = JSON.stringify(rules);
-      document.head.appendChild(script);
-    }, destination);
-
-    await expect.poll(() => statuses.some(item => item.status === 'Ready'), {
-      timeout:20000,
-      message:'Chromium must report the destination prerender as Ready before activation; observed CDP statuses: ' + JSON.stringify(statuses)
-    }).toBe(true);
+  // Do not attach a DevTools Protocol session to this page: Chromium reports
+  // PrerenderingDisabledByDevTools when DevTools is attached, which would
+  // invalidate the browser behaviour this test is intended to exercise.
+  const destination = 'https://example.com/?blb-prerender-destination=1';
+  await page.evaluate(url => {
+    const rules = {
+      prerender:[{
+        source:'list',
+        urls:[url],
+        eagerness:'immediate'
+      }]
+    };
+    const script = document.createElement('script');
+    script.type = 'speculationrules';
+    script.textContent = JSON.stringify(rules);
+    document.head.appendChild(script);
+  }, destination);
 
     // A normal same-tab navigation activates the browser-created prerender.
     await page.evaluate(url => { window.location.href = url; }, destination);
@@ -124,8 +101,6 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
       doubleClickBound:true
     });
   } finally {
-    cdp.off('Preload.prerenderStatusUpdated', statusListener);
-    await cdp.detach().catch(() => {});
     await page.close().catch(() => {});
     await extensionStorage.set({
       pageSelectionButtonSites:{'example.com':false},
