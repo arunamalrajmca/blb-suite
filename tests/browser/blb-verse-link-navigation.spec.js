@@ -42,6 +42,17 @@ test('enabled Suite targets bVerse links and routes ordinary nowrap links throug
   }, NOWRAP_URL);
   await expect(page.locator('#dynamic-bverse-link')).toHaveAttribute('target', '_blank');
 
+  // Adding an anchor inside an already-existing bVerse container must process
+  // its ancestor container, not only descendants of the added anchor.
+  await page.evaluate(url => {
+    const link = document.createElement('a');
+    link.id = 'nested-dynamic-bverse-link';
+    link.href = url;
+    link.textContent = "Nested dynamic Strong's link";
+    document.querySelector('#bVerse_1').appendChild(link);
+  }, NOWRAP_URL);
+  await expect(page.locator('#nested-dynamic-bverse-link')).toHaveAttribute('target', '_blank');
+
   const sourceUrl = page.url();
   const tabsBefore = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' })).map(tab => tab.id)
@@ -56,6 +67,31 @@ test('enabled Suite targets bVerse links and routes ordinary nowrap links throug
     );
   }, tabsBefore), { timeout: 10000 }).toBe(true);
   expect(page.url()).toBe(sourceUrl);
+});
+
+test('a BLB verse link clicked in the same task as insertion opens a new tab', async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true });
+  await serveBlbFixture(context);
+  await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
+
+  // Insert and click before the MutationObserver callback or its scheduled
+  // animation frame can assign target="_blank". The capture listener must
+  // establish the target synchronously before the browser's default action.
+  const popupPromise = context.waitForEvent('page');
+  await page.evaluate(url => {
+    const link = document.createElement('a');
+    link.id = 'same-task-bverse-link';
+    link.href = url;
+    link.textContent = "Immediate Strong's link";
+    document.querySelector('#bVerse_1').appendChild(link);
+    link.click();
+  }, BVERSE_URL);
+  const destination = await popupPromise;
+  await expect(destination).toHaveURL(BVERSE_URL);
+  await destination.close();
 });
 
 test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unchanged', async ({
