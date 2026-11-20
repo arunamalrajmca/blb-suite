@@ -304,6 +304,25 @@ function analyzeFile(source, filename) {
   return { definitions, properties, propertyReferences, ownReads, unresolvedReads, dynamicRisk };
 }
 
+function findCrossContextReferencedGlobals(contexts, analyses) {
+  const referenced = new Set();
+  for (const context of contexts) {
+    const definitions = [];
+    const reads = new Set();
+    for (const file of context.files) {
+      const analysis = analyses.get(file);
+      if (!analysis) continue;
+      for (const definition of analysis.definitions) definitions.push({ file, name: definition.name });
+      for (const name of analysis.unresolvedReads) reads.add(name);
+      for (const name of analysis.ownReads) reads.add(name);
+    }
+    for (const definition of definitions) {
+      if (reads.has(definition.name)) referenced.add(definition.file + ':' + definition.name);
+    }
+  }
+  return referenced;
+}
+
 function run(root = path.resolve(__dirname, '..')) {
   const jsFiles = walkFiles(root, file => file.endsWith('.js'));
   const sourceByFile = new Map(jsFiles.map(file => [relative(root, file), fs.readFileSync(file, 'utf8')]));
@@ -311,6 +330,7 @@ function run(root = path.resolve(__dirname, '..')) {
   const analyses = new Map();
   for (const [filename, source] of sourceByFile) analyses.set(filename, analyzeFile(source, filename));
 
+  const crossContextReferencedGlobals = findCrossContextReferencedGlobals(contexts.groups, analyses);
   const reports = [];
   for (const context of contexts.groups) {
     const files = context.files.filter(file => analyses.has(file));
@@ -338,7 +358,7 @@ function run(root = path.resolve(__dirname, '..')) {
 
     const globals = [];
     for (const [name, items] of definitions) {
-      if (!unresolvedReads.has(name)) {
+      if (!unresolvedReads.has(name) && !crossContextReferencedGlobals.has(item.file + ':' + name)) {
         for (const item of items) globals.push({
           ...item,
           context: context.id,
