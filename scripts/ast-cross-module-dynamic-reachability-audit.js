@@ -84,10 +84,9 @@ function analyzeCrossModule(root,files){
 
 function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const eslintScope=require('eslint-scope');
-  const scopes=new Map(),variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map();
+  const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map();
   for(const [file,ast] of asts){
     const manager=eslintScope.analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
-    scopes.set(file,manager);
     for(const scope of manager.scopes){
       for(const variable of scope.variables||[]){
         for(const id of variable.identifiers||[])variableForNode.set(id,variable);
@@ -172,6 +171,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     });
   }
   // Propagate origin sets over directed alias, argument, and return flows.
+  const objectImportCount=origins.size;
   const queue=[...origins.keys()];
   const queued=new Set(queue);
   while(queue.length){
@@ -196,7 +196,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     }
   });
   const dedupe=items=>[...new Map(items.map(item=>[JSON.stringify(item),item])).values()];
-  return {propertyReferences:dedupe(propertyReferences),dynamicPropertyReferences:dedupe(dynamicPropertyReferences),objectImports:importsForVariable.size};
+  return {propertyReferences:dedupe(propertyReferences),dynamicPropertyReferences:dedupe(dynamicPropertyReferences),objectImports:objectImportCount};
 }
 
 function analyzeDynamicExecution(root,files,graph){
