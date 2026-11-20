@@ -36,3 +36,15 @@ test('unknown dynamic loader reachable from an entrypoint suppresses orphan clai
  assert.equal(r.unresolvedReachable.length,1);assert.equal(r.candidates[0].status,'uncertain-dynamic-loader');}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('attributes imported object property reads to the exported source owner',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cross-property-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {}, stop() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; api.start(); api['stop'](); api[selected]();");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.propertyReferences.some(x=>x.local==='api'&&x.exportedLocal==='service'&&x.property==='start'));
+  assert.ok(r.propertyReferences.some(x=>x.property==='stop'));
+  assert.ok(r.dynamicPropertyReferences.some(x=>x.local==='api'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
