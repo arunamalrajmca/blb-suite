@@ -1,7 +1,7 @@
 const { test, expect } = require('./fixtures');
 
 test('Chromium prerender activation emits a real tabs.onReplaced event and initializes the surviving document', async ({
-  context, extensionStorage, extensionWorker, extensionId
+  context, extensionStorage, extensionWorker
 }) => {
   test.setTimeout(90000);
   await extensionStorage.set({
@@ -12,51 +12,41 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
   });
 
   const page = await context.newPage();
-  await page.goto('https://example.com/?blb-prerender-source=1', {waitUntil:'domcontentloaded'});
-  const sourceTabId = await extensionWorker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-    if (!tab || !Number.isInteger(tab.id)) throw new Error('Unable to identify source tab');
-    globalThis.__blbPrerenderReplacementEvents = [];
-    chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
-      globalThis.__blbPrerenderReplacementEvents.push({
-        addedTabId, removedTabId, observedAt:Date.now()
+  try {
+    await page.goto('https://example.com/?blb-prerender-source=1', {waitUntil:'domcontentloaded'});
+    const sourceTabId = await extensionWorker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      if (!tab || !Number.isInteger(tab.id)) throw new Error('Unable to identify source tab');
+      globalThis.__blbPrerenderReplacementEvents = [];
+      chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+        globalThis.__blbPrerenderReplacementEvents.push({
+          addedTabId, removedTabId, observedAt:Date.now()
+        });
       });
+      return tab.id;
     });
-    return tab.id;
-  });
 
-  // Do not attach a DevTools Protocol session to this page: Chromium reports
-  // PrerenderingDisabledByDevTools when DevTools is attached, which would
-  // invalidate the browser behaviour this test is intended to exercise.
-  const destination = 'https://example.com/?blb-prerender-destination=1';
-  await page.evaluate(url => {
-    const rules = {
-      prerender:[{
-        source:'list',
-        urls:[url],
-        eagerness:'immediate'
-      }]
-    };
-    const script = document.createElement('script');
-    script.type = 'speculationrules';
-    script.textContent = JSON.stringify(rules);
-    document.head.appendChild(script);
-  }, destination);
+    // Do not attach a DevTools Protocol session: Chromium disables prerendering
+    // when DevTools is attached. The real extension tabs.onReplaced event is
+    // the browser-level proof that the prerendered tab replaced the source tab.
+    const destination = 'https://example.com/?blb-prerender-destination=1';
+    await page.evaluate(url => {
+      const script = document.createElement('script');
+      script.type = 'speculationrules';
+      script.textContent = JSON.stringify({
+        prerender:[{source:'list',urls:[url],eagerness:'immediate'}]
+      });
+      document.head.appendChild(script);
+    }, destination);
 
-    // A normal same-tab navigation activates the browser-created prerender.
     await page.evaluate(url => { window.location.href = url; }, destination);
     await page.waitForURL(destination, {timeout:15000});
     await page.waitForLoadState('domcontentloaded');
 
-    await expect.poll(() => statuses.some(item => item.prerenderStatus === 'Activated'), {
-      timeout:10000,
-      message:'Chromium must report the prerender as Activated'
-    }).toBe(true);
-
     await expect.poll(() => extensionWorker.evaluate(() =>
       globalThis.__blbPrerenderReplacementEvents || []
     ), {
-      timeout:10000,
+      timeout:15000,
       message:'The extension must receive the real chrome.tabs.onReplaced event'
     }).toEqual(expect.arrayContaining([
       expect.objectContaining({removedTabId:sourceTabId})
