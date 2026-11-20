@@ -71,6 +71,10 @@ jobs:
         run: |
           node --test scripts/ast-symbol-reference-audit.test.js
           node scripts/ast-symbol-reference-audit.js
+      - name: Test and run context-aware repository reachability audit
+        run: |
+          node --test scripts/ast-repository-reachability-audit.test.js
+          node scripts/ast-repository-reachability-audit.js
       - name: Read manifest version
         id: version
         shell: bash
