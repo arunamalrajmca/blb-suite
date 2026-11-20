@@ -41,6 +41,24 @@ try {
   has(background, /!\(await isSuiteEnabled\(\)\)[\s\S]{0,180}sendResponse\(\{ok:false\}\)/, 'background URL navigation respects the global master switch');
   has(background, /https:\\\/\\\/www\\\.blueletterbible\\\.org\\\//, 'background URL navigation validates BLB destinations');
 
+  // Startup selection contracts: Double-click must have a capture listener
+  // before asynchronous master/per-site settings reads finish, and the event
+  // handler must defer authorization until those settings are authoritative.
+  has(contentScript, /if \(location\.hostname !== BLB_HOSTNAME && !isSensitiveSiteUrl\(location\.href\)\) \{\s*enableDoubleClickBlb\(\);\s*\}\s*void ensureDoubleClickSettingsReady\(\);/,
+    'Double-click listener is armed before initial settings readiness');
+  has(contentScript, /if \(!suiteSettingsReady \|\| !doubleClickSettingsReady\) \{[\s\S]{0,260}ensureDoubleClickSettingsReady\(\)\.then\([\s\S]{0,220}handleDoubleClickBlb\(event\)/,
+    'early Double-click events wait for authoritative settings before dispatch');
+
+  // Chromium groups multiple extension context-menu entries into a submenu.
+  // Keep exactly one registered native selection item and choose web/PDF
+  // eligibility from the active tab rather than creating a second item.
+  has(background, /async function shouldShowSelectionContextMenu\(tab, selectionText = ''\)/,
+    'one tab-aware selection-menu eligibility path serves web and PDF pages');
+  const registeredSelectionMenuIds = [...background.matchAll(/chrome\.contextMenus\.create\(\{[\s\S]{0,320}?id:\s*['"]([^'"]+)['"]/g)]
+    .map(match => match[1]);
+  assert.deepEqual(registeredSelectionMenuIds, ['blb-suite-web-selection'],
+    'only one native selection context-menu item may be registered');
+
   // MultiVerse page handoff contract: read refs, verify the rendered input,
   // consume only after verification, and retain the background-owned POST slot.
   ordered(multiverseHandoffModule, [
