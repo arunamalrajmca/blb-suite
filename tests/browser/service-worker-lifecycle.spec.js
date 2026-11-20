@@ -554,44 +554,53 @@ test('a replaced MV3 tab migrates extension-owned destination and MultiVerse sta
   });
 });
   
-test('a replaced prerendered tab is activated when startup registration recovery may have missed it', async ({
+test('replaced-tab recovery initializes the real surviving document', async ({
   context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
     pageSelectionButtonSites:{'example.com':true},
-    doubleClickBlbSites:{}
+    doubleClickBlbSites:{'example.com':true}
   });
-  const page = await context.newPage();
-  await page.goto('https://example.com/?replacement-recovery=1', {waitUntil:'domcontentloaded'});
-  const tabId = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-    return tabs[0]?.id;
-  });
-  expect(tabId).toBeTruthy();
+  const sourcePage = await context.newPage();
+  const destinationPage = await context.newPage();
+  await sourcePage.goto('https://example.com/?replacement-source=1', {waitUntil:'domcontentloaded'});
+  await destinationPage.goto('https://example.com/?replacement-destination=1', {waitUntil:'domcontentloaded'});
+  const [sourceTabId,destinationTabId] = await Promise.all([
+    getTabIdForUrl(extensionWorker,'https://example.com/*').then(async firstId => {
+      const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({url:'https://example.com/*'}));
+      return tabs.find(tab => tab.url.includes('replacement-source=1'))?.id ?? firstId;
+    }),
+    extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      return tabs.find(tab => tab.url.includes('replacement-destination=1'))?.id ?? null;
+    })
+  ]);
+  expect(Number.isInteger(sourceTabId)).toBe(true);
+  expect(Number.isInteger(destinationTabId)).toBe(true);
+  expect(destinationTabId).not.toBe(sourceTabId);
 
   try {
-    const activated = await extensionWorker.evaluate(async id => {
-      const original = ensureContentScriptInTab;
-      const calls = [];
-      ensureContentScriptInTab = async tabId => {
-        calls.push(tabId);
-        return true;
-      };
-      try {
-        await handleReplacedTabIdentity(id, 940003);
-        return calls;
-      } finally {
-        ensureContentScriptInTab = original;
-      }
-    }, tabId);
-    expect(activated).toContain(tabId);
+    // Exercise the production migration and activation path against an actual
+    // live destination tab. Chrome does not expose a supported way for
+    // Playwright to force a genuine prerender tab replacement, so this test
+    // does not claim to synthesize the browser's onReplaced event.
+    await extensionWorker.evaluate(async ({sourceId,destinationId}) => {
+      await handleReplacedTabIdentity(destinationId,sourceId);
+    }, {sourceId:sourceTabId,destinationId:destinationTabId});
+
+    await expect.poll(() => contentScriptLoaded(extensionWorker,destinationTabId), {
+      message:'replacement recovery must initialize the surviving document, not merely request activation'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
   } finally {
-    await page.close().catch(() => {});
+    await Promise.all([
+      sourcePage.close().catch(() => {}),
+      destinationPage.close().catch(() => {})
+    ]);
     await extensionStorage.set({
       pageSelectionButtonSites:{'example.com':false},
-      doubleClickBlbSites:{}
+      doubleClickBlbSites:{'example.com':false}
     });
     await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations().catch(() => {}));
   }
