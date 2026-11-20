@@ -86,6 +86,86 @@ function addGroup(groups, id, files, kind) {
   if (normalized.length) groups.push({ id, kind, files: normalized });
 }
 
+function staticImportScriptNames(ast) {
+  const names = [];
+  const constantArrays = new Map();
+  walkAst(ast, node => {
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+        node.init && node.init.type === 'ArrayExpression' &&
+        node.init.elements.every(item => item && item.type === 'Literal' && typeof item.value === 'string')) {
+      constantArrays.set(node.id.name, node.init.elements.map(item => item.value));
+    }
+  });
+
+  walkAst(ast, node => {
+    if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || node.callee.name !== 'importScripts') return;
+    for (const argument of node.arguments) {
+      if (argument.type === 'Literal' && typeof argument.value === 'string') names.push(argument.value);
+      else if (argument.type === 'Identifier' && constantArrays.has(argument.name)) {
+        names.push(...constantArrays.get(argument.name));
+      } else if (argument.type === 'Identifier') {
+        // Handle the common safe pattern:
+        // const files = ["a.js", "b.js"]; for (const file of files) importScripts(file)
+        walkAst(ast, loop => {
+          if (loop.type !== 'ForOfStatement' || loop.right.type !== 'Identifier' ||
+              loop.left.type !== 'VariableDeclaration') return;
+          const declaration = loop.left.declarations[0];
+          if (!declaration || declaration.id.type !== 'Identifier' ||
+              declaration.id.name !== argument.name) return;
+          const variable = declaration.id.name;
+          let importsLoopVariable = false;
+          walkAst(loop.body, child => {
+            if (child.type === 'CallExpression' && child.callee.type === 'Identifier' &&
+                child.callee.name === 'importScripts' &&
+                child.arguments.some(value => value.type === 'Identifier' && value.name === variable)) {
+              importsLoopVariable = true;
+            }
+          });
+          if (importsLoopVariable && constantArrays.has(loop.right.name)) {
+            names.push(...constantArrays.get(loop.right.name));
+          }
+        });
+      }
+    }
+  });
+  return [...new Set(names)];
+}
+
+function expandImportScripts(root, entryFile, sourceByFile) {
+  const ordered = [];
+  const visiting = new Set();
+  const visited = new Set();
+
+  function visit(filename) {
+    if (visited.has(filename) || visiting.has(filename)) return;
+    visiting.add(filename);
+    const source = sourceByFile.get(filename);
+    if (source) {
+      const ast = parse(source, filename).ast;
+      for (const requested of staticImportScriptNames(ast)) {
+        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(filename), requested));
+        if (sourceByFile.has(resolved)) visit(resolved);
+      }
+    }
+    visiting.delete(filename);
+    visited.add(filename);
+    ordered.push(filename);
+  }
+
+  visit(entryFile);
+  return ordered;
+}
+
+const RETAINED_SHARED_API_PROPERTIES = new Set([
+  // BLBShared is deliberately exposed as a cross-context extension API. Its
+  // methods are consumed by separate service-worker, content-script, popup,
+  // and options-page contexts, so per-context absence is not dead-code proof.
+  'extension/regex-patterns.js:isSensitiveSiteHostname',
+  'extension/regex-patterns.js:isSensitiveSiteUrl',
+  'extension/regex-patterns.js:whitespace',
+  'extension/regex-patterns.js:booleanOperatorWords'
+]);
+
 function discoverContexts(root, sourceByFile) {
   const groups = [];
   const dynamic = [];
@@ -93,7 +173,8 @@ function discoverContexts(root, sourceByFile) {
   if (fs.existsSync(manifestPath)) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     if (manifest.background && manifest.background.service_worker) {
-      addGroup(groups, 'mv3-service-worker', [relative(root, path.join(root, 'extension', manifest.background.service_worker))], 'manifest-background');
+      const worker = relative(root, path.join(root, 'extension', manifest.background.service_worker));
+      addGroup(groups, 'mv3-service-worker', expandImportScripts(root, worker, sourceByFile), 'manifest-background');
     }
     for (let i = 0; i < (manifest.content_scripts || []).length; i++) {
       const entry = manifest.content_scripts[i];
@@ -223,6 +304,25 @@ function analyzeFile(source, filename) {
   return { definitions, properties, propertyReferences, ownReads, unresolvedReads, dynamicRisk };
 }
 
+function findCrossContextReferencedGlobals(contexts, analyses) {
+  const referenced = new Set();
+  for (const context of contexts) {
+    const definitions = [];
+    const reads = new Set();
+    for (const file of context.files) {
+      const analysis = analyses.get(file);
+      if (!analysis) continue;
+      for (const definition of analysis.definitions) definitions.push({ file, name: definition.name });
+      for (const name of analysis.unresolvedReads) reads.add(name);
+      for (const name of analysis.ownReads) reads.add(name);
+    }
+    for (const definition of definitions) {
+      if (reads.has(definition.name)) referenced.add(definition.file + ':' + definition.name);
+    }
+  }
+  return referenced;
+}
+
 function run(root = path.resolve(__dirname, '..')) {
   const jsFiles = walkFiles(root, file => file.endsWith('.js'));
   const sourceByFile = new Map(jsFiles.map(file => [relative(root, file), fs.readFileSync(file, 'utf8')]));
@@ -230,6 +330,7 @@ function run(root = path.resolve(__dirname, '..')) {
   const analyses = new Map();
   for (const [filename, source] of sourceByFile) analyses.set(filename, analyzeFile(source, filename));
 
+  const crossContextReferencedGlobals = findCrossContextReferencedGlobals(contexts.groups, analyses);
   const reports = [];
   for (const context of contexts.groups) {
     const files = context.files.filter(file => analyses.has(file));
@@ -258,21 +359,24 @@ function run(root = path.resolve(__dirname, '..')) {
     const globals = [];
     for (const [name, items] of definitions) {
       if (!unresolvedReads.has(name)) {
-        for (const item of items) globals.push({
-          ...item,
-          context: context.id,
-          classification: hasDynamicRisk ? 'unresolved-dynamic-risk' : 'unreferenced-global-candidate',
-          confidence: 'candidate-only',
-          evidence: hasDynamicRisk
-            ? 'No static read found; this execution context contains eval/with/dynamic global-property access, so reachability cannot be excluded.'
-            : 'No same-context static identifier read found across the inventoried files.'
-        });
+        for (const item of items) {
+          if (crossContextReferencedGlobals.has(item.file + ':' + name)) continue;
+          globals.push({
+            ...item,
+            context: context.id,
+            classification: hasDynamicRisk ? 'unresolved-dynamic-risk' : 'unreferenced-global-candidate',
+            confidence: 'candidate-only',
+            evidence: hasDynamicRisk
+              ? 'No static read found; this execution context contains eval/with/dynamic global-property access, so reachability cannot be excluded.'
+              : 'No same-context static identifier read found across the inventoried files.'
+          });
+        }
       }
     }
 
     const properties = [];
     for (const [name, items] of propertyDefinitions) {
-      if (!propertyReferences.has(name)) {
+      if (!propertyReferences.has(name) && !items.every(item => RETAINED_SHARED_API_PROPERTIES.has(item.file + ':' + name))) {
         for (const item of items) properties.push({
           ...item,
           context: context.id,
@@ -316,4 +420,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { analyzeFile, discoverContexts, parse, run };
+module.exports = { analyzeFile, discoverContexts, findCrossContextReferencedGlobals, parse, run };

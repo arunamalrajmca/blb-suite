@@ -7,10 +7,6 @@ let currentSiteOrigin = '';
 let currentSiteUrl = '';
 let currentSiteKey = '';
 
-function isSensitiveSiteHostname(value) {
-  return BLBShared.isSensitiveSiteHostname(value);
-}
-
 function isSensitiveSiteUrl(value) {
   return BLBShared.isSensitiveSiteUrl(value);
 }
