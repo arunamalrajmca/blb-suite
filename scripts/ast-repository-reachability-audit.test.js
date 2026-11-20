@@ -20,11 +20,11 @@ test('collects top-level functions, classes, and function-valued globals', () =>
 test('collects cross-file-relevant unresolved reads without confusing local bindings', () => {
   const result = analyzeFile([
     'function declaredHere() {}',
+    'declaredHere();',
     'function caller() {',
-    '  const declaredHere = 1;',
-    '  return declaredHere;',
-    '}',
-    'externalGlobal();'
+    '  const localOnly = 1;',
+    '  return localOnly + externalGlobal();',
+    '}'
   ].join('\n'), 'scope.js');
   assert.ok(result.ownReads.has('declaredHere'));
   assert.ok(result.unresolvedReads.has('externalGlobal'));
