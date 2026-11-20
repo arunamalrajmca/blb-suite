@@ -172,3 +172,15 @@ test('keeps static and instance class methods in separate owners', () => {
     'unusedInstance', 'unusedStatic'
   ]);
 });
+
+test('tracks this-property references in object literal methods', () => {
+  const result = ownerAwarePropertyAudit([
+    'const api = {',
+    '  run() { this.stop(); },',
+    '  stop() {},',
+    '  unused() {}',
+    '};',
+    'api.run();'
+  ].join('\\n'), 'object-this.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['unused']);
+});
