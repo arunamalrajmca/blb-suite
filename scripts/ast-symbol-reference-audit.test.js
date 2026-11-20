@@ -107,3 +107,28 @@ test('does not treat Chrome executeScript func callbacks as object methods', () 
   );
   assert.deepEqual(findings, []);
 });
+
+test('does not mistake dynamic computed member keys for static property references', () => {
+  const findings = analyzeSource(
+    'class Example { run() {} } const instance = new Example(); instance[chosenMethod]();',
+    'dynamic-computed.js'
+  );
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].name, 'run');
+});
+
+test('recognizes computed string-literal property keys', () => {
+  const findings = analyzeSource(
+    'class Example { ["run"]() {} ["stop"]() {} } const instance = new Example(); instance["run"]();',
+    'literal-computed.js'
+  );
+  assert.deepEqual(findings.map(item => item.name), ['stop']);
+});
+
+test('does not mistake dynamic computed class method names for static names', () => {
+  const findings = analyzeSource(
+    'const chosen = "run"; class Example { [chosen]() {} }',
+    'dynamic-method-key.js'
+  );
+  assert.deepEqual(findings, []);
+});
