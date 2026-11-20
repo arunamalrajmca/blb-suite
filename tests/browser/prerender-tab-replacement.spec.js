@@ -18,7 +18,7 @@ async function waitFor(read, description, timeoutMs = 20000) {
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-test('native Chromium prerender activation emits tabs.onReplaced without a DevTools connection', async ({
+test('native Chromium same-tab prerender activation preserves tab identity without replacement events', async ({
   extensionPath
 }) => {
   test.setTimeout(120000);
@@ -298,13 +298,9 @@ chrome.webNavigation.onTabReplaced.addListener(details => {
       expect(navigationOrReplacement.url).toBe(destination);
     }
 
-    const replacement = await waitFor(() =>
-      events.find(event => event.type === 'tab-replaced'),
-    'the real chrome.tabs.onReplaced event from the extension service worker', 20000);
-    expect(Number(replacement.addedTabId)).not.toBe(Number(replacement.removedTabId));
-    expect(Number(replacement.addedTabId)).not.toBe(Number(sourceTab.id));
-    expect(Number(replacement.removedTabId)).not.toBe(Number(sourceTab.id));
-    expect(replacement.url).toBe(destination);
+    const destinationTab = events.find(event => event.type === 'destination-tab');
+    expect(destinationTab).toBeTruthy();
+    expect(Number(destinationTab.id)).toBe(Number(sourceTab.id));
 
     const destinationReady = await waitFor(() =>
       events.find(event => event.type === 'content-ready' && event.url === destination),
@@ -313,6 +309,13 @@ chrome.webNavigation.onTabReplaced.addListener(details => {
     expect(destinationReady.fileExecuted).toBe('true');
     expect(destinationReady.initialized).toBe('true');
     expect(destinationReady.doubleClickBound).toBe('true');
+
+    // Current Speculation Rules activation navigates the existing tab in place.
+    // It does not exercise the legacy hidden-tab replacement lifecycle exposed
+    // by tabs.onReplaced / webNavigation.onTabReplaced.
+    await delay(500);
+    expect(events.some(event => event.type === 'tab-replaced')).toBe(false);
+    expect(events.some(event => event.type === 'webnavigation-tab-replaced')).toBe(false);
   } catch (error) {
     throw new Error([
       error.message,
