@@ -110,7 +110,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/context-menu-visibility-event-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/prerender-tab-replacement.spec.js", "const { test } = require('./fixtures');\\n");
+  put(root, "tests/browser/native-prerender-activation.spec.js", "const { test } = require('./fixtures');\\n");
   put(root, "tests/browser/redirect-hostnames.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
