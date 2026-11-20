@@ -39,8 +39,8 @@ function analyzeSource(source, filename = '<source>') {
   const manager = eslintScope.analyze(ast, {
     ecmaVersion: 2022,
     sourceType: 'script',
-    optimistic: true,
-    ignoreEval: true,
+    optimistic: false,
+    ignoreEval: false,
     impliedStrict: false
   });
   const findings = [];
@@ -73,7 +73,14 @@ function analyzeSource(source, filename = '<source>') {
     }
   }
 
-  return findings.sort((a, b) =>
+  // Class declarations can appear in both their outer lexical scope and the
+  // class's own scope. Collapse identical source declarations into one result.
+  const unique = new Map();
+  for (const finding of findings) {
+    const key = [finding.file, finding.line, finding.column, finding.name].join(':');
+    if (!unique.has(key)) unique.set(key, finding);
+  }
+  return [...unique.values()].sort((a, b) =>
     a.line - b.line || a.column - b.column || a.name.localeCompare(b.name)
   );
 }
