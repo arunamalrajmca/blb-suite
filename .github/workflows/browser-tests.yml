@@ -79,6 +79,10 @@ jobs:
         run: |
           node --test scripts/ast-owner-aware-node-reachability-audit.test.js
           node scripts/ast-owner-aware-node-reachability-audit.js
+      - name: Test and run cross-module and dynamic execution reachability audit
+        run: |
+          node --test scripts/ast-cross-module-dynamic-reachability-audit.test.js
+          node scripts/ast-cross-module-dynamic-reachability-audit.js
       - name: Read manifest version
         id: version
         shell: bash
