@@ -121,13 +121,12 @@
     });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     document.addEventListener("click", event => {
-      const enabled = isSuiteEnabledNow();
       const clickedLink = event.target.closest?.("a");
       // Do not depend exclusively on the MutationObserver's next animation
       // frame: a verse link clicked immediately after insertion/load must
       // already have its native new-tab target before the default action.
-      if (enabled && clickedLink) manageVerseLink(clickedLink);
-      if (!enabled || isModifiedLinkActivation(event)) return;
+      if (isSuiteEnabledNow() && clickedLink) manageVerseLink(clickedLink);
+      if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;
       const link = event.target.closest?.("a.nowrap");
       if (!link) return;
       // Criteria Search owns ordinary KJV verse links on its results page.
