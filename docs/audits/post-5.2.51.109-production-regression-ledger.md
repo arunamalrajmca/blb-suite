@@ -375,3 +375,20 @@ Until the exact manual symptom is known, classify #880 as **manual integration f
 - The latest test head is `ca72d0755b633325556325a7d0524221ee8d5d47`. HARD-GATE and latest-main ancestry passed; the native prerender test passed under Xvfb. However, the References & Double-click workflow still failed in the context-menu lifecycle spec at the separate focus-change assertion: `focusChangeHidesWebMenu` expected true but received false. The replacement-menu synchronization assertion was isolated, but this subsequent focus assertion remains unresolved.
 - This is test behavior/coverage to investigate separately; it is not evidence that production tab-replacement recovery is defective. Do not weaken the focus assertion or modify production code speculatively.
 - PR #971 remains draft/open/unmerged. No production code, main branch, version, or release was changed by this experiment.
+
+
+
+### PR #880 source-path inspection — follow-up (2026-11-20)
+
+Inspection of current `main` confirms the merged implementation has the following runtime path:
+
+- The message handler calls `shouldAcceptSelectionOpenRequest(sender.tab.id, text, message.requestId, contentScriptSenderDocumentId(sender))` before entering the shared selection-opening pipeline.
+- `contentScriptSenderDocumentId` returns Chrome's `sender.documentId` when present, but deliberately returns null for file URLs and PDF viewer tabs. The dedup key then uses the explicit `no-document` fallback.
+- Selection IDs are generated independently by the page-button module (`show-on-blb-<timestamp>-<local sequence>`) and the Double-click handler (`dblclick-<timestamp>-<local sequence>`). Thus the code's documented collision concern is plausible for independently instantiated producers; the prefixes reduce collisions between those two specific producers but do not remove collisions between same-type instances.
+- The dedup window is 1,200 ms, while entries are retained/pruned over 5,000 ms. A duplicate inside the window receives `{ok:true,deduplicated:true}` and never enters `openSharedSelectionAction`.
+
+The current regression test is insufficient to validate the production fix: it invokes the pure helper with fabricated tab/document IDs. It does not exercise actual `chrome.runtime.sendMessage` delivery from two real page documents, the real `MessageSender.documentId` metadata, the service-worker message listener, or the resulting open-tab behavior.
+
+No source-level defect has yet been established in the key composition itself. The specific manual #880 failure remains unreported, so it is not possible to determine whether the failure occurs at request generation, sender identity extraction, deduplication, shared selection resolution, or tab activation. The next useful action is a real-browser message-boundary integration test with observable sender metadata and exactly-once navigation assertions—not a production revert or another synthetic helper-only test.
+
+**Current decision:** preserve the #880 implementation provisionally but mark it as manually failed / not accepted for production confidence. Do not describe it as validated. Do not revert it until the user's exact failed behavior or a reproducible integration test identifies the failing layer.
