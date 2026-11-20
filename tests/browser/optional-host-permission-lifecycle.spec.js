@@ -550,7 +550,6 @@ test('a stale redirect-rule update cannot finish after a newer OFF update', asyn
 test('global OFF remains authoritative across permission revocation, regrant, and extension-update recovery without changing either site preference', async ({
   page, extensionWorker, extensionStorage
 }) => {
-  const hostname = 'example.com';
   const pattern = 'https://example.com/*';
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
     masterEnabled:true,
@@ -1193,9 +1192,6 @@ test('permission revocation during an in-flight registration cannot leave a pers
     await runtimeContentScriptReconciliationQueue;
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
-  const tabId = await extensionWorker.evaluate(() =>
-    chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
-  );
   const registrationId = await extensionWorker.evaluate(value =>
     runtimeContentScriptIdForPattern(value), pattern
   );
