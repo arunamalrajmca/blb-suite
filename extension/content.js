@@ -3522,19 +3522,21 @@ window.__blbSuiteResolveVerseCueContext = function(selectionText) {
 
 function handleDoubleClickBlb(event) {
   try {
-    if (!suiteEnabled || isSensitiveSiteUrl(location.href) || isDoubleClickExcludedTarget(event.target)) return;
+    if (isSensitiveSiteUrl(location.href) || isDoubleClickExcludedTarget(event.target)) return;
 
-    // Chromium may dispatch dblclick before the new word selection has replaced
-    // the previous native selection. Never freeze that early selection/context:
-    // a stale selection can make a real chapter-number double-click inherit an
-    // unrelated reference from the preceding gesture.
-    if (!doubleClickSettingsReady) {
+    // Bind the document listener before asynchronous startup settings finish.
+    // If a physical double-click arrives during that window, retain the event
+    // and replay its exact target/coordinates only after both master and
+    // per-site settings have become authoritative.
+    if (!suiteSettingsReady || !doubleClickSettingsReady) {
       void ensureDoubleClickSettingsReady().then(() => {
-        if (doubleClickBlbEnabled) handleDoubleClickBlb(event);
+        if (suiteEnabled && !siteHostAccessRevoked && doubleClickBlbEnabled) {
+          handleDoubleClickBlb(event);
+        }
       });
       return;
     }
-    if (!doubleClickBlbEnabled) return;
+    if (!suiteEnabled || siteHostAccessRevoked || !doubleClickBlbEnabled) return;
 
     const started=Date.now();
     const requestId=`dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
@@ -4071,6 +4073,13 @@ function ensureDoubleClickSettingsReady() {
   return doubleClickSettingsRefreshPromise;
 }
 
+// Install a lightweight capture listener immediately on eligible pages.
+// The handler is inert until the authoritative master/per-site settings resolve,
+// but this closes the startup interval in which a real double-click was lost
+// before any listener existed.
+if (location.hostname !== BLB_HOSTNAME && !isSensitiveSiteUrl(location.href)) {
+  enableDoubleClickBlb();
+}
 void ensureDoubleClickSettingsReady();
 
 // Floating page-selection control is initialized by its feature module.
