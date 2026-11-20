@@ -30,6 +30,13 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     // when DevTools is attached. The real extension tabs.onReplaced event is
     // the browser-level proof that the prerendered tab replaced the source tab.
     const destination = 'https://example.com/?blb-prerender-destination=1';
+    const speculationRulesSupported = await page.evaluate(() =>
+      typeof HTMLScriptElement.supports === 'function' &&
+      HTMLScriptElement.supports('speculationrules')
+    );
+    expect(speculationRulesSupported,
+      'The selected Chromium build must support the Speculation Rules API'
+    ).toBe(true);
     await page.evaluate(url => {
       const script = document.createElement('script');
       script.type = 'speculationrules';
@@ -61,7 +68,8 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     });
     console.log('BLB_PRERENDER_ACTIVATION_DIAGNOSTIC ' + JSON.stringify(activation));
     expect(activation.activationStart,
-      'Destination must be a prerender-activated document, not a normal navigation'
+      'Destination must be a prerender-activated document, not a normal navigation: ' +
+      JSON.stringify(activation)
     ).toBeGreaterThan(0);
 
     await expect.poll(() => extensionWorker.evaluate(() =>
