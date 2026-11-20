@@ -191,3 +191,17 @@ The current tests for #966 include a fixture-driven module initialization with m
 
 - `audit/v5.2.51.109-known-good`: exact .109 source baseline plus this audit document; no production changes.
 - `audit/main-2026-11-20-snapshot`: exact current-main commit `d803d33319d5cd7a83e2d20971a39582f38cc989`; untouched snapshot for later comparisons.
+
+
+### Concrete failure mode to test in the #966 early-click queue
+
+The queued early-click branch calls `openBlbDestinationFromContent(destination)` after settings resolve. That function normalizes the URL and sends `blbSuiteOpenBackgroundUrl` through `safeRuntimeSendMessage()`, but it does not await the response or provide a native-navigation fallback. The bounded retry in `sendRuntimeMessageWithRetry()` applies only to the two selection-open message types, not `blbSuiteOpenBackgroundUrl`.
+
+Therefore, if the background service worker is unavailable during that first-load click (for example, a transient `No SW` dispatch failure), #966 has already called `preventDefault()` and suppressed the site's click handler, but the extension has no fallback path to navigate to the destination. A later refresh would naturally avoid the same startup timing window. This is a concrete code-path risk, not yet a confirmed production cause.
+
+A controlled experiment should compare:
+1. Current #966 early-click interception.
+2. .109's original rule: intercept only when the cached master setting is already enabled; otherwise allow native browser navigation.
+3. The #937 cleanup/settings-ready implementation with only the #966 early-click queue removed.
+
+Capture the runtime message result and resulting tab count/URLs. Do not add another retry/fallback as part of this audit; first determine whether restoring the old click ownership model removes the regression.
