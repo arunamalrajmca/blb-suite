@@ -68,6 +68,18 @@ function createHarness({liveTab, currentDocumentId, pdfViewer = false}) {
   assert.equal(await staleDocument.check(modernSender), false,
     'a sender from a previous document is rejected even if it remains scriptable');
 
+  const sameUrlStaleDocument = createHarness({
+    liveTab:{id:7, url:'https://example.test/same-url'},
+    currentDocumentId:'doc-reloaded'
+  });
+  assert.equal(await sameUrlStaleDocument.check({
+    tab:{id:7, url:'https://example.test/same-url'},
+    frameId:0,
+    documentId:'doc-before-reload',
+    url:'https://example.test/same-url'
+  }), false,
+    'a stale document is rejected by documentId even when every URL snapshot is identical');
+
   const noDocumentIdMatch = createHarness({
     liveTab:{id:7, url:'https://example.test/page?x=1#live'}
   });
