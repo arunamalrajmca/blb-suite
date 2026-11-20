@@ -128,9 +128,22 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
         userAgent:navigator.userAgent
       };
     });
+    let prerenderHistogram = '';
+    const histogramPage = await context.newPage();
+    try {
+      await histogramPage.goto(
+        'chrome://histograms/Prerender.Experimental.PrerenderHostFinalStatus',
+        { waitUntil:'domcontentloaded', timeout:10000 }
+      );
+      prerenderHistogram = await histogramPage.locator('body').innerText({timeout:5000});
+    } catch (error) {
+      prerenderHistogram = 'Unable to read Chromium prerender histogram: ' + error.message;
+    } finally {
+      await histogramPage.close().catch(() => {});
+    }
     expect(activation.activationStart,
       'Destination must be a prerender-activated document, not a normal navigation: ' +
-      JSON.stringify(activation)
+      JSON.stringify({activation,prerenderRequests,prerenderHistogram:prerenderHistogram.slice(-5000)})
     ).toBeGreaterThan(0);
 
     await expect.poll(() => extensionWorker.evaluate(() =>
