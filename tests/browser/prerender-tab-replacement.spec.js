@@ -30,14 +30,14 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
   const cdp = await context.newCDPSession(page);
   const statuses = [];
   const statusListener = event => {
-    const url = event.prerenderingUrl || event.url || '';
-    const status = typeof event.status === 'string' ? event.status : event.status?.status;
+    const url = event.key?.url || event.prerenderingUrl || event.url || '';
     if (url.includes('blb-prerender-destination=1')) {
       statuses.push({
-        status,
+        status:event.status,
+        prerenderStatus:event.prerenderStatus,
         url,
-        rawStatus:event.status,
-        prerenderingAttemptId:event.prerenderingAttemptId
+        key:event.key,
+        rawEvent:event
       });
     }
   };
@@ -71,7 +71,7 @@ test('Chromium prerender activation emits a real tabs.onReplaced event and initi
     await page.waitForURL(destination, {timeout:15000});
     await page.waitForLoadState('domcontentloaded');
 
-    await expect.poll(() => statuses.some(item => item.status === 'Activated'), {
+    await expect.poll(() => statuses.some(item => item.prerenderStatus === 'Activated'), {
       timeout:10000,
       message:'Chromium must report the prerender as Activated'
     }).toBe(true);
