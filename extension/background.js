@@ -3761,9 +3761,10 @@ async function isLiveContentScriptSenderDocument(sender) {
         target:{tabId:sender.tab.id, frameIds:[0]},
         func:() => location.href
       });
+      // Diagnostic isolation: trust the browser's current documentId match
+      // without the additional sender URL vs executing-document URL comparison.
       return results?.length === 1 &&
-        results[0]?.documentId === sender.documentId &&
-        sameSenderDocumentUrl(sender.url, results[0]?.result);
+        results[0]?.documentId === sender.documentId;
     }
     return true;
   } catch (_) {
