@@ -95,7 +95,7 @@ test.describe('PDF selection context-menu regressions', () => {
       }
     });
 
-    const pdfUpdates = result.filter(update => update.id === 'blb-suite-pdf-selection');
+    const pdfUpdates = result.filter(update => update.id === 'blb-suite-web-selection');
     expect(pdfUpdates.some(update => update.visible === true)).toBe(true);
     expect(pdfUpdates.at(-1).visible).toBe(false);
     expect(pdfUpdates.filter(update => update.visible === true).length).toBeGreaterThanOrEqual(2);
@@ -145,7 +145,7 @@ test('local PDF context-menu handoff opens a selected full Bible reference throu
 
     await extensionWorker.evaluate(async tabId => {
       await handleBlbSelectionContextMenuClick({
-        menuItemId:'blb-suite-pdf-selection',
+        menuItemId:'blb-suite-web-selection',
         selectionText:'John 3:16'
       }, {
         id:tabId,

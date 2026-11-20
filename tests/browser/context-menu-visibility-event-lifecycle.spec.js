@@ -65,16 +65,16 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
 
       // A real tab activation must make both global menus reflect the active tab.
       await chrome.tabs.update(enabledTab.id, {active:true});
-      for (let attempt=0; attempt<100 && (!updates.some(item =>
-        item.id === 'blb-suite-web-selection' && item.visible === true
-      ) || !updates.some(item => item.id === 'blb-suite-pdf-selection')); attempt++) {
+      for (let attempt=0; attempt<100 && updates.filter(item =>
+        item.id === 'blb-suite-web-selection'
+      ).length < 2; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       const activationUpdates = [...updates];
       const activationMenuVisibility = Object.fromEntries(
         activationUpdates
           .filter(item =>
-            (item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection') &&
+            (item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-web-selection') &&
             typeof item.visible === 'boolean'
           )
           .map(item => [item.id, item.visible])
@@ -82,9 +82,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const activationShowsWebMenu = activationUpdates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
-      const activationSynchronizesPdfMenu = activationUpdates.some(item =>
-        item.id === 'blb-suite-pdf-selection'
-      );
+      const activationSynchronizesPdfMenu = activationUpdates.filter(item =>
+        item.id === 'blb-suite-web-selection'
+      ).length >= 2;
 
       // A navigation in an inactive tab must not change global menu visibility.
       updates.length = 0;
@@ -117,10 +117,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // Let the real activation listener finish before isolating the explicit
       // replacement synchronization; otherwise its asynchronous visibility
       // update can race this direct helper invocation and invalidate its result.
-      for (let attempt=0; attempt<100 && (
-        !updates.some(item => item.id === 'blb-suite-web-selection' && item.visible === true) ||
-        !updates.some(item => item.id === 'blb-suite-pdf-selection')
-      ); attempt++) {
+      for (let attempt=0; attempt<100 && updates.filter(item =>
+        item.id === 'blb-suite-web-selection'
+      ).length < 2; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       // Activation drives the two menu synchronizers independently. Wait for
@@ -134,9 +133,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const replacementShowsWebMenu = updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
-      const replacementSynchronizesPdfMenu = updates.some(item =>
-        item.id === 'blb-suite-pdf-selection'
-      );
+      const replacementSynchronizesPdfMenu = updates.filter(item =>
+        item.id === 'blb-suite-web-selection'
+      ).length >= 2;
       const replacementUpdates = [...updates];
       const replacementUpdatedMenuIds = [...new Set(replacementUpdates.map(item => item.id))].sort();
 
@@ -229,7 +228,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.activationShowsWebMenu).toBe(true);
   expect(result.activationSynchronizesPdfMenu).toBe(true);
   const inactiveNavigationMenuUpdates = result.inactiveNavigationUpdates.filter(item =>
-    item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection'
+    item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-web-selection'
   );
   expect(
     inactiveNavigationMenuUpdates.every(item =>
@@ -318,7 +317,7 @@ test('PDF selection menu ignores stale asynchronous visibility results', async (
     }
   });
 
-  expect(result).toEqual([{id:'blb-suite-pdf-selection',visible:true}]);
+  expect(result).toEqual([{id:'blb-suite-web-selection',visible:true}]);
 });
 
 test('web selection menu ignores stale asynchronous visibility results', async ({extensionWorker}) => {
@@ -407,7 +406,7 @@ test('right-click action remains usable after the service worker restarts with a
   });
   expect(result.menuReady).toBe(true);
   expect(result.updates).toEqual([
-    {id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B'}
+    {id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B',documentUrlPatterns:[]}
   ]);
   expect(result.actions).toHaveLength(1);
   expect(result.actions[0]).toMatchObject({
@@ -456,6 +455,6 @@ test('worker restart preserves web menu visibility while click-time eligibility 
   });
 
   expect(result.ensured).toBe(true);
-  expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B'});
+  expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B',documentUrlPatterns:[]});
   expect(result.sensitiveHostAllowed).toBe(false);
 });

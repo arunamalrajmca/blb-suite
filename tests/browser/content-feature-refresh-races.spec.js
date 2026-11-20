@@ -831,3 +831,50 @@ test('content-script reinjection replaces the page-selection runtime message lis
     }
   }), tabId);
 });
+
+
+test('Show on BLB catches a selection made before per-site activation without reloading', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':false},
+    doubleClickBlbSites:{'example.com':false},
+    redirectEnabled:false
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Early selection catch-up</title></head><body><p id="early-selection">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://example.com/early-selection-catch-up.html', {waitUntil:'domcontentloaded'});
+
+  // Make the selection while Show on BLB is still OFF, so no feature listener
+  // can observe the mouseup that originally created it.
+  await page.evaluate(() => {
+    const target = document.getElementById('early-selection');
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  expect(await page.evaluate(() => window.getSelection().toString())).toBe('John 3:16');
+  await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(0);
+
+  // Enabling the per-site feature must reconcile the already-live Selection;
+  // the user should not need to select the text again or reload the page.
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'example.com':true}
+  });
+  await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
+  await expect(page.locator('#blb-suite-page-selection-button')).toHaveText('Show on BLB');
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://example.com/early-selection-catch-up.html'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+  await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toMatchObject({
+    floatingButtonPresent:true
+  });
+});

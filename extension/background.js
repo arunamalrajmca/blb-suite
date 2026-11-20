@@ -7401,6 +7401,15 @@ async function shouldShowPdfSelectionContextMenu(tab) {
   );
 }
 
+// One native item serves web pages and PDF viewers. Keeping a single registered
+// item avoids Chromium grouping the two same-titled entries under an extension
+// submenu. Eligibility and selection retrieval remain tab-type aware.
+async function shouldShowSelectionContextMenu(tab, selectionText = '') {
+  return isPdfViewerTab(tab)
+    ? shouldShowPdfSelectionContextMenu(tab)
+    : shouldShowBlbContextMenu(tab, selectionText);
+}
+
 let selectionMenuOperation = Promise.resolve();
 let selectionMenuKnownPresent = false;
 let pdfSelectionMenuKnownPresent = false;
@@ -7422,7 +7431,10 @@ async function ensureWebSelectionContextMenu() {
     // re-evaluates visibility after restart, and the click handler independently
     // rechecks global state, site preference, host permission, and sensitive-site policy.
     await chrome.contextMenus.update('blb-suite-web-selection', {
-      title:'Show on BLB\tAlt+B'
+      title:'Show on BLB\tAlt+B',
+      // Clear the old HTTP(S)-only restriction so the same persistent item
+      // can also appear in browser-managed PDF viewer documents.
+      documentUrlPatterns:[]
     });
     selectionMenuKnownPresent = true;
     return true;
@@ -7432,7 +7444,8 @@ async function ensureWebSelectionContextMenu() {
       id:'blb-suite-web-selection',
       title:'Show on BLB\tAlt+B',
       contexts:['selection'],
-      documentUrlPatterns:['http://*/*','https://*/*'],
+      // One item is shared by ordinary web pages and browser-managed PDF tabs.
+      // The active-tab synchronizer applies the appropriate eligibility policy.
       visible:false
     });
     selectionMenuKnownPresent = true;
@@ -7475,7 +7488,7 @@ async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTa
       }
       return false;
     }
-    const visible = await shouldShowBlbContextMenu(activeTab, '');
+    const visible = await shouldShowSelectionContextMenu(activeTab, '');
     // A newer activation/navigation may have started while eligibility was
     // being read. Also verify that an ordinary sync still targets the active
     // tab in the last-focused window before changing the global menu.
@@ -7531,24 +7544,11 @@ async function installWebSelectionContextMenu() {
 
 async function installPdfSelectionContextMenu() {
   selectionMenuOperation = selectionMenuOperation.then(async () => {
-    // Context-menu items persist across service-worker restarts/reloads.
-    // Remove our known PDF item first so startup/onChanged/onStartup calls are idempotent.
+    // Remove the legacy second item left by earlier extension versions. The
+    // single web-selection item now has no URL pattern restriction and serves
+    // both ordinary pages and browser-managed PDF viewers.
     try { await chrome.contextMenus.remove('blb-suite-pdf-selection'); } catch (_) {}
-    try {
-      await chrome.contextMenus.create({
-        id:'blb-suite-pdf-selection',
-        title:'Show on BLB\tAlt+B',
-        // PDF viewers may expose a chrome-extension:// or browser-internal
-        // URL even when the original document is a remote HTTPS PDF. Keep the
-        // item globally registered and let focused-tab PDF classification plus
-        // the click-time preference check enforce visibility and eligibility.
-        contexts:['selection'],
-        visible:false
-      });
-      pdfSelectionMenuKnownPresent = true;
-    } catch (_) {
-      pdfSelectionMenuKnownPresent = false;
-    }
+    pdfSelectionMenuKnownPresent = await ensureWebSelectionContextMenu();
   }).catch(() => {});
   return selectionMenuOperation;
 }
@@ -7557,11 +7557,11 @@ async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true
   if (!pdfSelectionMenuKnownPresent) return false;
   const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
-    const enabled = await shouldShowPdfSelectionContextMenu(tab);
+    const enabled = await shouldShowSelectionContextMenu(tab, '');
     // PDF menu visibility is global too. A slow eligibility lookup for an
     // earlier tab must not overwrite the result for the tab now in focus.
     if (generation !== pdfSelectionVisibilitySyncGeneration || !isCurrent()) return false;
-    await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
+    await chrome.contextMenus.update('blb-suite-web-selection', {visible: enabled});
     return true;
   } catch (_) {
     return false;
@@ -7718,10 +7718,11 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
   const pdfClickTraceId = 'pdfclick-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
   const pdfClickTrace = (stage, details = {}) => console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfClickTraceId, stage, elapsedMs:Date.now()-pdfClickTraceStart, at:Date.now(), ...details}));
   const nativeText = String(info.selectionText || '').trim();
-  if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('context-menu-click', {tabId:tab?.id, selectionChars:nativeText.length});
+  const isPdfSelection = isPdfViewerTab(tab);
+  if (isPdfSelection) pdfClickTrace('context-menu-click', {tabId:tab?.id, selectionChars:nativeText.length});
   let liveText = '';
   let text = nativeText;
-  if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
+  if (!isPdfSelection && Number.isInteger(tab?.id)) {
     liveText = await getActiveTabSelection(tab.id);
     const liveSelectionKey = normalizeSelectedScriptureText(liveText);
     const nativeSelectionKey = normalizeSelectedScriptureText(nativeText);
@@ -7736,24 +7737,22 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
     }
   }
   if (!text) return;
-  const eligible = menuId === 'blb-suite-pdf-selection'
-    ? await shouldShowPdfSelectionContextMenu(tab)
-    : await shouldShowBlbContextMenu(tab, text);
+  const eligible = await shouldShowSelectionContextMenu(tab, text);
   if (!eligible) return;
   try {
     // PDF right-click selections already provide the selected text directly.
     // Avoid a content-script context lookup on protected PDF viewer tabs.
-    const contextualRef = menuId === 'blb-suite-pdf-selection'
+    const contextualRef = isPdfSelection
       ? null
       : await getContextualSelectionReference(tab?.id, text);
-    if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
+    if (isPdfSelection) pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
     await openSharedSelectionAction({
       tabId:tab?.id,
       tabUrl:tab?.url || '',
       text,
       behavior:{activeIfNew:true, activateExisting:true},
       contextualReference:contextualRef || null,
-      contextualReferenceResolved: menuId === 'blb-suite-web-selection'
+      contextualReferenceResolved: !isPdfSelection
     });
     await clearPageSelectionAfterBlbAction(tab?.id);
   } catch (err) {

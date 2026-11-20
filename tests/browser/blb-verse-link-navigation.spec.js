@@ -18,6 +18,8 @@ async function serveBlbFixture(context) {
         <a id="verse-in-bverse-self" target="_self" href="${BVERSE_URL}">Strong's G25 original self target</a>
       </div>
       <a id="nowrap-link" class="nowrap" href="${NOWRAP_URL}">Strong's G3056</a>
+      <h3>The Deity of Jesus Christ</h3>
+      <a id="range-cross-reference" class="nowrap" href="https://www.blueletterbible.org/kjv/gen/1/1-31/">Gen 1:1—2:3</a>
     </body></html>`
   }));
 }
@@ -133,4 +135,51 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
     (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' })).some(tab =>
       tab.id === sourceId && new URL(tab.url || tab.pendingUrl || '').pathname === '/lexicon/g3056/kjv/tr/0-1/'
     ), sourceTab.id), { timeout: 10000 }).toBe(true);
+});
+
+
+test('a BLB range cross-reference clicked before initial settings readiness is queued instead of navigating in the same tab', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await serveBlbFixture(context);
+  await page.goto(HOME_URL, {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async sourceUrl =>
+    (await chrome.tabs.query({url:'https://www.blueletterbible.org/*'}))
+      .find(tab => (tab.url || tab.pendingUrl) === sourceUrl)?.id,
+  HOME_URL);
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:async () => {
+        const state = {enabled:false,opened:[]};
+        let resolveSettings;
+        const pendingSettings = new Promise(resolve => { resolveSettings = resolve; });
+        const navigation = globalThis.BLBVerseLinkNavigationModule.initialize({
+          BLB_HOSTNAME:'blueletterbible.org',
+          isSuiteEnabledNow:() => state.enabled,
+          isModifiedLinkActivation:() => false,
+          openBlbDestinationFromContent:url => state.opened.push(url),
+          suiteSettingsReadyPromise:pendingSettings
+        });
+        document.getElementById('range-cross-reference').click();
+        const stayedOnSourcePage = location.pathname === '/';
+        state.enabled = true;
+        resolveSettings();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const opened = [...state.opened];
+        navigation.cleanup();
+        return {stayedOnSourcePage,opened};
+      }
+    });
+    return injected.result;
+  }, tabId);
+
+  expect(result.stayedOnSourcePage).toBe(true);
+  expect(result.opened).toEqual([
+    'https://www.blueletterbible.org/kjv/gen/1/1-31/'
+  ]);
 });
