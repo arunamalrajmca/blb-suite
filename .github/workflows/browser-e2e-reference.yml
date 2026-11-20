@@ -647,7 +647,19 @@ jobs:
               echo "::error::Playwright discovered no tests in $spec."
               exit 1
             fi
-            npx playwright test --config=playwright.config.js "$spec"
+            if [[ "$spec" == "tests/browser/prerender-tab-replacement.spec.js" ]]; then
+              # Chromium's headless mode does not reliably exercise prerender
+              # activation. Run this one browser-capability test headed under
+              # Xvfb; all other focused tests keep their existing headless mode.
+              command -v xvfb-run >/dev/null || {
+                echo "::error::xvfb-run is required for the headed prerender test."
+                exit 1
+              }
+              xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 \
+                npx playwright test --config=playwright.config.js "$spec"
+            else
+              npx playwright test --config=playwright.config.js "$spec"
+            fi
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
