@@ -2179,6 +2179,83 @@ test('GitHub and all subdomains are excluded before any content-script injection
   }
 });
 
+test('persistent registration failure keeps current and subsequent same-tab documents independently activatable', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const host='example.com';
+  const pattern='https://example.com/*';
+  const registrationId=await extensionWorker.evaluate(value => runtimeContentScriptIdForPattern(value),pattern);
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{[host]:true},
+    doubleClickBlbSites:{}
+  });
+  await extensionWorker.evaluate(async value => {
+    await unregisterRuntimeContentScriptForPattern(value);
+    const api=chrome.scripting;
+    const original=api.registerContentScripts;
+    globalThis.__registrationFailureAudit={
+      original,
+      attempts:0
+    };
+    api.registerContentScripts=async function(scripts) {
+      if((scripts||[]).some(script => (script.matches||[]).includes('https://example.com/*'))) {
+        globalThis.__registrationFailureAudit.attempts++;
+        throw new Error('simulated persistent registration rejection');
+      }
+      return original.call(api,scripts);
+    };
+  },pattern);
+  await page.route('https://example.com/**',route=>route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Registration failure audit</title></head><body><p id="reference">John 3:16</p></body></html>'
+  }));
+
+  try {
+    await page.goto('https://example.com/registration-failure-first',{waitUntil:'domcontentloaded'});
+    const tabId=await getTabIdForUrl(extensionWorker,pattern);
+    expect(Number.isInteger(tabId)).toBe(true);
+    await expect.poll(()=>contentScriptLoaded(extensionWorker,tabId),{
+      message:'current-document fallback must initialize the core content script after persistent registration fails'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+
+    const firstState=await extensionWorker.evaluate(async ({id,pattern})=>({
+      attempts:globalThis.__registrationFailureAudit?.attempts||0,
+      registered:(await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length>0,
+      tab:(await chrome.tabs.get(tabIdForCheck)).url
+    }),{id:registrationId,pattern,tabIdForCheck:tabId});
+    expect(firstState.attempts).toBeGreaterThan(0);
+    expect(firstState.registered).toBe(false);
+    expect(firstState.tab).toContain('/registration-failure-first');
+
+    await page.goto('https://example.com/registration-failure-next',{waitUntil:'domcontentloaded'});
+    await expect.poll(()=>contentScriptLoaded(extensionWorker,tabId),{
+      message:'the committed next document must independently activate despite the still-failing persistent registration'
+    }).toMatchObject({fileExecuted:true,initialized:true,doubleClickBound:true});
+    const secondState=await extensionWorker.evaluate(async id=>({
+      attempts:globalThis.__registrationFailureAudit?.attempts||0,
+      registered:(await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length>0
+    }),registrationId);
+    expect(secondState.attempts).toBeGreaterThan(firstState.attempts);
+    expect(secondState.registered).toBe(false);
+  } finally {
+    await extensionWorker.evaluate(async value=>{
+      const audit=globalThis.__registrationFailureAudit;
+      if(audit?.original) chrome.scripting.registerContentScripts=audit.original;
+      delete globalThis.__registrationFailureAudit;
+      await unregisterRuntimeContentScriptForPattern(value).catch(()=>{});
+    },pattern).catch(()=>{});
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[host]:false},
+      doubleClickBlbSites:{}
+    });
+    await extensionWorker.evaluate(()=>reconcileRuntimeContentScriptRegistrations().catch(()=>{}));
+  }
+});
+
+
 test('optional redirect-script failure cannot block core selection activation on a first-load page', async ({
   page, extensionStorage, extensionWorker
 }) => {
