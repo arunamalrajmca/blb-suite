@@ -16,6 +16,31 @@ const path = require('node:path');
 const acorn = require('acorn');
 const eslintScope = require('eslint-scope');
 
+const RETAINED_EXTERNAL_PROPERTY_CONSUMERS = new Set([
+  // These object properties are injected into node:vm contexts and consumed
+  // as global identifiers by source snippets, not as receiver.member reads.
+  'scripts/test-content-script-sender-document.js:hostnameFromTabUrl',
+  'scripts/test-study-session-export.js:btoa',
+  'tests/browser/extension-lifecycle.spec.js:recoverConfiguredTabsOnStartup',
+  'tests/browser/extension-lifecycle.spec.js:schedulePersistedRuntimeContentScriptAudit',
+  'tests/browser/redirect-toggle-isolation.spec.js:getSiteKey',
+  'tests/browser/redirect-toggle-isolation.spec.js:deriveSiteCaption',
+  'tests/browser/scripttagger-global-injection.spec.js:isHttpPageUrl',
+  'tests/browser/scripttagger-global-injection.spec.js:originPatternForUrl',
+  'tests/browser/scripttagger-global-injection.spec.js:normalizeSiteHostname',
+  'tests/browser/scripttagger-global-injection.spec.js:hostnameFromTabUrl',
+  'tests/browser/scripttagger-global-injection.spec.js:hasHostAccessForTab',
+  'tests/browser/scripttagger-global-injection.spec.js:ensureContentScriptInTabWithRetry',
+  'tests/browser/scripttagger-global-injection.spec.js:getLiveTabById',
+  'tests/browser/scripttagger-global-injection.spec.js:enqueueBlbTabCreation',
+  'tests/browser/source-page-collector-behavior.spec.js:clearTimeout',
+  // Playwright calls these reporter lifecycle hooks by interface contract.
+  'tests/browser/progress-reporter.js:onBegin',
+  'tests/browser/progress-reporter.js:onTestBegin',
+  'tests/browser/progress-reporter.js:onTestEnd',
+  'tests/browser/progress-reporter.js:onEnd'
+]);
+
 function collectJavaScriptFiles(directory) {
   const files = [];
   function walk(current) {
@@ -116,7 +141,10 @@ function analyzePropertyReferences(ast, filename, repositoryReferences = null) {
   });
 
   return definitions
-    .filter(definition => !references.has(definition.name))
+    .filter(definition =>
+      !references.has(definition.name) &&
+      !RETAINED_EXTERNAL_PROPERTY_CONSUMERS.has(filename + ':' + definition.name)
+    )
     .map(definition => ({
       file: filename,
       name: definition.name,
