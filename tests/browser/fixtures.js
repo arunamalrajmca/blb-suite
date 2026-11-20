@@ -134,7 +134,7 @@ const test = base.extend({
         '--no-default-browser-check'
       ]
     });
-    profileFixture('persistent-context-launch', launchStartedAt, { prerenderProfile });
+    profileFixture('persistent-context-launch', launchStartedAt);
     await use(context);
     const closeStartedAt = process.hrtime.bigint();
     await context.close();
