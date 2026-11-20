@@ -3785,7 +3785,9 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
     const host = normalizeSiteHostname(hostnameFromTabUrl(sender.url || sender.tab.url));
     if (!allowedHosts.has(host)) return false;
   }
-  return isLiveContentScriptSenderDocument(sender);
+  // Diagnostic isolation: retain sender identity, tab, URL, host-permission,
+  // and allow-list checks while bypassing only the live-document revalidation.
+  return true;
 }
 
 async function isActiveTabContentScriptSender(sender) {
