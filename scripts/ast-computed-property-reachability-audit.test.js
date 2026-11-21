@@ -54,7 +54,8 @@ test('tracks class methods and prototype assignments as receiver candidates', ()
     'main.js': "class Worker { start() {} stop() {} } Worker.prototype.reset = function() {}; const key = getKey(); const worker = new Worker(); worker[key]();"
   });
   assert.equal(separate.observations.length, 1);
-  assert.equal(separate.observations[0].status, 'receiver-or-key-unknown');
+  assert.equal(separate.observations[0].status, 'receiver-properties-known-key-unknown');
+  assert.deepEqual(separate.observations[0].candidateProperties, ['reset', 'start', 'stop']);
 });
 
 test('does not treat computed writes as proof that a property is read or invoked', () => {
@@ -63,5 +64,5 @@ test('does not treat computed writes as proof that a property is read or invoked
   });
   assert.equal(result.observations.length, 1);
   assert.equal(result.observations[0].role, 'write');
-  assert.equal(result.observations[0].candidateProperties, ['start']);
+  assert.deepEqual(result.observations[0].candidateProperties, ['start']);
 });
