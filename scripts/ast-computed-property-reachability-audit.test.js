@@ -88,3 +88,40 @@ test('propagates property ownership from a default-exported object', () => {
   assert.equal(result.observations.length, 1);
   assert.deepEqual(result.observations[0].candidateProperties, ['close', 'open']);
 });
+
+
+test('classifies storage-backed object maps and records the dynamic key origin', () => {
+  const result = run({
+    'main.js': "async function update(origin, site) { const data = await chrome.storage.local.get({pageSites:{}}); const pageSites = data.pageSites && typeof data.pageSites === 'object' ? {...data.pageSites} : {}; pageSites[site] = true; return pageSites[origin]; }"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 2);
+  for (const observation of result.observations) {
+    assert.equal(observation.receiverKind, 'storage-backed-container');
+    assert.equal(observation.storageField, 'pageSites');
+    assert.equal(observation.keyDefinition, 'parameter-or-loop-binding');
+  }
+  const write = result.observations.find(item => item.role === 'write');
+  assert.equal(write.valueExpression, 'true');
+});
+
+test('recognizes literal globalThis registries and inline object key domains', () => {
+  const result = run({
+    'registry.js': "globalThis.Registry = Object.freeze({alpha: 1, beta: 2});",
+    'main.js': "const key = getKey(); globalThis.Registry[key]; ({'1':'I','2':'II','3':'III'})[key];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 2);
+  assert.deepEqual(result.observations[0].candidateProperties, ['alpha', 'beta']);
+  assert.deepEqual(result.observations[1].candidateProperties, ['1', '2', '3']);
+});
+
+test('classifies computed array accesses separately from object-key dispatch', () => {
+  const result = run({
+    'main.js': "const tokens = 'one two'.split(' '); const index = getIndex(); tokens[index];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.observations[0].receiverKind, 'array-like');
+  assert.equal(result.observations[0].role, 'read-or-other');
+});
