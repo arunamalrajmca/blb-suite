@@ -456,9 +456,30 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const uncertainSet = new Set([...uncertainFileRoots.keys()]);
   const unreachableInventory = files.filter(file => !reachable.has(file)).map(file => rel(root, file));
   const definiteUnreachable = files.filter(file => !reachable.has(file) && !uncertainSet.has(file)).map(file => rel(root, file));
+  const uncertaintyByKind = {};
+  const uncertaintyByFile = new Map();
+  const uncertaintyByRoot = {};
+  for (const site of uncertainty) {
+    uncertaintyByKind[site.kind] = (uncertaintyByKind[site.kind] || 0) + 1;
+    if (!uncertaintyByFile.has(site.file)) uncertaintyByFile.set(site.file, {});
+    const kinds = uncertaintyByFile.get(site.file);
+    kinds[site.kind] = (kinds[site.kind] || 0) + 1;
+    for (const affectedRoot of site.affectedRoots || []) {
+      if (!uncertaintyByRoot[affectedRoot]) uncertaintyByRoot[affectedRoot] = {};
+      uncertaintyByRoot[affectedRoot][site.kind] = (uncertaintyByRoot[affectedRoot][site.kind] || 0) + 1;
+    }
+  }
+  const topUncertaintyFiles = [...uncertaintyByFile].map(([file, kinds]) => ({
+    file, total: Object.values(kinds).reduce((sum, count) => sum + count, 0), kinds
+  })).sort((a, b) => b.total - a.total || a.file.localeCompare(b.file)).slice(0, 25);
+  const uncertaintySummary = {
+    byKind: Object.fromEntries(Object.entries(uncertaintyByKind).sort((a, b) => b[1] - a[1])),
+    byAffectedRoot: Object.fromEntries(Object.entries(uncertaintyByRoot).sort((a, b) => a[0].localeCompare(b[0]))),
+    topFiles: topUncertaintyFiles
+  };
   return {
     filesAnalyzed: asts.size, parseErrors: errors, roots: [...roots].map(file => rel(root, file)).sort(),
-    edges, dynamicSites: sites, uncertainty, reachable: [...reachable].map(file => rel(root, file)).sort(),
+    edges, dynamicSites: sites, uncertainty, uncertaintySummary, reachable: [...reachable].map(file => rel(root, file)).sort(),
     unresolvedByRoot, uncertainFiles, unreachableInventory, definiteUnreachable
   };
 }
@@ -475,6 +496,9 @@ function run(root) {
   console.log('Unreachable inventory only (not deletion candidates): ' + result.unreachableInventory.length);
   console.log('Unreachable files scoped as uncertain dynamic targets: ' + result.uncertainFiles.length);
   console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
+  console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
+  console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
+  console.log('Top uncertainty source files: ' + JSON.stringify(result.uncertaintySummary.topFiles));
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
   if (result.parseErrors.length) process.exitCode = 1;
   return result;
