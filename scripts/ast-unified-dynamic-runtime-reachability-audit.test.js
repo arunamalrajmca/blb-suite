@@ -64,7 +64,21 @@ test('propagates imported function calls and object/callback parameter bindings 
   assert.ok(result.edges.some(item => item.kind === 'cross-module-binding-import' && item.file === 'scripts/main.js' && item.detail === 'service'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'cross-module-property-read' && item.expression === 'service[start]' && item.certainty === 'resolved-property-key'));
   assert.ok(result.edges.some(item => item.kind === 'function-argument' && item.file === 'scripts/main.js'));
+  assert.ok(result.edges.some(item => item.kind === 'runtime-flow:callback-registration'));
+  assert.ok(result.edges.some(item => item.kind === 'runtime-flow:closure-capture'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'callback-argument' && item.certainty === 'resolved-inline-callback'));
+});
+
+
+test('propagates object identity returned by an imported helper into the caller', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/service.js': 'export const service = { start() {} };',
+    'scripts/helper.js': "import { service } from './service.js'; export function getService() { return service; }",
+    'scripts/main.js': "import { getService } from './helper.js'; const result = getService(); result.start();"
+  });
+  assert.ok(edge(result, 'cross-module-function-return', 'scripts/helper.js', 'scripts/main.js'));
+  assert.ok(result.edges.some(item => item.kind === 'cross-module-binding-import' && item.file === 'scripts/helper.js'));
 });
 
 test('connects container writes to reads and records constant computed property keys', () => {
