@@ -114,7 +114,7 @@ jobs:
         if: ${{ matrix.scenario == 'worker-termination' }}
         run: >-
           npx playwright test tests/browser/service-worker-lifecycle.spec.js
-          --grep "a real MV3 service-worker termination is recovered by the Alt+B command message"
+          --grep "a real MV3 service-worker termination is recovered by the Alt\\+B command message"
           --workers=1 --reporter=line
 
       - name: Rerun guarded source-host registration lifecycle test in isolation
