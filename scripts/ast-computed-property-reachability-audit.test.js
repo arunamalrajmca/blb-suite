@@ -66,3 +66,25 @@ test('does not treat computed writes as proof that a property is read or invoked
   assert.equal(result.observations[0].role, 'write');
   assert.deepEqual(result.observations[0].candidateProperties, ['start']);
 });
+
+test('propagates exported object ownership and constant keys through named imports and re-exports', () => {
+  const result = run({
+    'lib/service.js': 'export const registry = { start() {}, stop() {} }; export const DEFAULT_METHOD = "start";',
+    'lib/facade.js': "export { registry, DEFAULT_METHOD as METHOD } from './service.js';",
+    'main.js': "import { registry, METHOD } from './lib/facade.js'; const alias = registry; const key = readFromStorage(); alias[key](); registry[METHOD];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.observations[0].status, 'receiver-properties-known-key-unknown');
+  assert.deepEqual(result.observations[0].candidateProperties, ['start', 'stop']);
+});
+
+test('propagates property ownership from a default-exported object', () => {
+  const result = run({
+    'lib/router.js': 'export default { open() {}, close() {} };',
+    'main.js': "import router from './lib/router.js'; const key = getRuntimeKey(); router[key]();"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 1);
+  assert.deepEqual(result.observations[0].candidateProperties, ['close', 'open']);
+});
