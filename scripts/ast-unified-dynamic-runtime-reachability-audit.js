@@ -855,7 +855,7 @@ module.exports = { analyze, run, staticValue, resolveFile };
     const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:scripts|tests|regression-suite)\/[A-Za-z0-9_.*?/-]+\.(?:js|cjs|mjs))/g;
     let command;
     while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1]);
-    const shellGlobPattern = /(?:^|\s)(?:\.\/)?(scripts\/test-[A-Za-z0-9_.*?/-]+\.js)(?=\s|$)/gm;
+    const shellGlobPattern = /(?:^|\s)(?:\.\/)?(scripts\/test-[A-Za-z0-9_.*?/-]+\.js)(?=[;\s]|$)/gm;
     while ((command = shellGlobPattern.exec(workflowSource))) addWorkflowTarget(command[1]);
   }
   // Playwright reporter modules are loaded by name from configuration rather
