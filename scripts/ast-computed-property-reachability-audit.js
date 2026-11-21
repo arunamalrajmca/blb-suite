@@ -105,6 +105,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   // First collect bounded constants, object/class owners, aliases, and local functions.
   for (const [file, record] of records) {
     const { ast, bindings, env, owners, aliases, functions } = record;
+    const functionsByName = new Map();
     visit(ast, (node, parent) => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         const key = bindings.get(node.id);
@@ -137,6 +138,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'FunctionDeclaration' && node.id) {
         const key = bindings.get(node.id);
         if (key) functions.set(key, node);
+        if (node.id && !functionsByName.has(node.id.name)) functionsByName.set(node.id.name, node);
+        else if (node.id) functionsByName.set(node.id.name, null);
       }
       if (node.type === 'ClassDeclaration' && node.id) {
         const key = bindings.get(node.id);
@@ -154,7 +157,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // Feed literal arguments into locally declared function parameters.
     visit(ast, node => {
       if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
-      const fn = functions.get(bindings.get(node.callee));
+      const fn = functions.get(bindings.get(node.callee)) || functionsByName.get(node.callee.name);
       if (!fn) return;
       for (let index = 0; index < Math.min(fn.params.length, node.arguments.length); index++) {
         if (fn.params[index].type !== 'Identifier') continue;
