@@ -1,8 +1,9 @@
-'use strict';
-const fs = require('node:fs');
-const path = require('node:path');
-const root = path.resolve(__dirname, '..');
-const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-suite-inventory.json'), 'utf8'));
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..');
+const manifest = JSON.parse(fs.readFileSync(path.join(here, 'test-suite-inventory.json'), 'utf8'));
 const errors = [];
 const counts = [];
 function fail(message) { errors.push(message); }
@@ -15,13 +16,13 @@ function listPattern(pattern) {
   const slash = pattern.lastIndexOf('/');
   const directory = slash < 0 ? '.' : pattern.slice(0, slash);
   const filePattern = slash < 0 ? pattern : pattern.slice(slash + 1);
-  const escaped = filePattern.replace(/[.+^()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  const escaped = filePattern.replace(/[.+^()|[\\]\\\\]/g, '\\\\$&').replace(/\\*/g, '.*');
   const expression = new RegExp('^' + escaped + '$');
   const absoluteDirectory = path.join(root, directory);
   if (!fs.existsSync(absoluteDirectory)) return [];
   return fs.readdirSync(absoluteDirectory, { withFileTypes: true })
     .filter(entry => entry.isFile() && expression.test(entry.name))
-    .map(entry => path.posix.join(directory.replace(/\\/g, '/'), entry.name)).sort();
+    .map(entry => path.posix.join(directory.replace(/\\\\/g, '/'), entry.name)).sort();
 }
 const classified = new Set();
 for (const suite of manifest.suites) {
@@ -43,7 +44,7 @@ for (const suite of manifest.suites) {
   }
   if (suite.id === 'ast-reachability-audit-tests') {
     for (const file of files) {
-      const analysis = file.replace(/\.test\.js$/, '.js');
+      const analysis = file.replace(/\\.test\\.js$/, '.js');
       if (!fs.existsSync(path.join(root, analysis))) fail('AST regression test has no matching audit program: ' + file);
     }
   }
@@ -63,7 +64,7 @@ function walk(directory) {
     const absolute = path.join(directory,entry.name);
     if (entry.isDirectory()) walk(absolute);
     else {
-      const relative = path.relative(root,absolute).replace(/\\/g,'/');
+      const relative = path.relative(root,absolute).replace(/\\\\/g,'/');
       const lower = entry.name.toLowerCase();
       const looksLikeTest = lower.startsWith('test-') || lower.startsWith('test_') || lower.includes('.test.') || lower.includes('.spec.') || lower.includes('test-runner');
       if (looksLikeTest && !ignoredNames.has(entry.name)) candidates.push(relative);
