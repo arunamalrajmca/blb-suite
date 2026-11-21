@@ -30,7 +30,7 @@ function parse(file) {
   const source = fs.readFileSync(file, 'utf8');
   let error;
   for (const sourceType of ['script', 'module']) {
-    try { return acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true }); }
+    try { return acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true, ranges: true }); }
     catch (caught) { error = caught; }
   }
   throw error;
