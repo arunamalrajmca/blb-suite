@@ -50,7 +50,11 @@ for (const suite of manifest.suites) {
   }
   for (const delegation of suite.delegations || []) {
     if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
-    if (!readRepoFile(delegation.testFile).includes(delegation.testTitle)) fail('Delegated test title is missing from its declared spec: ' + delegation.testFile);
+    const delegatedSpec = readRepoFile(delegation.testFile);
+    const testIsDeclared = delegation.testTitlePattern
+      ? new RegExp(delegation.testTitlePattern).test(delegatedSpec)
+      : delegatedSpec.includes(delegation.testTitle);
+    if (!testIsDeclared) fail('Delegated test title or pattern is missing from its declared spec: ' + delegation.testFile);
     const delegatedWorkflow = readRepoFile(delegation.workflow);
     if (!delegatedWorkflow.includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
     if (delegation.environment === 'x11-headed-chromium') {
@@ -61,7 +65,7 @@ for (const suite of manifest.suites) {
   counts.push({ id:suite.id, count:files.length });
 }
 const manualOnly = new Map(manifest.manualOnly.map(item => [item.path,item]));
-const ignoredNames = new Set(['fixtures.js','extension-test-helpers.js','progress-reporter.js']);
+const ignoredNames = new Set(['fixtures.js','extension-test-helpers.js','progress-reporter.js','test-suite-inventory.json']);
 const candidates = [];
 function walk(directory) {
   for (const entry of fs.readdirSync(directory,{withFileTypes:true})) {
