@@ -143,7 +143,8 @@ test("native prerender activation scenarios have one headed X11 execution owner"
   );
   assert.ok(registry.includes('"tests/browser/native-prerender-activation.spec.js"'));
   assert.ok(separatelyManagedSpecs.has("tests/browser/native-prerender-activation.spec.js"));
-  assert.doesNotMatch(referenceWorkflow, /focused_specs, 'tests\\/browser\\/native-prerender-activation\\.spec\\.js'/);
+  assert.ok(!referenceWorkflow.includes("focused_specs, 'tests/browser/native-prerender-activation.spec.js'"),
+    "the reference workflow must not select native prerender tests for a second execution");
   assert.ok(workflow.includes("BLB_HEADFUL_EXTENSION_TESTS: '1'"));
   assert.ok(workflow.includes("xvfb-run -a --server-args='-screen 0 1280x900x24'"));
   assert.ok(workflow.includes("tests/browser/native-prerender-activation.spec.js"));
