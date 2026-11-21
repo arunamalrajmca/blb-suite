@@ -133,10 +133,10 @@ jobs:
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
-      # complete test list, then run each individual test in its own invocation.
-      # This preserves maxFailures: 1 while ensuring one failing test cannot
+      # complete test list, then execute the complete test list in one Playwright process with four workers.
+      # Using max-failures=0 ensures one failing test cannot
       # prevent any later test case from executing.
-      - name: Run every browser test case independently without CI selector filtering
+      - name: Run complete browser test list in one Playwright process
         id: browser
         continue-on-error: true
         env:

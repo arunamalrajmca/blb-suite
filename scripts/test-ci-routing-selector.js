@@ -87,7 +87,7 @@ function auditRepositoryTestInventory() {
   const auditCoverage = [
     ['all browser test cases are collected with Playwright list output', /npx playwright test --list --reporter=list/],
     ['full audit reruns when a labeled pull request receives new commits', /types: \[labeled, synchronize\]/],
-    ['each browser test case is isolated with maxFailures one', /npx playwright test --test-list .*--max-failures=1/],
+    ['all remaining browser test cases run in one Playwright invocation with four workers and complete failure collection', /npx playwright test --test-list .*--workers=4 --max-failures=0/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
     ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
     ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],
@@ -101,7 +101,7 @@ function auditRepositoryTestInventory() {
   for (const [label, pattern] of auditCoverage) {
     assert.match(workflow, pattern, 'full-test audit must execute ' + label);
   }
-  assert.doesNotMatch(workflow, /--max-failures=0/, 'full-test audit must not disable the repository maxFailures: 1 policy');
+  assert.match(workflow, /--max-failures=0/, 'full-test audit must collect all scheduled browser failures in one run');
 
   const testFiles = [
     ...browserSpecs,
