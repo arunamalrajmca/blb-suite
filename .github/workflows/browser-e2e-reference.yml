@@ -671,7 +671,6 @@ jobs:
             exit 1
           fi
           npx playwright test --config=playwright.config.js "${specs[@]}"
-          done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
