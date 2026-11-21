@@ -115,6 +115,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const source = bindings.get(node.init);
             if (source) aliases.set(key, source);
           }
+          if (node.init.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
+            const source = bindings.get(node.init.callee);
+            if (source) aliases.set(key, source);
+          }
           if (node.init.type === 'ObjectExpression') {
             const props = new Set();
             for (const property of node.init.properties) {
