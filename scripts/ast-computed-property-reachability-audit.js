@@ -26,6 +26,14 @@ function walk(root) {
   return out.sort();
 }
 function rel(root, file) { return path.relative(root, file).split(path.sep).join('/'); }
+function resolveModuleFile(from, spec, fileSet) {
+  if (typeof spec !== 'string' || !spec.startsWith('.')) return null;
+  const base = path.resolve(path.dirname(from), spec);
+  const candidates = path.extname(base)
+    ? [base]
+    : [base, ...['.js', '.cjs', '.mjs'].map(ext => base + ext), ...['.js', '.cjs', '.mjs'].map(ext => path.join(base, 'index' + ext))];
+  return candidates.find(candidate => fileSet.has(candidate)) || null;
+}
 function parse(file) {
   const source = fs.readFileSync(file, 'utf8');
   let error;
@@ -98,13 +106,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
   for (const file of files) {
     try {
       const ast = parse(file);
-      records.set(file, { ast, bindings: bindingsFor(ast), env: new Map(), owners: new Map(), aliases: new Map(), functions: new Map() });
+      records.set(file, { ast, bindings: bindingsFor(ast), env: new Map(), owners: new Map(), aliases: new Map() });
     } catch (error) { parseErrors.push({ file: rel(root, file), error: error.message }); }
   }
 
   // First collect bounded constants, object/class owners, aliases, and local functions.
   for (const [file, record] of records) {
-    const { ast, bindings, env, owners, aliases, functions } = record;
+    const { ast, bindings, env, owners, aliases } = record;
     visit(ast, (node, parent) => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         const key = bindings.get(node.id);
@@ -176,6 +184,127 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
       }
     });
+  }
+
+  // Resolve exported object identity and constant values into importing modules.
+  // Re-exports are followed conservatively, with cycle protection.
+  const exportsByFile = new Map(), reexportsByFile = new Map(), exportAllByFile = new Map();
+  const fileSet = new Set(records.keys());
+  for (const [file, record] of records) {
+    const { ast, bindings, env, owners } = record;
+    const exported = new Map(), reexports = new Map(), exportAll = [];
+    for (const statement of ast.body) {
+      if (statement.type === 'ExportNamedDeclaration') {
+        const declaration = statement.declaration;
+        if (declaration && declaration.type === 'VariableDeclaration') {
+          for (const item of declaration.declarations || []) {
+            if (item.id.type !== 'Identifier') continue;
+            const key = bindings.get(item.id);
+            if (key) exported.set(item.id.name, { key });
+          }
+        } else if (declaration && ['FunctionDeclaration', 'ClassDeclaration'].includes(declaration.type) && declaration.id) {
+          const key = bindings.get(declaration.id);
+          if (key) exported.set(declaration.id.name, { key });
+        }
+        if (statement.source) {
+          const target = resolveModuleFile(file, statement.source.value, fileSet);
+          if (target) for (const specifier of statement.specifiers || []) {
+            const importedName = specifier.local.name || specifier.local.value;
+            const exportedName = specifier.exported.name || specifier.exported.value;
+            reexports.set(exportedName, { file: target, name: importedName });
+          }
+        } else {
+          for (const specifier of statement.specifiers || []) {
+            const localKey = bindings.get(specifier.local);
+            const exportedName = specifier.exported.name || specifier.exported.value;
+            if (localKey) exported.set(exportedName, { key: localKey });
+          }
+        }
+      } else if (statement.type === 'ExportDefaultDeclaration') {
+        const declaration = statement.declaration;
+        if (declaration.type === 'Identifier') {
+          const key = bindings.get(declaration);
+          if (key) exported.set('default', { key });
+        } else if (declaration.type === 'ObjectExpression') {
+          const props = new Set();
+          for (const property of declaration.properties) {
+            if (property.type === 'SpreadElement') continue;
+            const names = property.computed ? valuesOf(property.key, env, bindings) : new Set([String(property.key.name ?? property.key.value)]);
+            if (names) for (const name of names) props.add(name);
+          }
+          exported.set('default', { ownerProps: props });
+        } else if (declaration.type === 'ClassDeclaration' && declaration.id) {
+          const key = bindings.get(declaration.id);
+          if (key) exported.set('default', { key });
+        }
+      } else if (statement.type === 'ExportAllDeclaration' && statement.source) {
+        const target = resolveModuleFile(file, statement.source.value, fileSet);
+        if (target) exportAll.push(target);
+      }
+    }
+    exportsByFile.set(file, exported);
+    reexportsByFile.set(file, reexports);
+    exportAllByFile.set(file, exportAll);
+  }
+
+  function resolveExport(file, name, seen = new Set()) {
+    const marker = file + '::' + name;
+    if (seen.has(marker)) return null;
+    seen.add(marker);
+    const direct = exportsByFile.get(file)?.get(name);
+    if (direct) return { file, ...direct };
+    const reexport = reexportsByFile.get(file)?.get(name);
+    if (reexport) return resolveExport(reexport.file, reexport.name, seen);
+    if (name !== 'default') {
+      for (const target of exportAllByFile.get(file) || []) {
+        const resolved = resolveExport(target, name, seen);
+        if (resolved) return resolved;
+      }
+    }
+    return null;
+  }
+
+  // Iterate a few times so chains of imports/re-exports can inherit owner and
+  // constant evidence regardless of file traversal order.
+  for (let pass = 0; pass < 6; pass++) {
+    let changed = false;
+    for (const [file, record] of records) {
+      const { ast, bindings, env, owners } = record;
+      visit(ast, node => {
+        if (node.type !== 'ImportDeclaration') return;
+        const target = resolveModuleFile(file, node.source.value, fileSet);
+        if (!target) return;
+        for (const specifier of node.specifiers || []) {
+          if (specifier.type === 'ImportNamespaceSpecifier') continue;
+          const importedName = specifier.type === 'ImportDefaultSpecifier'
+            ? 'default' : (specifier.imported.name || specifier.imported.value);
+          const localKey = bindings.get(specifier.local);
+          if (!localKey) continue;
+          const resolved = resolveExport(target, importedName);
+          if (!resolved) continue;
+          if (resolved.key) {
+            const sourceRecord = records.get(resolved.file);
+            if (sourceRecord) {
+              changed = unionInto(env, localKey, sourceRecord.env.get(resolved.key)) || changed;
+              const props = sourceRecord.owners.get(resolved.key);
+              if (props && props.size) {
+                if (!owners.has(localKey)) owners.set(localKey, new Set());
+                const before = owners.get(localKey).size;
+                for (const prop of props) owners.get(localKey).add(prop);
+                if (owners.get(localKey).size !== before) changed = true;
+              }
+            }
+          }
+          if (resolved.ownerProps && resolved.ownerProps.size) {
+            if (!owners.has(localKey)) owners.set(localKey, new Set());
+            const before = owners.get(localKey).size;
+            for (const prop of resolved.ownerProps) owners.get(localKey).add(prop);
+            if (owners.get(localKey).size !== before) changed = true;
+          }
+        }
+      });
+    }
+    if (!changed) break;
   }
 
   const observations = [];
