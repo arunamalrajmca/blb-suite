@@ -160,7 +160,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
 
   for (const [file, ast] of asts) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
-    const imported = new Map();
+    const imported = new Map(), scriptElementBindings = new Set();
     visit(ast, node => {
       if (node.type === 'ImportDeclaration' && node.source.value) {
         const target = resolveFile(file, node.source.value, fileSet);
@@ -172,6 +172,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
 
     visit(ast, (node, parent) => {
+      if (node.type === 'ExportNamedDeclaration' && node.source) {
+        const target = resolveFile(file, node.source.value, fileSet);
+        if (target) addEdge(file, target, 're-export', file, node.loc.start.line, node.source.value);
+      }
+      if (node.type === 'ExportAllDeclaration' && node.source) {
+        const target = resolveFile(file, node.source.value, fileSet);
+        if (target) addEdge(file, target, 're-export-all', file, node.loc.start.line, node.source.value);
+      }
       if (node.type === 'ImportExpression') {
         const spec = staticValue(node.source, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
         addSite(file, node, 'dynamic-import', spec, target, target ? 'resolved-local' : 'unresolved-dynamic-import');
