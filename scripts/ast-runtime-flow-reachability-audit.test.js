@@ -99,7 +99,7 @@ test('builds explicit directed edges for aliases, wrappers, calls, returns, cont
     'const proxy = new Proxy(service, {});',
     'const prototype = {}; Object.setPrototypeOf(proxy, prototype);',
     'const target = {}; target.handler = callback;'
-  ].join('\\n'));
+  ].join('\n'));
   const kinds = new Set(result.flowEdges.map(edge => edge.kind));
   for (const kind of [
     'identifier-alias', 'object-wrap', 'function-argument', 'function-return',
