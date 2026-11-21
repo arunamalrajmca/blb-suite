@@ -315,18 +315,24 @@ function analyze(root = path.resolve(__dirname, '..')) {
                 if (sourceKey && targetKey) edges.push({ from: rel(root, file) + '::' + sourceKey, to: rel(root, targetFunction.file) + '::' + targetKey, kind: 'function-argument', file: rel(root, file), line: node.loc.start.line, detail: callee.name });
               }
             }
+            const returnedIdentifiers = [];
+            visit(targetFunction.node.body, returned => {
+              if (returned.type === 'ReturnStatement' && returned.argument && returned.argument.type === 'Identifier') {
+                returnedIdentifiers.push(returned.argument);
+              }
+            });
+            if (returnedIdentifiers.length) addEdge(targetFunction.file, file, 'cross-module-function-return', file, node.loc.start.line, callee.name);
             const assigned = parent && parent.type === 'VariableDeclarator' && parent.init === node && parent.id.type === 'Identifier'
               ? bindings.get(parent.id) : null;
-            if (assigned) visit(targetFunction.node.body, returned => {
-              if (returned.type !== 'ReturnStatement' || !returned.argument || returned.argument.type !== 'Identifier') return;
-              const sourceKey = bindingByFile.get(targetFunction.file).get(returned.argument);
+            if (assigned) for (const returnedIdentifier of returnedIdentifiers) {
+              const sourceKey = bindingByFile.get(targetFunction.file).get(returnedIdentifier);
               if (sourceKey) edges.push({
                 from: rel(root, targetFunction.file) + '::' + sourceKey,
                 to: rel(root, file) + '::' + assigned,
-                kind: 'cross-module-function-return', file: rel(root, file),
+                kind: 'cross-module-returned-binding', file: rel(root, file),
                 line: node.loc.start.line, detail: callee.name
               });
-            });
+            }
           }
         }
       }
