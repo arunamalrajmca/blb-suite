@@ -23,7 +23,7 @@ on:
       - 'tests/browser/fixtures.js'
       - 'tests/browser/service-worker-shortcut-headed.spec.js'
       - 'tests/browser/native-prerender-activation.spec.js'
-      # A full audit delegates its physical Alt+B case to this X11 workflow.
+      # The full audit delegates native keyboard and prerender cases to this X11 workflow.
       - '.github/workflows/manual-full-test-audit.yml'
       - '.github/workflows/browser-native-shortcut.yml'
       - 'package.json'
