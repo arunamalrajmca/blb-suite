@@ -2216,7 +2216,16 @@ test('persistent registration failure keeps current and subsequent same-tab docu
       }
     });
     globalThis.__registrationFailureAudit.hookInstalled=api.registerContentScripts!==original;
-  },pattern);
+    if (!globalThis.__registrationFailureAudit.hookInstalled) {
+      throw new Error('Could not install the persistent-registration failure interceptor');
+    }
+    const seeded=await registerRuntimeContentScriptForPattern({url:value},BLB_CONTENT_SCRIPT_FILES);
+    globalThis.__registrationFailureAudit.seededFailure=seeded===false &&
+      globalThis.__registrationFailureAudit.attempts>0;
+    if (!globalThis.__registrationFailureAudit.seededFailure) {
+      throw new Error('The simulated registration rejection was not exercised before navigation');
+    }
+  },'https://example.com/');
   await page.route('https://example.com/**',route=>route.fulfill({
     status:200,
     contentType:'text/html',
