@@ -72,7 +72,7 @@ function unionInto(map, key, values) {
 function valuesOf(node, env, bindings, depth = 0) {
   if (!node || depth > 10) return null;
   if (node.type === 'Literal' && ['string', 'number'].includes(typeof node.value)) return new Set([String(node.value)]);
-  if (node.type === 'Identifier') return env.get(bindings.get(node)) || env.get('__uniqueIdentifierName:' + node.name) || env.get('__uniqueParameterName:' + node.name) || null;
+  if (node.type === 'Identifier') return env.get(bindings.get(node)) || null;
   if (node.type === 'TemplateLiteral') {
     if (!node.expressions.length) return new Set([node.quasis[0].value.cooked]);
     return null;
@@ -105,12 +105,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
   // First collect bounded constants, object/class owners, aliases, and local functions.
   for (const [file, record] of records) {
     const { ast, bindings, env, owners, aliases, functions } = record;
-    const functionsByName = new Map(), parameterNameCounts = new Map(), identifierNameCounts = new Map();
-    visit(ast, node => {
-      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') identifierNameCounts.set(node.id.name, (identifierNameCounts.get(node.id.name) || 0) + 1);
-      if (node.type === 'FunctionDeclaration' && node.id) identifierNameCounts.set(node.id.name, (identifierNameCounts.get(node.id.name) || 0) + 1);
-      if (node.type === 'ClassDeclaration' && node.id) identifierNameCounts.set(node.id.name, (identifierNameCounts.get(node.id.name) || 0) + 1);
-    });
     visit(ast, (node, parent) => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         const key = bindings.get(node.id);
@@ -118,7 +112,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const values = valuesOf(node.init, env, bindings);
           if (values) {
             unionInto(env, key, values);
-            if (identifierNameCounts.get(node.id.name) === 1) unionInto(env, '__uniqueIdentifierName:' + node.id.name, values);
           }
           if (node.init.type === 'Identifier') {
             const source = bindings.get(node.init);
@@ -143,13 +136,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
           }
         }
       }
-      if (node.type === 'FunctionDeclaration' && node.id) {
-        for (const param of node.params) if (param.type === 'Identifier') parameterNameCounts.set(param.name, (parameterNameCounts.get(param.name) || 0) + 1);
-        const key = bindings.get(node.id);
-        if (key) functions.set(key, node);
-        if (node.id && !functionsByName.has(node.id.name)) functionsByName.set(node.id.name, node);
-        else if (node.id) functionsByName.set(node.id.name, null);
-      }
       if (node.type === 'ClassDeclaration' && node.id) {
         const key = bindings.get(node.id);
         if (key) owners.set(key, new Set(node.body.body.filter(item => item.key && !item.computed).map(item => String(item.key.name ?? item.key.value))));
@@ -160,19 +146,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (key && node.right.type === 'Identifier') {
           const source = bindings.get(node.right); if (source) aliases.set(key, source);
         }
-      }
-    });
-
-    // Feed literal arguments into locally declared function parameters.
-    visit(ast, node => {
-      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
-      const fn = functions.get(bindings.get(node.callee)) || functionsByName.get(node.callee.name);
-      if (!fn) return;
-      for (let index = 0; index < Math.min(fn.params.length, node.arguments.length); index++) {
-        if (fn.params[index].type !== 'Identifier') continue;
-        const key = bindings.get(fn.params[index]), values = valuesOf(node.arguments[index], env, bindings);
-        if (key && values) unionInto(env, key, values);
-        if (values && parameterNameCounts.get(fn.params[index].name) === 1) unionInto(env, '__uniqueParameterName:' + fn.params[index].name, values);
       }
     });
 
