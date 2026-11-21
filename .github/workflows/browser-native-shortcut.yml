@@ -1,4 +1,4 @@
-name: BLB Suite — Native Browser Shortcut E2E
+name: BLB Suite — Native Browser Regressions (X11)
 
 on:
   pull_request:
@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   native-shortcut:
-    name: Native Alt+B shortcut after worker termination
+    name: Native browser UI and prerender regressions under X11
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -86,14 +86,14 @@ jobs:
           else
             echo "Xvfb and xdotool are already installed; skipping apt installation."
           fi
-      - name: Run physical browser-level Alt+B shortcut test
+      - name: Run all native browser regressions in one X11 session
         env:
           BLB_HEADFUL_EXTENSION_TESTS: '1'
-        run: xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test tests/browser/service-worker-shortcut-headed.spec.js
-      - name: Run native Chromium prerender activation cases under Xvfb
-        env:
-          BLB_HEADFUL_EXTENSION_TESTS: '1'
-        run: xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test tests/browser/native-prerender-activation.spec.js
+        run: >-
+          xvfb-run -a --server-args='-screen 0 1280x900x24'
+          npx playwright test
+          tests/browser/service-worker-shortcut-headed.spec.js
+          tests/browser/native-prerender-activation.spec.js
       - name: Upload native shortcut diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
