@@ -3,6 +3,7 @@ class ProgressReporter {
     this.total = suite.allTests().length;
     this.aggregateProgress = process.env.BLB_PERF_AGGREGATE_PROGRESS === '1';
     this.started = 0;
+    this.startedTestIds = new Set();
     this.testIndexes = new Map(suite.allTests().map((test, index) => [test.id, index + 1]));
     this.passed = 0;
     this.failed = 0;
@@ -12,10 +13,12 @@ class ProgressReporter {
   }
 
   onTestBegin(test) {
-    this.started += 1;
+    this.startedTestIds.add(test.id);
+    this.started = this.startedTestIds.size;
     if (!this.aggregateProgress) {
       const title = test.titlePath().filter(Boolean).join(' › ');
-      console.log(`\n… [${this.started}/${this.total}] ${title}`);
+      const testIndex = this.testIndexes.get(test.id) || 0;
+      console.log(`\n… [${testIndex}/${this.total}] ${title}`);
     }
   }
 
