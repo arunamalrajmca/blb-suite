@@ -33,6 +33,7 @@ for (const suite of manifest.suites) {
   if (suite.alsoOwnedBy && !readRepoFile(suite.alsoOwnedBy).includes(suite.alsoRequiredText)) fail('Secondary execution owner no longer runs ' + suite.id + ': ' + suite.alsoOwnedBy);
   for (const delegation of suite.delegations || []) {
     if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
+    if (!readRepoFile(delegation.testFile).includes(delegation.testTitle)) fail('Delegated test title is missing from its declared spec: ' + delegation.testFile);
     if (!readRepoFile(delegation.workflow).includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
   }
   counts.push({ id:suite.id, count:files.length });
