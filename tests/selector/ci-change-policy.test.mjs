@@ -14,7 +14,9 @@ test("repository AST audit analyzers and their fixtures are package-validated bu
     "scripts/ast-cross-module-dynamic-reachability-audit.js",
     "scripts/ast-cross-module-dynamic-reachability-audit.test.js",
     "scripts/ast-runtime-flow-reachability-audit.js",
-    "scripts/ast-runtime-flow-reachability-audit.test.js"
+    "scripts/ast-runtime-flow-reachability-audit.test.js",
+    "scripts/ast-unified-dynamic-runtime-reachability-audit.js",
+    "scripts/ast-unified-dynamic-runtime-reachability-audit.test.js"
   ];
   for (const path of auditPaths) {
     assert.equal(isNonRuntimePath(path), true, path);
