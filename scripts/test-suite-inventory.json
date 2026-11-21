@@ -81,8 +81,21 @@
   ],
   "manualOnly": [
     {
+      "path": "local-runner/BLB-Test.bat",
+      "reason": "Interactive local Brave test launcher; not an automated CI suite."
+    },
+    {
+      "path": "local-runner/Legacy-Brave-E2E-Runner/BLB-Test.bat",
+      "reason": "Legacy interactive Brave test launcher; not an automated CI suite."
+    },
+    {
       "path": "local-runner/Legacy-Brave-E2E-Runner/test-runner.ps1",
-      "reason": "Legacy interactive Brave test harness; not an automated CI test suite."
+      "reason": "Legacy interactive Brave test harness; not an automated CI suite."
+    },
+    {
+      "path": "regression-suite/Run-BLB-Regression.ps1",
+      "reason": "PowerShell wrapper for the deterministic regression suite; the underlying Node regression groups are executed by the full audit."
     }
-  ]
+  ],
+  "manualVerification": "PRE-MERGE-CHECKLIST.md remains the source of required manual Brave/Chrome verification for native context menus, browser-specific permissions, and protected PDF behavior."
 }
