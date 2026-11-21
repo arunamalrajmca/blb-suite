@@ -77,6 +77,7 @@ test('propagates object identity returned by an imported helper into the caller'
     'scripts/helper.js': "import { service } from './service.js'; export function getService() { return service; }",
     'scripts/main.js': "import { getService } from './helper.js'; const result = getService(); result.start();"
   });
+  assert.ok(edge(result, 'function-call', 'scripts/main.js', 'scripts/helper.js'));
   assert.ok(edge(result, 'cross-module-function-return', 'scripts/helper.js', 'scripts/main.js'));
   assert.ok(result.edges.some(item => item.kind === 'cross-module-binding-import' && item.file === 'scripts/helper.js'));
 });
@@ -111,7 +112,7 @@ test('scopes unresolved dynamic uncertainty to roots that can reach its source',
     'scripts/second.js': 'module.exports = true;',
     'scripts/plugins/known.js': 'module.exports = true;'
   });
-  const site = result.uncertainty.find(item => item.kind === 'unresolved-dynamic-import');
+  const site = result.uncertainty.find(item => item.kind === 'dynamic-import');
   assert.ok(site);
   assert.deepEqual(site.affectedRoots, ['scripts/first.js']);
   assert.equal(result.unresolvedByRoot['scripts/second.js'].length, 0);
