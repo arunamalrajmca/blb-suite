@@ -184,10 +184,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
       for (const spec of refs) { const target = resolveFile(manifestPath, spec, fileSet); if (target) roots.add(target); }
     } catch (error) { errors.push({ file: 'extension/manifest.json', error: error.message }); }
   }
-  // HTML entrypoints that own script tags (popup/options/devtools pages).
-  for (const html of ['popup.html', 'options.html', 'devtools.html']) {
-    const file = path.join(root, 'extension', html);
-    if (!fs.existsSync(file)) continue;
+  // Every extension-owned HTML page is an executable entrypoint when opened
+  // directly or by chrome.runtime.getURL(). This includes the manifest options
+  // page and transient handoff pages created by the background worker.
+  const htmlEntrypoints = [];
+  function collectHtml(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (SKIP.has(entry.name)) continue;
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) collectHtml(file);
+      else if (entry.isFile() && entry.name.toLowerCase().endsWith('.html')) htmlEntrypoints.push(file);
+    }
+  }
+  const extensionRoot = path.join(root, 'extension');
+  if (fs.existsSync(extensionRoot)) collectHtml(extensionRoot);
+  for (const file of htmlEntrypoints) {
     const source = fs.readFileSync(file, 'utf8');
     for (const match of source.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)) {
       const target = resolveFile(file, match[1], fileSet); if (target) roots.add(target);
@@ -419,9 +430,25 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const spec = staticValue(node.source, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
         addSite(file, node, 'dynamic-import', spec, target, target ? 'resolved-local' : 'unresolved-dynamic-import', [], staticPrefix(node.source, constants, bindings));
       }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.id.name === 'fallbackAssignments' && node.init && node.init.type === 'ObjectExpression') {
+        for (const entry of node.init.properties) {
+          if (entry.type !== 'Property' || entry.value.type !== 'ArrayExpression') continue;
+          const fallbackName = entry.value.elements[0];
+          const spec = fallbackName && fallbackName.type === 'Literal' ? fallbackName.value : null;
+          const target = typeof spec === 'string' ? resolveInjected(spec) : null;
+          if (target) addEdge(file, target, 'packaged-data-fallback', file, entry.loc.start.line, spec);
+        }
+      }
       if (node.type === 'CallExpression') {
         const callee = node.callee;
         const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') parts.unshift(n.name); return parts.filter(Boolean).join('.'); };
+        if (callee.type === 'Identifier' && callee.name === 'fetchPackagedJsonAssignment') {
+          const spec = staticValue(node.arguments[0], constants, 0, bindings);
+          const target = typeof spec === 'string' ? resolveInjected(spec) : null;
+          if (target) addEdge(file, target, 'packaged-data-fetch', file, node.loc.start.line, spec);
+          else if (spec !== undefined) addSite(file, node, 'packaged-data-fetch', spec, null, 'unresolved-packaged-data-fetch', [], staticPrefix(node.arguments[0], constants, bindings));
+        }
         if (callee.type === 'Identifier' && callee.name === 'importScripts') {
           for (const arg of node.arguments) {
             const boundedValues = arg.type === 'Identifier' ? loopValues.get(bindings.get(arg)) : null;
