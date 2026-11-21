@@ -57,6 +57,12 @@
       "pattern": "regression-suite/tests/kjv-corpus-integrity.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
       "requiredText": "node regression-suite/tests/kjv-corpus-integrity.mjs extension"
+    },
+    {
+      "id": "inventory-enforcement-checker",
+      "pattern": "scripts/test-suite-inventory.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node scripts/test-suite-inventory.mjs"
     }
   ],
   "manualOnly": [
