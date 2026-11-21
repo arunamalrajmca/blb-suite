@@ -362,7 +362,6 @@ jobs:
           else
             npx playwright test --config=playwright.config.js "${runnable_specs[@]}" --grep "$MATRIX_GREP"
           fi
-          done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
