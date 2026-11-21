@@ -32,22 +32,24 @@ test('resolves dynamic import, importScripts, executeScript files, and registere
     'scripts/worker-extra.js': 'self.ready = true;',
     'extension/manifest.json': JSON.stringify({
       manifest_version: 3,
-      background: { service_worker: 'background.js' },
+      background: { service_worker: 'background/worker.js' },
       content_scripts: [{ matches: ['https://example.com/*'], js: ['content.js'] }]
     }),
-    'extension/background.js': "chrome.scripting.executeScript({ target: { tabId: 1 }, files: ['./injected.js'] }); chrome.scripting.registerContentScripts([{ id: 'late', js: [{ file: './registered.js' }] }]);",
+    'extension/background/worker.js': "chrome.scripting.executeScript({ target: { tabId: 1 }, files: ['scripts/injected.js'] }); chrome.scripting.registerContentScripts([{ id: 'late', js: [{ file: 'scripts/registered.js' }] }]); const script = document.createElement('script'); script.src = 'scripts/dom-injected.js'; document.head.appendChild(script);",
     'extension/content.js': 'void 0;',
-    'extension/injected.js': 'void 0;',
-    'extension/registered.js': 'void 0;'
+    'extension/scripts/injected.js': 'void 0;',
+    'extension/scripts/registered.js': 'void 0;',
+    'extension/scripts/dom-injected.js': 'void 0;'
   });
   assert.equal(result.parseErrors.length, 0);
   assert.ok(result.roots.includes('scripts/main.js'));
-  assert.ok(result.roots.includes('extension/background.js'));
+  assert.ok(result.roots.includes('extension/background/worker.js'));
   assert.ok(result.roots.includes('extension/content.js'));
   assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'scripts/plugins/alpha.js'));
   assert.ok(edge(result, 'importScripts', 'scripts/main.js', 'scripts/worker-extra.js'));
-  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background.js', 'extension/injected.js'));
-  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/registered.js'));
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background/worker.js', 'extension/scripts/injected.js'));
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background/worker.js', 'extension/scripts/registered.js'));
+  assert.ok(edge(result, 'dom-script-src-injection', 'extension/background/worker.js', 'extension/scripts/dom-injected.js'));
 });
 
 test('propagates imported function calls and object/callback parameter bindings across modules', () => {
