@@ -334,6 +334,10 @@ jobs:
           fi
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
+            if [[ "$spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
+              echo "Delegated to the single-owner native X11 workflow: $spec"
+              continue
+            fi
             if [[ ! -f "$spec" ]]; then
               echo "::error::Selected Playwright spec does not exist: $spec"
               exit 1
@@ -574,7 +578,7 @@ jobs:
   focused-test-only-behavior:
     name: Focused behavior tests (test-only edits)
     needs: change-detection
-    if: ${{ github.event_name == 'pull_request' && ((needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '') || contains(needs.change-detection.outputs.focused_specs, 'tests/browser/native-prerender-activation.spec.js')) }}
+    if: ${{ github.event_name == 'pull_request' && ((needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -636,7 +640,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IFS=',' read -r -a specs <<< "$FOCUSED_SPECS"
+          IFS=',' read -r -a selected_specs <<< "$FOCUSED_SPECS"
+          specs=()
+          for selected_spec in "${selected_specs[@]}"; do
+            if [[ "$selected_spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
+              echo "Delegated to the single-owner native X11 workflow: $selected_spec"
+            else
+              specs+=("$selected_spec")
+            fi
+          done
           total="${#specs[@]}"
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
@@ -648,20 +660,7 @@ jobs:
               echo "::error::Playwright discovered no tests in $spec."
               exit 1
             fi
-            if [[ "$spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
-              # Native prerender activation requires a visible browser and X11 input.
-              command -v xvfb-run >/dev/null || {
-                echo "::error::xvfb-run is required for the native prerender test."
-                exit 1
-              }
-              if ! command -v xdotool >/dev/null 2>&1; then
-                sudo apt-get update -qq
-                sudo apt-get install -y xdotool
-              fi
-              xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test --config=playwright.config.js "$spec"
-            else
-              npx playwright test --config=playwright.config.js "$spec"
-            fi
+            npx playwright test --config=playwright.config.js "$spec"
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
