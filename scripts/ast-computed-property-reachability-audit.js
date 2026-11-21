@@ -429,14 +429,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
       });
     });
   }
-  const byStatus = {}, byRole = {}, withCandidates = observations.filter(item => item.candidateCount);
+  const byStatus = {}, byRole = {}, byReceiverKind = {}, withCandidates = observations.filter(item => item.candidateCount);
   for (const item of observations) {
     byStatus[item.status] = (byStatus[item.status] || 0) + 1;
     byRole[item.role] = (byRole[item.role] || 0) + 1;
+    byReceiverKind[item.receiverKind] = (byReceiverKind[item.receiverKind] || 0) + 1;
   }
   return { filesAnalyzed: records.size, parseErrors, observations, summary: {
     total: observations.length, withReceiverCandidates: withCandidates.length,
-    byStatus, byRole, candidatePropertyTotal: withCandidates.reduce((sum, item) => sum + item.candidateCount, 0)
+    byStatus, byRole, byReceiverKind,
+    storageBackedAccesses: observations.filter(item => item.receiverKind === 'storage-backed-container').length,
+    candidatePropertyTotal: withCandidates.reduce((sum, item) => sum + item.candidateCount, 0)
   } };
 }
 function run(root) {
@@ -448,6 +451,8 @@ function run(root) {
   console.log('Observations with known receiver property candidates: ' + result.summary.withReceiverCandidates);
   console.log('Observations by status: ' + JSON.stringify(result.summary.byStatus));
   console.log('Observations by access role: ' + JSON.stringify(result.summary.byRole));
+  console.log('Observations by receiver kind: ' + JSON.stringify(result.summary.byReceiverKind));
+  console.log('Storage-backed container accesses: ' + result.summary.storageBackedAccesses);
   console.log('Candidate property references (not proof of runtime selection): ' + result.summary.candidatePropertyTotal);
   console.log('Candidate observations: ' + JSON.stringify(result.observations.filter(item => item.candidateCount)));
   const focusFiles = new Set(['extension/background.js', 'extension/content.js']);
