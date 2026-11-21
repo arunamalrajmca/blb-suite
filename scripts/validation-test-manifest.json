@@ -73,5 +73,10 @@
     "script": "test-content-script-sender-document.js",
     "failure": "content-script sender-document authorization tests failed\\n",
     "success": "content-script sender-document authorization behavior validated"
+  },
+  {
+    "script": "ast-unified-dynamic-runtime-reachability-audit.test.js",
+    "failure": "unified dynamic/runtime reachability audit tests failed\\n",
+    "success": "unified dynamic/runtime reachability graph validated"
   }
 ]
