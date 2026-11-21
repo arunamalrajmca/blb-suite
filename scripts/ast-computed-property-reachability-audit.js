@@ -238,6 +238,42 @@ function analyze(root = path.resolve(__dirname, '..')) {
           }
         }
       }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
+        const receiverKey = node.left.object.type === 'Identifier' ? bindings.get(node.left.object) : null;
+        const propertyNames = node.left.computed
+          ? valuesOf(node.left.property, env, bindings)
+          : new Set([String(node.left.property.name)]);
+        if (receiverKey && propertyNames?.size) {
+          if (!owners.has(receiverKey)) owners.set(receiverKey, new Set());
+          for (const name of propertyNames) owners.get(receiverKey).add(name);
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' &&
+          node.callee.property.name === 'assign' && node.arguments[0]?.type === 'Identifier') {
+        const receiverKey = bindings.get(node.arguments[0]);
+        if (receiverKey) {
+          if (!owners.has(receiverKey)) owners.set(receiverKey, new Set());
+          for (const source of node.arguments.slice(1)) {
+            if (source.type !== 'ObjectExpression') continue;
+            for (const property of source.properties) {
+              if (property.type === 'SpreadElement') continue;
+              const names = property.computed ? valuesOf(property.key, env, bindings) : new Set([String(property.key.name ?? property.key.value)]);
+              if (names) for (const name of names) owners.get(receiverKey).add(name);
+            }
+          }
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' &&
+          node.callee.property.name === 'defineProperty' && node.arguments[0]?.type === 'Identifier') {
+        const receiverKey = bindings.get(node.arguments[0]);
+        const names = valuesOf(node.arguments[1], env, bindings);
+        if (receiverKey && names) {
+          if (!owners.has(receiverKey)) owners.set(receiverKey, new Set());
+          for (const name of names) owners.get(receiverKey).add(name);
+        }
+      }
       if (node.type === 'ClassDeclaration' && node.id) {
         const key = bindings.get(node.id);
         if (key) owners.set(key, new Set(node.body.body.filter(item => item.key && !item.computed).map(item => String(item.key.name ?? item.key.value))));
@@ -491,7 +527,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
       const role = parent && parent.type === 'CallExpression' && parent.callee === node ? 'call' :
         parent && parent.type === 'NewExpression' && parent.callee === node ? 'construct' :
         parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
-        parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' : 'read-or-other';
+        parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' :
+        parent && parent.type === 'UnaryExpression' && parent.operator === 'delete' && parent.argument === node ? 'delete' : 'read-or-other';
       observations.push({
         file: rel(root, file), line: node.loc.start.line,
         expression: fs.readFileSync(file, 'utf8').slice(node.start, node.end).slice(0, 200),
