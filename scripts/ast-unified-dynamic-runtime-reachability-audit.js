@@ -101,8 +101,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const addEdge = (from, to, kind, file, line, detail) => {
     if (from && to) edges.push({ from: rel(root, from), to: rel(root, to), kind, file: rel(root, file), line, detail: detail || null });
   };
-  const addSite = (file, node, kind, spec, target, certainty, rootScope) => {
-    const site = { file: rel(root, file), line: node.loc.start.line, kind, expression: spec == null ? null : String(spec), resolved: target ? rel(root, target) : null, certainty, affectedRoots: rootScope || [] };
+  const addSite = (file, node, kind, spec, target, certainty, rootScope, scopePath = null) => {
+    const site = { file: rel(root, file), line: node.loc.start.line, kind, expression: spec == null ? null : String(spec), resolved: target ? rel(root, target) : null, certainty, affectedRoots: rootScope || [], scopePath };
     sites.push(site);
     if (!target && certainty.startsWith('unresolved')) uncertainty.push(site);
     if (target) addEdge(file, target, kind, file, node.loc.start.line, spec);
