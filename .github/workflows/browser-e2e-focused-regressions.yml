@@ -32,6 +32,12 @@ jobs:
             scenario: closed-tab
           - name: blb-verse-link-click-isolated
             scenario: blb-link-click
+          - name: repeated-master-toggle-listener-isolated
+            scenario: master-toggle-listener
+          - name: real-worker-termination-isolated
+            scenario: worker-termination
+          - name: guarded-source-registration-isolated
+            scenario: guarded-registration
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -95,6 +101,27 @@ jobs:
         run: >-
           npx playwright test tests/browser/blb-verse-link-navigation.spec.js
           --grep "a BLB verse link clicked in the same task as insertion opens a new tab"
+          --workers=1 --reporter=line
+
+      - name: Rerun repeated master-toggle listener lifecycle test in isolation
+        if: ${{ matrix.scenario == 'master-toggle-listener' }}
+        run: >-
+          npx playwright test tests/browser/content-feature-refresh-races.spec.js
+          --grep "repeated global master toggles disable and restore exactly one double-click listener"
+          --workers=1 --reporter=line
+
+      - name: Rerun real MV3 service-worker termination test in isolation
+        if: ${{ matrix.scenario == 'worker-termination' }}
+        run: >-
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js
+          --grep "a real MV3 service-worker termination is recovered by the Alt+B command message"
+          --workers=1 --reporter=line
+
+      - name: Rerun guarded source-host registration lifecycle test in isolation
+        if: ${{ matrix.scenario == 'guarded-registration' }}
+        run: >-
+          npx playwright test tests/browser/source-page-button-redirect-separation.spec.js
+          --grep "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
           --workers=1 --reporter=line
 
       - name: Prepare exact PR-base performance baseline
