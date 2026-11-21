@@ -277,14 +277,20 @@ jobs:
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$UNMAPPED_SPECS"
           total="${#specs[@]}"
+          if (( total == 0 )); then
+            echo "::error::The unmapped-spec selector returned an empty list."
+            exit 1
+          fi
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            npx playwright test "$spec"
+            printf '[%s/%s] Selected %s\n' "$((index + 1))" "$total" "$spec"
+            node --check "$spec"
           done
+          npx playwright test "${specs[@]}"
 
       - name: Upload Group A selection-stage benchmark
+
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
         with:
@@ -324,21 +330,36 @@ jobs:
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
-      - name: Run Study Sessions popup UI regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
-        run: npx playwright test tests/browser/study-session-popup-ui-regression.spec.js
-      - name: Run Study Sessions concurrency regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-concurrency.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-session-concurrency.spec.js') }}
-        run: npx playwright test tests/browser/study-session-concurrency.spec.js
-      - name: Run Study Sessions lifecycle regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
-        run: npx playwright test tests/browser/feature-lifecycle-regressions.spec.js
-      - name: Run Study Sessions backup and restore regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-backup-restore.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-backup-restore.spec.js') }}
-        run: npx playwright test tests/browser/study-backup-restore.spec.js
-      - name: Run Study reference capture behavior regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-reference-capture.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-reference-capture.spec.js') }}
-        run: npx playwright test tests/browser/study-reference-capture.spec.js
+      - name: Run selected Study Sessions regressions in one Playwright process
+        env:
+          FULL_BROWSER_SUITE: ${{ inputs.full_browser_suite }}
+          CHANGED_SPECS: ${{ inputs.changed_specs }}
+          CHANGED_BROWSER_SPECS: ${{ inputs.changed_browser_specs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          specs=()
+          add_if_selected() {
+            local spec="$1"
+            if [[ "$FULL_BROWSER_SUITE" == "true" || "$CHANGED_SPECS" == *"$spec"* || "$CHANGED_BROWSER_SPECS" == *"$spec"* ]]; then
+              specs+=("$spec")
+            fi
+          }
+          add_if_selected tests/browser/study-session-popup-ui-regression.spec.js
+          add_if_selected tests/browser/study-session-concurrency.spec.js
+          add_if_selected tests/browser/feature-lifecycle-regressions.spec.js
+          add_if_selected tests/browser/study-backup-restore.spec.js
+          add_if_selected tests/browser/study-reference-capture.spec.js
+          if (( ${#specs[@]} == 0 )); then
+            echo "No Study Sessions specs selected."
+            exit 0
+          fi
+          for spec in "${specs[@]}"; do
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            node --check "$spec"
+          done
+          printf 'Running %d selected Study Sessions specs in one Playwright process.\n' "${#specs[@]}"
+          npx playwright test "${specs[@]}"
       # PDF export coverage is already included in study-session-popup-ui-regression.spec.js.
       # Do not invoke the removed study-session-export.spec.js path.
 
@@ -377,15 +398,39 @@ jobs:
         if: ${{ inputs.group_b_required == 'true' }}
       - run: npx playwright install chromium
         if: ${{ inputs.group_b_required == 'true' }}
-      - name: Run native redirect hostname regression tests
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/redirect-hostnames.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js')))) }}
-        run: npx playwright test tests/browser/redirect-hostnames.spec.js
-      - name: Run non-KJV BLB redirect regression tests
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/blb-non-kjv-redirect.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js')))) }}
-        run: npx playwright test tests/browser/blb-non-kjv-redirect.spec.js
-      - name: Run ScriptTagger injection and toggle regression tests
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/scripttagger-global-injection.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/scripttagger-global-injection.spec.js')) }}
-        run: npx playwright test tests/browser/scripttagger-global-injection.spec.js
+      - name: Run selected Group B redirect and injection regressions in one Playwright process
+        if: ${{ !cancelled() }}
+        env:
+          FULL_BROWSER_SUITE: ${{ inputs.full_browser_suite }}
+          CHANGED_SPECS: ${{ inputs.changed_specs }}
+          CHANGED_BROWSER_SPECS: ${{ inputs.changed_browser_specs }}
+          BROWSER_E2E_REQUIRED: ${{ inputs.browser_e2e_required }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          specs=()
+          redirect_host="tests/browser/redirect-hostnames.spec.js"
+          non_kjv="tests/browser/blb-non-kjv-redirect.spec.js"
+          tagger="tests/browser/scripttagger-global-injection.spec.js"
+          if [[ ( "$FULL_BROWSER_SUITE" == "true" || "$CHANGED_SPECS" == *"$redirect_host"* ) && "$CHANGED_BROWSER_SPECS" != *"$redirect_host"* && !( "$BROWSER_E2E_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || "$CHANGED_SPECS" == *"$redirect_host"* ) ) ]]; then
+            specs+=("$redirect_host")
+          fi
+          if [[ ( "$FULL_BROWSER_SUITE" == "true" || "$CHANGED_SPECS" == *"$non_kjv"* ) && "$CHANGED_BROWSER_SPECS" != *"$non_kjv"* && !( "$BROWSER_E2E_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || "$CHANGED_SPECS" == *"$non_kjv"* ) ) ]]; then
+            specs+=("$non_kjv")
+          fi
+          if [[ ( "$FULL_BROWSER_SUITE" == "true" || "$CHANGED_SPECS" == *"$tagger"* ) && "$CHANGED_BROWSER_SPECS" != *"$tagger"* ]]; then
+            specs+=("$tagger")
+          fi
+          if (( ${#specs[@]} == 0 )); then
+            echo "No Group B specs selected."
+            exit 0
+          fi
+          for spec in "${specs[@]}"; do
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            node --check "$spec"
+          done
+          printf 'Running %d selected Group B specs in one Playwright process.\n' "${#specs[@]}"
+          npx playwright test "${specs[@]}"
   feature-groups-summary:
     name: Validate selected feature groups
     needs:
