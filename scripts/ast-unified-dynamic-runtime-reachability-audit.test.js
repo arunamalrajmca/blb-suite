@@ -52,6 +52,34 @@ test('resolves dynamic import, importScripts, executeScript files, and registere
   assert.ok(edge(result, 'dom-script-src-injection', 'extension/background/worker.js', 'extension/scripts/dom-injected.js'));
 });
 
+
+test('includes extension HTML script entrypoints and packaged data fallback dependencies', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' },
+      options_page: 'Tutorial.html'
+    }),
+    'extension/background.js': "async function fetchPackagedJsonAssignment(filename) { return fetch(chrome.runtime.getURL(filename)); } const fallbackAssignments = { 'corpus.json.gz': ['corpus-fallback.js', 'const CORPUS = ', ';'] }; async function loadWords() { return fetchPackagedJsonAssignment('words-fallback.js'); }",
+    'extension/Tutorial.html': '<script src="Tutorial.js"></script>',
+    'extension/Tutorial.js': 'globalThis.guide = true;',
+    'extension/multiverse-post.html': '<script src="multiverse-post.js"></script>',
+    'extension/multiverse-post.js': 'globalThis.handoff = true;',
+    'extension/words-fallback.js': 'const WORDS = [];',
+    'extension/corpus-fallback.js': 'const CORPUS = [];'
+  });
+  assert.ok(result.roots.includes('extension/Tutorial.js'));
+  assert.ok(result.roots.includes('extension/multiverse-post.js'));
+  assert.ok(edge(result, 'packaged-data-fetch', 'extension/background.js', 'extension/words-fallback.js'));
+  assert.ok(edge(result, 'packaged-data-fallback', 'extension/background.js', 'extension/corpus-fallback.js'));
+  assert.ok(result.reachable.includes('extension/Tutorial.js'));
+  assert.ok(result.reachable.includes('extension/multiverse-post.js'));
+  assert.ok(result.reachable.includes('extension/words-fallback.js'));
+  assert.ok(result.reachable.includes('extension/corpus-fallback.js'));
+});
+
 test('propagates imported function calls and object/callback parameter bindings across modules', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
