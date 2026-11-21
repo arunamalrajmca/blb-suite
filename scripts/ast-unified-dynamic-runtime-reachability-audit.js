@@ -227,10 +227,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
       const key = bindings.get(node.id);
       if (key) {
         const values = [...new Set(candidates)];
-        constants.set(key, values);
-        functionArraySummaries.push({ file: rel(root, file), name: node.id.name, binding: key, values });
-        if (parent && parent.type === 'Program' && topLevelFunctionCounts.get(node.id.name) === 1) {
-          constants.set('__uniqueTopLevelFunction:' + node.id.name, key);
+        if (values.length) {
+          constants.set(key, values);
+          functionArraySummaries.push({ file: rel(root, file), name: node.id.name, binding: key, values });
+          if (parent && parent.type === 'Program' && topLevelFunctionCounts.get(node.id.name) === 1) {
+            constants.set('__uniqueTopLevelFunction:' + node.id.name, key);
+          }
         }
       }
     });
@@ -724,6 +726,8 @@ function run(root) {
     unreachedByArea.set(area, (unreachedByArea.get(area) || 0) + 1);
   }
   console.log('Not-reached inventory by top-level area: ' + JSON.stringify(Object.fromEntries([...unreachedByArea].sort((a, b) => b[1] - a[1]))));
+  console.log('Not-reached extension files (review inventory only): ' + JSON.stringify(result.definiteUnreachable.filter(file => file.startsWith('extension/'))));
+  console.log('Not-reached scripts files (review inventory only): ' + JSON.stringify(result.definiteUnreachable.filter(file => file.startsWith('scripts/'))));
   console.log('Static function array-return summaries: ' + JSON.stringify(result.functionArraySummaries));
   console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
