@@ -99,6 +99,23 @@ test('discovers Playwright specs and GitHub Actions Node commands as execution r
   assert.ok(edge(result, 'commonjs-require', 'scripts/ci-check.test.js', 'scripts/ci-helper.js'));
 });
 
+
+test('resolves service-worker global content-script arrays referenced by browser test injections', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
+    'playwright.config.js': "module.exports = { testDir: './tests/browser' };",
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': "const BLB_CONTENT_SCRIPT_FILES = ['content.js', 'collector.js']; const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['tagger.js'];",
+    'extension/content.js': 'globalThis.content = true;',
+    'extension/collector.js': 'globalThis.collector = true;',
+    'extension/tagger.js': 'globalThis.tagger = true;',
+    'tests/browser/injection.spec.js': "async function reinject(worker, id) { await worker.evaluate(async tabId => { await chrome.scripting.executeScript({ target: { tabId }, files: BLB_CONTENT_SCRIPT_FILES }); }, id); }"
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'tests/browser/injection.spec.js', 'extension/content.js'));
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'tests/browser/injection.spec.js', 'extension/collector.js'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript.files').length, 0);
+});
+
 test('propagates imported function calls and object/callback parameter bindings across modules', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
