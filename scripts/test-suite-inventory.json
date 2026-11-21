@@ -11,12 +11,14 @@
         {
           "testTitle": "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "tests/browser/service-worker-shortcut-headed.spec.js"
+          "requiredText": "tests/browser/service-worker-shortcut-headed.spec.js",
+          "testFile": "tests/browser/service-worker-shortcut-headed.spec.js"
         },
         {
           "testTitle": "Show on BLB performance benchmark",
           "workflow": ".github/workflows/browser-e2e-performance.yml",
-          "requiredText": "tests/browser/performance.spec.js"
+          "requiredText": "tests/browser/performance.spec.js",
+          "testFile": "tests/browser/performance.spec.js"
         }
       ]
     },
