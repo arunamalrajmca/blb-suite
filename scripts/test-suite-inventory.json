@@ -15,6 +15,18 @@
           "testFile": "tests/browser/service-worker-shortcut-headed.spec.js"
         },
         {
+          "testTitle": "native Chromium _self prerender activation initializes the activated document without tab replacement",
+          "workflow": ".github/workflows/browser-native-shortcut.yml",
+          "requiredText": "tests/browser/native-prerender-activation.spec.js",
+          "testFile": "tests/browser/native-prerender-activation.spec.js"
+        },
+        {
+          "testTitle": "native Chromium _blank prerender activation initializes the activated document without tab replacement",
+          "workflow": ".github/workflows/browser-native-shortcut.yml",
+          "requiredText": "tests/browser/native-prerender-activation.spec.js",
+          "testFile": "tests/browser/native-prerender-activation.spec.js"
+        },
+        {
           "testTitle": "Show on BLB performance benchmark",
           "workflow": ".github/workflows/browser-e2e-performance.yml",
           "requiredText": "tests/browser/performance.spec.js",
