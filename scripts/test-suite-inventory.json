@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Patterns are discovered dynamically; newly added matching tests inherit the declared execution owner.",
+  "description": "Patterns are discovered dynamically; every suite declares its default execution environment, and genuinely native browser cases are delegated to one X11 owner.",
   "suites": [
     {
       "id": "playwright-browser-specs",
@@ -11,34 +11,40 @@
         {
           "testTitle": "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "tests/browser/service-worker-shortcut-headed.spec.js",
-          "testFile": "tests/browser/service-worker-shortcut-headed.spec.js"
+          "requiredText": "xvfb-run -a",
+          "testFile": "tests/browser/service-worker-shortcut-headed.spec.js",
+          "environment": "x11-headed-chromium"
         },
         {
           "testTitle": "native Chromium _self prerender activation initializes the activated document without tab replacement",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "tests/browser/native-prerender-activation.spec.js",
-          "testFile": "tests/browser/native-prerender-activation.spec.js"
+          "requiredText": "xvfb-run -a",
+          "testFile": "tests/browser/native-prerender-activation.spec.js",
+          "environment": "x11-headed-chromium"
         },
         {
           "testTitle": "native Chromium _blank prerender activation initializes the activated document without tab replacement",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "tests/browser/native-prerender-activation.spec.js",
-          "testFile": "tests/browser/native-prerender-activation.spec.js"
+          "requiredText": "xvfb-run -a",
+          "testFile": "tests/browser/native-prerender-activation.spec.js",
+          "environment": "x11-headed-chromium"
         },
         {
           "testTitle": "Show on BLB performance benchmark",
           "workflow": ".github/workflows/browser-e2e-performance.yml",
           "requiredText": "tests/browser/performance.spec.js",
-          "testFile": "tests/browser/performance.spec.js"
+          "testFile": "tests/browser/performance.spec.js",
+          "environment": "dedicated-performance-runner"
         }
-      ]
+      ],
+      "executionEnvironment": "headless Chromium by default; only native browser UI/activation cases use headed Chromium under Xvfb/X11"
     },
     {
       "id": "selector-contract-tests",
       "pattern": "tests/selector/*.test.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node --test tests/selector/*.test.mjs"
+      "requiredText": "node --test tests/selector/*.test.mjs",
+      "executionEnvironment": "node"
     },
     {
       "id": "ast-reachability-audit-tests",
@@ -56,7 +62,8 @@
           "file": ".github/workflows/manual-full-test-audit.yml",
           "requiredText": "audit_file=\"${test_file%.test.js}.js\""
         }
-      ]
+      ],
+      "executionEnvironment": "node"
     },
     {
       "id": "standalone-javascript-tests",
@@ -72,13 +79,15 @@
           "file": "scripts/validate-build.js",
           "requiredText": "runValidationTests"
         }
-      ]
+      ],
+      "executionEnvironment": "node"
     },
     {
       "id": "python-unittests",
       "pattern": "tests/test_*.py",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "python -m unittest discover -s tests -p 'test_*.py' -v"
+      "requiredText": "python -m unittest discover -s tests -p 'test_*.py' -v",
+      "executionEnvironment": "python"
     },
     {
       "id": "deterministic-regression-groups",
@@ -86,19 +95,22 @@
       "owner": ".github/workflows/manual-full-test-audit.yml",
       "requiredText": "node regression-suite/tests/run-regression.mjs extension --group=",
       "runnerFile": "regression-suite/tests/run-regression.mjs",
-      "runnerImportPrefix": "from './"
+      "runnerImportPrefix": "from './",
+      "executionEnvironment": "node"
     },
     {
       "id": "kjv-corpus-integrity",
       "pattern": "regression-suite/tests/kjv-corpus-integrity.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node regression-suite/tests/kjv-corpus-integrity.mjs extension"
+      "requiredText": "node regression-suite/tests/kjv-corpus-integrity.mjs extension",
+      "executionEnvironment": "node"
     },
     {
       "id": "inventory-enforcement-checker",
       "pattern": "scripts/test-suite-inventory.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node scripts/test-suite-inventory.mjs"
+      "requiredText": "node scripts/test-suite-inventory.mjs",
+      "executionEnvironment": "node"
     }
   ],
   "manualOnly": [
