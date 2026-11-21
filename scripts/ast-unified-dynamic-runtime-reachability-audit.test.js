@@ -110,12 +110,16 @@ test('scopes unresolved dynamic uncertainty to roots that can reach its source',
     'package.json': JSON.stringify({ scripts: { first: 'node scripts/first.js', second: 'node scripts/second.js' } }),
     'scripts/first.js': "import('./plugins/' + process.env.PLUGIN);",
     'scripts/second.js': 'module.exports = true;',
-    'scripts/plugins/known.js': 'module.exports = true;'
+    'scripts/plugins/known.js': 'module.exports = true;',
+    'scripts/other/unused.js': 'module.exports = false;'
   });
   const site = result.uncertainty.find(item => item.kind === 'dynamic-import');
   assert.ok(site);
   assert.deepEqual(site.affectedRoots, ['scripts/first.js']);
   assert.equal(result.unresolvedByRoot['scripts/second.js'].length, 0);
+  assert.ok(result.uncertainFiles.some(item => item.file === 'scripts/plugins/known.js' && item.affectedRoots.includes('scripts/first.js')));
+  assert.ok(!result.definiteUnreachable.includes('scripts/plugins/known.js'));
+  assert.ok(result.definiteUnreachable.includes('scripts/other/unused.js'), 'unrelated folders remain definite inventory rather than inheriting another root\'s uncertainty');
 });
 
 test('keeps unresolved computed properties uncertain rather than attributing arbitrary owners', () => {
