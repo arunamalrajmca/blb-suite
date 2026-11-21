@@ -30,6 +30,8 @@ jobs:
             scenario: reinjection
           - name: closed-tab-activation-isolated
             scenario: closed-tab
+          - name: blb-verse-link-click-isolated
+            scenario: blb-link-click
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -86,6 +88,13 @@ jobs:
         run: >-
           npx playwright test tests/browser/service-worker-lifecycle.spec.js
           --grep "a tab closed during asynchronous eligibility checks is not injected during startup recovery"
+          --workers=1 --reporter=line
+
+      - name: Rerun same-task BLB verse-link navigation test in isolation
+        if: ${{ matrix.scenario == 'blb-link-click' }}
+        run: >-
+          npx playwright test tests/browser/blb-verse-link-navigation.spec.js
+          --grep "a BLB verse link clicked in the same task as insertion opens a new tab"
           --workers=1 --reporter=line
 
       - name: Prepare exact PR-base performance baseline
