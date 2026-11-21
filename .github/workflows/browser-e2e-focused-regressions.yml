@@ -73,7 +73,7 @@ jobs:
       - name: Read candidate manifest version
         if: ${{ matrix.scenario == 'performance' }}
         id: version
-        run: echo "value=$(node -p \"require('./extension/manifest.json').version\")" >> "$GITHUB_OUTPUT"
+        run: echo "value=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
 
       - name: Run interleaved selection-only A/B benchmark
         if: ${{ matrix.scenario == 'performance' }}
