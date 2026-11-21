@@ -208,12 +208,32 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (target) roots.add(target);
       return;
     }
-    // Support simple filename globs used by Node's test runner and shell
-    // loops (for example tests/selector/*.test.mjs and scripts/test-*.js).
+    // Support simple filename globs used by Node's test runner and shell loops.
     const directory = path.resolve(root, path.dirname(normalized));
     if (!fs.existsSync(directory)) return;
     const pattern = path.basename(normalized);
-    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '
+    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isFile() || !matcher.test(entry.name)) continue;
+      const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
+      if (target) roots.add(target);
+    }
+  };
+  for (const workflowFile of collectWorkflowFiles(workflowDir)) {
+    const workflowSource = fs.readFileSync(workflowFile, 'utf8');
+    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:scripts|tests|regression-suite)\/[A-Za-z0-9_.*?/-]+\.(?:js|cjs|mjs))/g;
+    let command;
+    while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1]);
+    const shellGlobPattern = /scripts\/test-[A-Za-z0-9_.*?/-]+\.js(?=[;\s]|$)/g;
+    while ((command = shellGlobPattern.exec(workflowSource))) addWorkflowTarget(command[0]);
+  }
+  // Playwright reporter modules are loaded by name from configuration rather than static imports.
+  if (fileSet.has(playwrightConfig)) {
+    const configSource = fs.readFileSync(playwrightConfig, 'utf8');
+    const reporterPattern = /(?:\.\/)?tests\/browser\/[A-Za-z0-9_.-]+\.js/g;
+    let reporter;
+    while ((reporter = reporterPattern.exec(configSource))) addWorkflowTarget(reporter[0]);
+  }
 
   const manifestPath = path.join(root, 'extension', 'manifest.json');
   if (fs.existsSync(manifestPath)) {
