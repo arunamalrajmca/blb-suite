@@ -822,6 +822,8 @@ function run(root) {
   console.log('Not-reached inventory by top-level area: ' + JSON.stringify(Object.fromEntries([...unreachedByArea].sort((a, b) => b[1] - a[1]))));
   console.log('Not-reached extension files (review inventory only): ' + JSON.stringify(result.definiteUnreachable.filter(file => file.startsWith('extension/'))));
   console.log('Not-reached scripts files (review inventory only): ' + JSON.stringify(result.definiteUnreachable.filter(file => file.startsWith('scripts/'))));
+  console.log('Complete not-reached file inventory (review only): ' + JSON.stringify(result.definiteUnreachable));
+  console.log('Files conservatively held back by unresolved dynamic targets: ' + JSON.stringify(result.uncertainFiles));
   console.log('Static function array-return summaries: ' + JSON.stringify(result.functionArraySummaries));
   console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
