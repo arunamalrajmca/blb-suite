@@ -306,7 +306,7 @@ test('resolves registered content-script files through aliases and bounded helpe
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': 'module.exports = true;',
     'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
-    'extension/background.js': "function registeredFiles() { return [{ file: 'scripts/first.js' }, { file: 'scripts/second.js' }]; } const firstList = registeredFiles(); const aliasList = firstList; chrome.scripting.registerContentScripts([{ id: 'late', js: aliasList }]);",
+    'extension/background.js': "function registeredFiles() { return ['scripts/first.js', 'scripts/second.js']; } const firstList = registeredFiles(); const aliasList = firstList; chrome.scripting.registerContentScripts([{ id: 'late', js: aliasList }]);",
     'extension/scripts/first.js': 'globalThis.first = true;',
     'extension/scripts/second.js': 'globalThis.second = true;'
   });
