@@ -86,11 +86,6 @@ function isFunction(node) {
   ].includes(node.type);
 }
 
-function isFunctionValue(node) {
-  return isFunction(node) ||
-    (node && node.type === 'ObjectExpression' && node.properties.some(p => p.method));
-}
-
 function location(root, file, node, category, kind, detail) {
   return {
     category, kind,
@@ -123,12 +118,32 @@ function analyzeFile(root, file) {
   }
 
   const findings = [];
+  const flowEdges = [];
+  const bindingId = node => {
+    const variable = node && variableForNode.get(node);
+    if (!variable) return null;
+    const definition = variable.identifiers && variable.identifiers[0];
+    return variable.name + '@' + (definition && definition.loc ? definition.loc.start.line : 0);
+  };
+  const addEdge = (from, to, kind, node, detail) => {
+    if (!from || !to) return;
+    flowEdges.push({
+      from, to, kind,
+      file: path.relative(root, file).split(path.sep).join('/'),
+      line: node && node.loc ? node.loc.start.line : null,
+      detail: detail || null
+    });
+  };
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
   const functionNodes = [];
   const functionVariables = new Map();
   visit(ast, (node, parent) => {
     if (isFunction(node)) {
       functionNodes.push(node);
+      if (node.type === 'FunctionDeclaration' && node.id) {
+        const variable = variableForNode.get(node.id);
+        if (variable) functionVariables.set(variable, node);
+      }
       if (parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
         const variable = variableForNode.get(parent.id);
         if (variable) functionVariables.set(variable, node);
@@ -148,8 +163,12 @@ function analyzeFile(root, file) {
     if (scope.type !== 'function') continue;
     for (const reference of scope.references || []) {
       if (!reference.resolved || reference.resolved.scope === scope) continue;
+      const captured = reference.resolved.identifiers && reference.resolved.identifiers[0];
+      const capturedId = captured ? bindingId(captured) : reference.resolved.name;
+      const closureId = 'closure@' + (scope.block && scope.block.loc ? scope.block.loc.start.line : 0);
       add('closures', 'captured-outer-binding', scope.block || ast,
         reference.resolved.name + ' captured by nested function');
+      addEdge(capturedId, closureId, 'closure-capture', scope.block || ast, reference.resolved.name);
     }
   }
 
@@ -191,12 +210,20 @@ function analyzeFile(root, file) {
         if (isFunction(argument)) {
           const scheduler = callbackSchedulers.has(name) || name === 'addListener' ||
             (name === 'addEventListener' && index === 1);
-          if (scheduler) add('callbacks', 'callback-registration', argument,
-            (name || 'call') + ' argument[' + index + ']');
+          if (scheduler) {
+            add('callbacks', 'callback-registration', argument,
+              (name || 'call') + ' argument[' + index + ']');
+            addEdge('function@' + argument.loc.start.line,
+              'scheduler@' + node.loc.start.line, 'callback-registration', argument, name || 'call');
+          }
         }
         if (argument.type === 'Identifier' && functionVariables.has(variableForNode.get(argument))) {
-          if (callbackSchedulers.has(name)) add('callbacks', 'function-reference-registration',
-            argument, (name || 'call') + ' argument[' + index + ']');
+          if (callbackSchedulers.has(name)) {
+            add('callbacks', 'function-reference-registration',
+              argument, (name || 'call') + ' argument[' + index + ']');
+            addEdge(bindingId(argument), 'scheduler@' + node.loc.start.line,
+              'callback-reference', argument, name || 'call');
+          }
         }
       }
 
@@ -205,6 +232,12 @@ function analyzeFile(root, file) {
 
       if (node.type === 'NewExpression' && name === 'Proxy') {
         add('proxies', 'proxy-construction', node, 'Proxy target and handler can mediate property access');
+        const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        for (const argument of node.arguments.slice(0, 2)) {
+          if (argument.type === 'Identifier') addEdge(bindingId(argument), assigned,
+            'proxy-target-or-handler', node, argument.name);
+        }
       }
 
       if (node.type === 'CallExpression' && name === 'Proxy') {
@@ -214,6 +247,11 @@ function analyzeFile(root, file) {
       if (node.type === 'CallExpression' && name === 'setPrototypeOf') {
         if (receiverName === 'Object' || receiverName === 'Reflect') {
           add('prototype-mutation', 'prototype-set', node, receiverName + '.setPrototypeOf');
+          if (node.arguments[0] && node.arguments[0].type === 'Identifier' &&
+              node.arguments[1] && node.arguments[1].type === 'Identifier') {
+            addEdge(bindingId(node.arguments[1]), bindingId(node.arguments[0]),
+              'prototype-inheritance', node, receiverName + '.setPrototypeOf');
+          }
         }
       }
       if (node.type === 'CallExpression' && name === 'create' && receiverName === 'Object') {
@@ -243,6 +281,48 @@ function analyzeFile(root, file) {
       if (node.type === 'CallExpression' && containerMethods.has(name) &&
           receiverName && !['Object', 'Reflect', 'Array'].includes(receiverName)) {
         add('container-storage', 'container-write', node, receiverName + '.' + name);
+        const container = bindingId(receiver);
+        for (const argument of node.arguments) {
+          if (argument.type === 'Identifier') addEdge(bindingId(argument), container,
+            'container-store', node, name);
+          else if (isFunction(argument)) addEdge('function@' + argument.loc.start.line,
+            container, 'container-store-callback', node, name);
+        }
+      }
+      if (node.type === 'CallExpression' && name === 'get' && receiverName) {
+        const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.get');
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
+        const calledVariable = variableForNode.get(node.callee);
+        const calledFunction = calledVariable && functionVariables.get(calledVariable);
+        if (calledFunction) {
+          for (let index = 0; index < Math.min(node.arguments.length, calledFunction.params.length); index++) {
+            const argument = node.arguments[index];
+            const parameter = calledFunction.params[index];
+            if (argument.type === 'Identifier' && parameter.type === 'Identifier') {
+              addEdge(bindingId(argument), bindingId(parameter), 'function-argument', node, node.callee.name);
+            } else if (isFunction(argument) && parameter.type === 'Identifier') {
+              addEdge('function@' + argument.loc.start.line, bindingId(parameter),
+                'function-callback-parameter', node, node.callee.name);
+            }
+          }
+          const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+            ? bindingId(parent.id) : null;
+          if (assigned) {
+            const returned = new Set();
+            visit(calledFunction.body, returnedNode => {
+              if (returnedNode.type === 'ReturnStatement' &&
+                  returnedNode.argument && returnedNode.argument.type === 'Identifier') {
+                const sourceBinding = bindingId(returnedNode.argument);
+                if (sourceBinding) returned.add(sourceBinding);
+              }
+            });
+            if (returned.size === 1) addEdge([...returned][0], assigned,
+              'function-return', node, node.callee.name);
+          }
+        }
       }
 
       if (node.type === 'CallExpression' && ['assign', 'defineProperty', 'defineProperties'].includes(name) &&
@@ -259,6 +339,13 @@ function analyzeFile(root, file) {
       if (node.init && ['ObjectExpression', 'ArrayExpression'].includes(node.init.type)) {
         add('object-wrapping', 'aggregate-wrapper', node,
           node.init.type + ' may retain nested function/object identities');
+        const container = bindingId(node.id);
+        visit(node.init, (child, childParent) => {
+          if (child.type !== 'Identifier' || !childParent) return;
+          if (childParent.type === 'Property' && childParent.key === child && !childParent.computed) return;
+          if (childParent.type === 'MemberExpression' && childParent.property === child && !childParent.computed) return;
+          addEdge(bindingId(child), container, 'object-wrap', child, node.init.type);
+        });
         if (node.init.type === 'ArrayExpression') {
           for (const element of node.init.elements) {
             if (element && isFunction(element)) add('callbacks', 'callback-stored-in-array', element, 'array element');
@@ -275,6 +362,8 @@ function analyzeFile(root, file) {
         add('indirect-methods', 'method-value-alias', node,
           (node.init.object.name + '.' + (propertyName(node.init) || '[computed]')) +
           ' stored as ' + (node.id.name || 'destructured binding'));
+        addEdge(bindingId(node.init.object), bindingId(node.id),
+          'indirect-method-alias', node, propertyName(node.init) || 'computed method');
       }
       if (node.id.type === 'ObjectPattern' && node.init) {
         add('indirect-methods', 'destructured-property-alias', node,
@@ -282,11 +371,16 @@ function analyzeFile(root, file) {
       }
       if (node.init && node.init.type === 'Identifier' && node.id.type === 'Identifier') {
         add('object-wrapping', 'identifier-alias', node, node.init.name + ' -> ' + node.id.name);
+        addEdge(bindingId(node.init), bindingId(node.id), 'identifier-alias', node, node.init.name + ' -> ' + node.id.name);
       }
     }
 
     if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
       add('mutation', 'member-assignment', node, propertyName(node.left) || 'computed property');
+      if (node.left.object.type === 'Identifier' && node.right.type === 'Identifier') {
+        addEdge(bindingId(node.right), bindingId(node.left.object), 'mutation-store', node,
+          propertyName(node.left) || 'computed property');
+      }
       if (node.right && (isFunction(node.right) || node.right.type === 'Identifier')) {
         add('object-wrapping', 'property-stored-value', node, 'assigned value retained by object property');
       }
@@ -343,7 +437,13 @@ function analyzeFile(root, file) {
   const unique = [...new Map(findings.map(item => [
     [item.category, item.kind, item.file, item.line, item.column, item.detail].join('|'), item
   ])).values()];
-  return { file: path.relative(root, file).split(path.sep).join('/'), functions: functionNodes.length, findings: unique };
+  const uniqueEdges = [...new Map(flowEdges.map(item => [
+    [item.from, item.to, item.kind, item.file, item.line, item.detail].join('|'), item
+  ])).values()];
+  return {
+    file: path.relative(root, file).split(path.sep).join('/'),
+    functions: functionNodes.length, findings: unique, flowEdges: uniqueEdges
+  };
 }
 
 function analyze(root = path.resolve(__dirname, '..')) {
@@ -357,6 +457,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
   }
   const findings = results.flatMap(result => result.findings);
+  const flowEdges = results.flatMap(result => result.flowEdges);
+  const flowEdgeKinds = {};
+  for (const edge of flowEdges) flowEdgeKinds[edge.kind] = (flowEdgeKinds[edge.kind] || 0) + 1;
   const counts = Object.fromEntries(CATEGORIES.map(category => [
     category, findings.filter(item => item.category === category).length
   ]));
@@ -367,6 +470,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
     filesFailedToParse: parseErrors.length,
     functionsInventoried: results.reduce((sum, result) => sum + result.functions, 0),
     findingCount: findings.length,
+    flowEdgeCount: flowEdges.length,
+    flowEdgeKinds,
+    flowEdges,
     counts,
     byKind,
     parseErrors,
@@ -382,6 +488,10 @@ function run(root = path.resolve(__dirname, '..')) {
   console.log('Functions inventoried: ' + result.functionsInventoried);
   for (const category of CATEGORIES) console.log(category + ': ' + result.counts[category]);
   console.log('Runtime-flow findings: ' + result.findingCount);
+  console.log('Explicit runtime-flow edges: ' + result.flowEdgeCount);
+  for (const [kind, count] of Object.entries(result.flowEdgeKinds).sort()) {
+    console.log('  ' + kind + ': ' + count);
+  }
   if (result.parseErrors.length) {
     for (const item of result.parseErrors) console.error(item.file + ': ' + item.error);
     process.exitCode = 1;
