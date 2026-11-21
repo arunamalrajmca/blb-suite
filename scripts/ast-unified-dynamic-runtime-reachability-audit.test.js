@@ -190,7 +190,8 @@ test('resolves executeScript file lists returned by bounded helper functions', (
     'extension/one.js': 'globalThis.one = true;',
     'extension/two.js': 'globalThis.two = true;'
   });
-  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/one.js'));
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/one.js'),
+    JSON.stringify({ uncertainty: result.uncertainty, injectionSites: result.dynamicSites.filter(item => item.kind.includes('executeScript')) }));
   assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/two.js'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript').length, 0);
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript.files').length, 0);
