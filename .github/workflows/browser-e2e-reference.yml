@@ -654,17 +654,23 @@ jobs:
             fi
           done
           total="${#specs[@]}"
+          if (( total == 0 )); then
+            echo "::error::No focused behavior specs remain after native-test delegation."
+            exit 1
+          fi
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Checking and running %s\n' "$((index + 1))" "$total" "$spec"
-            discovery_log="$(mktemp)"
-            npx playwright test --config=playwright.config.js --list "$spec" 2>&1 | tee "$discovery_log"
-            if ! grep -Eq 'Running [1-9][0-9]* tests?' "$discovery_log"; then
-              echo "::error::Playwright discovered no tests in $spec."
-              exit 1
-            fi
-            npx playwright test --config=playwright.config.js "$spec"
+            printf '[%s/%s] Validating %s\n' "$((index + 1))" "$total" "$spec"
+            node --check "$spec"
+          done
+          discovery_log="$(mktemp)"
+          npx playwright test --config=playwright.config.js --list "${specs[@]}" 2>&1 | tee "$discovery_log"
+          if ! grep -Eq 'Running [1-9][0-9]* tests?' "$discovery_log"; then
+            echo "::error::Playwright discovered no tests in the selected focused behavior specs."
+            exit 1
+          fi
+          npx playwright test --config=playwright.config.js "${specs[@]}"
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
