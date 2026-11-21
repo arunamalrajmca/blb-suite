@@ -581,15 +581,23 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (method === 'registerContentScripts' && object === 'chrome.scripting') {
           visit(node.arguments[0], child => {
             if (child.type !== 'Property' || (child.key.name !== 'js' && child.key.value !== 'js')) return;
-            const entries = staticValue(child.value, constants, 0, bindings);
+            const entries = child.value.type === 'ArrayExpression'
+              ? child.value.elements.map(entry => ({
+                node: entry,
+                spec: entry && entry.type === 'ObjectExpression'
+                  ? entry.properties.find(property => property.type === 'Property' &&
+                    (property.key.name === 'file' || property.key.value === 'file'))?.value
+                  : entry
+              }))
+              : staticValue(child.value, constants, 0, bindings);
             if (Array.isArray(entries)) {
               for (const entry of entries) {
-                const spec = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry.file : entry;
-                const value = typeof spec === 'string' ? spec : undefined;
+                const spec = entry && Object.prototype.hasOwnProperty.call(entry, 'spec') ? entry.spec : entry;
+                const value = typeof spec === 'string' ? spec : staticValue(spec, constants, 0, bindings);
                 const target = typeof value === 'string' ? resolveInjected(value) : null;
-                addSite(file, child, 'chrome.scripting.registerContentScripts', value, target,
+                addSite(file, entry && entry.node || child, 'chrome.scripting.registerContentScripts', value, target,
                   target ? 'resolved-local' : 'unresolved-registered-script', [],
-                  typeof value === 'string' ? value : staticPrefix(child.value, constants, bindings));
+                  typeof value === 'string' ? value : staticPrefix(spec, constants, bindings));
               }
             } else {
               addSite(file, child, 'chrome.scripting.registerContentScripts', null, null,
