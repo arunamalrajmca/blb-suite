@@ -62,7 +62,7 @@ test('propagates imported function calls and object/callback parameter bindings 
   assert.ok(edge(result, 'static-import', 'scripts/main.js', 'scripts/helper.js'));
   assert.ok(edge(result, 'function-call', 'scripts/main.js', 'scripts/helper.js'));
   assert.ok(result.edges.some(item => item.kind === 'cross-module-binding-import' && item.file === 'scripts/main.js' && item.detail === 'service'));
-  assert.ok(result.dynamicSites.some(item => item.kind === 'cross-module-property-read' && item.expression === 'target[start]') === false);
+  assert.ok(result.dynamicSites.some(item => item.kind === 'cross-module-property-read' && item.expression === 'service[start]' && item.certainty === 'resolved-property-key'));
   assert.ok(result.edges.some(item => item.kind === 'function-argument' && item.file === 'scripts/main.js'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'callback-argument' && item.certainty === 'resolved-inline-callback'));
 });
