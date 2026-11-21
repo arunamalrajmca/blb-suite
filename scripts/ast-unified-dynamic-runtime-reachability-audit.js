@@ -215,6 +215,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
 
   for (const [file, ast] of asts) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
+    const sourceText = fs.readFileSync(file, 'utf8');
     const loopValues = loopValuesByFile.get(file);
     const imported = new Map(), scriptElementBindings = new Set();
     visit(ast, node => {
@@ -404,7 +405,16 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'MemberExpression' && node.computed) {
         const key = staticValue(node.property, constants, 0, bindings);
         if (key === undefined) {
-          uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'unresolved-computed-property', certainty: 'unresolved-computed-property', affectedRoots: [] });
+          const accessRole = parent && parent.type === 'CallExpression' && parent.callee === node ? 'call' :
+            parent && parent.type === 'NewExpression' && parent.callee === node ? 'construct' :
+            parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
+            parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' : 'read-or-other';
+          uncertainty.push({
+            file: rel(root, file), line: node.loc.start.line, kind: 'unresolved-computed-property',
+            certainty: 'unresolved-computed-property', expression: sourceText.slice(node.start, node.end).slice(0, 240),
+            propertyExpression: sourceText.slice(node.property.start, node.property.end).slice(0, 120),
+            accessRole, parentType: parent ? parent.type : null, affectedRoots: []
+          });
         } else sites.push({ file: rel(root, file), line: node.loc.start.line, kind: 'constant-computed-property', expression: String(key), resolved: null, certainty: 'resolved-constant-key', affectedRoots: [] });
       }
     });
@@ -497,9 +507,26 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const topUncertaintyFiles = [...uncertaintyByFile].map(([file, kinds]) => ({
     file, total: [...kinds.values()].reduce((sum, count) => sum + count, 0), kinds: Object.fromEntries(kinds)
   })).sort((a, b) => b.total - a.total || a.file.localeCompare(b.file)).slice(0, 25);
+  const computedPropertyRoles = new Map();
+  const computedPropertyKeys = new Map();
+  for (const site of uncertainty) {
+    if (site.kind !== 'unresolved-computed-property') continue;
+    const role = site.accessRole || 'unclassified';
+    computedPropertyRoles.set(role, (computedPropertyRoles.get(role) || 0) + 1);
+    const key = site.propertyExpression || '[unknown]';
+    if (!computedPropertyKeys.has(key)) computedPropertyKeys.set(key, { count: 0, examples: [] });
+    const entry = computedPropertyKeys.get(key);
+    entry.count++;
+    if (entry.examples.length < 3) entry.examples.push({ file: site.file, line: site.line, role });
+  }
+  const topComputedPropertyKeys = [...computedPropertyKeys].map(([expression, value]) => ({
+    expression, count: value.count, examples: value.examples
+  })).sort((a, b) => b.count - a.count || a.expression.localeCompare(b.expression)).slice(0, 40);
   const uncertaintySummary = {
     byKind: Object.fromEntries([...uncertaintyByKind].sort((a, b) => b[1] - a[1])),
     byAffectedRoot: Object.fromEntries([...uncertaintyByRoot].sort((a, b) => a[0].localeCompare(b[0])).map(([rootName, kinds]) => [rootName, Object.fromEntries(kinds)])),
+    computedPropertyRoles: Object.fromEntries([...computedPropertyRoles].sort((a, b) => b[1] - a[1])),
+    topComputedPropertyKeys,
     topFiles: topUncertaintyFiles
   };
   return {
@@ -523,6 +550,8 @@ function run(root) {
   console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
   console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
+  console.log('Unresolved computed-property use roles: ' + JSON.stringify(result.uncertaintySummary.computedPropertyRoles));
+  console.log('Most common unresolved computed-property expressions: ' + JSON.stringify(result.uncertaintySummary.topComputedPropertyKeys));
   console.log('Top uncertainty source files: ' + JSON.stringify(result.uncertaintySummary.topFiles));
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
   if (result.parseErrors.length) process.exitCode = 1;
