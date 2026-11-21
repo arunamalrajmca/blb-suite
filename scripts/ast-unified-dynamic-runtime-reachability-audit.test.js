@@ -314,3 +314,18 @@ test('resolves registered content-script files through aliases and bounded helpe
   assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/second.js'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts').length, 0);
 });
+
+
+test('propagates bounded file arrays through helper parameters and defaults', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': "const defaultFiles = ['scripts/default-one.js', 'scripts/default-two.js']; function register(files) { chrome.scripting.registerContentScripts([{ id: 'forwarded', js: files }]); } function ensure(files = defaultFiles) { register(files); } ensure();",
+    'extension/scripts/default-one.js': 'globalThis.one = true;',
+    'extension/scripts/default-two.js': 'globalThis.two = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/default-one.js'));
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/default-two.js'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts').length, 0);
+});
