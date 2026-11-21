@@ -1,0 +1,207 @@
+name: BLB Suite — Focused Failure Regressions
+run-name: Focused regressions — PR #${{ github.event.pull_request.number }} — Run ${{ github.run_number }}
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: focused-regressions-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: registration-failure-lifecycle
+            scenario: registration
+          - name: selection-performance
+            scenario: performance
+          - name: context-menu-activation-isolated
+            scenario: context-menu
+          - name: content-bundle-reinjection-isolated
+            scenario: reinjection
+          - name: closed-tab-activation-isolated
+            scenario: closed-tab
+          - name: blb-verse-link-click-isolated
+            scenario: blb-link-click
+          - name: repeated-master-toggle-listener-isolated
+            scenario: master-toggle-listener
+          - name: real-worker-termination-isolated
+            scenario: worker-termination
+          - name: guarded-source-registration-isolated
+            scenario: guarded-registration
+          - name: parallel-lifecycle-contention-stress
+            scenario: concurrency-stress
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout PR candidate
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Cache npm and Playwright
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/ms-playwright
+          key: focused-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            focused-${{ runner.os }}-node22-
+
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run persistent-registration failure regression
+        if: ${{ matrix.scenario == 'registration' }}
+        run: >-
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js
+          --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable"
+          --workers=1 --reporter=line
+
+      - name: Rerun context-menu activation synchronization test in isolation
+        if: ${{ matrix.scenario == 'context-menu' }}
+        run: >-
+          npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js
+          --grep "tab activation and active-tab navigation synchronize the global web/PDF selection menus"
+          --workers=1 --reporter=line
+
+      - name: Rerun content-bundle reinjection test in isolation
+        if: ${{ matrix.scenario == 'reinjection' }}
+        run: >-
+          npx playwright test tests/browser/extension-lifecycle.spec.js
+          --grep "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+          --workers=1 --reporter=line
+
+      - name: Rerun closed-tab activation test in isolation
+        if: ${{ matrix.scenario == 'closed-tab' }}
+        run: >-
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js
+          --grep "a tab closed during asynchronous eligibility checks is not injected during startup recovery"
+          --workers=1 --reporter=line
+
+      - name: Rerun same-task BLB verse-link navigation test in isolation
+        if: ${{ matrix.scenario == 'blb-link-click' }}
+        run: >-
+          npx playwright test tests/browser/blb-verse-link-navigation.spec.js
+          --grep "a BLB verse link clicked in the same task as insertion opens a new tab"
+          --workers=1 --reporter=line
+
+      - name: Rerun repeated master-toggle listener lifecycle test in isolation
+        if: ${{ matrix.scenario == 'master-toggle-listener' }}
+        run: >-
+          npx playwright test tests/browser/content-feature-refresh-races.spec.js
+          --grep "repeated global master toggles disable and restore exactly one double-click listener"
+          --workers=1 --reporter=line
+
+      - name: Rerun real MV3 service-worker termination test in isolation
+        if: ${{ matrix.scenario == 'worker-termination' }}
+        run: >-
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js
+          --grep "a real MV3 service-worker termination is recovered by the Alt\\+B command message"
+          --workers=1 --reporter=line
+
+      - name: Rerun guarded source-host registration lifecycle test in isolation
+        if: ${{ matrix.scenario == 'guarded-registration' }}
+        run: >-
+          npx playwright test tests/browser/source-page-button-redirect-separation.spec.js
+          --grep "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+          --workers=1 --reporter=line
+
+      - name: Stress both full-audit failures concurrently under four Playwright workers
+        if: ${{ matrix.scenario == 'concurrency-stress' }}
+        run: >-
+          npx playwright test
+          tests/browser/service-worker-lifecycle.spec.js
+          tests/browser/source-page-button-redirect-separation.spec.js
+          --grep "(a real MV3 service-worker termination is recovered by the Alt\\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them)"
+          --repeat-each=2 --workers=4 --max-failures=0 --reporter=line
+
+      - name: Prepare exact PR-base performance baseline
+        if: ${{ matrix.scenario == 'performance' }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$PR_BASE_SHA" --depth=1
+          git worktree add "$RUNNER_TEMP/blb-baseline" "$PR_BASE_SHA"
+          node -e "const fs=require('fs'); for (const p of ['extension/manifest.json', '$RUNNER_TEMP/blb-baseline/extension/manifest.json']) { const m=JSON.parse(fs.readFileSync(p)); m.host_permissions=[...new Set([...(m.host_permissions||[]),'https://example.com/*'])]; fs.writeFileSync(p,JSON.stringify(m,null,2)+'\\n'); }"
+
+      - name: Read candidate manifest version
+        if: ${{ matrix.scenario == 'performance' }}
+        id: version
+        run: echo "value=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Run interleaved selection-only A/B benchmark
+        if: ${{ matrix.scenario == 'performance' }}
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.value }}
+          BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
+          BLB_CANDIDATE_EXTENSION_PATH: ${{ github.workspace }}/extension
+          BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-selection.jsonl
+          BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-selection.jsonl
+          BLB_PERF_SAMPLES: 11
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$BLB_BASELINE_OUTPUT"
+          : > "$BLB_CANDIDATE_OUTPUT"
+          progress=0
+          for ((sample=1; sample<=BLB_PERF_SAMPLES; sample++)); do
+            run_sample() {
+              local variant="$1" extension="$2" output="$3"
+              progress=$((progress+1))
+              printf '[%s/22] selection %s sample %s/11\n' "$progress" "$variant" "$sample"
+              BLB_EXTENSION_PATH="$extension" BLB_PERF_OUTPUT="$output" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1 --reporter=line
+            }
+            if (( sample % 2 == 1 )); then
+              run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+              run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+            else
+              run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+              run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+            fi
+          done
+          node <<'NODE'
+          const fs=require('fs');
+          const read=p=>fs.readFileSync(p,'utf8').trim().split(/\r?\n/).filter(Boolean).map(x=>JSON.parse(x).handoffMs);
+          const median=a=>[...a].sort((x,y)=>x-y)[Math.floor(a.length/2)];
+          const b=read(process.env.BLB_BASELINE_OUTPUT), c=read(process.env.BLB_CANDIDATE_OUTPUT);
+          if(b.length!==11 || c.length!==11) throw new Error('Expected 11 baseline and 11 candidate samples');
+          const bm=median(b), cm=median(c), regression=(cm-bm)/bm;
+          const paired=median(b.map((v,i)=>(c[i]-v)/v));
+          console.log('Baseline selection samples (ms): '+b.join(', '));
+          console.log('Candidate selection samples (ms): '+c.join(', '));
+          console.log(`Median: baseline ${bm} ms; candidate ${cm} ms; regression ${(regression*100).toFixed(1)}%`);
+          console.log(`Paired median regression: ${(paired*100).toFixed(1)}%`);
+          if(regression>0.10) throw new Error('Selection handoff regression exceeds the unchanged 10% limit');
+          console.log('Focused selection performance gate passed.');
+          NODE
+
+      - name: Upload focused selection measurements
+        if: ${{ always() && matrix.scenario == 'performance' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: focused-selection-performance
+          path: |
+            ${{ runner.temp }}/baseline-selection.jsonl
+            ${{ runner.temp }}/candidate-selection.jsonl
+          if-no-files-found: ignore
+          retention-days: 14

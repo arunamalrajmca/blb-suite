@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "description": "Patterns are discovered dynamically; every suite declares its default execution environment, and genuinely native browser cases are delegated to one X11 owner.",
+  "suites": [
+    {
+      "id": "playwright-browser-specs",
+      "pattern": "tests/browser/*.spec.js",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "npx playwright test --list",
+      "delegations": [
+        {
+          "testTitle": "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
+          "workflow": ".github/workflows/browser-native-shortcut.yml",
+          "requiredText": "xvfb-run -a",
+          "testFile": "tests/browser/service-worker-shortcut-headed.spec.js",
+          "environment": "x11-headed-chromium"
+        },
+        {
+          "testTitle": "native Chromium _self prerender activation initializes the activated document without tab replacement",
+          "workflow": ".github/workflows/browser-native-shortcut.yml",
+          "requiredText": "xvfb-run -a",
+          "testFile": "tests/browser/native-prerender-activation.spec.js",
+          "environment": "x11-headed-chromium",
+          "testTitlePattern": "native Chromium .* prerender activation initializes the activated document without tab replacement"
+        },
+        {
+          "testTitle": "native Chromium _blank prerender activation initializes the activated document without tab replacement",
+          "workflow": ".github/workflows/browser-native-shortcut.yml",
+          "requiredText": "xvfb-run -a",
+          "testFile": "tests/browser/native-prerender-activation.spec.js",
+          "environment": "x11-headed-chromium",
+          "testTitlePattern": "native Chromium .* prerender activation initializes the activated document without tab replacement"
+        },
+        {
+          "testTitle": "Show on BLB performance benchmark",
+          "workflow": ".github/workflows/browser-e2e-performance.yml",
+          "requiredText": "tests/browser/performance.spec.js",
+          "testFile": "tests/browser/performance.spec.js",
+          "environment": "dedicated-performance-runner"
+        }
+      ],
+      "executionEnvironment": "headless Chromium by default; only native browser UI/activation cases use headed Chromium under Xvfb/X11"
+    },
+    {
+      "id": "selector-contract-tests",
+      "pattern": "tests/selector/*.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test tests/selector/*.test.mjs",
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "ast-reachability-audit-tests",
+      "pattern": "scripts/ast-*-audit.test.js",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "for test_file in scripts/ast-*-audit.test.js",
+      "alsoOwnedBy": ".github/workflows/browser-tests.yml",
+      "alsoRequiredText": "node --test scripts/ast-symbol-reference-audit.test.js",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "node --test \"$test_file\""
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "audit_file=\"${test_file%.test.js}.js\""
+        }
+      ],
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "standalone-javascript-tests",
+      "pattern": "scripts/test-*.js",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "for test_file in scripts/test-*.js",
+      "runnerChecks": [
+        {
+          "file": "scripts/run-validation-tests.js",
+          "requiredText": "validation-test-manifest.json"
+        },
+        {
+          "file": "scripts/validate-build.js",
+          "requiredText": "runValidationTests"
+        }
+      ],
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "python-unittests",
+      "pattern": "tests/test_*.py",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "python -m unittest discover -s tests -p 'test_*.py' -v",
+      "executionEnvironment": "python"
+    },
+    {
+      "id": "deterministic-regression-groups",
+      "pattern": "regression-suite/tests/*-tests.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node regression-suite/tests/run-regression.mjs extension --group=",
+      "runnerFile": "regression-suite/tests/run-regression.mjs",
+      "runnerImportPrefix": "from './",
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "kjv-corpus-integrity",
+      "pattern": "regression-suite/tests/kjv-corpus-integrity.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node regression-suite/tests/kjv-corpus-integrity.mjs extension",
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "inventory-enforcement-checker",
+      "pattern": "scripts/test-suite-inventory.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node scripts/test-suite-inventory.mjs",
+      "executionEnvironment": "node"
+    }
+  ],
+  "manualOnly": [
+    {
+      "path": "local-runner/BLB-Test.bat",
+      "reason": "Interactive local Brave test launcher; not an automated CI suite."
+    },
+    {
+      "path": "local-runner/Legacy-Brave-E2E-Runner/BLB-Test.bat",
+      "reason": "Legacy interactive Brave test launcher; not an automated CI suite."
+    },
+    {
+      "path": "local-runner/Legacy-Brave-E2E-Runner/test-runner.ps1",
+      "reason": "Legacy interactive Brave test harness; not an automated CI suite."
+    },
+    {
+      "path": "regression-suite/Run-BLB-Regression.ps1",
+      "reason": "PowerShell wrapper for the deterministic regression suite; the underlying Node regression groups are executed by the full audit."
+    }
+  ],
+  "manualVerification": "PRE-MERGE-CHECKLIST.md remains the source of required manual Brave/Chrome verification for native context menus, browser-specific permissions, and protected PDF behavior."
+}

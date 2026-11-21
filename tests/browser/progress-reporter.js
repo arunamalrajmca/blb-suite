@@ -3,6 +3,8 @@ class ProgressReporter {
     this.total = suite.allTests().length;
     this.aggregateProgress = process.env.BLB_PERF_AGGREGATE_PROGRESS === '1';
     this.started = 0;
+    this.startedTestIds = new Set();
+    this.testIndexes = new Map(suite.allTests().map((test, index) => [test.id, index + 1]));
     this.passed = 0;
     this.failed = 0;
     this.skipped = 0;
@@ -11,10 +13,12 @@ class ProgressReporter {
   }
 
   onTestBegin(test) {
-    this.started += 1;
+    this.startedTestIds.add(test.id);
+    this.started = this.startedTestIds.size;
     if (!this.aggregateProgress) {
       const title = test.titlePath().filter(Boolean).join(' › ');
-      console.log(`\n… [${this.started}/${this.total}] ${title}`);
+      const testIndex = this.testIndexes.get(test.id) || 0;
+      console.log(`\n… [${testIndex}/${this.total}] ${title}`);
     }
   }
 
@@ -22,18 +26,20 @@ class ProgressReporter {
     const status = result.status;
     const passed = status === 'passed';
     const failed = status === 'failed' || status === 'timedOut';
+    const willRetry = failed && result.retry < test.retries;
     if (passed) this.passed += 1;
-    else if (failed) this.failed += 1;
+    else if (failed && !willRetry) this.failed += 1;
     else if (status === 'skipped') this.skipped += 1;
-    else this.other += 1;
-    const symbol = passed ? '✓' : failed ? '✘' : status === 'skipped' ? '－' : '•';
-    const color = passed ? '\u001b[32m' : failed ? '\u001b[31m' : '\u001b[90m';
+    else if (!willRetry) this.other += 1;
+    const symbol = passed ? '✓' : failed ? (willRetry ? '↻' : '✘') : status === 'skipped' ? '－' : '•';
+    const color = passed ? '\u001b[32m' : failed ? (willRetry ? '\u001b[33m' : '\u001b[31m') : '\u001b[90m';
     const reset = '\u001b[0m';
-    const statusText = status.toUpperCase();
-    // The title was already printed when the test started. Keep the result
-    // line compact so CI logs do not repeat the same long title twice.
+    const statusText = willRetry ? 'RETRY FAILED' : status.toUpperCase();
+    // Resolve the test's stable suite index rather than using the number of
+    // tests that have started: parallel workers complete out of order.
+    const testIndex = this.testIndexes.get(test.id) || 0;
     if (!this.aggregateProgress) {
-      console.log(`${color}${symbol} [${this.started}/${this.total}] ${statusText} (${(result.duration / 1000).toFixed(1)}s)${reset}`);
+      console.log(`${color}${symbol} [${testIndex}/${this.total}] ${statusText} (attempt ${result.retry + 1}/${test.retries + 1}, ${(result.duration / 1000).toFixed(1)}s)${reset}`);
     }
 
     if (!failed) {

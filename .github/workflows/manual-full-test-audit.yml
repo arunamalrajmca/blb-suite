@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: full-test-audit-${{ github.ref }}
@@ -50,6 +51,29 @@ jobs:
 
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install pinned AST audit dependencies
+        run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
+
+      - name: Verify repository-wide test inventory and ownership
+        id: inventory
+        continue-on-error: true
+        run: node scripts/test-suite-inventory.mjs
+
+      - name: Run every AST reachability audit test and analysis
+        id: ast
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          for test_file in scripts/ast-*-audit.test.js; do
+            echo "Running AST audit regression tests: $test_file"
+            node --test "$test_file"
+            audit_file="${test_file%.test.js}.js"
+            if [[ -f "$audit_file" ]]; then
+              echo "Running AST reachability analysis: $audit_file"
+              node "$audit_file"
+            fi
+          done
 
       - name: Read manifest version
         id: version
@@ -109,10 +133,10 @@ jobs:
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
-      # complete test list, then run each individual test in its own invocation.
-      # This preserves maxFailures: 1 while ensuring one failing test cannot
+      # complete test list, then execute the complete test list in one Playwright process with four workers.
+      # Using max-failures=0 ensures one failing test cannot
       # prevent any later test case from executing.
-      - name: Run every browser test case independently without CI selector filtering
+      - name: Run complete browser test list in one Playwright process
         id: browser
         continue-on-error: true
         env:
@@ -143,92 +167,48 @@ jobs:
             exit 1
           fi
 
-          # These three cases are owned by dedicated execution workflows:
-          # two physical browser-input tests run with Xvfb/xdotool, while the
-          # performance spec runs with the benchmark matrix and its own
-          # authenticated content-script fixture. Running them here in the
-          # generic per-test headless harness is not equivalent coverage.
-          alt_count=$(grep -F "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" | wc -l | tr -d ' ')
-          right_click_count=$(grep -F "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action" "$test_list" | wc -l | tr -d ' ')
-          performance_count=$(grep -F "› Show on BLB performance benchmark" "$test_list" | wc -l | tr -d ' ')
-          if [[ "$alt_count" -ne 1 || "$right_click_count" -ne 1 || "$performance_count" -ne 1 ]]; then
-            echo "::error::Expected exactly one delegated Alt+B test, right-click test, and performance benchmark; found $alt_count/$right_click_count/$performance_count."
+          # Physical Alt+B, both native prerender activation cases, and the
+          # performance benchmark are delegated to their dedicated X11/benchmark workflows.
+          alt_count=$(grep -F -c "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" || true)
+          prerender_self_count=$(grep -F -c "› native Chromium _self prerender activation initializes the activated document without tab replacement" "$test_list" || true)
+          prerender_blank_count=$(grep -F -c "› native Chromium _blank prerender activation initializes the activated document without tab replacement" "$test_list" || true)
+          performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
+          if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 ]]; then
+            echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, and performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count."
             exit 1
           fi
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
           awk '
             index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
-            index($0, "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action") == 0 &&
+            index($0, "› native Chromium _self prerender activation initializes the activated document without tab replacement") == 0 &&
+            index($0, "› native Chromium _blank prerender activation initializes the activated document without tab replacement") == 0 &&
             index($0, "› Show on BLB performance benchmark") == 0
           ' "$test_list" > "$test_list.filtered"
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
           delegated=$((discovered_before_delegation - discovered_after_delegation))
-          if [[ "$delegated" -ne 3 ]]; then
-            echo "::error::Expected to delegate exactly 3 tests to dedicated workflows, found $delegated."
+          if [[ "$delegated" -ne 4 ]]; then
+            echo "::error::Expected to delegate exactly 4 tests to dedicated workflows, found $delegated."
             exit 1
           fi
           total=$discovered_after_delegation
-          echo "Delegated tests: $delegated (2 native-browser cases + 1 performance benchmark)."
+          echo "Delegated tests: $delegated (Alt+B + two prerender cases + performance benchmark)."
           echo "Browser test cases discovered after delegation: $total"
           if [[ "$total" -eq 0 ]]; then
             echo "No headless browser tests remain after delegation."
             exit 1
           fi
 
-          # Put failures from the preceding exhaustive run first. If either
-          # fails again, stop this audit immediately instead of spending time
-          # running the remaining browser matrix.
-          priority_list="$RUNNER_TEMP/blb-playwright-priority-list.txt"
-          : > "$priority_list"
-          for failed_title in \
-            "Rediscover, Sagacity, and TSK use the existing current-page MultiVerse collector" \
-            "Study Sessions confirmed deletion stops and removes only the selected recording, while delete-all clears remaining history" \
-            "selected Study Topic exports a PDF containing its saved reference and note" \
-            "shared sensitive-site classifier covers known providers without keyword false positives" \
-            "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins"; do
-            grep -F "› $failed_title" "$test_list" >> "$priority_list" || true
-          done
-          cat "$test_list" >> "$priority_list"
-          awk '!seen[$0]++' "$priority_list" > "$test_list.ordered"
-          mv "$test_list.ordered" "$test_list"
-          priority_count=$(wc -l < "$priority_list" | tr -d ' ')
-          echo "Prior-run failures prioritized: $priority_count"
-
-          failures=0
-          skipped=0
-          passed=0
-          executed=0
-          current_test="$RUNNER_TEMP/blb-current-test.txt"
-          current_log="$RUNNER_TEMP/blb-current-test.log"
-          while IFS= read -r test_id; do
-            executed=$((executed + 1))
-            printf '[%s/%s] %s\n' "$executed" "$total" "$test_id"
-            printf '%s\n' "$test_id" > "$current_test"
-            command_status=0
-            npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
-            cat "$current_log"
-            summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
-            if [[ "$command_status" -eq 0 && "$summary" == *"1/1 completed"* && "$summary" == *"1 passed, 0 failed, 0 skipped"* ]]; then
-              passed=$((passed + 1))
-            else
-              if [[ "$summary" == *"skipped"* && "$summary" != *"0 skipped"* ]]; then
-                skipped=$((skipped + 1))
-              fi
-              failures=$((failures + 1))
-              echo "FAILED OR NOT EXECUTED: $test_id"
-              echo "SUMMARY: $summary"
-              echo "Stopping browser audit immediately after the first failed or incomplete test."
-              break
-            fi
-          done < "$test_list"
-
-          echo "Browser test cases executed: $executed/$total"
-          echo "Browser test cases passed: $passed"
-          echo "Browser test cases failed or incomplete: $failures"
-          echo "Browser test cases skipped: $skipped"
-          if [[ "$executed" -ne "$total" || "$failures" -gt 0 || "$skipped" -gt 0 ]]; then
-            exit 1
+          # The known prior failures are run first by the focused-regressions workflow.
+          # Here, run the entire remaining browser matrix in one Playwright process.
+          # This avoids 759 separate Node/Playwright startups while keeping every
+          # test case eligible to run even when another case fails.
+          echo "Running all $total browser test cases with four isolated workers."
+          browser_status=0
+          npx playwright test --test-list "$test_list" --workers=4 --max-failures=0 || browser_status=$?
+          if [[ "$browser_status" -ne 0 ]]; then
+            echo "Browser audit completed with one or more failures; all scheduled tests were allowed to finish."
+            exit "$browser_status"
           fi
 
       - name: Upload corpus A/B measurements
@@ -280,6 +260,12 @@ jobs:
         if: always()
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          INVENTORY: ${{ steps.inventory.outcome }}
+          AST: ${{ steps.ast.outcome }}
           BUILD: ${{ steps.build.outcome }}
           SELECTOR: ${{ steps.selector.outcome }}
           SCRIPTS: ${{ steps.scripts.outcome }}
@@ -296,6 +282,8 @@ jobs:
             echo
             echo "| Suite | Result |"
             echo "|---|---|"
+            echo "| Repository test inventory | $INVENTORY |"
+            echo "| AST reachability audit tests and analysis | $AST |"
             echo "| Build validation | $BUILD |"
             echo "| Selector contract tests | $SELECTOR |"
             echo "| Standalone JavaScript test scripts | $SCRIPTS |"
@@ -309,9 +297,29 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            if [[ "$failed" -eq 0 ]]; then
+              state=success
+              description="Full repository test audit passed"
+            else
+              state=failure
+              description="Full repository test audit failed"
+            fi
+            for context in browser-e2e regression-gate; do
+              payload=$(printf '{"state":"%s","target_url":"%s","description":"%s","context":"%s"}' "$state" "$TARGET_URL" "$description" "$context")
+              curl --fail-with-body --silent --show-error \
+                -X POST \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
+                -d "$payload"
+            done
+          fi
+
           if [[ "$failed" -ne 0 ]]; then
             echo "One or more audit suites failed; see the individual step logs above."
             exit 1
