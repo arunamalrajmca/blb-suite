@@ -172,7 +172,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
 
     visit(ast, (node, parent) => {
       if (node.type === 'ImportExpression') {
-        const spec = staticValue(node.source, constants), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+        const spec = staticValue(node.source, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
         addSite(file, node, 'dynamic-import', spec, target, target ? 'resolved-local' : 'unresolved-dynamic-import');
       }
       if (node.type === 'CallExpression') {
@@ -214,7 +214,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           });
         }
         if (callee.type === 'Identifier' && callee.name === 'require') {
-          const spec = staticValue(node.arguments[0], constants), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+          const spec = staticValue(node.arguments[0], constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
           if (target) addEdge(file, target, 'commonjs-require', file, node.loc.start.line, spec);
           else if (spec !== undefined && typeof spec === 'string' && spec.startsWith('.')) addSite(file, node, 'require', spec, null, 'unresolved-local-require');
         }
@@ -252,7 +252,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (from && to) edges.push({ from: rel(root, file) + '::' + from, to: rel(root, file) + '::' + to, kind: 'binding-alias', file: rel(root, file), line: node.loc.start.line, detail: node.id.name });
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
-        const method = node.callee.computed ? staticValue(node.callee.property, constants) : node.callee.property.name;
+        const method = node.callee.computed ? staticValue(node.callee.property, constants, 0, bindings) : node.callee.property.name;
         if (['set', 'add', 'push', 'unshift'].includes(method)) {
           const receiver = node.callee.object.type === 'Identifier' ? bindings.get(node.callee.object) : null;
           for (const arg of node.arguments) if (arg.type === 'Identifier') {
