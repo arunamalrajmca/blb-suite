@@ -9,6 +9,7 @@ on:
       - 'extension/manifest.json'
       - 'tests/browser/fixtures.js'
       - 'tests/browser/service-worker-shortcut-headed.spec.js'
+      - 'tests/browser/native-prerender-activation.spec.js'
       # A full audit delegates its physical Alt+B case to this X11 workflow.
       - '.github/workflows/manual-full-test-audit.yml'
       - '.github/workflows/browser-native-shortcut.yml'
@@ -89,6 +90,10 @@ jobs:
         env:
           BLB_HEADFUL_EXTENSION_TESTS: '1'
         run: xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test tests/browser/service-worker-shortcut-headed.spec.js
+      - name: Run native Chromium prerender activation cases under Xvfb
+        env:
+          BLB_HEADFUL_EXTENSION_TESTS: '1'
+        run: xvfb-run -a --server-args='-screen 0 1280x900x24' npx playwright test tests/browser/native-prerender-activation.spec.js
       - name: Upload native shortcut diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
