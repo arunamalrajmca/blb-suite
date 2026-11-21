@@ -315,8 +315,30 @@ function analyze(root = path.resolve(__dirname, '..')) {
                 if (sourceKey && targetKey) edges.push({ from: rel(root, file) + '::' + sourceKey, to: rel(root, targetFunction.file) + '::' + targetKey, kind: 'function-argument', file: rel(root, file), line: node.loc.start.line, detail: callee.name });
               }
             }
+            const assigned = parent && parent.type === 'VariableDeclarator' && parent.init === node && parent.id.type === 'Identifier'
+              ? bindings.get(parent.id) : null;
+            if (assigned) visit(targetFunction.node.body, returned => {
+              if (returned.type !== 'ReturnStatement' || !returned.argument || returned.argument.type !== 'Identifier') return;
+              const sourceKey = bindingByFile.get(targetFunction.file).get(returned.argument);
+              if (sourceKey) edges.push({
+                from: rel(root, targetFunction.file) + '::' + sourceKey,
+                to: rel(root, file) + '::' + assigned,
+                kind: 'cross-module-function-return', file: rel(root, file),
+                line: node.loc.start.line, detail: callee.name
+              });
+            });
           }
         }
+      }
+      if (node.type === 'MemberExpression' && node.object.type === 'Identifier' && imported.has(node.object.name)) {
+        const info = imported.get(node.object.name);
+        const property = node.computed ? staticValue(node.property, constants, 0, bindings) : node.property.name;
+        sites.push({
+          file: rel(root, file), line: node.loc.start.line,
+          kind: 'cross-module-property-read', expression: node.object.name + '[' + (property === undefined ? 'dynamic' : String(property)) + ']',
+          resolved: rel(root, info.file), certainty: property === undefined ? 'unresolved-dynamic-property' : 'resolved-property-key',
+          affectedRoots: []
+        });
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init && node.init.type === 'Identifier') {
         const from = bindings.get(node.init), to = bindings.get(node.id);
