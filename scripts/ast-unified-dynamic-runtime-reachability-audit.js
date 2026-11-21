@@ -63,6 +63,10 @@ function staticPrefix(node, constants, bindings, depth = 0) {
 function staticValue(node, constants, depth = 0, bindings = null) {
   if (!node || depth > 8) return undefined;
   if (node.type === 'Literal') return node.value;
+  if (node.type === 'ArrayExpression') {
+    const values = node.elements.map(element => element ? staticValue(element, constants, depth + 1, bindings) : undefined);
+    return values.every(value => value !== undefined) ? values : undefined;
+  }
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
   if (node.type === 'Identifier') { const key = bindings && bindings.get(node); return key ? constants.get(key) : undefined; }
   if (node.type === 'BinaryExpression' && node.operator === '+') {
@@ -157,6 +161,19 @@ function analyze(root = path.resolve(__dirname, '..')) {
     constantsByFile.set(file, constants);
   }
 
+  const loopValuesByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file), constants = constantsByFile.get(file), loopValues = new Map();
+    visit(ast, node => {
+      if (node.type !== 'ForOfStatement' || node.left.type !== 'VariableDeclaration' ||
+          node.left.declarations.length !== 1 || node.left.declarations[0].id.type !== 'Identifier') return;
+      const values = staticValue(node.right, constants, 0, bindings);
+      const key = bindings.get(node.left.declarations[0].id);
+      if (Array.isArray(values) && key) loopValues.set(key, values);
+    });
+    loopValuesByFile.set(file, loopValues);
+  }
+
   const exportsByFile = new Map();
   for (const [file, ast] of asts) {
     const bindings = bindingByFile.get(file), exported = new Map();
@@ -198,6 +215,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
 
   for (const [file, ast] of asts) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
+    const loopValues = loopValuesByFile.get(file);
     const imported = new Map(), scriptElementBindings = new Set();
     visit(ast, node => {
       if (node.type === 'ImportDeclaration' && node.source.value) {
@@ -259,14 +277,19 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') parts.unshift(n.name); return parts.filter(Boolean).join('.'); };
         if (callee.type === 'Identifier' && callee.name === 'importScripts') {
           for (const arg of node.arguments) {
-            const spec = staticValue(arg, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
-            addSite(file, node, 'importScripts', spec, target, target ? 'resolved-local' : 'unresolved-importScripts', [], staticPrefix(arg, constants, bindings));
+            const boundedValues = arg.type === 'Identifier' ? loopValues.get(bindings.get(arg)) : null;
+            const specs = Array.isArray(boundedValues) ? boundedValues : [staticValue(arg, constants, 0, bindings)];
+            for (const spec of specs) {
+              const target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+              addSite(file, node, 'importScripts', spec, target, target ? 'resolved-local' : 'unresolved-importScripts', [], staticPrefix(arg, constants, bindings));
+            }
           }
         }
         const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) : null;
         const object = callee.type === 'MemberExpression' ? memberPath(callee.object) : null;
         if (method === 'executeScript' && object === 'chrome.scripting') {
           let foundFiles = [];
+          let foundFunction = false;
           for (const arg of node.arguments) visit(arg, child => {
             if (child.type === 'Property' && (child.key.name === 'files' || child.key.value === 'files') && child.value.type === 'ArrayExpression') {
               for (const element of child.value.elements) {
@@ -276,10 +299,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
               }
             }
             if (child.type === 'Property' && (child.key.name === 'func' || child.key.value === 'func')) {
+              foundFunction = true;
               sites.push({ file: rel(root, file), line: child.loc.start.line, kind: 'chrome.scripting.executeScript.func', expression: '[function value]', resolved: null, certainty: 'inline-function-body', affectedRoots: [] });
             }
           });
-          if (!foundFiles.length) uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'chrome.scripting.executeScript', certainty: 'unresolved-injection-target', affectedRoots: [] });
+          if (!foundFiles.length && !foundFunction) uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'chrome.scripting.executeScript', certainty: 'unresolved-injection-target', affectedRoots: [] });
         }
         if (method === 'registerContentScripts' && object === 'chrome.scripting') {
           visit(node.arguments[0], child => {
@@ -456,25 +480,26 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const uncertainSet = new Set([...uncertainFileRoots.keys()]);
   const unreachableInventory = files.filter(file => !reachable.has(file)).map(file => rel(root, file));
   const definiteUnreachable = files.filter(file => !reachable.has(file) && !uncertainSet.has(file)).map(file => rel(root, file));
-  const uncertaintyByKind = {};
+  const uncertaintyByKind = new Map();
   const uncertaintyByFile = new Map();
-  const uncertaintyByRoot = {};
+  const uncertaintyByRoot = new Map();
   for (const site of uncertainty) {
-    uncertaintyByKind[site.kind] = (uncertaintyByKind[site.kind] || 0) + 1;
-    if (!uncertaintyByFile.has(site.file)) uncertaintyByFile.set(site.file, {});
+    uncertaintyByKind.set(site.kind, (uncertaintyByKind.get(site.kind) || 0) + 1);
+    if (!uncertaintyByFile.has(site.file)) uncertaintyByFile.set(site.file, new Map());
     const kinds = uncertaintyByFile.get(site.file);
-    kinds[site.kind] = (kinds[site.kind] || 0) + 1;
+    kinds.set(site.kind, (kinds.get(site.kind) || 0) + 1);
     for (const affectedRoot of site.affectedRoots || []) {
-      if (!uncertaintyByRoot[affectedRoot]) uncertaintyByRoot[affectedRoot] = {};
-      uncertaintyByRoot[affectedRoot][site.kind] = (uncertaintyByRoot[affectedRoot][site.kind] || 0) + 1;
+      if (!uncertaintyByRoot.has(affectedRoot)) uncertaintyByRoot.set(affectedRoot, new Map());
+      const rootKinds = uncertaintyByRoot.get(affectedRoot);
+      rootKinds.set(site.kind, (rootKinds.get(site.kind) || 0) + 1);
     }
   }
   const topUncertaintyFiles = [...uncertaintyByFile].map(([file, kinds]) => ({
-    file, total: Object.values(kinds).reduce((sum, count) => sum + count, 0), kinds
+    file, total: [...kinds.values()].reduce((sum, count) => sum + count, 0), kinds: Object.fromEntries(kinds)
   })).sort((a, b) => b.total - a.total || a.file.localeCompare(b.file)).slice(0, 25);
   const uncertaintySummary = {
-    byKind: Object.fromEntries(Object.entries(uncertaintyByKind).sort((a, b) => b[1] - a[1])),
-    byAffectedRoot: Object.fromEntries(Object.entries(uncertaintyByRoot).sort((a, b) => a[0].localeCompare(b[0]))),
+    byKind: Object.fromEntries([...uncertaintyByKind].sort((a, b) => b[1] - a[1])),
+    byAffectedRoot: Object.fromEntries([...uncertaintyByRoot].sort((a, b) => a[0].localeCompare(b[0])).map(([rootName, kinds]) => [rootName, Object.fromEntries(kinds)])),
     topFiles: topUncertaintyFiles
   };
   return {
