@@ -156,6 +156,8 @@ test('reports uncertainty observations grouped by kind, affected root, and sourc
   assert.ok(result.uncertaintySummary.byKind['unresolved-computed-property'] >= 1);
   assert.ok(result.uncertaintySummary.byAffectedRoot['scripts/main.js']);
   assert.ok(result.uncertaintySummary.topFiles.some(item => item.file === 'scripts/main.js'));
+  assert.ok(result.uncertaintySummary.computedPropertyRoles.call >= 1);
+  assert.ok(result.uncertaintySummary.topComputedPropertyKeys.some(item => item.expression === 'key'));
 });
 
 
