@@ -86,7 +86,10 @@ function staticValue(node, constants, depth = 0, bindings = null) {
     return consequent !== undefined && Object.is(consequent, alternate) ? consequent : undefined;
   }
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
-  if (node.type === 'Identifier') { const key = bindings && bindings.get(node); return key ? constants.get(key) : undefined; }
+  if (node.type === 'Identifier') {
+    const key = bindings && bindings.get(node);
+    return key ? constants.get(key) : constants.get('__globalName:' + node.name);
+  }
   if (node.type === 'BinaryExpression' && node.operator === '+') {
     const left = staticValue(node.left, constants, depth + 1, bindings), right = staticValue(node.right, constants, depth + 1, bindings);
     if (left !== undefined && right !== undefined && ['string', 'number'].includes(typeof left) && ['string', 'number'].includes(typeof right)) return String(left) + String(right);
@@ -288,6 +291,37 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (value !== undefined && key) constants.set(key, value);
     });
     constantsByFile.set(file, constants);
+  }
+
+  // Tests that evaluate code inside the extension service worker can refer
+  // to its global content-script file arrays without declaring local bindings.
+  // Import only these explicit shared runtime constants into unresolved global
+  // identifier lookups; never override a locally bound identifier.
+  const sharedBackgroundFile = path.join(root, 'extension', 'background.js');
+  const sharedBackgroundAst = asts.get(sharedBackgroundFile);
+  const sharedBackgroundBindings = bindingByFile.get(sharedBackgroundFile);
+  const sharedBackgroundConstants = constantsByFile.get(sharedBackgroundFile);
+  const sharedRuntimeConstantNames = new Set([
+    'BLB_CONTENT_SCRIPT_FILES',
+    'SCRIPT_TAGGER_CONTENT_SCRIPT_FILES',
+    'BIBLEREF_RANGE_CONTENT_SCRIPT_FILES'
+  ]);
+  const sharedRuntimeConstants = new Map();
+  if (sharedBackgroundAst && sharedBackgroundBindings && sharedBackgroundConstants) {
+    for (const statement of sharedBackgroundAst.body) {
+      if (statement.type !== 'VariableDeclaration') continue;
+      for (const declaration of statement.declarations || []) {
+        if (declaration.id.type !== 'Identifier' || !sharedRuntimeConstantNames.has(declaration.id.name)) continue;
+        const key = sharedBackgroundBindings.get(declaration.id);
+        const value = key && sharedBackgroundConstants.get(key);
+        if (Array.isArray(value) && value.every(item => typeof item === 'string' && item.length)) {
+          sharedRuntimeConstants.set(declaration.id.name, value);
+        }
+      }
+    }
+  }
+  for (const constants of constantsByFile.values()) {
+    for (const [name, value] of sharedRuntimeConstants) constants.set('__globalName:' + name, value);
   }
 
   const loopValuesByFile = new Map();
