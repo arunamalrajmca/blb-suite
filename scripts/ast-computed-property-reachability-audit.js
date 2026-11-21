@@ -72,7 +72,7 @@ function unionInto(map, key, values) {
 function valuesOf(node, env, bindings, depth = 0) {
   if (!node || depth > 10) return null;
   if (node.type === 'Literal' && ['string', 'number'].includes(typeof node.value)) return new Set([String(node.value)]);
-  if (node.type === 'Identifier') return env.get(bindings.get(node)) || env.get('__uniqueParameterName:' + node.name) || null;
+  if (node.type === 'Identifier') return env.get(bindings.get(node)) || env.get('__uniqueIdentifierName:' + node.name) || env.get('__uniqueParameterName:' + node.name) || null;
   if (node.type === 'TemplateLiteral') {
     if (!node.expressions.length) return new Set([node.quasis[0].value.cooked]);
     return null;
@@ -105,13 +105,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
   // First collect bounded constants, object/class owners, aliases, and local functions.
   for (const [file, record] of records) {
     const { ast, bindings, env, owners, aliases, functions } = record;
-    const functionsByName = new Map(), parameterNameCounts = new Map();
+    const functionsByName = new Map(), parameterNameCounts = new Map(), identifierNameCounts = new Map();
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') identifierNameCounts.set(node.id.name, (identifierNameCounts.get(node.id.name) || 0) + 1);
+      if (node.type === 'FunctionDeclaration' && node.id) identifierNameCounts.set(node.id.name, (identifierNameCounts.get(node.id.name) || 0) + 1);
+      if (node.type === 'ClassDeclaration' && node.id) identifierNameCounts.set(node.id.name, (identifierNameCounts.get(node.id.name) || 0) + 1);
+    });
     visit(ast, (node, parent) => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         const key = bindings.get(node.id);
         if (key && node.init) {
           const values = valuesOf(node.init, env, bindings);
-          if (values) unionInto(env, key, values);
+          if (values) {
+            unionInto(env, key, values);
+            if (identifierNameCounts.get(node.id.name) === 1) unionInto(env, '__uniqueIdentifierName:' + node.id.name, values);
+          }
           if (node.init.type === 'Identifier') {
             const source = bindings.get(node.init);
             if (source) aliases.set(key, source);
