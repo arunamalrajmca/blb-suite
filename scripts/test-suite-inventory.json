@@ -20,14 +20,16 @@
           "workflow": ".github/workflows/browser-native-shortcut.yml",
           "requiredText": "xvfb-run -a",
           "testFile": "tests/browser/native-prerender-activation.spec.js",
-          "environment": "x11-headed-chromium"
+          "environment": "x11-headed-chromium",
+          "testTitlePattern": "native Chromium \\\\$\\\\{targetHint\\\\} prerender activation initializes the activated document without tab replacement"
         },
         {
           "testTitle": "native Chromium _blank prerender activation initializes the activated document without tab replacement",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
           "requiredText": "xvfb-run -a",
           "testFile": "tests/browser/native-prerender-activation.spec.js",
-          "environment": "x11-headed-chromium"
+          "environment": "x11-headed-chromium",
+          "testTitlePattern": "native Chromium \\\\$\\\\{targetHint\\\\} prerender activation initializes the activated document without tab replacement"
         },
         {
           "testTitle": "Show on BLB performance benchmark",
