@@ -31,9 +31,10 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   assert.ok(start >= 0 && end > start);
   const changedRunner = groupsWorkflow.slice(start, end);
   assert.ok(changedRunner.includes('npx playwright test "${normal_specs[@]}" --max-failures=1'));
-  assert.ok(changedRunner.includes('BLB_HEADFUL_EXTENSION_TESTS=1 xvfb-run'));
-  assert.ok(changedRunner.includes('npx playwright test "$headed_spec" --max-failures=1'));
-  assert.equal(changedRunner.split("npx playwright test").length - 1, 2);
+  assert.ok(changedRunner.includes('Delegated to the single-owner native X11 workflow: $spec'));
+  assert.doesNotMatch(changedRunner, /BLB_HEADFUL_EXTENSION_TESTS=1 xvfb-run/);
+  assert.doesNotMatch(changedRunner, /npx playwright test "\\$headed_spec"/);
+  assert.equal(changedRunner.split("npx playwright test").length - 1, 1);
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ steps.browser-select.outputs.group_a_changed_browser_specs }}"));
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ needs.change-detection.outputs.group_a_changed_browser_specs }}"));
   assert.doesNotMatch(groupsWorkflow, /case "$spec" in/);
@@ -127,19 +128,24 @@ test("split reference matrix groups preserve the former test-title coverage exac
   }
 });
 
-test("native prerender activation scenarios are separately managed and run headed under Xvfb", () => {
+test("native prerender activation scenarios have one headed X11 execution owner", () => {
   const registry = readFileSync(
     new URL("../../scripts/ci-routing-registry.mjs", import.meta.url),
     "utf8"
   );
   const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-native-shortcut.yml", import.meta.url),
+    "utf8"
+  );
+  const referenceWorkflow = readFileSync(
     new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
     "utf8"
   );
   assert.ok(registry.includes('"tests/browser/native-prerender-activation.spec.js"'));
   assert.ok(separatelyManagedSpecs.has("tests/browser/native-prerender-activation.spec.js"));
-  assert.ok(workflow.includes("contains(needs.change-detection.outputs.focused_specs, 'tests/browser/native-prerender-activation.spec.js')"));
-  assert.ok(workflow.includes('command -v xvfb-run'));
-  assert.ok(workflow.includes('sudo apt-get install -y xdotool'));
-  assert.ok(workflow.includes('xvfb-run -a --server-args=\'-screen 0 1280x900x24\' npx playwright test --config=playwright.config.js "$spec"'));
+  assert.doesNotMatch(referenceWorkflow, /focused_specs, 'tests\\/browser\\/native-prerender-activation\\.spec\\.js'/);
+  assert.ok(workflow.includes("BLB_HEADFUL_EXTENSION_TESTS: '1'"));
+  assert.ok(workflow.includes("xvfb-run -a --server-args='-screen 0 1280x900x24'"));
+  assert.ok(workflow.includes("tests/browser/native-prerender-activation.spec.js"));
+  assert.ok(workflow.includes("tests/browser/service-worker-shortcut-headed.spec.js"));
 });
