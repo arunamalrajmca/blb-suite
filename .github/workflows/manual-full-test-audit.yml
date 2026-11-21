@@ -199,59 +199,16 @@ jobs:
             exit 1
           fi
 
-          # Put failures from the preceding exhaustive run first. If either
-          # fails again, stop this audit immediately instead of spending time
-          # running the remaining browser matrix.
-          priority_list="$RUNNER_TEMP/blb-playwright-priority-list.txt"
-          : > "$priority_list"
-          for failed_title in \
-            "Rediscover, Sagacity, and TSK use the existing current-page MultiVerse collector" \
-            "Study Sessions confirmed deletion stops and removes only the selected recording, while delete-all clears remaining history" \
-            "selected Study Topic exports a PDF containing its saved reference and note" \
-            "shared sensitive-site classifier covers known providers without keyword false positives" \
-            "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins"; do
-            grep -F "› $failed_title" "$test_list" >> "$priority_list" || true
-          done
-          cat "$test_list" >> "$priority_list"
-          awk '!seen[$0]++' "$priority_list" > "$test_list.ordered"
-          mv "$test_list.ordered" "$test_list"
-          priority_count=$(wc -l < "$priority_list" | tr -d ' ')
-          echo "Prior-run failures prioritized: $priority_count"
-
-          failures=0
-          skipped=0
-          passed=0
-          executed=0
-          current_test="$RUNNER_TEMP/blb-current-test.txt"
-          current_log="$RUNNER_TEMP/blb-current-test.log"
-          while IFS= read -r test_id; do
-            executed=$((executed + 1))
-            printf '[%s/%s] %s\n' "$executed" "$total" "$test_id"
-            printf '%s\n' "$test_id" > "$current_test"
-            command_status=0
-            npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
-            cat "$current_log"
-            summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
-            if [[ "$command_status" -eq 0 && "$summary" == *"1/1 completed"* && "$summary" == *"1 passed, 0 failed, 0 skipped"* ]]; then
-              passed=$((passed + 1))
-            else
-              if [[ "$summary" == *"skipped"* && "$summary" != *"0 skipped"* ]]; then
-                skipped=$((skipped + 1))
-              fi
-              failures=$((failures + 1))
-              echo "FAILED OR NOT EXECUTED: $test_id"
-              echo "SUMMARY: $summary"
-              echo "Stopping browser audit immediately after the first failed or incomplete test."
-              break
-            fi
-          done < "$test_list"
-
-          echo "Browser test cases executed: $executed/$total"
-          echo "Browser test cases passed: $passed"
-          echo "Browser test cases failed or incomplete: $failures"
-          echo "Browser test cases skipped: $skipped"
-          if [[ "$executed" -ne "$total" || "$failures" -gt 0 || "$skipped" -gt 0 ]]; then
-            exit 1
+          # The known prior failures are run first by the focused-regressions workflow.
+          # Here, run the entire remaining browser matrix in one Playwright process.
+          # This avoids 759 separate Node/Playwright startups while keeping every
+          # test case eligible to run even when another case fails.
+          echo "Running all $total browser test cases with four isolated workers."
+          browser_status=0
+          npx playwright test --test-list "$test_list" --workers=4 --max-failures=0 || browser_status=$?
+          if [[ "$browser_status" -ne 0 ]]; then
+            echo "Browser audit completed with one or more failures; all scheduled tests were allowed to finish."
+            exit "$browser_status"
           fi
 
       - name: Upload corpus A/B measurements
