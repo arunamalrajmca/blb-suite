@@ -86,3 +86,24 @@ test('publishes a stable category list covering every requested runtime mechanis
     'prototype-mutation', 'custom-runtime-dispatch'
   ]);
 });
+
+test('builds explicit directed edges for aliases, wrappers, calls, returns, containers, mutation, proxies, and prototypes', () => {
+  const result = audit([
+    'const service = {};',
+    'const alias = service;',
+    'const wrapped = { nested: service };',
+    'function consume(target) { return target; }',
+    'const returned = consume(alias);',
+    'const registry = new Map(); registry.set("service", returned);',
+    'const callback = () => service;',
+    'const proxy = new Proxy(service, {});',
+    'const prototype = {}; Object.setPrototypeOf(proxy, prototype);',
+    'const target = {}; target.handler = callback;'
+  ].join('\\n'));
+  const kinds = new Set(result.flowEdges.map(edge => edge.kind));
+  for (const kind of [
+    'identifier-alias', 'object-wrap', 'function-argument', 'function-return',
+    'container-store', 'mutation-store', 'proxy-target-or-handler',
+    'prototype-inheritance', 'closure-capture'
+  ]) assert.ok(kinds.has(kind), 'expected flow edge: ' + kind);
+});
