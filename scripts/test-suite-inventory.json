@@ -32,9 +32,19 @@
       "id": "ast-reachability-audit-tests",
       "pattern": "scripts/ast-*-audit.test.js",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node --test scripts/ast-*-audit.test.js",
+      "requiredText": "for test_file in scripts/ast-*-audit.test.js",
       "alsoOwnedBy": ".github/workflows/browser-tests.yml",
-      "alsoRequiredText": "node --test scripts/ast-symbol-reference-audit.test.js"
+      "alsoRequiredText": "node --test scripts/ast-symbol-reference-audit.test.js",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "node --test \"$test_file\""
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "audit_file=\"${test_file%.test.js}.js\""
+        }
+      ]
     },
     {
       "id": "standalone-javascript-tests",
