@@ -332,6 +332,7 @@ jobs:
             echo "::error::Reference matrix group selected no spec files."
             exit 1
           fi
+          runnable_specs=()
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             if [[ "$spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
@@ -342,21 +343,25 @@ jobs:
               echo "::error::Selected Playwright spec does not exist: $spec"
               exit 1
             fi
-            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            # Explicitly constrain discovery to browser spec files and fail
-            # before execution if Playwright silently registers zero tests.
-            discovery_log="$(mktemp)"
+            printf '[%s/%s] Validating %s\n' "$((index + 1))" "$total" "$spec"
             node --check "$spec"
-            npx playwright test --config=playwright.config.js --list --reporter=list "$spec" 2>&1 | tee "$discovery_log"
-            if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
-              echo "::error::Playwright discovered no tests in $spec."
-              exit 1
-            fi
-            if [[ "$MATRIX_GREP" == ".*" ]]; then
-              npx playwright test --config=playwright.config.js "$spec"
-            else
-              npx playwright test --config=playwright.config.js "$spec" --grep "$MATRIX_GREP"
-            fi
+            runnable_specs+=("$spec")
+          done
+          if (( ${#runnable_specs[@]} == 0 )); then
+            echo "::error::Reference matrix group has no runnable browser specs after native-test delegation."
+            exit 1
+          fi
+          discovery_log="$(mktemp)"
+          npx playwright test --config=playwright.config.js --list --reporter=list "${runnable_specs[@]}" 2>&1 | tee "$discovery_log"
+          if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
+            echo "::error::Playwright discovered no tests in the reference matrix group."
+            exit 1
+          fi
+          if [[ "$MATRIX_GREP" == ".*" ]]; then
+            npx playwright test --config=playwright.config.js "${runnable_specs[@]}"
+          else
+            npx playwright test --config=playwright.config.js "${runnable_specs[@]}" --grep "$MATRIX_GREP"
+          fi
           done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
