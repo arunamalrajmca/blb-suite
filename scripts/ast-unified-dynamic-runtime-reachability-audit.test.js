@@ -181,3 +181,17 @@ test('does not treat executeScript inline func bodies as unresolved file targets
   assert.ok(result.dynamicSites.some(item => item.kind === 'chrome.scripting.executeScript.func'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript').length, 0);
 });
+
+
+test('resolves executeScript file lists returned by bounded helper functions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "function contentFiles() { return ['one.js', 'two.js']; } chrome.scripting.executeScript({ target: { tabId: 1 }, files: contentFiles().filter(Boolean) });",
+    'extension/one.js': 'globalThis.one = true;',
+    'extension/two.js': 'globalThis.two = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/one.js'));
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/two.js'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript').length, 0);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript.files').length, 0);
+});
