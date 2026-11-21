@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   change-detection:
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     name: Select requested CI suite
     runs-on: ubuntu-latest
     outputs:
@@ -152,7 +153,7 @@ jobs:
       - change-detection
       - regression-package
       - regression-behavioral
-    if: ${{ always() }}
+    if: ${{ always() && !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
     runs-on: ubuntu-latest
     permissions:
       statuses: write
