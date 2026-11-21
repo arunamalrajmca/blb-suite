@@ -472,7 +472,8 @@ function run(root) {
   console.log('Dynamic/runtime sites: ' + result.dynamicSites.length);
   console.log('Scoped uncertainty sites: ' + result.uncertainty.length);
   console.log('Reachable files: ' + result.reachable.length);
-  console.log('Unreachable inventory only (not deletion candidates): ' + result.unreachableInventory.length);\n  console.log('Unreachable files scoped as uncertain dynamic targets: ' + result.uncertainFiles.length);\n  console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
+  console.log('Unreachable inventory only (not deletion candidates): ' + result.unreachableInventory.length);
+  console.log('Unreachable files scoped as uncertain dynamic targets: ' + result.uncertainFiles.length);\n  console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
   if (result.parseErrors.length) process.exitCode = 1;
   return result;
