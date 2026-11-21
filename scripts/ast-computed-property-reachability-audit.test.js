@@ -88,3 +88,74 @@ test('propagates property ownership from a default-exported object', () => {
   assert.equal(result.observations.length, 1);
   assert.deepEqual(result.observations[0].candidateProperties, ['close', 'open']);
 });
+
+
+test('classifies storage-backed object maps and records the dynamic key origin', () => {
+  const result = run({
+    'main.js': "async function update(origin, site) { const data = await chrome.storage.local.get({pageSites:{}}); const pageSites = data.pageSites && typeof data.pageSites === 'object' ? {...data.pageSites} : {}; pageSites[site] = true; return pageSites[origin]; }"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 2);
+  for (const observation of result.observations) {
+    assert.equal(observation.receiverKind, 'storage-backed-container');
+    assert.equal(observation.storageField, 'pageSites');
+    assert.equal(observation.keyDefinition, 'parameter-or-loop-binding');
+  }
+  const write = result.observations.find(item => item.role === 'write');
+  assert.equal(write.valueExpression, 'true');
+});
+
+test('recognizes literal globalThis registries and inline object key domains', () => {
+  const result = run({
+    'registry.js': "globalThis.Registry = Object.freeze({alpha: 1, beta: 2});",
+    'main.js': "const key = getKey(); globalThis.Registry[key]; ({'1':'I','2':'II','3':'III'})[key];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 2);
+  assert.deepEqual(result.observations[0].candidateProperties, ['alpha', 'beta']);
+  assert.deepEqual(result.observations[1].candidateProperties, ['1', '2', '3']);
+});
+
+test('classifies computed array accesses separately from object-key dispatch', () => {
+  const result = run({
+    'main.js': "const tokens = 'one two'.split(' '); const index = getIndex(); tokens[index];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 1);
+  assert.equal(result.observations[0].receiverKind, 'array-like');
+  assert.equal(result.observations[0].role, 'read-or-other');
+});
+
+
+test('propagates storage-backed container identity through a mutator callback', () => {
+  const result = run({
+    'main.js': "async function getTracked() { const data = await chrome.storage.local.get({tracked:{}}); return data.tracked && typeof data.tracked === 'object' ? {...data.tracked} : {}; } async function updateTracked(mutator) { const map = await getTracked(); await mutator(map); return map; } function caller() { updateTracked(map => { const key = getKey(); map[key] = {active:true}; return map[key]; }); }"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 2);
+  for (const observation of result.observations) {
+    assert.equal(observation.receiverKind, 'storage-backed-container');
+    assert.equal(observation.storageField, 'tracked');
+  }
+});
+
+test('tracks properties added through direct writes, Object.assign, and defineProperty', () => {
+  const result = run({
+    'main.js': "const target = {}; target.start = fn; Object.assign(target, {stop: fn}); Object.defineProperty(target, 'reset', {value:fn}); const key = getKey(); target[key]();"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 1);
+  assert.deepEqual(result.observations[0].candidateProperties, ['reset', 'start', 'stop']);
+});
+
+test('records computed-write values and distinguishes property deletion', () => {
+  const result = run({
+    'main.js': "const target = {}; const key = getKey(); target[key] = handler; delete target[key];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 2);
+  const write = result.observations.find(item => item.role === 'write');
+  const deletion = result.observations.find(item => item.role === 'delete');
+  assert.equal(write.valueExpression, 'handler');
+  assert.equal(deletion.role, 'delete');
+});

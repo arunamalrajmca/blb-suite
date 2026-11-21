@@ -100,30 +100,124 @@ function valuesOf(node, env, bindings, depth = 0) {
   }
   return null;
 }
+function unwrap(node) {
+  while (node && ['AwaitExpression','ChainExpression','ParenthesizedExpression'].includes(node.type)) node = node.argument || node.expression;
+  return node;
+}
+function memberPath(node) {
+  const parts = [];
+  while (node && node.type === 'MemberExpression' && !node.computed) {
+    parts.unshift(node.property.name);
+    node = node.object;
+  }
+  if (node && node.type === 'Identifier') parts.unshift(node.name);
+  return parts.join('.');
+}
+function isArrayProducer(node) {
+  node = unwrap(node);
+  if (!node) return false;
+  if (node.type === 'ArrayExpression') return true;
+  if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Array') return true;
+  if (node.type !== 'CallExpression') return false;
+  const path = memberPath(node.callee);
+  return path === 'Array.from' || path === 'Object.keys' || path === 'Object.values' ||
+    path === 'Object.entries' || path === 'Promise.all' ||
+    (node.callee.type === 'MemberExpression' && ['split','match','map','filter','flatMap','slice','concat','sort','toSorted','reverse','flat'].includes(node.callee.property.name));
+}
+function isNumericIndexExpression(node) {
+  if (!node) return false;
+  if (node.type === 'Literal' && typeof node.value === 'number') return true;
+  if (node.type === 'Identifier') return /(?:^|_)(?:i|idx|index|offset|chapter|verse|position|start|end|point|token|found|suffix|candidate|current|selection|word|char|byte|line|column|cursor|length|count|number|no|n)(?:$|_)/i.test(node.name);
+  if (node.type === 'BinaryExpression' && ['+','-'].includes(node.operator)) {
+    return isNumericIndexExpression(node.left) || isNumericIndexExpression(node.right) ||
+      node.left.type === 'Literal' && typeof node.left.value === 'number' ||
+      node.right.type === 'Literal' && typeof node.right.value === 'number';
+  }
+  return false;
+}
 function analyze(root = path.resolve(__dirname, '..')) {
   root = path.resolve(root);
   const files = walk(root), records = new Map(), parseErrors = [];
   for (const file of files) {
     try {
       const ast = parse(file);
-      records.set(file, { ast, bindings: bindingsFor(ast), env: new Map(), owners: new Map(), aliases: new Map() });
+      records.set(file, { ast, bindings: bindingsFor(ast), env: new Map(), owners: new Map(), aliases: new Map(), definitions: new Map(), arrays: new Set(), storageMaps: new Map(), storageResults: new Set() });
     } catch (error) { parseErrors.push({ file: rel(root, file), error: error.message }); }
+  }
+
+  // Summarize functions that return a property read from chrome.storage.local.
+  const storageReturnFields = new Map();
+  for (const record of records.values()) {
+    const { ast, bindings } = record;
+    visit(ast, node => {
+      if (node.type !== 'FunctionDeclaration' || !node.id) return;
+      const storageBindings = new Set(), localStorageBindings = new Map();
+      visit(node.body, child => {
+        if (child.type !== 'VariableDeclarator' || child.id.type !== 'Identifier') return;
+        const init = unwrap(child.init);
+        if (init?.type === 'CallExpression' && memberPath(init.callee) === 'chrome.storage.local.get') {
+          storageBindings.add(bindings.get(child.id));
+        }
+      });
+      if (!storageBindings.size) return;
+      visit(node.body, child => {
+        if (child.type !== 'VariableDeclarator' || child.id.type !== 'Identifier') return;
+        let field = null;
+        visit(child.init, member => {
+          if (!field && member.type === 'MemberExpression' && !member.computed && member.object.type === 'Identifier' &&
+              storageBindings.has(bindings.get(member.object))) field = member.property.name;
+        });
+        if (field) localStorageBindings.set(bindings.get(child.id), field);
+      });
+      visit(node.body, child => {
+        if (child.type !== 'ReturnStatement' || !child.argument) return;
+        if (child.argument.type === 'Identifier') {
+          const field = localStorageBindings.get(bindings.get(child.argument));
+          if (field) storageReturnFields.set(node.id.name, field);
+        }
+        visit(child.argument, member => {
+          if (member.type === 'MemberExpression' && !member.computed && member.object.type === 'Identifier' &&
+              storageBindings.has(bindings.get(member.object))) {
+            storageReturnFields.set(node.id.name, member.property.name);
+          }
+        });
+      });
+    });
   }
 
   // First collect bounded constants, object/class owners, aliases, and local functions.
   for (const [file, record] of records) {
-    const { ast, bindings, env, owners, aliases } = record;
+    const { ast, bindings, env, owners, aliases, definitions, arrays, storageMaps, storageResults } = record;
     visit(ast, (node, parent) => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         const key = bindings.get(node.id);
         if (key && node.init) {
+          definitions.set(key, node.init);
+          if (isArrayProducer(node.init)) arrays.add(key);
+          const init = unwrap(node.init);
+          if (init?.type === 'CallExpression' && memberPath(init.callee) === 'chrome.storage.local.get') storageResults.add(key);
+          for (const storageBinding of storageResults) {
+            let field = null;
+            visit(node.init, child => {
+              if (!field && child.type === 'MemberExpression' && !child.computed && child.object.type === 'Identifier' &&
+                  bindings.get(child.object) === storageBinding) field = child.property.name;
+            });
+            if (field) storageMaps.set(key, field);
+          }
+          if (init?.type === 'CallExpression' && init.callee.type === 'Identifier' && storageReturnFields.has(init.callee.name)) {
+            storageMaps.set(key, storageReturnFields.get(init.callee.name));
+          }
           const values = valuesOf(node.init, env, bindings);
           if (values) {
             unionInto(env, key, values);
           }
           if (node.init.type === 'Identifier') {
             const source = bindings.get(node.init);
-            if (source) aliases.set(key, source);
+            if (source) {
+              aliases.set(key, source);
+              if (arrays.has(source)) arrays.add(key);
+              if (storageMaps.has(source)) storageMaps.set(key, storageMaps.get(source));
+            }
           }
           if (node.init.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
             const source = bindings.get(node.init.callee);
@@ -144,12 +238,49 @@ function analyze(root = path.resolve(__dirname, '..')) {
           }
         }
       }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
+        const receiverKey = node.left.object.type === 'Identifier' ? bindings.get(node.left.object) : null;
+        const propertyNames = node.left.computed
+          ? valuesOf(node.left.property, env, bindings)
+          : new Set([String(node.left.property.name)]);
+        if (receiverKey && propertyNames?.size) {
+          if (!owners.has(receiverKey)) owners.set(receiverKey, new Set());
+          for (const name of propertyNames) owners.get(receiverKey).add(name);
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' &&
+          node.callee.property.name === 'assign' && node.arguments[0]?.type === 'Identifier') {
+        const receiverKey = bindings.get(node.arguments[0]);
+        if (receiverKey) {
+          if (!owners.has(receiverKey)) owners.set(receiverKey, new Set());
+          for (const source of node.arguments.slice(1)) {
+            if (source.type !== 'ObjectExpression') continue;
+            for (const property of source.properties) {
+              if (property.type === 'SpreadElement') continue;
+              const names = property.computed ? valuesOf(property.key, env, bindings) : new Set([String(property.key.name ?? property.key.value)]);
+              if (names) for (const name of names) owners.get(receiverKey).add(name);
+            }
+          }
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' &&
+          node.callee.property.name === 'defineProperty' && node.arguments[0]?.type === 'Identifier') {
+        const receiverKey = bindings.get(node.arguments[0]);
+        const names = valuesOf(node.arguments[1], env, bindings);
+        if (receiverKey && names) {
+          if (!owners.has(receiverKey)) owners.set(receiverKey, new Set());
+          for (const name of names) owners.get(receiverKey).add(name);
+        }
+      }
       if (node.type === 'ClassDeclaration' && node.id) {
         const key = bindings.get(node.id);
         if (key) owners.set(key, new Set(node.body.body.filter(item => item.key && !item.computed).map(item => String(item.key.name ?? item.key.value))));
       }
       if (node.type === 'AssignmentExpression' && node.operator === '=' && node.left.type === 'Identifier') {
         const key = bindings.get(node.left), values = valuesOf(node.right, env, bindings);
+        if (key && isArrayProducer(node.right)) arrays.add(key);
         if (key && values) unionInto(env, key, values);
         if (key && node.right.type === 'Identifier') {
           const source = bindings.get(node.right); if (source) aliases.set(key, source);
@@ -160,7 +291,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // Iterate aliases and simple assignments to a fixed point (bounded by file size).
     for (let pass = 0; pass < 8; pass++) {
       let changed = false;
-      for (const [alias, source] of aliases) changed = unionInto(env, alias, env.get(source)) || changed;
+      for (const [alias, source] of aliases) {
+        changed = unionInto(env, alias, env.get(source)) || changed;
+        if (arrays.has(source)) arrays.add(alias);
+        if (storageMaps.has(source) && !storageMaps.has(alias)) storageMaps.set(alias, storageMaps.get(source));
+      }
       visit(ast, node => {
         if (node.type === 'AssignmentExpression' && node.operator === '=' && node.left.type === 'Identifier') {
           const key = bindings.get(node.left), values = valuesOf(node.right, env, bindings);
@@ -169,6 +304,40 @@ function analyze(root = path.resolve(__dirname, '..')) {
       });
       if (!changed) break;
     }
+
+    // Map callback parameters back to storage containers passed by wrapper helpers.
+    const callbackStorageFields = new Map();
+    visit(ast, node => {
+      if (node.type !== 'FunctionDeclaration' || !node.id) return;
+      node.params.forEach((param, index) => {
+        if (param.type !== 'Identifier') return;
+        visit(node.body, call => {
+          if (call.type !== 'CallExpression' || call.callee.type !== 'Identifier' || call.callee.name !== param.name) return;
+          for (const argument of call.arguments || []) {
+            if (argument.type !== 'Identifier') continue;
+            const binding = bindings.get(argument);
+            const init = definitions.get(binding);
+            const unwrapped = unwrap(init);
+            const field = storageMaps.get(binding) ||
+              (unwrapped?.type === 'CallExpression' && unwrapped.callee.type === 'Identifier'
+                ? storageReturnFields.get(unwrapped.callee.name) : null);
+            if (field) callbackStorageFields.set(node.id.name + ':' + index, field);
+          }
+        });
+      });
+    });
+    visit(ast, call => {
+      if (call.type !== 'CallExpression' || call.callee.type !== 'Identifier') return;
+      const callbackIndex = 0;
+      const field = callbackStorageFields.get(call.callee.name + ':' + callbackIndex);
+      const callback = call.arguments?.[callbackIndex];
+      if (!field || !callback || !['ArrowFunctionExpression','FunctionExpression'].includes(callback.type)) return;
+      const parameter = callback.params?.[0];
+      if (parameter?.type === 'Identifier') {
+        const binding = bindings.get(parameter);
+        if (binding) storageMaps.set(binding, field);
+      }
+    });
 
     // Add prototype-assigned methods to the owning class constructor.
     visit(ast, node => {
@@ -308,8 +477,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
   }
 
   const observations = [];
+  const globalObjectProperties = new Map();
+  for (const record of records.values()) {
+    visit(record.ast, node => {
+      if (node.type !== 'AssignmentExpression' || node.operator !== '=' || node.left.type !== 'MemberExpression' ||
+          node.left.computed || node.left.object.type !== 'Identifier' || node.left.object.name !== 'globalThis' ||
+          node.right.type !== 'CallExpression' || node.right.callee.type !== 'MemberExpression' ||
+          node.right.callee.object.type !== 'Identifier' || node.right.callee.object.name !== 'Object' ||
+          node.right.callee.property.name !== 'freeze' || node.right.arguments[0]?.type !== 'ObjectExpression') return;
+      globalObjectProperties.set(node.left.property.name, new Set(node.right.arguments[0].properties
+        .filter(property => property.type !== 'SpreadElement')
+        .map(property => String(property.key.name ?? property.key.value))));
+    });
+  }
   for (const [file, record] of records) {
-    const { ast, bindings, env, aliases, owners } = record;
+    const sourceText = fs.readFileSync(file, 'utf8');
+    const { ast, bindings, env, aliases, owners, definitions, arrays, storageMaps } = record;
     const canonicalOwner = key => {
       const seen = new Set();
       while (key && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
@@ -319,30 +502,58 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type !== 'MemberExpression' || !node.computed) return;
       const keys = valuesOf(node.property, env, bindings);
       if (keys && keys.size) return; // already statically bounded
-      const receiver = node.object.type === 'Identifier' ? canonicalOwner(bindings.get(node.object)) : null;
-      const known = receiver && owners.get(receiver) ? [...owners.get(receiver)].sort() : [];
+      const receiverBinding = node.object.type === 'Identifier' ? bindings.get(node.object) : null;
+      const receiver = receiverBinding ? canonicalOwner(receiverBinding) : null;
+      const inlineObjectProperties = node.object.type === 'ObjectExpression'
+        ? node.object.properties.filter(property => property.type !== 'SpreadElement').flatMap(property =>
+            property.computed ? [...(valuesOf(property.key, env, bindings) || [])] : [String(property.key.name ?? property.key.value)])
+        : [];
+      const globalOwner = node.object.type === 'MemberExpression' && node.object.object.type === 'Identifier' &&
+        node.object.object.name === 'globalThis' && !node.object.computed
+        ? globalObjectProperties.get(node.object.property.name) : null;
+      const known = receiver && owners.get(receiver) ? [...owners.get(receiver)].sort() :
+        inlineObjectProperties.length ? [...new Set(inlineObjectProperties)].sort() :
+        globalOwner ? [...globalOwner].sort() : [];
+      const keyBinding = node.property.type === 'Identifier' ? bindings.get(node.property) : null;
+      const keyDefinition = keyBinding && definitions.has(keyBinding)
+        ? sourceText.slice(definitions.get(keyBinding).start, definitions.get(keyBinding).end).slice(0, 180)
+        : keyBinding ? 'parameter-or-loop-binding' : '';
+      const receiverKind = receiver && storageMaps.has(receiver) ? 'storage-backed-container' :
+        receiver && arrays.has(receiver) || node.object.type === 'MemberExpression' && node.object.property.name === 'verses'
+          ? 'array-like' :
+        inlineObjectProperties.length || globalOwner || receiver && owners.has(receiver) ? 'object-like' :
+        isNumericIndexExpression(node.property) ? 'numeric-index-candidate' : 'unknown';
+      const storageField = receiver && storageMaps.has(receiver) ? storageMaps.get(receiver) : '';
       const role = parent && parent.type === 'CallExpression' && parent.callee === node ? 'call' :
         parent && parent.type === 'NewExpression' && parent.callee === node ? 'construct' :
         parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
-        parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' : 'read-or-other';
+        parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' :
+        parent && parent.type === 'UnaryExpression' && parent.operator === 'delete' && parent.argument === node ? 'delete' : 'read-or-other';
       observations.push({
         file: rel(root, file), line: node.loc.start.line,
         expression: fs.readFileSync(file, 'utf8').slice(node.start, node.end).slice(0, 200),
         propertyExpression: fs.readFileSync(file, 'utf8').slice(node.property.start, node.property.end).slice(0, 100),
+        receiverExpression: sourceText.slice(node.object.start, node.object.end).slice(0, 120),
+        receiverBinding, receiverKind, storageField, keyBinding, keyDefinition, keyValues: keys ? [...keys] : [],
+        valueExpression: parent?.type === 'AssignmentExpression' && parent.left === node
+          ? sourceText.slice(parent.right.start, parent.right.end).slice(0, 160) : '',
         role, receiverKnown: Boolean(receiver && owners.has(receiver)),
         candidateProperties: known, candidateCount: known.length,
         status: known.length ? 'receiver-properties-known-key-unknown' : 'receiver-or-key-unknown'
       });
     });
   }
-  const byStatus = {}, byRole = {}, withCandidates = observations.filter(item => item.candidateCount);
+  const byStatus = {}, byRole = {}, byReceiverKind = {}, withCandidates = observations.filter(item => item.candidateCount);
   for (const item of observations) {
     byStatus[item.status] = (byStatus[item.status] || 0) + 1;
     byRole[item.role] = (byRole[item.role] || 0) + 1;
+    byReceiverKind[item.receiverKind] = (byReceiverKind[item.receiverKind] || 0) + 1;
   }
   return { filesAnalyzed: records.size, parseErrors, observations, summary: {
     total: observations.length, withReceiverCandidates: withCandidates.length,
-    byStatus, byRole, candidatePropertyTotal: withCandidates.reduce((sum, item) => sum + item.candidateCount, 0)
+    byStatus, byRole, byReceiverKind,
+    storageBackedAccesses: observations.filter(item => item.receiverKind === 'storage-backed-container').length,
+    candidatePropertyTotal: withCandidates.reduce((sum, item) => sum + item.candidateCount, 0)
   } };
 }
 function run(root) {
@@ -354,8 +565,14 @@ function run(root) {
   console.log('Observations with known receiver property candidates: ' + result.summary.withReceiverCandidates);
   console.log('Observations by status: ' + JSON.stringify(result.summary.byStatus));
   console.log('Observations by access role: ' + JSON.stringify(result.summary.byRole));
+  console.log('Observations by receiver kind: ' + JSON.stringify(result.summary.byReceiverKind));
+  console.log('Storage-backed container accesses: ' + result.summary.storageBackedAccesses);
   console.log('Candidate property references (not proof of runtime selection): ' + result.summary.candidatePropertyTotal);
   console.log('Candidate observations: ' + JSON.stringify(result.observations.filter(item => item.candidateCount)));
+  const focusFiles = new Set(['extension/background.js', 'extension/content.js']);
+  console.log('Background/content unresolved computed-property observations: ' + JSON.stringify(
+    result.observations.filter(item => focusFiles.has(item.file))
+  ));
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
   if (result.parseErrors.length) process.exitCode = 1;
   return result;
