@@ -117,6 +117,7 @@ jobs:
           done <<< "$stale_runs"
 
   change-detection:
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     name: Select requested CI suite
     needs: cancel-superseded-runs
     runs-on: ubuntu-latest
@@ -457,7 +458,7 @@ jobs:
       - browser-e2e
       - browser-e2e-features
       - grouped-browser-e2e
-    if: ${{ always() }}
+    if: ${{ always() && !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
     runs-on: ubuntu-latest
     # This job is scheduled only after all required browser suites complete.
     timeout-minutes: 10
