@@ -176,7 +176,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   }
 
   const resolveInjected = spec => resolveFile(path.join(root, 'extension', 'manifest.json'), spec, fileSet);
-  const bindingByFile = new Map(), constantsByFile = new Map();
+  const bindingByFile = new Map(), constantsByFile = new Map(), functionArraySummaries = [];
   for (const [file, ast] of asts) {
     bindingByFile.set(file, bindingMap(ast));
     const constants = new Map(), bindings = bindingByFile.get(file);
@@ -198,7 +198,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
       });
       if (candidates.length) {
         const key = bindings.get(node.id);
-        if (key) constants.set(key, [...new Set(candidates)]);
+        if (key) {
+          const values = [...new Set(candidates)];
+          constants.set(key, values);
+          functionArraySummaries.push({ file: rel(root, file), name: node.id.name, binding: key, values });
+        }
       }
     });
     // Re-evaluate declarators after function summaries are available so
@@ -588,7 +592,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   };
   return {
     filesAnalyzed: asts.size, parseErrors: errors, roots: [...roots].map(file => rel(root, file)).sort(),
-    edges, dynamicSites: sites, uncertainty, uncertaintySummary, reachable: [...reachable].map(file => rel(root, file)).sort(),
+    edges, dynamicSites: sites, uncertainty, uncertaintySummary, functionArraySummaries, reachable: [...reachable].map(file => rel(root, file)).sort(),
     unresolvedByRoot, uncertainFiles, unreachableInventory, definiteUnreachable
   };
 }
@@ -605,6 +609,7 @@ function run(root) {
   console.log('Unreachable inventory only (not deletion candidates): ' + result.unreachableInventory.length);
   console.log('Unreachable files scoped as uncertain dynamic targets: ' + result.uncertainFiles.length);
   console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
+  console.log('Static function array-return summaries: ' + JSON.stringify(result.functionArraySummaries));
   console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
   console.log('Unresolved computed-property use roles: ' + JSON.stringify(result.uncertaintySummary.computedPropertyRoles));
