@@ -48,18 +48,18 @@ function resolveFile(from, spec, files) {
   const candidates = path.extname(base) ? [base] : [base, ...EXT.map(ext => base + ext), ...EXT.map(ext => path.join(base, 'index' + ext))];
   return candidates.find(candidate => files.has(candidate)) || null;
 }
-function staticValue(node, constants, depth = 0) {
+function staticValue(node, constants, depth = 0, bindings = null) {
   if (!node || depth > 8) return undefined;
   if (node.type === 'Literal') return node.value;
   if (node.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
-  if (node.type === 'Identifier') return constants.get(node.name);
+  if (node.type === 'Identifier') { const key = bindings && bindings.get(node); return key ? constants.get(key) : undefined; }
   if (node.type === 'BinaryExpression' && node.operator === '+') {
-    const left = staticValue(node.left, constants, depth + 1), right = staticValue(node.right, constants, depth + 1);
+    const left = staticValue(node.left, constants, depth + 1, bindings), right = staticValue(node.right, constants, depth + 1, bindings);
     if (left !== undefined && right !== undefined && ['string', 'number'].includes(typeof left) && ['string', 'number'].includes(typeof right)) return String(left) + String(right);
   }
   if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
       node.callee.object.name === 'path' && ['join', 'resolve'].includes(node.callee.property.name)) {
-    const parts = node.arguments.map(arg => staticValue(arg, constants, depth + 1));
+    const parts = node.arguments.map(arg => staticValue(arg, constants, depth + 1, bindings));
     if (parts.every(part => typeof part === 'string')) return node.callee.property.name === 'join' ? path.join(...parts) : path.resolve(...parts);
   }
   return undefined;
@@ -134,11 +134,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const bindingByFile = new Map(), constantsByFile = new Map();
   for (const [file, ast] of asts) {
     bindingByFile.set(file, bindingMap(ast));
-    const constants = new Map();
+    const constants = new Map(), bindings = bindingByFile.get(file);
     visit(ast, node => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
-        const value = staticValue(node.init, constants);
-        if (value !== undefined) constants.set(node.id.name, value);
+        const value = staticValue(node.init, constants, 0, bindings), key = bindings.get(node.id);
+        if (value !== undefined && key) constants.set(key, value);
       }
     });
     constantsByFile.set(file, constants);
@@ -177,20 +177,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression') {
         const callee = node.callee;
+        const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') parts.unshift(n.name); return parts.filter(Boolean).join('.'); };
         if (callee.type === 'Identifier' && callee.name === 'importScripts') {
           for (const arg of node.arguments) {
-            const spec = staticValue(arg, constants), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+            const spec = staticValue(arg, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
             addSite(file, node, 'importScripts', spec, target, target ? 'resolved-local' : 'unresolved-importScripts');
           }
         }
-        const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants) : callee.property.name) : null;
-        const object = callee.type === 'MemberExpression' && callee.object.type === 'Identifier' ? callee.object.name : null;
-        if (method === 'executeScript' && object === 'scripting') {
+        const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) : null;
+        const object = callee.type === 'MemberExpression' ? memberPath(callee.object) : null;
+        if (method === 'executeScript' && object === 'chrome.scripting') {
           let foundFiles = [];
           for (const arg of node.arguments) visit(arg, child => {
             if (child.type === 'Property' && (child.key.name === 'files' || child.key.value === 'files') && child.value.type === 'ArrayExpression') {
               for (const element of child.value.elements) {
-                const spec = staticValue(element, constants), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+                const spec = staticValue(element, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
                 addSite(file, child, 'chrome.scripting.executeScript.files', spec, target, target ? 'resolved-local' : 'unresolved-script-injection');
                 if (target) foundFiles.push(target);
               }
@@ -201,12 +202,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
           });
           if (!foundFiles.length) uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'chrome.scripting.executeScript', certainty: 'unresolved-injection-target', affectedRoots: [] });
         }
-        if (method === 'registerContentScripts' && object === 'scripting') {
+        if (method === 'registerContentScripts' && object === 'chrome.scripting') {
           visit(node.arguments[0], child => {
             if (child.type === 'Property' && (child.key.name === 'js' || child.key.value === 'js') && child.value.type === 'ArrayExpression') {
               for (const element of child.value.elements) {
                 const spec = element.type === 'ObjectExpression' ? element.properties.find(p => p.key && (p.key.name === 'file' || p.key.value === 'file'))?.value : element;
-                const value = staticValue(spec, constants), target = typeof value === 'string' ? resolveFile(file, value, fileSet) : null;
+                const value = staticValue(spec, constants, 0, bindings), target = typeof value === 'string' ? resolveFile(file, value, fileSet) : null;
                 addSite(file, element, 'chrome.scripting.registerContentScripts', value, target, target ? 'resolved-local' : 'unresolved-registered-script');
               }
             }
@@ -266,7 +267,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
       }
       if (node.type === 'MemberExpression' && node.computed) {
-        const key = staticValue(node.property, constants);
+        const key = staticValue(node.property, constants, 0, bindings);
         if (key === undefined) {
           uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'computed-property', certainty: 'unresolved-computed-property', affectedRoots: [] });
         } else sites.push({ file: rel(root, file), line: node.loc.start.line, kind: 'constant-computed-property', expression: String(key), resolved: null, certainty: 'resolved-constant-key', affectedRoots: [] });
