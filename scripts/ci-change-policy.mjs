@@ -3,8 +3,13 @@
  * suite selector. Unknown paths deliberately remain runtime-affecting.
  */
 
+function isAstAuditToolingPath(path) {
+  return /^scripts\/ast-(?:symbol-reference|repository-reachability|owner-aware-node-reachability|cross-module-dynamic-reachability|runtime-flow-reachability)-audit(?:\.test)?\.js$/i.test(path);
+}
+
 export function isNonRuntimePath(path) {
-  return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
+  return isAstAuditToolingPath(path)
+    || /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
     || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
     || path === "scripts/package-release.sh"
     || path === "regression-suite/Verify-BLB-Zip.ps1"
@@ -44,5 +49,6 @@ export function requiresPackageValidation(path) {
     || path === "package-lock.json"
     || path === "extension/manifest.json"
     || path === "playwright.config.js"
-    || path === "playwright.config.ts";
+    || path === "playwright.config.ts"
+    || isAstAuditToolingPath(path);
 }

@@ -3,6 +3,27 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isNonRuntimePath, requiresPackageValidation } from "../../scripts/ci-change-policy.mjs";
 
+test("repository AST audit analyzers and their fixtures are package-validated but non-runtime", () => {
+  const auditPaths = [
+    "scripts/ast-symbol-reference-audit.js",
+    "scripts/ast-symbol-reference-audit.test.js",
+    "scripts/ast-repository-reachability-audit.js",
+    "scripts/ast-repository-reachability-audit.test.js",
+    "scripts/ast-owner-aware-node-reachability-audit.js",
+    "scripts/ast-owner-aware-node-reachability-audit.test.js",
+    "scripts/ast-cross-module-dynamic-reachability-audit.js",
+    "scripts/ast-cross-module-dynamic-reachability-audit.test.js",
+    "scripts/ast-runtime-flow-reachability-audit.js",
+    "scripts/ast-runtime-flow-reachability-audit.test.js"
+  ];
+  for (const path of auditPaths) {
+    assert.equal(isNonRuntimePath(path), true, path);
+    assert.equal(requiresPackageValidation(path), true, path);
+  }
+  assert.equal(isNonRuntimePath("scripts/ast-unrecognized-audit.js"), false);
+  assert.equal(requiresPackageValidation("scripts/ast-unrecognized-audit.js"), false);
+});
+
 test("the shared CI path policy keeps documentation, CI, selector and browser-spec edits non-runtime", () => {
   for (const path of [
     "README.md",
