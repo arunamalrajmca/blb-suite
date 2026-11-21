@@ -105,9 +105,7 @@ function analyzeFile(root, file) {
     ignoreEval: false, impliedStrict: false
   });
   const variableForNode = new Map();
-  const functionScopeByNode = new Map();
   for (const scope of manager.scopes) {
-    if (scope.block && isFunction(scope.block)) functionScopeByNode.set(scope.block, scope);
     for (const variable of scope.variables || []) {
       for (const id of variable.identifiers || []) variableForNode.set(id, variable);
       for (const def of variable.defs || []) if (def.name) variableForNode.set(def.name, variable);
@@ -121,7 +119,11 @@ function analyzeFile(root, file) {
   const flowEdges = [];
   const bindingId = node => {
     const variable = node && variableForNode.get(node);
-    if (!variable) return null;
+    if (!variable) {
+      return node && node.type === 'Identifier'
+        ? 'unresolved:' + node.name + '@' + (node.loc ? node.loc.start.line : 0)
+        : null;
+    }
     const definition = variable.identifiers && variable.identifiers[0];
     return variable.name + '@' + (definition && definition.loc ? definition.loc.start.line : 0);
   };
@@ -137,12 +139,15 @@ function analyzeFile(root, file) {
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
   const functionNodes = [];
   const functionVariables = new Map();
+  const functionDeclarationsByName = new Map();
   visit(ast, (node, parent) => {
     if (isFunction(node)) {
       functionNodes.push(node);
       if (node.type === 'FunctionDeclaration' && node.id) {
         const variable = variableForNode.get(node.id);
         if (variable) functionVariables.set(variable, node);
+        if (!functionDeclarationsByName.has(node.id.name)) functionDeclarationsByName.set(node.id.name, []);
+        functionDeclarationsByName.get(node.id.name).push(node);
       }
       if (parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
         const variable = variableForNode.get(parent.id);
@@ -153,8 +158,6 @@ function analyzeFile(root, file) {
         if (variable) functionVariables.set(variable, node);
       }
     }
-    if (node.type === 'MethodDefinition' && node.value) functionNodes.push(node.value);
-    if (node.type === 'Property' && node.method && node.value) functionNodes.push(node.value);
   });
 
   // Lexical captures are function-to-outer-binding edges even when the function
@@ -176,7 +179,7 @@ function analyzeFile(root, file) {
     'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask',
     'then', 'catch', 'finally', 'addEventListener', 'removeListener',
     'addListener', 'on', 'once', 'subscribe', 'observe', 'watch',
-    'requestAnimationFrame', 'requestIdleCallback'
+    'requestAnimationFrame', 'requestIdleCallback', 'addEventListener', 'addListener', 'subscribe', 'observe', 'watch'
   ]);
   const asyncSchedulers = new Set([
     'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask',
@@ -194,7 +197,6 @@ function analyzeFile(root, file) {
     'notify', 'publish', 'invoke', 'execute', 'callHandler', 'handleEvent'
   ]);
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice']);
-  const prototypeMethods = new Set(['setPrototypeOf', 'create', 'getPrototypeOf']);
 
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'CallExpression' || node.type === 'NewExpression') {
@@ -296,7 +298,9 @@ function analyzeFile(root, file) {
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const calledVariable = variableForNode.get(node.callee);
-        const calledFunction = calledVariable && functionVariables.get(calledVariable);
+        const namedFunctions = functionDeclarationsByName.get(node.callee.name) || [];
+        const calledFunction = (calledVariable && functionVariables.get(calledVariable)) ||
+          (namedFunctions.length === 1 ? namedFunctions[0] : null);
         if (calledFunction) {
           for (let index = 0; index < Math.min(node.arguments.length, calledFunction.params.length); index++) {
             const argument = node.arguments[index];
@@ -330,8 +334,26 @@ function analyzeFile(root, file) {
         add('mutation', 'object-mutation-api', node, 'Object.' + name);
       }
 
-      if (node.type === 'CallExpression' && ['call', 'apply', 'bind'].includes(name)) {
-        add('indirect-methods', 'indirect-invocation', node, 'Function.prototype.' + name);
+      if (node.type === 'CallExpression' &&
+          (['call', 'apply', 'bind'].includes(name) ||
+           (receiverName === 'Reflect' && ['apply', 'construct'].includes(name)))) {
+        add('indirect-methods', 'indirect-invocation', node,
+          receiverName === 'Reflect' ? 'Reflect.' + name : 'Function.prototype.' + name);
+      }
+      if (node.type === 'CallExpression' && name === 'assign' && receiverName === 'Object') {
+        const target = node.arguments[0] && node.arguments[0].type === 'Identifier'
+          ? bindingId(node.arguments[0]) : null;
+        for (const source of node.arguments.slice(1)) {
+          if (source.type === 'Identifier') addEdge(bindingId(source), target,
+            'object-assign-merge', node, 'Object.assign');
+        }
+      }
+      if (node.type === 'CallExpression' && name === 'set' && receiverName === 'Reflect') {
+        const target = node.arguments[0] && node.arguments[0].type === 'Identifier'
+          ? bindingId(node.arguments[0]) : null;
+        const value = node.arguments[2] && node.arguments[2].type === 'Identifier'
+          ? bindingId(node.arguments[2]) : null;
+        addEdge(value, target, 'reflective-mutation', node, 'Reflect.set');
       }
     }
 
@@ -431,6 +453,9 @@ function analyzeFile(root, file) {
     if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
         node.left.property && node.left.property.name === '__proto__') {
       add('prototype-mutation', 'legacy-prototype-assignment', node, '__proto__ assignment');
+    }
+    if (node.type === 'ClassDeclaration' && node.superClass) {
+      add('prototype-mutation', 'class-extends', node, 'class inheritance');
     }
   });
 
