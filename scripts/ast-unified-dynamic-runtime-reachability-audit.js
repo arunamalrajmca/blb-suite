@@ -48,6 +48,18 @@ function resolveFile(from, spec, files) {
   const candidates = path.extname(base) ? [base] : [base, ...EXT.map(ext => base + ext), ...EXT.map(ext => path.join(base, 'index' + ext))];
   return candidates.find(candidate => files.has(candidate)) || null;
 }
+function staticPrefix(node, constants, bindings, depth = 0) {
+  if (!node || depth > 8) return null;
+  const exact = staticValue(node, constants, 0, bindings);
+  if (typeof exact === 'string') return exact;
+  if (node.type === 'TemplateLiteral') return node.quasis[0]?.value?.cooked || '';
+  if (node.type === 'BinaryExpression' && node.operator === '+') {
+    const leftExact = staticValue(node.left, constants, 0, bindings);
+    if (typeof leftExact === 'string') return leftExact + (staticPrefix(node.right, constants, bindings, depth + 1) || '');
+    return staticPrefix(node.left, constants, bindings, depth + 1);
+  }
+  return null;
+}
 function staticValue(node, constants, depth = 0, bindings = null) {
   if (!node || depth > 8) return undefined;
   if (node.type === 'Literal') return node.value;
@@ -220,7 +232,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           (node.left.computed ? staticValue(node.left.property, constants, 0, bindings) : node.left.property.name) === 'src') {
         const spec = staticValue(node.right, constants, 0, bindings);
         const target = typeof spec === 'string' ? resolveInjected(spec) : null;
-        addSite(file, node, 'dom-script-src-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection');
+        addSite(file, node, 'dom-script-src-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection', [], staticPrefix(node.right, constants, bindings));
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' && scriptElementBindings.has(bindings.get(node.callee.object)) &&
@@ -228,7 +240,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           node.arguments[0]?.value === 'src') {
         const spec = staticValue(node.arguments[1], constants, 0, bindings);
         const target = typeof spec === 'string' ? resolveInjected(spec) : null;
-        addSite(file, node, 'dom-script-setAttribute-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection');
+        addSite(file, node, 'dom-script-setAttribute-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection', [], staticPrefix(node.arguments[1], constants, bindings));
       }
       if (node.type === 'ExportNamedDeclaration' && node.source) {
         const target = resolveFile(file, node.source.value, fileSet);
@@ -240,7 +252,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'ImportExpression') {
         const spec = staticValue(node.source, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
-        addSite(file, node, 'dynamic-import', spec, target, target ? 'resolved-local' : 'unresolved-dynamic-import');
+        addSite(file, node, 'dynamic-import', spec, target, target ? 'resolved-local' : 'unresolved-dynamic-import', [], staticPrefix(node.source, constants, bindings));
       }
       if (node.type === 'CallExpression') {
         const callee = node.callee;
@@ -248,7 +260,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (callee.type === 'Identifier' && callee.name === 'importScripts') {
           for (const arg of node.arguments) {
             const spec = staticValue(arg, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
-            addSite(file, node, 'importScripts', spec, target, target ? 'resolved-local' : 'unresolved-importScripts');
+            addSite(file, node, 'importScripts', spec, target, target ? 'resolved-local' : 'unresolved-importScripts', [], staticPrefix(arg, constants, bindings));
           }
         }
         const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) : null;
@@ -259,7 +271,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
             if (child.type === 'Property' && (child.key.name === 'files' || child.key.value === 'files') && child.value.type === 'ArrayExpression') {
               for (const element of child.value.elements) {
                 const spec = staticValue(element, constants, 0, bindings), target = typeof spec === 'string' ? resolveInjected(spec) : null;
-                addSite(file, child, 'chrome.scripting.executeScript.files', spec, target, target ? 'resolved-local' : 'unresolved-script-injection');
+                addSite(file, child, 'chrome.scripting.executeScript.files', spec, target, target ? 'resolved-local' : 'unresolved-script-injection', [], staticPrefix(element, constants, bindings));
                 if (target) foundFiles.push(target);
               }
             }
@@ -275,7 +287,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
               for (const element of child.value.elements) {
                 const spec = element.type === 'ObjectExpression' ? element.properties.find(p => p.key && (p.key.name === 'file' || p.key.value === 'file'))?.value : element;
                 const value = staticValue(spec, constants, 0, bindings), target = typeof value === 'string' ? resolveInjected(value) : null;
-                addSite(file, element, 'chrome.scripting.registerContentScripts', value, target, target ? 'resolved-local' : 'unresolved-registered-script');
+                addSite(file, element, 'chrome.scripting.registerContentScripts', value, target, target ? 'resolved-local' : 'unresolved-registered-script', [], staticPrefix(spec, constants, bindings));
               }
             }
           });
@@ -283,7 +295,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (callee.type === 'Identifier' && callee.name === 'require') {
           const spec = staticValue(node.arguments[0], constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
           if (target) addEdge(file, target, 'commonjs-require', file, node.loc.start.line, spec);
-          else if (spec !== undefined && typeof spec === 'string' && spec.startsWith('.')) addSite(file, node, 'require', spec, null, 'unresolved-local-require');
+          else if (spec !== undefined && typeof spec === 'string' && spec.startsWith('.')) addSite(file, node, 'require', spec, null, 'unresolved-local-require', [], staticPrefix(node.arguments[0], constants, bindings));
         }
         // Interprocedural direct-call and callback argument edges. Imported function
         // aliases are resolved to the declaring module; unresolved names are not guessed.
@@ -412,13 +424,42 @@ function analyze(root = path.resolve(__dirname, '..')) {
     site.affectedRoots = [...rootReach].filter(([, seen]) => seen.has(source)).map(([entry]) => rel(root, entry)).sort();
   }
   const reachable = new Set([...rootReach.values()].flatMap(set => [...set]));
-  const unresolvedByRoot = {};
-  for (const [entry, seen] of rootReach) unresolvedByRoot[rel(root, entry)] = uncertainty.filter(site => seen.has(path.resolve(root, site.file))).map(site => ({ file: site.file, line: site.line, kind: site.kind }));
-  const definiteUnreachable = files.filter(file => !reachable.has(file)).map(file => rel(root, file));
+  const unresolvedByRoot = {}, uncertainFileRoots = new Map();
+  const loaderUncertainty = uncertainty.filter(site => [
+    'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
+    'chrome.scripting.registerContentScripts', 'dom-script-src-injection',
+    'dom-script-setAttribute-injection', 'require'
+  ].includes(site.kind));
+  for (const [entry, seen] of rootReach) {
+    const scopedSites = loaderUncertainty.filter(site => seen.has(path.resolve(root, site.file)));
+    unresolvedByRoot[rel(root, entry)] = uncertainty.filter(site => seen.has(path.resolve(root, site.file)))
+      .map(site => ({ file: site.file, line: site.line, kind: site.kind, scopePath: site.scopePath || null }));
+    for (const site of scopedSites) {
+      const source = path.resolve(root, site.file);
+      const prefix = typeof site.scopePath === 'string' && site.scopePath.length ? site.scopePath : null;
+      const base = prefix ? path.resolve(path.dirname(source), prefix) : null;
+      for (const candidate of files) {
+        if (reachable.has(candidate)) continue;
+        const candidatePath = path.resolve(candidate);
+        const matches = base
+          ? (prefix.endsWith('/') ? candidatePath.startsWith(base + path.sep) || candidatePath === base : candidatePath === base || candidatePath.startsWith(base + path.sep))
+          : true;
+        if (!matches) continue;
+        if (!uncertainFileRoots.has(candidate)) uncertainFileRoots.set(candidate, new Set());
+        uncertainFileRoots.get(candidate).add(rel(root, entry));
+      }
+    }
+  }
+  const uncertainFiles = [...uncertainFileRoots].map(([file, affectedRoots]) => ({
+    file: rel(root, file), status: 'uncertain-dynamic-target', affectedRoots: [...affectedRoots].sort()
+  })).sort((a, b) => a.file.localeCompare(b.file));
+  const uncertainSet = new Set([...uncertainFileRoots.keys()]);
+  const unreachableInventory = files.filter(file => !reachable.has(file)).map(file => rel(root, file));
+  const definiteUnreachable = files.filter(file => !reachable.has(file) && !uncertainSet.has(file)).map(file => rel(root, file));
   return {
     filesAnalyzed: asts.size, parseErrors: errors, roots: [...roots].map(file => rel(root, file)).sort(),
     edges, dynamicSites: sites, uncertainty, reachable: [...reachable].map(file => rel(root, file)).sort(),
-    unresolvedByRoot, definiteUnreachable
+    unresolvedByRoot, uncertainFiles, unreachableInventory, definiteUnreachable
   };
 }
 function run(root) {
@@ -431,7 +472,7 @@ function run(root) {
   console.log('Dynamic/runtime sites: ' + result.dynamicSites.length);
   console.log('Scoped uncertainty sites: ' + result.uncertainty.length);
   console.log('Reachable files: ' + result.reachable.length);
-  console.log('Unreachable inventory only (not deletion candidates): ' + result.definiteUnreachable.length);
+  console.log('Unreachable inventory only (not deletion candidates): ' + result.unreachableInventory.length);\n  console.log('Unreachable files scoped as uncertain dynamic targets: ' + result.uncertainFiles.length);\n  console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
   if (result.parseErrors.length) process.exitCode = 1;
   return result;
