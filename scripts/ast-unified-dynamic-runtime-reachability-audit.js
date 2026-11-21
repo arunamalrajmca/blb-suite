@@ -324,7 +324,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
         const method = node.callee.computed ? staticValue(node.callee.property, constants, 0, bindings) : node.callee.property.name;
-        if (['addEventListener', 'then', 'catch', 'finally'].includes(method)) {
+        if (['addEventListener', 'addListener', 'then', 'catch', 'finally'].includes(method)) {
           for (const arg of node.arguments) if (arg.type === 'Identifier') {
             const key = bindings.get(arg); if (key) callbackBindings.add(key);
           }
@@ -561,6 +561,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
             computedValueRoles.get(node) ||
             (parent && parent.type === 'MemberExpression' && ['call', 'apply', 'bind'].includes(parent.property.name) &&
               parents.get(parent) && parents.get(parent).type === 'CallExpression' ? 'indirect-call' : null) ||
+            (parent && parent.type === 'CallExpression' && parent.arguments.includes(node) &&
+              ((parent.callee.type === 'Identifier' && ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(parent.callee.name)) ||
+               (parent.callee.type === 'MemberExpression' && ['addEventListener', 'addListener', 'then', 'catch', 'finally'].includes(parent.callee.computed ? staticValue(parent.callee.property, constants, 0, bindings) : parent.callee.property.name))) ? 'indirect-callback' : null) ||
             (parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
             parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' : 'read-or-other');
           uncertainty.push({
