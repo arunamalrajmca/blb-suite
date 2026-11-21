@@ -401,44 +401,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
   }
 
-  // Propagate bounded array arguments into local function parameters. This
-  // resolves loader options forwarded through helper layers, including default
-  // parameter values, without guessing when a call argument is dynamic.
-  for (let pass = 0; pass < 8; pass++) {
-    let changed = false;
-    for (const [file, ast] of asts) {
-      const bindings = bindingByFile.get(file), constants = constantsByFile.get(file);
-      visit(ast, node => {
-        if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
-        const localKey = bindings.get(node.callee);
-        const target = localKey && functionDefs.get(file + '::' + localKey);
-        if (!target) return;
-        const targetBindings = bindingByFile.get(target.file);
-        const targetConstants = constantsByFile.get(target.file);
-        target.node.params.forEach((parameter, index) => {
-          const parameterNode = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
-          if (!parameterNode || parameterNode.type !== 'Identifier') return;
-          const key = targetBindings.get(parameterNode);
-          if (!key) return;
-          const argument = node.arguments[index];
-          const value = argument
-            ? staticValue(argument.type === 'SpreadElement' ? argument.argument : argument, constants, 0, bindings)
-            : parameter.type === 'AssignmentPattern'
-              ? staticValue(parameter.right, targetConstants, 0, targetBindings)
-              : undefined;
-          if (!Array.isArray(value) || value.some(item => typeof item !== 'string' || !item)) return;
-          const previous = targetConstants.get(key);
-          const merged = [...new Set([...(Array.isArray(previous) ? previous : []), ...value])];
-          if (!Array.isArray(previous) || merged.length !== previous.length) {
-            targetConstants.set(key, merged);
-            changed = true;
-          }
-        });
-      });
-    }
-    if (!changed) break;
-  }
-
   for (const [file, ast] of asts) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
     const sourceText = fs.readFileSync(file, 'utf8');
