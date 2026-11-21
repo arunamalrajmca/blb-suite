@@ -197,6 +197,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'FunctionDeclaration' && node.id && parent && parent.type === 'Program') {
         topLevelFunctionCounts.set(node.id.name, (topLevelFunctionCounts.get(node.id.name) || 0) + 1);
       }
+    });
+    visit(ast, (node, parent) => {
       if (node.type !== 'FunctionDeclaration' || !node.id) return;
       const candidates = [];
       visit(node.body, child => {
