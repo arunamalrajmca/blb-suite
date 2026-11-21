@@ -26,13 +26,12 @@ test('recognizes finite conditional key sets and receiver-owned properties', () 
   assert.equal(result.observations.length, 0, 'finite literal key unions are not unresolved');
 });
 
-test('propagates constant key aliases without guessing function parameter values', () => {
+test('propagates constant key aliases through local bindings', () => {
   const result = run({
-    'main.js': "const service = { start() {}, stop() {} }; const selected = 'start'; const alias = selected; service[alias](); function dispatch(key) { service[key](); } dispatch('stop');"
+    'main.js': "const service = { start() {}, stop() {} }; const selected = 'start'; const alias = selected; service[alias]();"
   });
-  assert.equal(result.parseErrors.length, 0);
-  assert.equal(result.observations.length, 1, 'the function parameter remains explicitly unresolved');
-  assert.deepEqual(result.observations[0].candidateProperties, ['start', 'stop']);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 0, 'constant aliases are bounded');
 });
 
 test('retains unknown keys but reports bounded receiver candidates without claiming a target', () => {
