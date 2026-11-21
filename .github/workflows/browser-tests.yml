@@ -83,6 +83,10 @@ jobs:
         run: |
           node --test scripts/ast-cross-module-dynamic-reachability-audit.test.js
           node scripts/ast-cross-module-dynamic-reachability-audit.js
+      - name: Test and run conservative runtime-flow reachability audit
+        run: |
+          node --test scripts/ast-runtime-flow-reachability-audit.test.js
+          node scripts/ast-runtime-flow-reachability-audit.js
       - name: Read manifest version
         id: version
         shell: bash
