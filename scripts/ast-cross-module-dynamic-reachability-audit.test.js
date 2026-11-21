@@ -60,3 +60,66 @@ test('classifies builtin and package imports as external, not unresolved local l
   assert.ok(d.launches.every(x=>x.certainty==='external-static'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('traces imported object identity through a cross-module function parameter',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-parameter-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api);");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'&&x.flow==='interprocedural'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('traces imported object identity through local function arguments and returned aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-return-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; function identity(value) { return value; } const result = identity(api); result.start();");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.property==='start'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('traces object parameters through an imported function and records dynamic property access',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-dynamic-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target, key) { target[key](); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api, selected);");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.dynamicPropertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.flow==='interprocedural'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('keeps same-named parameters in separate function scopes attributed to their own objects',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-scope-'));
+ try{
+  fs.writeFileSync(path.join(root,'service-a.js'),'const serviceA = { alpha() {} }; export { serviceA };');
+  fs.writeFileSync(path.join(root,'service-b.js'),'const serviceB = { beta() {} }; export { serviceB };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function useA(target) { target.alpha(); } export function useB(target) { target.beta(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { serviceA as a } from './service-a.js'; import { serviceB as b } from './service-b.js'; import { useA, useB } from './helper.js'; useA(a); useB(b);");
+  const files=['service-a.js','service-b.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  const refs=r.interprocedural.propertyReferences;
+  assert.ok(refs.some(x=>x.from==='helper.js'&&x.to==='service-a.js'&&x.property==='alpha'));
+  assert.ok(refs.some(x=>x.from==='helper.js'&&x.to==='service-b.js'&&x.property==='beta'));
+  assert.ok(!refs.some(x=>x.from==='helper.js'&&x.to==='service-a.js'&&x.property==='beta'));
+  assert.ok(!refs.some(x=>x.from==='helper.js'&&x.to==='service-b.js'&&x.property==='alpha'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('preserves multiple object origins passed to the same helper parameter',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-multi-origin-'));
+ try{
+  fs.writeFileSync(path.join(root,'service-a.js'),'const serviceA = { start() {} }; export { serviceA };');
+  fs.writeFileSync(path.join(root,'service-b.js'),'const serviceB = { start() {} }; export { serviceB };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { serviceA as a } from './service-a.js'; import { serviceB as b } from './service-b.js'; import { invoke } from './helper.js'; invoke(a); invoke(b);");
+  const files=['service-a.js','service-b.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  const refs=r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.property==='start');
+  assert.ok(refs.some(x=>x.to==='service-a.js'));
+  assert.ok(refs.some(x=>x.to==='service-b.js'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});

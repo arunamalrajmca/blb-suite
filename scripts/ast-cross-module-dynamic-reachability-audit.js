@@ -15,7 +15,7 @@ function walk(root) {
   }}
   dir(root); return out.sort();
 }
-function parse(s,f) { let err; for(const sourceType of ['script','module']) try{return acorn.parse(s,{ecmaVersion:'latest',sourceType,locations:true,allowHashBang:true});}catch(e){err=e;} throw new Error(f+': '+err.message); }
+function parse(s,f) { let err; for(const sourceType of ['script','module']) try{return acorn.parse(s,{ecmaVersion:'latest',sourceType,locations:true,ranges:true,allowHashBang:true});}catch(e){err=e;} throw new Error(f+': '+err.message); }
 function visit(n,fn,p=null) { if(!n||typeof n!=='object'||typeof n.type!=='string')return; fn(n,p); for(const [k,v] of Object.entries(n)){if(['loc','start','end','range'].includes(k))continue;if(Array.isArray(v))v.forEach(x=>visit(x,fn,n));else if(v&&typeof v.type==='string')visit(v,fn,n);} }
 function literalString(n,file) {
   if(!n)return null;
@@ -76,8 +76,129 @@ function analyzeCrossModule(root,files){
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
     });
   }
-  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,externalImports,propertyReferences,dynamicPropertyReferences};
+  const interprocedural=analyzeInterproceduralObjectFlow(root,files,asts,meta);
+  for(const item of interprocedural.propertyReferences)if(!propertyReferences.some(x=>x.from===item.from&&x.to===item.to&&x.local===item.local&&x.property===item.property&&x.line===item.line))propertyReferences.push(item);
+  for(const item of interprocedural.dynamicPropertyReferences)if(!dynamicPropertyReferences.some(x=>x.from===item.from&&x.to===item.to&&x.local===item.local&&x.line===item.line))dynamicPropertyReferences.push(item);
+  return {modulesWithExports:[...meta.values()].filter(x=>x.exports.size).length,links,unresolved,externalImports,propertyReferences,dynamicPropertyReferences,interprocedural};
 }
+
+function analyzeInterproceduralObjectFlow(root,files,asts,meta){
+  const eslintScope=require('eslint-scope');
+  const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map();
+  for(const [file,ast] of asts){
+    const manager=eslintScope.analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
+    for(const scope of manager.scopes){
+      for(const variable of scope.variables||[]){
+        for(const id of variable.identifiers||[])variableForNode.set(id,variable);
+        for(const def of variable.defs||[])if(def.name)variableForNode.set(def.name,variable);
+        if(scope.type==='module'||scope.type==='global')topLevel.set(file+'::'+variable.name,variable);
+      }
+      for(const ref of scope.references||[])if(ref.resolved)variableForNode.set(ref.identifier,ref.resolved);
+    }
+  }
+  const getTop=(file,name)=>topLevel.get(file+'::'+name)||null;
+  const addFunction=(file,node,variable)=>{
+    if(!variable||!node||!['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
+    const params=(node.params||[]).map(param=>param.type==='Identifier'?variableForNode.get(param)||null:null);
+    functionForVariable.set(variable,{file,node,params});
+  };
+  for(const [file,ast] of asts){
+    for(const statement of ast.body){
+      const declaration=statement.type==='ExportNamedDeclaration'?statement.declaration:statement;
+      if(!declaration)continue;
+      if(declaration.type==='FunctionDeclaration'&&declaration.id)addFunction(file,declaration,variableForNode.get(declaration.id));
+      if(declaration.type==='VariableDeclaration')for(const item of declaration.declarations||[])if(item.id.type==='Identifier')addFunction(file,item.init,variableForNode.get(item.id));
+    }
+  }
+  for(const [file,data] of meta)for(const item of data.imports){
+    if(!item.local)continue;
+    const localVariable=getTop(file,item.local);
+    const target=resolveLocal(file,item.source,new Set(files));
+    if(!localVariable||!target)continue;
+    const exportedLocal=meta.get(target).exports.get(item.imported);
+    if(!exportedLocal)continue;
+    const targetVariable=getTop(target,exportedLocal);
+    if(!targetVariable)continue;
+    importsForVariable.set(localVariable,{file,target,exportedLocal,imported:item.imported,targetVariable});
+  }
+  const functionForImportedVariable=new Map();
+  for(const [variable,info] of importsForVariable){
+    const fn=functionForVariable.get(info.targetVariable);
+    if(fn)functionForImportedVariable.set(variable,fn);
+  }
+  const resolveFunction=(file,identifier)=>{
+    const variable=variableForNode.get(identifier);
+    return variable?(functionForVariable.get(variable)||functionForImportedVariable.get(variable)||null):null;
+  };
+  const origins=new Map(),edges=new Map();
+  const addEdge=(from,to)=>{
+    if(!from||!to)return;
+    if(!edges.has(from))edges.set(from,new Set());
+    edges.get(from).add(to);
+  };
+  const addOrigin=(variable,origin)=>{
+    if(!variable)return;
+    if(!origins.has(variable))origins.set(variable,new Map());
+    origins.get(variable).set(origin.file+'::'+origin.exportedLocal,origin);
+  };
+  for(const [variable,info] of importsForVariable){
+    if(functionForVariable.has(info.targetVariable))continue;
+    addOrigin(variable,{file:path.relative(root,info.target),target:info.target,exportedLocal:info.exportedLocal});
+  }
+  for(const [file,ast] of asts){
+    visit(ast,(node,parentNode)=>{
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init&&node.init.type==='Identifier'){
+        addEdge(variableForNode.get(node.init),variableForNode.get(node.id));
+      }
+      if(node.type!=='CallExpression'||node.callee.type!=='Identifier')return;
+      const fn=resolveFunction(file,node.callee);
+      if(!fn)return;
+      for(let i=0;i<Math.min(fn.params.length,node.arguments.length);i++){
+        const arg=node.arguments[i];
+        if(arg.type==='Identifier')addEdge(variableForNode.get(arg),fn.params[i]);
+      }
+      const assigned=parentNode&&parentNode.type==='VariableDeclarator'&&parentNode.init===node&&parentNode.id.type==='Identifier'?variableForNode.get(parentNode.id):null;
+      if(assigned){
+        const returned=new Set();
+        visit(fn.node.body,returnedNode=>{
+          if(returnedNode.type==='ReturnStatement'&&returnedNode.argument&&returnedNode.argument.type==='Identifier'){
+            const variable=variableForNode.get(returnedNode.argument);
+            if(variable)returned.add(variable);
+          }
+        });
+        if(returned.size===1)addEdge([...returned][0],assigned);
+      }
+    });
+  }
+  // Propagate origin sets over directed alias, argument, and return flows.
+  const objectImportCount=origins.size;
+  const queue=[...origins.keys()];
+  const queued=new Set(queue);
+  while(queue.length){
+    const from=queue.shift();queued.delete(from);
+    for(const to of edges.get(from)||[]){
+      if(!origins.has(to))origins.set(to,new Map());
+      let changed=false;
+      for(const [key,origin] of origins.get(from))if(!origins.get(to).has(key)){origins.get(to).set(key,origin);changed=true;}
+      if(changed&&!queued.has(to)){queue.push(to);queued.add(to);}
+    }
+  }
+  const propertyReferences=[],dynamicPropertyReferences=[];
+  for(const [file,ast] of asts)visit(ast,node=>{
+    if(node.type!=='MemberExpression'||node.object.type!=='Identifier')return;
+    const variable=variableForNode.get(node.object);
+    const objectOrigins=variable&&origins.get(variable);
+    if(!objectOrigins)return;
+    const property=node.computed?(node.property.type==='Literal'&&(typeof node.property.value==='string'||typeof node.property.value==='number')?String(node.property.value):null):(node.property.name||null);
+    for(const origin of objectOrigins.values()){
+      const entry={from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property,line:node.loc.start.line,flow:'interprocedural'};
+      if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
+    }
+  });
+  const dedupe=items=>[...new Map(items.map(item=>[JSON.stringify(item),item])).values()];
+  return {propertyReferences:dedupe(propertyReferences),dynamicPropertyReferences:dedupe(dynamicPropertyReferences),objectImports:objectImportCount};
+}
+
 function analyzeDynamicExecution(root,files,graph){
   const set=new Set(files),launches=[],extra=[];
   for(const file of files)visit(parse(fs.readFileSync(file,'utf8'),file),n=>{
@@ -130,6 +251,8 @@ function run(root=path.resolve(__dirname,'..')){
   console.log('External package/builtin imports: '+crossModule.externalImports.length);
   console.log('Cross-module property references: '+crossModule.propertyReferences.length);
   console.log('Dynamic imported-property references: '+crossModule.dynamicPropertyReferences.length);
+  console.log('Interprocedural object-flow property references: '+crossModule.interprocedural.propertyReferences.length);
+  console.log('Interprocedural dynamic property references: '+crossModule.interprocedural.dynamicPropertyReferences.length);
   console.log('Dynamic loader/process sites: '+dynamic.launches.length);
   console.log('Resolved dynamic execution edges: '+dynamic.resolvedLaunchEdges.length);
   console.log('Unresolved dynamic sites in reachable modules: '+dynamic.unresolvedReachable.length);
