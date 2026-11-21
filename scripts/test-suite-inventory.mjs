@@ -31,6 +31,22 @@ for (const suite of manifest.suites) {
   const ownerContent = readRepoFile(suite.owner);
   if (suite.requiredText && !ownerContent.includes(suite.requiredText)) fail('Execution owner lacks declared runner command for ' + suite.id + ': ' + suite.owner);
   if (suite.alsoOwnedBy && !readRepoFile(suite.alsoOwnedBy).includes(suite.alsoRequiredText)) fail('Secondary execution owner no longer runs ' + suite.id + ': ' + suite.alsoOwnedBy);
+  if (suite.runnerFile) {
+    const runner = readRepoFile(suite.runnerFile);
+    for (const file of files) {
+      const basename = path.basename(file);
+      if (!runner.includes(suite.runnerImportPrefix + basename + "'")) fail('Discovered regression module is not imported by its runner: ' + file);
+    }
+  }
+  for (const check of suite.runnerChecks || []) {
+    if (!readRepoFile(check.file).includes(check.requiredText)) fail('Standalone test execution chain is incomplete: ' + check.file);
+  }
+  if (suite.id === 'ast-reachability-audit-tests') {
+    for (const file of files) {
+      const analysis = file.replace(/\.test\.js$/, '.js');
+      if (!fs.existsSync(path.join(root, analysis))) fail('AST regression test has no matching audit program: ' + file);
+    }
+  }
   for (const delegation of suite.delegations || []) {
     if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
     if (!readRepoFile(delegation.testFile).includes(delegation.testTitle)) fail('Delegated test title is missing from its declared spec: ' + delegation.testFile);
