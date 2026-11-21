@@ -319,8 +319,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type !== 'MemberExpression' || !node.computed) return;
       const keys = valuesOf(node.property, env, bindings);
       if (keys && keys.size) return; // already statically bounded
-      const receiver = node.object.type === 'Identifier' ? canonicalOwner(bindings.get(node.object)) : null;
+      const receiverBinding = node.object.type === 'Identifier' ? bindings.get(node.object) : null;
+      const receiver = receiverBinding ? canonicalOwner(receiverBinding) : null;
       const known = receiver && owners.get(receiver) ? [...owners.get(receiver)].sort() : [];
+      const keyBinding = node.property.type === 'Identifier' ? bindings.get(node.property) : null;
       const role = parent && parent.type === 'CallExpression' && parent.callee === node ? 'call' :
         parent && parent.type === 'NewExpression' && parent.callee === node ? 'construct' :
         parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
@@ -329,6 +331,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         file: rel(root, file), line: node.loc.start.line,
         expression: fs.readFileSync(file, 'utf8').slice(node.start, node.end).slice(0, 200),
         propertyExpression: fs.readFileSync(file, 'utf8').slice(node.property.start, node.property.end).slice(0, 100),
+        receiverExpression: fs.readFileSync(file, 'utf8').slice(node.object.start, node.object.end).slice(0, 120),
+        receiverBinding, keyBinding, keyValues: keys ? [...keys] : [],
         role, receiverKnown: Boolean(receiver && owners.has(receiver)),
         candidateProperties: known, candidateCount: known.length,
         status: known.length ? 'receiver-properties-known-key-unknown' : 'receiver-or-key-unknown'
@@ -356,6 +360,10 @@ function run(root) {
   console.log('Observations by access role: ' + JSON.stringify(result.summary.byRole));
   console.log('Candidate property references (not proof of runtime selection): ' + result.summary.candidatePropertyTotal);
   console.log('Candidate observations: ' + JSON.stringify(result.observations.filter(item => item.candidateCount)));
+  const focusFiles = new Set(['extension/background.js', 'extension/content.js']);
+  console.log('Background/content unresolved computed-property observations: ' + JSON.stringify(
+    result.observations.filter(item => focusFiles.has(item.file))
+  ));
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
   if (result.parseErrors.length) process.exitCode = 1;
   return result;
