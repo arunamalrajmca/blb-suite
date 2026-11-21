@@ -51,6 +51,29 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
 
+      - name: Install pinned AST audit dependencies
+        run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
+
+      - name: Verify repository-wide test inventory and ownership
+        id: inventory
+        continue-on-error: true
+        run: node scripts/test-suite-inventory.mjs
+
+      - name: Run every AST reachability audit test and analysis
+        id: ast
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          for test_file in scripts/ast-*-audit.test.js; do
+            echo "Running AST audit regression tests: $test_file"
+            node --test "$test_file"
+            audit_file="${test_file%.test.js}.js"
+            if [[ -f "$audit_file" ]]; then
+              echo "Running AST reachability analysis: $audit_file"
+              node "$audit_file"
+            fi
+          done
+
       - name: Read manifest version
         id: version
         shell: bash
@@ -278,6 +301,8 @@ jobs:
         if: always()
         shell: bash
         env:
+          INVENTORY: ${{ steps.inventory.outcome }}
+          AST: ${{ steps.ast.outcome }}
           BUILD: ${{ steps.build.outcome }}
           SELECTOR: ${{ steps.selector.outcome }}
           SCRIPTS: ${{ steps.scripts.outcome }}
@@ -294,6 +319,8 @@ jobs:
             echo
             echo "| Suite | Result |"
             echo "|---|---|"
+            echo "| Repository test inventory | $INVENTORY |"
+            echo "| AST reachability audit tests and analysis | $AST |"
             echo "| Build validation | $BUILD |"
             echo "| Selector contract tests | $SELECTOR |"
             echo "| Standalone JavaScript test scripts | $SCRIPTS |"
@@ -307,7 +334,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
           if [[ "$failed" -ne 0 ]]; then
