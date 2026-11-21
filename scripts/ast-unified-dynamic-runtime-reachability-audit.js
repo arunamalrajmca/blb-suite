@@ -131,6 +131,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
   }
 
+  const resolveInjected = spec => resolveFile(path.join(root, 'extension', 'manifest.json'), spec, fileSet);
   const bindingByFile = new Map(), constantsByFile = new Map();
   for (const [file, ast] of asts) {
     bindingByFile.set(file, bindingMap(ast));
@@ -191,7 +192,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           for (const arg of node.arguments) visit(arg, child => {
             if (child.type === 'Property' && (child.key.name === 'files' || child.key.value === 'files') && child.value.type === 'ArrayExpression') {
               for (const element of child.value.elements) {
-                const spec = staticValue(element, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+                const spec = staticValue(element, constants, 0, bindings), target = typeof spec === 'string' ? resolveInjected(spec) : null;
                 addSite(file, child, 'chrome.scripting.executeScript.files', spec, target, target ? 'resolved-local' : 'unresolved-script-injection');
                 if (target) foundFiles.push(target);
               }
@@ -207,7 +208,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
             if (child.type === 'Property' && (child.key.name === 'js' || child.key.value === 'js') && child.value.type === 'ArrayExpression') {
               for (const element of child.value.elements) {
                 const spec = element.type === 'ObjectExpression' ? element.properties.find(p => p.key && (p.key.name === 'file' || p.key.value === 'file'))?.value : element;
-                const value = staticValue(spec, constants, 0, bindings), target = typeof value === 'string' ? resolveFile(file, value, fileSet) : null;
+                const value = staticValue(spec, constants, 0, bindings), target = typeof value === 'string' ? resolveInjected(value) : null;
                 addSite(file, element, 'chrome.scripting.registerContentScripts', value, target, target ? 'resolved-local' : 'unresolved-registered-script');
               }
             }
