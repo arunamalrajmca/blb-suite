@@ -2148,14 +2148,35 @@ test('BLB verse links inside parse popups bind dynamically appended anchors', as
     waitUntil: 'domcontentloaded'
   });
 
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const popup = document.createElement('div');
     popup.className = 'parse-popup';
     popup.id = 'blb-e2e-dynamic-parse-popup';
     document.body.appendChild(popup);
 
-    // Append the anchor as the mutation root, rather than inserting a wrapper
-    // containing it. MutationObserver.querySelectorAll() does not include root.
+    // The content script reads masterEnabled asynchronously after navigation.
+    // Keep producing genuine child-list mutations until its observer binds a
+    // probe anchor; this proves readiness without a fixed sleep or production
+    // test hook. Re-inserting is important because an early mutation can be
+    // observed while the suite is still fail-closed and then ignored.
+    const readinessProbe = document.createElement('a');
+    readinessProbe.href = 'https://www.blueletterbible.org/lexicon/g26/kjv/tr/0-1/';
+    readinessProbe.id = 'blb-e2e-dynamic-parse-popup-readiness-probe';
+    popup.appendChild(readinessProbe);
+
+    const deadline = Date.now() + 10000;
+    while (!readinessProbe.dataset.blbSuitePopup && Date.now() < deadline) {
+      readinessProbe.remove();
+      popup.appendChild(readinessProbe);
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    if (readinessProbe.dataset.blbSuitePopup !== '1') {
+      throw new Error('BLB parse-popup observer did not become ready before timeout');
+    }
+    readinessProbe.remove();
+
+    // Append the target anchor as the mutation root, rather than inserting a
+    // wrapper containing it. MutationObserver.querySelectorAll() excludes root.
     const link = document.createElement('a');
     link.href = 'https://www.blueletterbible.org/lexicon/g26/kjv/tr/0-1/';
     link.textContent = 'G26';
