@@ -151,7 +151,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const { ast, bindings } = record;
     visit(ast, node => {
       if (node.type !== 'FunctionDeclaration' || !node.id) return;
-      const storageBindings = new Set();
+      const storageBindings = new Set(), localStorageBindings = new Map();
       visit(node.body, child => {
         if (child.type !== 'VariableDeclarator' || child.id.type !== 'Identifier') return;
         const init = unwrap(child.init);
@@ -161,7 +161,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
       });
       if (!storageBindings.size) return;
       visit(node.body, child => {
+        if (child.type !== 'VariableDeclarator' || child.id.type !== 'Identifier') return;
+        let field = null;
+        visit(child.init, member => {
+          if (!field && member.type === 'MemberExpression' && !member.computed && member.object.type === 'Identifier' &&
+              storageBindings.has(bindings.get(member.object))) field = member.property.name;
+        });
+        if (field) localStorageBindings.set(bindings.get(child.id), field);
+      });
+      visit(node.body, child => {
         if (child.type !== 'ReturnStatement' || !child.argument) return;
+        if (child.argument.type === 'Identifier') {
+          const field = localStorageBindings.get(bindings.get(child.argument));
+          if (field) storageReturnFields.set(node.id.name, field);
+        }
         visit(child.argument, member => {
           if (member.type === 'MemberExpression' && !member.computed && member.object.type === 'Identifier' &&
               storageBindings.has(bindings.get(member.object))) {
@@ -269,10 +282,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const binding = bindings.get(argument);
             const init = definitions.get(binding);
             const unwrapped = unwrap(init);
-            if (unwrapped?.type === 'CallExpression' && unwrapped.callee.type === 'Identifier' &&
-                storageReturnFields.has(unwrapped.callee.name)) {
-              callbackStorageFields.set(node.id.name + ':' + index, storageReturnFields.get(unwrapped.callee.name));
-            }
+            const field = storageMaps.get(binding) ||
+              (unwrapped?.type === 'CallExpression' && unwrapped.callee.type === 'Identifier'
+                ? storageReturnFields.get(unwrapped.callee.name) : null);
+            if (field) callbackStorageFields.set(node.id.name + ':' + index, field);
           }
         });
       });
