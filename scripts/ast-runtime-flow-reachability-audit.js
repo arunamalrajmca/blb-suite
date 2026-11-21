@@ -340,12 +340,14 @@ function analyzeFile(root, file) {
         add('object-wrapping', 'aggregate-wrapper', node,
           node.init.type + ' may retain nested function/object identities');
         const container = bindingId(node.id);
-        visit(node.init, (child, childParent) => {
-          if (child.type !== 'Identifier' || !childParent) return;
-          if (childParent.type === 'Property' && childParent.key === child && !childParent.computed) return;
-          if (childParent.type === 'MemberExpression' && childParent.property === child && !childParent.computed) return;
-          addEdge(bindingId(child), container, 'object-wrap', child, node.init.type);
-        });
+        const values = node.init.type === 'ObjectExpression'
+          ? node.init.properties.filter(property => property.type === 'Property').map(property => property.value)
+          : node.init.elements.filter(Boolean);
+        for (const value of values) {
+          if (value.type === 'Identifier') addEdge(bindingId(value), container, 'object-wrap', value, node.init.type);
+          else if (isFunction(value)) addEdge('function@' + value.loc.start.line,
+            container, 'object-wrap-callback', value, node.init.type);
+        }
         if (node.init.type === 'ArrayExpression') {
           for (const element of node.init.elements) {
             if (element && isFunction(element)) add('callbacks', 'callback-stored-in-array', element, 'array element');
