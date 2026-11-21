@@ -1,0 +1,126 @@
+name: BLB Suite — Focused Failure Regressions
+run-name: Focused regressions — PR #${{ github.event.pull_request.number }} — Run ${{ github.run_number }}
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: focused-regressions-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: registration-failure-lifecycle
+            scenario: registration
+          - name: selection-performance
+            scenario: performance
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout PR candidate
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Cache npm and Playwright
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/ms-playwright
+          key: focused-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            focused-${{ runner.os }}-node22-
+
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run persistent-registration failure regression
+        if: ${{ matrix.scenario == 'registration' }}
+        run: >-
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js
+          --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable"
+          --workers=1 --reporter=line
+
+      - name: Prepare exact PR-base performance baseline
+        if: ${{ matrix.scenario == 'performance' }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$PR_BASE_SHA" --depth=1
+          git worktree add "$RUNNER_TEMP/blb-baseline" "$PR_BASE_SHA"
+          node -e "const fs=require('fs'); for (const p of ['extension/manifest.json', '$RUNNER_TEMP/blb-baseline/extension/manifest.json']) { const m=JSON.parse(fs.readFileSync(p)); m.host_permissions=[...new Set([...(m.host_permissions||[]),'https://example.com/*'])]; fs.writeFileSync(p,JSON.stringify(m,null,2)+'\\n'); }"
+
+      - name: Run interleaved selection-only A/B benchmark
+        if: ${{ matrix.scenario == 'performance' }}
+        env:
+          BLB_EXPECTED_VERSION: ${{ github.event.pull_request.head.sha }}
+          BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
+          BLB_CANDIDATE_EXTENSION_PATH: ${{ github.workspace }}/extension
+          BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-selection.jsonl
+          BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-selection.jsonl
+          BLB_PERF_SAMPLES: 11
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$BLB_BASELINE_OUTPUT"
+          : > "$BLB_CANDIDATE_OUTPUT"
+          for ((sample=1; sample<=BLB_PERF_SAMPLES; sample++)); do
+            run_sample() {
+              local variant="$1" extension="$2" output="$3"
+              printf '[%s/22] selection %s sample %s/11\\n' "$(( (sample-1)*2 + (variant == candidate ? 2 : 1) ))" "$variant" "$sample"
+              BLB_EXTENSION_PATH="$extension" BLB_PERF_OUTPUT="$output" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1 --reporter=line
+            }
+            if (( sample % 2 == 1 )); then
+              run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+              run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+            else
+              run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+              run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+            fi
+          done
+          node <<'NODE'
+          const fs=require('fs');
+          const read=p=>fs.readFileSync(p,'utf8').trim().split(/\\r?\\n/).filter(Boolean).map(x=>JSON.parse(x).handoffMs);
+          const median=a=>[...a].sort((x,y)=>x-y)[Math.floor(a.length/2)];
+          const b=read(process.env.BLB_BASELINE_OUTPUT), c=read(process.env.BLB_CANDIDATE_OUTPUT);
+          if(b.length!==11 || c.length!==11) throw new Error('Expected 11 baseline and 11 candidate samples');
+          const bm=median(b), cm=median(c), regression=(cm-bm)/bm;
+          const paired=median(b.map((v,i)=>(c[i]-v)/v));
+          console.log('Baseline selection samples (ms): '+b.join(', '));
+          console.log('Candidate selection samples (ms): '+c.join(', '));
+          console.log(`Median: baseline ${bm} ms; candidate ${cm} ms; regression ${(regression*100).toFixed(1)}%`);
+          console.log(`Paired median regression: ${(paired*100).toFixed(1)}%`);
+          if(regression>0.10) throw new Error('Selection handoff regression exceeds the unchanged 10% limit');
+          console.log('Focused selection performance gate passed.');
+          NODE
+
+      - name: Upload focused selection measurements
+        if: ${{ always() && matrix.scenario == 'performance' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: focused-selection-performance
+          path: |
+            ${{ runner.temp }}/baseline-selection.jsonl
+            ${{ runner.temp }}/candidate-selection.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
