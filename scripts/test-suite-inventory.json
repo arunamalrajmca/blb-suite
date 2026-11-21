@@ -40,7 +40,17 @@
       "id": "standalone-javascript-tests",
       "pattern": "scripts/test-*.js",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "for test_file in scripts/test-*.js"
+      "requiredText": "for test_file in scripts/test-*.js",
+      "runnerChecks": [
+        {
+          "file": "scripts/run-validation-tests.js",
+          "requiredText": "validation-test-manifest.json"
+        },
+        {
+          "file": "scripts/validate-build.js",
+          "requiredText": "runValidationTests"
+        }
+      ]
     },
     {
       "id": "python-unittests",
@@ -52,7 +62,9 @@
       "id": "deterministic-regression-groups",
       "pattern": "regression-suite/tests/*-tests.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node regression-suite/tests/run-regression.mjs extension --group="
+      "requiredText": "node regression-suite/tests/run-regression.mjs extension --group=",
+      "runnerFile": "regression-suite/tests/run-regression.mjs",
+      "runnerImportPrefix": "from './"
     },
     {
       "id": "kjv-corpus-integrity",
