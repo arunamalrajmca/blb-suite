@@ -38,6 +38,8 @@ jobs:
             scenario: worker-termination
           - name: guarded-source-registration-isolated
             scenario: guarded-registration
+          - name: parallel-lifecycle-contention-stress
+            scenario: concurrency-stress
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -123,6 +125,15 @@ jobs:
           npx playwright test tests/browser/source-page-button-redirect-separation.spec.js
           --grep "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
           --workers=1 --reporter=line
+
+      - name: Stress both full-audit failures concurrently under four Playwright workers
+        if: ${{ matrix.scenario == 'concurrency-stress' }}
+        run: >-
+          npx playwright test
+          tests/browser/service-worker-lifecycle.spec.js
+          tests/browser/source-page-button-redirect-separation.spec.js
+          --grep "(a real MV3 service-worker termination is recovered by the Alt\\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them)"
+          --repeat-each=2 --workers=4 --max-failures=0 --reporter=line
 
       - name: Prepare exact PR-base performance baseline
         if: ${{ matrix.scenario == 'performance' }}
