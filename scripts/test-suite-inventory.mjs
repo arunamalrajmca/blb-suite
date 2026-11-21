@@ -1,0 +1,66 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'test-suite-inventory.json'), 'utf8'));
+const errors = [];
+const counts = [];
+function fail(message) { errors.push(message); }
+function readRepoFile(relativePath) {
+  const absolute = path.join(root, relativePath);
+  if (!fs.existsSync(absolute)) { fail('Missing inventory-owned file: ' + relativePath); return ''; }
+  return fs.readFileSync(absolute, 'utf8');
+}
+function listPattern(pattern) {
+  const slash = pattern.lastIndexOf('/');
+  const directory = slash < 0 ? '.' : pattern.slice(0, slash);
+  const filePattern = slash < 0 ? pattern : pattern.slice(slash + 1);
+  const escaped = filePattern.replace(/[.+^()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  const expression = new RegExp('^' + escaped + '$');
+  const absoluteDirectory = path.join(root, directory);
+  if (!fs.existsSync(absoluteDirectory)) return [];
+  return fs.readdirSync(absoluteDirectory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && expression.test(entry.name))
+    .map(entry => path.posix.join(directory.replace(/\\/g, '/'), entry.name)).sort();
+}
+const classified = new Set();
+for (const suite of manifest.suites) {
+  const files = listPattern(suite.pattern);
+  if (!files.length) fail('Suite pattern matched no files: ' + suite.id + ' (' + suite.pattern + ')');
+  for (const file of files) classified.add(file);
+  const ownerContent = readRepoFile(suite.owner);
+  if (suite.requiredText && !ownerContent.includes(suite.requiredText)) fail('Execution owner lacks declared runner command for ' + suite.id + ': ' + suite.owner);
+  if (suite.alsoOwnedBy && !readRepoFile(suite.alsoOwnedBy).includes(suite.alsoRequiredText)) fail('Secondary execution owner no longer runs ' + suite.id + ': ' + suite.alsoOwnedBy);
+  for (const delegation of suite.delegations || []) {
+    if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
+    if (!readRepoFile(delegation.workflow).includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
+  }
+  counts.push({ id:suite.id, count:files.length });
+}
+const manualOnly = new Map(manifest.manualOnly.map(item => [item.path,item]));
+const ignoredNames = new Set(['fixtures.js','extension-test-helpers.js','progress-reporter.js']);
+const candidates = [];
+function walk(directory) {
+  for (const entry of fs.readdirSync(directory,{withFileTypes:true})) {
+    if (['.git','node_modules','playwright-report','test-results'].includes(entry.name)) continue;
+    const absolute = path.join(directory,entry.name);
+    if (entry.isDirectory()) walk(absolute);
+    else {
+      const relative = path.relative(root,absolute).replace(/\\/g,'/');
+      const lower = entry.name.toLowerCase();
+      const looksLikeTest = lower.startsWith('test-') || lower.startsWith('test_') || lower.includes('.test.') || lower.includes('.spec.') || lower.includes('test-runner');
+      if (looksLikeTest && !ignoredNames.has(entry.name)) candidates.push(relative);
+    }
+  }
+}
+walk(root);
+for (const candidate of candidates.sort()) if (!classified.has(candidate) && !manualOnly.has(candidate)) fail('Unclassified test-looking file: ' + candidate);
+for (const item of manifest.manualOnly) if (!fs.existsSync(path.join(root,item.path))) fail('Declared manual-only harness is missing: ' + item.path);
+const total = counts.reduce((sum,item)=>sum+item.count,0);
+console.log('Repository test inventory');
+for (const suite of counts) console.log('  '+suite.id+': '+suite.count+' file(s)');
+console.log('  Automated inventory total: '+total+' file(s)');
+console.log('  Explicit manual-only harnesses: '+manifest.manualOnly.length);
+console.log('  Test-looking files discovered: '+candidates.length);
+if (errors.length) { for (const error of errors) console.error('FAIL: '+error); process.exitCode=1; }
+else console.log('PASS: every discovered test file has an explicit execution owner.');
