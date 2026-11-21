@@ -142,3 +142,18 @@ test('does not claim unreachable files are deletion candidates', () => {
   // changes this into a deletion recommendation.
   assert.ok(!Object.keys(result).some(key => /deleteCandidates/i.test(key)));
 });
+
+
+test('reports uncertainty observations grouped by kind, affected root, and source file', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('./plugins/' + process.env.PLUGIN); const key = getKey(); service[key]();",
+    'scripts/plugins/known.js': 'module.exports = true;'
+  });
+  const kindTotal = Object.values(result.uncertaintySummary.byKind).reduce((sum, count) => sum + count, 0);
+  assert.equal(kindTotal, result.uncertainty.length);
+  assert.ok(result.uncertaintySummary.byKind['dynamic-import'] >= 1);
+  assert.ok(result.uncertaintySummary.byKind['unresolved-computed-property'] >= 1);
+  assert.ok(result.uncertaintySummary.byAffectedRoot['scripts/main.js']);
+  assert.ok(result.uncertaintySummary.topFiles.some(item => item.file === 'scripts/main.js'));
+});
