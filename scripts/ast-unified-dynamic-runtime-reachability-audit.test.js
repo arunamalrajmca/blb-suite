@@ -177,6 +177,23 @@ test('resolves importScripts loop targets from a constant array', () => {
   assert.equal(result.uncertainty.filter(item => item.kind === 'importScripts').length, 0);
 });
 
+
+test('function array summaries exclude nested returns and reject mixed dynamic return paths', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "function contentFiles(flag) { function unrelated() { return ['not-injected.js']; } if (flag) return ['one.js']; return ['two.js']; } chrome.scripting.executeScript({ target: { tabId: 1 }, files: contentFiles(true) }); function uncertainFiles(flag) { if (flag) return ['known.js']; return getRuntimeFiles(); } chrome.scripting.executeScript({ target: { tabId: 1 }, files: uncertainFiles(true) });",
+    'extension/one.js': 'globalThis.one = true;',
+    'extension/two.js': 'globalThis.two = true;',
+    'extension/not-injected.js': 'globalThis.unrelated = true;',
+    'extension/known.js': 'globalThis.known = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/one.js'));
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/two.js'));
+  assert.ok(!edge(result, 'chrome.scripting.executeScript.files', 'scripts/main.js', 'extension/not-injected.js'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript.files').length, 1);
+  assert.ok(!result.functionArraySummaries.some(item => item.name === 'uncertainFiles'));
+});
+
 test('does not treat executeScript inline func bodies as unresolved file targets', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
