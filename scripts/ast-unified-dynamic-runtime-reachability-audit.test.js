@@ -165,6 +165,19 @@ test('reports uncertainty observations grouped by kind, affected root, and sourc
 });
 
 
+
+test('classifies computed properties that flow into indirect calls, constructors, and callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "const handler = registry[getHandlerKey()]; const alias = handler; alias(); const Constructor = constructors[getConstructorKey()]; new Constructor(); const callback = callbacks[getCallbackKey()]; setTimeout(callback, 1);"
+  });
+  const roles = result.uncertainty.filter(item => item.kind === 'unresolved-computed-property').map(item => item.accessRole);
+  assert.ok(roles.includes('indirect-call'), JSON.stringify(roles));
+  assert.ok(roles.includes('indirect-construct'), JSON.stringify(roles));
+  assert.ok(roles.includes('indirect-callback'), JSON.stringify(roles));
+  assert.equal(result.uncertaintySummary.computedPropertyCallSites.length, 3);
+});
+
 test('resolves importScripts loop targets from a constant array', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
