@@ -301,6 +301,67 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const sourceText = fs.readFileSync(file, 'utf8');
     const loopValues = loopValuesByFile.get(file);
     const imported = new Map(), scriptElementBindings = new Set();
+    const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
+    const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
+    visit(ast, (node, parent) => {
+      if (parent) parents.set(node, parent);
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.init && node.init.type === 'Identifier') {
+        const target = bindings.get(node.id), source = bindings.get(node.init);
+        if (target && source) aliases.set(target, source);
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
+        const key = bindings.get(node.callee); if (key) calledBindings.add(key);
+      }
+      if (node.type === 'NewExpression' && node.callee.type === 'Identifier') {
+        const key = bindings.get(node.callee); if (key) constructedBindings.add(key);
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'].includes(node.callee.name)) {
+        for (const arg of node.arguments) if (arg.type === 'Identifier') {
+          const key = bindings.get(arg); if (key) callbackBindings.add(key);
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+        const method = node.callee.computed ? staticValue(node.callee.property, constants, 0, bindings) : node.callee.property.name;
+        if (['addEventListener', 'then', 'catch', 'finally'].includes(method)) {
+          for (const arg of node.arguments) if (arg.type === 'Identifier') {
+            const key = bindings.get(arg); if (key) callbackBindings.add(key);
+          }
+        }
+      }
+      if (node.type === 'MemberExpression' && node.computed &&
+          staticValue(node.property, constants, 0, bindings) === undefined) {
+        const parentNode = parent;
+        if (parentNode && parentNode.type === 'VariableDeclarator' && parentNode.init === node &&
+            parentNode.id.type === 'Identifier') {
+          const key = bindings.get(parentNode.id); if (key) computedValueBindings.set(key, node);
+        } else if (parentNode && parentNode.type === 'AssignmentExpression' && parentNode.right === node &&
+            parentNode.left.type === 'Identifier') {
+          const key = bindings.get(parentNode.left); if (key) computedValueBindings.set(key, node);
+        }
+      }
+    });
+    const bindingsUsedAsCalls = new Set(calledBindings), bindingsUsedAsConstructors = new Set(constructedBindings),
+      bindingsUsedAsCallbacks = new Set(callbackBindings);
+    const propagateAliases = used => {
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const [alias, source] of aliases) if (used.has(alias) && !used.has(source)) {
+          used.add(source); changed = true;
+        }
+      }
+    };
+    propagateAliases(bindingsUsedAsCalls);
+    propagateAliases(bindingsUsedAsConstructors);
+    propagateAliases(bindingsUsedAsCallbacks);
+    const computedValueRoles = new Map();
+    for (const [key, member] of computedValueBindings) {
+      if (bindingsUsedAsCalls.has(key)) computedValueRoles.set(member, 'indirect-call');
+      else if (bindingsUsedAsConstructors.has(key)) computedValueRoles.set(member, 'indirect-construct');
+      else if (bindingsUsedAsCallbacks.has(key)) computedValueRoles.set(member, 'indirect-callback');
+    }
     visit(ast, node => {
       if (node.type === 'ImportDeclaration' && node.source.value) {
         const target = resolveFile(file, node.source.value, fileSet);
@@ -497,8 +558,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (key === undefined) {
           const accessRole = parent && parent.type === 'CallExpression' && parent.callee === node ? 'call' :
             parent && parent.type === 'NewExpression' && parent.callee === node ? 'construct' :
-            parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
-            parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' : 'read-or-other';
+            computedValueRoles.get(node) ||
+            (parent && parent.type === 'MemberExpression' && ['call', 'apply', 'bind'].includes(parent.property.name) &&
+              parents.get(parent) && parents.get(parent).type === 'CallExpression' ? 'indirect-call' : null) ||
+            (parent && parent.type === 'AssignmentExpression' && parent.left === node ? 'write' :
+            parent && parent.type === 'UpdateExpression' && parent.argument === node ? 'update' : 'read-or-other');
           uncertainty.push({
             file: rel(root, file), line: node.loc.start.line, kind: 'unresolved-computed-property',
             certainty: 'unresolved-computed-property', expression: sourceText.slice(node.start, node.end).slice(0, 240),
@@ -613,7 +677,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     expression, count: value.count, examples: value.examples
   })).sort((a, b) => b.count - a.count || a.expression.localeCompare(b.expression)).slice(0, 40);
   const computedPropertyCallSites = uncertainty.filter(site =>
-    site.kind === 'unresolved-computed-property' && ['call', 'construct'].includes(site.accessRole)
+    site.kind === 'unresolved-computed-property' && ['call', 'construct', 'indirect-call', 'indirect-construct', 'indirect-callback'].includes(site.accessRole)
   ).map(site => ({ file: site.file, line: site.line, expression: site.expression, propertyExpression: site.propertyExpression, role: site.accessRole, affectedRoots: site.affectedRoots }));
   const unresolvedLoaderSites = uncertainty.filter(site => [
     'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
