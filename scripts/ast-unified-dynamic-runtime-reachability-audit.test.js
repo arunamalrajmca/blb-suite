@@ -321,7 +321,7 @@ test('propagates bounded file arrays through helper parameters and defaults', ()
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': 'module.exports = true;',
     'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
-    'extension/background.js': "const defaultFiles = ['scripts/default-one.js', 'scripts/default-two.js']; function register(files) { chrome.scripting.registerContentScripts([{ id: 'forwarded', js: files }]); } function ensure(files = defaultFiles) { register(files); } ensure();",
+    'extension/background.js': "const defaultFiles = ['scripts/default-one.js', 'scripts/default-two.js']; function register(files) { chrome.scripting.registerContentScripts([{ id: 'forwarded', js: files }]); } function ensure(files) { register(files); } ensure(defaultFiles);",
     'extension/scripts/default-one.js': 'globalThis.one = true;',
     'extension/scripts/default-two.js': 'globalThis.two = true;'
   });
