@@ -514,6 +514,19 @@ try {
   assertValue(result, 'full_browser_suite', false, 'selector implementation');
   console.log('PASS: selector implementation changes do not launch browser E2E');
 
+  // Repository AST audit tooling is package-validated but does not execute in the extension runtime.
+  resetScenario(base);
+  write('scripts/ast-runtime-flow-reachability-audit.js', '// static analyzer tooling\n');
+  write('scripts/ast-runtime-flow-reachability-audit.test.js', '// static analyzer tests\n');
+  commit('change repository AST audit tooling');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'AST audit tooling');
+  assertValue(result, 'extension_spec_required', false, 'AST audit tooling');
+  assertValue(result, 'group_a_required', false, 'AST audit tooling');
+  assertValue(result, 'group_b_required', false, 'AST audit tooling');
+  assertValue(result, 'reference_required', false, 'AST audit tooling');
+  console.log('PASS: AST audit tooling skips unrelated browser E2E');
+
   // The reference matrix definition and runner workflows change test execution topology.
   resetScenario(base);
   write('scripts/reference-e2e-matrix.json', '{"group":"test"}\n');
