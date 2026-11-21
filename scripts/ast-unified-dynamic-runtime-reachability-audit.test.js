@@ -55,11 +55,14 @@ test('resolves dynamic import, importScripts, executeScript files, and registere
 test('propagates imported function calls and object/callback parameter bindings across modules', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
-    'scripts/main.js': "import { invoke } from './helper.js'; const service = {}; invoke(service, () => service.start());",
-    'scripts/helper.js': 'export function invoke(target, callback) { target.start(); callback(); }'
+    'scripts/main.js': "import { service } from './service.js'; import { invoke } from './helper.js'; invoke(service, () => service.start());",
+    'scripts/helper.js': 'export function invoke(target, callback) { target.start(); callback(); }',
+    'scripts/service.js': 'export const service = { start() {} };'
   });
   assert.ok(edge(result, 'static-import', 'scripts/main.js', 'scripts/helper.js'));
   assert.ok(edge(result, 'function-call', 'scripts/main.js', 'scripts/helper.js'));
+  assert.ok(result.edges.some(item => item.kind === 'cross-module-binding-import' && item.file === 'scripts/main.js' && item.detail === 'service'));
+  assert.ok(result.dynamicSites.some(item => item.kind === 'cross-module-property-read' && item.expression === 'target[start]') === false);
   assert.ok(result.edges.some(item => item.kind === 'function-argument' && item.file === 'scripts/main.js'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'callback-argument' && item.certainty === 'resolved-inline-callback'));
 });
