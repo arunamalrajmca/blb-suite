@@ -174,6 +174,39 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     } catch (error) { errors.push({ file: 'package.json', error: error.message }); }
   }
+  // Playwright loads its config and test specs as independent execution
+  // roots. They are not necessarily imported by the config's static module graph.
+  const playwrightConfig = path.join(root, 'playwright.config.js');
+  if (fileSet.has(playwrightConfig)) roots.add(playwrightConfig);
+  const browserTestsDir = path.join(root, 'tests', 'browser');
+  if (fs.existsSync(browserTestsDir)) {
+    for (const file of walk(browserTestsDir)) {
+      if (/\.(?:spec|test)\.(?:js|cjs|mjs)$/i.test(file)) roots.add(file);
+    }
+  }
+  // CI workflows execute repository scripts directly. Include those commands
+  // as roots so test/build tooling is not misreported as unreferenced source.
+  const workflowDir = path.join(root, '.github', 'workflows');
+  function collectWorkflowFiles(dir) {
+    const found = [];
+    if (!fs.existsSync(dir)) return found;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) found.push(...collectWorkflowFiles(file));
+      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) found.push(file);
+    }
+    return found;
+  }
+  for (const workflowFile of collectWorkflowFiles(workflowDir)) {
+    const workflowSource = fs.readFileSync(workflowFile, 'utf8');
+    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:scripts|tests|regression-suite)\/[A-Za-z0-9_./-]+\.(?:js|cjs|mjs))/g;
+    let command;
+    while ((command = commandPattern.exec(workflowSource))) {
+      const target = resolveFile(pkgPath, command[1], fileSet);
+      if (target) roots.add(target);
+    }
+  }
+
   const manifestPath = path.join(root, 'extension', 'manifest.json');
   if (fs.existsSync(manifestPath)) {
     try {
