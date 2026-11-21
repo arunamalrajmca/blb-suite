@@ -87,6 +87,10 @@ jobs:
         run: |
           node --test scripts/ast-runtime-flow-reachability-audit.test.js
           node scripts/ast-runtime-flow-reachability-audit.js
+      - name: Test and run unified dynamic/runtime reachability audit
+        run: |
+          node --test scripts/ast-unified-dynamic-runtime-reachability-audit.test.js
+          node scripts/ast-unified-dynamic-runtime-reachability-audit.js
       - name: Read manifest version
         id: version
         shell: bash
