@@ -580,12 +580,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         if (method === 'registerContentScripts' && object === 'chrome.scripting') {
           visit(node.arguments[0], child => {
-            if (child.type === 'Property' && (child.key.name === 'js' || child.key.value === 'js') && child.value.type === 'ArrayExpression') {
-              for (const element of child.value.elements) {
-                const spec = element.type === 'ObjectExpression' ? element.properties.find(p => p.key && (p.key.name === 'file' || p.key.value === 'file'))?.value : element;
-                const value = staticValue(spec, constants, 0, bindings), target = typeof value === 'string' ? resolveInjected(value) : null;
-                addSite(file, element, 'chrome.scripting.registerContentScripts', value, target, target ? 'resolved-local' : 'unresolved-registered-script', [], staticPrefix(spec, constants, bindings));
+            if (child.type !== 'Property' || (child.key.name !== 'js' && child.key.value !== 'js')) return;
+            const entries = staticValue(child.value, constants, 0, bindings);
+            if (Array.isArray(entries)) {
+              for (const entry of entries) {
+                const spec = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry.file : entry;
+                const value = typeof spec === 'string' ? spec : undefined;
+                const target = typeof value === 'string' ? resolveInjected(value) : null;
+                addSite(file, child, 'chrome.scripting.registerContentScripts', value, target,
+                  target ? 'resolved-local' : 'unresolved-registered-script', [],
+                  typeof value === 'string' ? value : staticPrefix(child.value, constants, bindings));
               }
+            } else {
+              addSite(file, child, 'chrome.scripting.registerContentScripts', null, null,
+                'unresolved-registered-script', [], staticPrefix(child.value, constants, bindings));
             }
           });
         }
