@@ -145,6 +145,32 @@ function analyze(root = path.resolve(__dirname, '..')) {
     constantsByFile.set(file, constants);
   }
 
+  const exportsByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file), exported = new Map();
+    for (const statement of ast.body) {
+      const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : null;
+      if (declaration && declaration.type === 'FunctionDeclaration' && declaration.id) {
+        const key = bindings.get(declaration.id); if (key) exported.set(declaration.id.name, key);
+      }
+      if (declaration && declaration.type === 'VariableDeclaration') {
+        for (const item of declaration.declarations || []) if (item.id.type === 'Identifier') {
+          const key = bindings.get(item.id); if (key) exported.set(item.id.name, key);
+        }
+      }
+      if (statement.type === 'ExportNamedDeclaration') {
+        for (const spec of statement.specifiers || []) {
+          if (statement.source) continue;
+          const local = spec.local.name || spec.local.value;
+          const name = spec.exported.name || spec.exported.value;
+          const key = [...bindings.entries()].find(([identifier]) => identifier.name === local)?.[1];
+          if (key) exported.set(name, key);
+        }
+      }
+    }
+    exportsByFile.set(file, exported);
+  }
+
   const functionDefs = new Map();
   for (const [file, ast] of asts) {
     const bindings = bindingByFile.get(file);
@@ -166,7 +192,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const target = resolveFile(file, node.source.value, fileSet);
         if (target) {
           addEdge(file, target, 'static-import', file, node.loc.start.line, node.source.value);
-          for (const spec of node.specifiers) imported.set(spec.local.name, { file: target, imported: spec.imported ? (spec.imported.name || spec.imported.value) : 'default' });
+          for (const spec of node.specifiers) {
+            const importedName = spec.imported ? (spec.imported.name || spec.imported.value) : 'default';
+            imported.set(spec.local.name, { file: target, imported: importedName });
+            const sourceKey = exportsByFile.get(target)?.get(importedName), targetKey = bindings.get(spec.local);
+            if (sourceKey && targetKey) edges.push({
+              from: rel(root, target) + '::' + sourceKey,
+              to: rel(root, file) + '::' + targetKey,
+              kind: 'cross-module-binding-import', file: rel(root, file),
+              line: spec.loc.start.line, detail: importedName
+            });
+          }
         }
       }
     });
@@ -269,6 +305,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
               const arg = node.arguments[i], param = targetFunction.node.params[i];
               if (arg.type === 'FunctionExpression' || arg.type === 'ArrowFunctionExpression') {
                 sites.push({ file: rel(root, file), line: arg.loc.start.line, kind: 'callback-argument', expression: callee.name + '[' + i + ']', resolved: null, certainty: 'resolved-inline-callback', affectedRoots: [] });
+                if (param.type === 'Identifier') {
+                  const targetKey = bindingByFile.get(targetFunction.file).get(param);
+                  if (targetKey) edges.push({ from: rel(root, file) + '::function@' + arg.loc.start.line, to: rel(root, targetFunction.file) + '::' + targetKey, kind: 'cross-module-callback-parameter', file: rel(root, file), line: node.loc.start.line, detail: callee.name });
+                }
               }
               if (arg.type === 'Identifier' && param.type === 'Identifier') {
                 const sourceKey = bindings.get(arg), targetKey = bindingByFile.get(targetFunction.file).get(param);
