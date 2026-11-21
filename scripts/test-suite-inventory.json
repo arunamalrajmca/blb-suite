@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "description": "Patterns are discovered dynamically; newly added matching tests inherit the declared execution owner.",
+  "suites": [
+    {
+      "id": "playwright-browser-specs",
+      "pattern": "tests/browser/*.spec.js",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "npx playwright test --list",
+      "delegations": [
+        {
+          "testTitle": "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
+          "workflow": ".github/workflows/browser-native-shortcut.yml",
+          "requiredText": "tests/browser/service-worker-shortcut-headed.spec.js"
+        },
+        {
+          "testTitle": "Show on BLB performance benchmark",
+          "workflow": ".github/workflows/browser-e2e-performance.yml",
+          "requiredText": "tests/browser/performance.spec.js"
+        }
+      ]
+    },
+    {
+      "id": "selector-contract-tests",
+      "pattern": "tests/selector/*.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test tests/selector/*.test.mjs"
+    },
+    {
+      "id": "ast-reachability-audit-tests",
+      "pattern": "scripts/ast-*-audit.test.js",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test scripts/ast-*-audit.test.js",
+      "alsoOwnedBy": ".github/workflows/browser-tests.yml",
+      "alsoRequiredText": "node --test scripts/ast-symbol-reference-audit.test.js"
+    },
+    {
+      "id": "standalone-javascript-tests",
+      "pattern": "scripts/test-*.js",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "for test_file in scripts/test-*.js"
+    },
+    {
+      "id": "python-unittests",
+      "pattern": "tests/test_*.py",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "python -m unittest discover -s tests -p 'test_*.py' -v"
+    },
+    {
+      "id": "deterministic-regression-groups",
+      "pattern": "regression-suite/tests/*-tests.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node regression-suite/tests/run-regression.mjs extension --group="
+    },
+    {
+      "id": "kjv-corpus-integrity",
+      "pattern": "regression-suite/tests/kjv-corpus-integrity.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node regression-suite/tests/kjv-corpus-integrity.mjs extension"
+    }
+  ],
+  "manualOnly": [
+    {
+      "path": "local-runner/Legacy-Brave-E2E-Runner/test-runner.ps1",
+      "reason": "Legacy interactive Brave test harness; not an automated CI test suite."
+    }
+  ]
+}
