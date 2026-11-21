@@ -186,7 +186,7 @@ test('does not treat executeScript inline func bodies as unresolved file targets
 test('resolves executeScript file lists returned by bounded helper functions', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
-    'scripts/main.js': "function contentFiles() { return ['one.js', 'two.js']; } chrome.scripting.executeScript({ target: { tabId: 1 }, files: contentFiles().filter(Boolean) });",
+    'scripts/main.js': "function contentFiles() { return ['one.js', 'two.js']; } chrome.scripting.executeScript({ target: { tabId: 1 }, files: contentFiles() });",
     'extension/one.js': 'globalThis.one = true;',
     'extension/two.js': 'globalThis.two = true;'
   });
