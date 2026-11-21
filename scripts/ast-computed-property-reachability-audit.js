@@ -145,6 +145,33 @@ function analyze(root = path.resolve(__dirname, '..')) {
     } catch (error) { parseErrors.push({ file: rel(root, file), error: error.message }); }
   }
 
+  // Summarize functions that return a property read from chrome.storage.local.
+  const storageReturnFields = new Map();
+  for (const record of records.values()) {
+    const { ast, bindings } = record;
+    visit(ast, node => {
+      if (node.type !== 'FunctionDeclaration' || !node.id) return;
+      const storageBindings = new Set();
+      visit(node.body, child => {
+        if (child.type !== 'VariableDeclarator' || child.id.type !== 'Identifier') return;
+        const init = unwrap(child.init);
+        if (init?.type === 'CallExpression' && memberPath(init.callee) === 'chrome.storage.local.get') {
+          storageBindings.add(bindings.get(child.id));
+        }
+      });
+      if (!storageBindings.size) return;
+      visit(node.body, child => {
+        if (child.type !== 'ReturnStatement' || !child.argument) return;
+        visit(child.argument, member => {
+          if (member.type === 'MemberExpression' && !member.computed && member.object.type === 'Identifier' &&
+              storageBindings.has(bindings.get(member.object))) {
+            storageReturnFields.set(node.id.name, member.property.name);
+          }
+        });
+      });
+    });
+  }
+
   // First collect bounded constants, object/class owners, aliases, and local functions.
   for (const [file, record] of records) {
     const { ast, bindings, env, owners, aliases, definitions, arrays, storageMaps, storageResults } = record;
@@ -163,6 +190,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
                   bindings.get(child.object) === storageBinding) field = child.property.name;
             });
             if (field) storageMaps.set(key, field);
+          }
+          if (init?.type === 'CallExpression' && init.callee.type === 'Identifier' && storageReturnFields.has(init.callee.name)) {
+            storageMaps.set(key, storageReturnFields.get(init.callee.name));
           }
           const values = valuesOf(node.init, env, bindings);
           if (values) {
@@ -225,6 +255,40 @@ function analyze(root = path.resolve(__dirname, '..')) {
       });
       if (!changed) break;
     }
+
+    // Map callback parameters back to storage containers passed by wrapper helpers.
+    const callbackStorageFields = new Map();
+    visit(ast, node => {
+      if (node.type !== 'FunctionDeclaration' || !node.id) return;
+      node.params.forEach((param, index) => {
+        if (param.type !== 'Identifier') return;
+        visit(node.body, call => {
+          if (call.type !== 'CallExpression' || call.callee.type !== 'Identifier' || call.callee.name !== param.name) return;
+          for (const argument of call.arguments || []) {
+            if (argument.type !== 'Identifier') continue;
+            const binding = bindings.get(argument);
+            const init = definitions.get(binding);
+            const unwrapped = unwrap(init);
+            if (unwrapped?.type === 'CallExpression' && unwrapped.callee.type === 'Identifier' &&
+                storageReturnFields.has(unwrapped.callee.name)) {
+              callbackStorageFields.set(node.id.name + ':' + index, storageReturnFields.get(unwrapped.callee.name));
+            }
+          }
+        });
+      });
+    });
+    visit(ast, call => {
+      if (call.type !== 'CallExpression' || call.callee.type !== 'Identifier') return;
+      const callbackIndex = 0;
+      const field = callbackStorageFields.get(call.callee.name + ':' + callbackIndex);
+      const callback = call.arguments?.[callbackIndex];
+      if (!field || !callback || !['ArrowFunctionExpression','FunctionExpression'].includes(callback.type)) return;
+      const parameter = callback.params?.[0];
+      if (parameter?.type === 'Identifier') {
+        const binding = bindings.get(parameter);
+        if (binding) storageMaps.set(binding, field);
+      }
+    });
 
     // Add prototype-assigned methods to the owning class constructor.
     visit(ast, node => {
