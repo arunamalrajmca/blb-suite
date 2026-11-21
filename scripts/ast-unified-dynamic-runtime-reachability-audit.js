@@ -172,6 +172,28 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
 
     visit(ast, (node, parent) => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.init && node.init.type === 'CallExpression' &&
+          node.init.callee.type === 'MemberExpression' &&
+          node.init.callee.object.type === 'Identifier' && node.init.callee.object.name === 'document' &&
+          node.init.callee.property.name === 'createElement' &&
+          node.init.arguments[0] && node.init.arguments[0].type === 'Literal' &&
+          node.init.arguments[0].value === 'script') scriptElementBindings.add(bindings.get(node.id));
+      if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
+          node.left.object.type === 'Identifier' && scriptElementBindings.has(bindings.get(node.left.object)) &&
+          (node.left.computed ? staticValue(node.left.property, constants, 0, bindings) : node.left.property.name) === 'src') {
+        const spec = staticValue(node.right, constants, 0, bindings);
+        const target = typeof spec === 'string' ? resolveInjected(spec) : null;
+        addSite(file, node, 'dom-script-src-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection');
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && scriptElementBindings.has(bindings.get(node.callee.object)) &&
+          (node.callee.computed ? staticValue(node.callee.property, constants, 0, bindings) : node.callee.property.name) === 'setAttribute' &&
+          node.arguments[0]?.value === 'src') {
+        const spec = staticValue(node.arguments[1], constants, 0, bindings);
+        const target = typeof spec === 'string' ? resolveInjected(spec) : null;
+        addSite(file, node, 'dom-script-setAttribute-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection');
+      }
       if (node.type === 'ExportNamedDeclaration' && node.source) {
         const target = resolveFile(file, node.source.value, fileSet);
         if (target) addEdge(file, target, 're-export', file, node.loc.start.line, node.source.value);
