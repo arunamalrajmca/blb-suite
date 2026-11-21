@@ -55,7 +55,7 @@ test('resolves dynamic import, importScripts, executeScript files, and registere
 test('propagates imported function calls and object/callback parameter bindings across modules', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
-    'scripts/main.js': "import { service } from './service.js'; import { invoke } from './helper.js'; invoke(service, () => service.start());",
+    'scripts/main.js': "import { service } from './service.js'; import { invoke } from './helper.js'; invoke(service, () => service.start()); setTimeout(() => service.start(), 1);",
     'scripts/helper.js': 'export function invoke(target, callback) { target.start(); callback(); }',
     'scripts/service.js': 'export const service = { start() {} };'
   });
