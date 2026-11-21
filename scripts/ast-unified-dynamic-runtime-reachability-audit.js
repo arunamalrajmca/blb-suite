@@ -275,6 +275,24 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
   }
 
+  // Fold the existing per-file runtime-flow evidence into this unified graph.
+  // These binding-level edges are deliberately namespaced by source file so
+  // same-named locals in different modules cannot be conflated.
+  const runtimeFlow = require('./ast-runtime-flow-reachability-audit');
+  for (const file of asts.keys()) {
+    const local = runtimeFlow.analyzeFile(root, file);
+    for (const edge of local.flowEdges) {
+      edges.push({
+        from: rel(root, file) + '::' + edge.from,
+        to: rel(root, file) + '::' + edge.to,
+        kind: 'runtime-flow:' + edge.kind,
+        file: rel(root, file),
+        line: edge.line,
+        detail: edge.detail || null
+      });
+    }
+  }
+
   // Reachability and uncertainty are scoped to individual roots. A dynamic site
   // only taints descendants of the root that can reach its source file.
   const outgoing = new Map();
