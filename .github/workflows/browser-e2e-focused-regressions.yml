@@ -24,6 +24,12 @@ jobs:
             scenario: registration
           - name: selection-performance
             scenario: performance
+          - name: context-menu-activation-isolated
+            scenario: context-menu
+          - name: content-bundle-reinjection-isolated
+            scenario: reinjection
+          - name: closed-tab-activation-isolated
+            scenario: closed-tab
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -59,6 +65,27 @@ jobs:
         run: >-
           npx playwright test tests/browser/service-worker-lifecycle.spec.js
           --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable"
+          --workers=1 --reporter=line
+
+      - name: Rerun context-menu activation synchronization test in isolation
+        if: ${{ matrix.scenario == 'context-menu' }}
+        run: >-
+          npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js
+          --grep "tab activation and active-tab navigation synchronize the global web/PDF selection menus"
+          --workers=1 --reporter=line
+
+      - name: Rerun content-bundle reinjection test in isolation
+        if: ${{ matrix.scenario == 'reinjection' }}
+        run: >-
+          npx playwright test tests/browser/extension-lifecycle.spec.js
+          --grep "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+          --workers=1 --reporter=line
+
+      - name: Rerun closed-tab activation test in isolation
+        if: ${{ matrix.scenario == 'closed-tab' }}
+        run: >-
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js
+          --grep "a tab closed during asynchronous eligibility checks is not injected during startup recovery"
           --workers=1 --reporter=line
 
       - name: Prepare exact PR-base performance baseline
