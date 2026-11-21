@@ -203,66 +203,58 @@ jobs:
             npx playwright test "${normal_specs[@]}" --max-failures=1
           fi
 
-      - name: Run source URL parser regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')))) }}
-        run: npx playwright test tests/browser/redirect-source-url-patterns.spec.js
-
-      - name: Run omnibox behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) }}
-        run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js
-      - name: Run King's Bible collector behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/kings-bible-collector-behavior.spec.js')) }}
-        run: npx playwright test tests/browser/kings-bible-collector-behavior.spec.js
-
-      - name: Run BLB rich clipboard hyperlink regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/blb-auto-hyperlinker.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/blb-auto-hyperlinker.spec.js')) }}
-        run: npx playwright test tests/browser/blb-auto-hyperlinker.spec.js
-
-      - name: Run draggable button behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/blb-draggable-button.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/blb-draggable-button.spec.js')) }}
-        run: npx playwright test tests/browser/blb-draggable-button.spec.js
-
-      - name: Run Webster collector behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/webster-collector-behavior.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/webster-collector-behavior.spec.js')) }}
-        run: npx playwright test tests/browser/webster-collector-behavior.spec.js
-
-      - name: Run confirmed audit defect regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/audit-defect-regressions.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/audit-defect-regressions.spec.js')) }}
-        run: npx playwright test tests/browser/audit-defect-regressions.spec.js --workers=1
-
-      - name: Run KJV case-sensitive routing behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/case-sensitive-routing-behavior.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/case-sensitive-routing-behavior.spec.js')) }}
-        run: npx playwright test tests/browser/case-sensitive-routing-behavior.spec.js
-
-
-      - name: Run popup site-feature defaults regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/site-feature-defaults.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/site-feature-defaults.spec.js')) }}
-        run: npx playwright test tests/browser/site-feature-defaults.spec.js
-
-      - name: Run MultiVerse tool-view behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/multiverse-tool-view.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/multiverse-tool-view.spec.js')) }}
-        run: npx playwright test tests/browser/multiverse-tool-view.spec.js
-
-      - name: Run MultiVerse handoff behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/multiverse-handoff.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/multiverse-handoff.spec.js')) }}
-        run: npx playwright test tests/browser/multiverse-handoff.spec.js
-
-      - name: Run passive new-tab target behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/blb-passive-new-tab-targets.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/blb-passive-new-tab-targets.spec.js')) }}
-        run: npx playwright test tests/browser/blb-passive-new-tab-targets.spec.js
-
-      - name: Run source-page collector behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/source-page-collector-behavior.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/source-page-collector-behavior.spec.js')) }}
-        run: npx playwright test tests/browser/source-page-collector-behavior.spec.js
-
-      - name: Run BLB verse-link navigation behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/blb-verse-link-navigation.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/blb-verse-link-navigation.spec.js')) }}
-        run: npx playwright test tests/browser/blb-verse-link-navigation.spec.js
-
-      - name: Run Criteria Search navigation behavior regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/criteria-search-navigation.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/criteria-search-navigation.spec.js')) }}
-        run: npx playwright test tests/browser/criteria-search-navigation.spec.js
-
+      - name: Run selected Group A behavior regressions in one Playwright process
+        if: ${{ !cancelled() }}
+        env:
+          FULL_BROWSER_SUITE: ${{ inputs.full_browser_suite }}
+          CHANGED_SPECS: ${{ inputs.changed_specs }}
+          CHANGED_BROWSER_SPECS: ${{ inputs.changed_browser_specs }}
+          BROWSER_E2E_REQUIRED: ${{ inputs.browser_e2e_required }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          specs=()
+          add_if_selected() {
+            local spec="$1"
+            local exclude_when_browser_e2e="${2:-false}"
+            if [[ "$FULL_BROWSER_SUITE" != "true" && "$CHANGED_SPECS" != *"$spec"* ]]; then
+              return 0
+            fi
+            if [[ "$CHANGED_BROWSER_SPECS" == *"$spec"* ]]; then
+              return 0
+            fi
+            if [[ "$exclude_when_browser_e2e" == "true" && "$BROWSER_E2E_REQUIRED" == "true" ]]; then
+              return 0
+            fi
+            specs+=("$spec")
+          }
+          add_if_selected tests/browser/redirect-source-url-patterns.spec.js true
+          add_if_selected tests/browser/omnibox-boolean-operators.spec.js
+          add_if_selected tests/browser/kings-bible-collector-behavior.spec.js
+          add_if_selected tests/browser/blb-auto-hyperlinker.spec.js
+          add_if_selected tests/browser/blb-draggable-button.spec.js
+          add_if_selected tests/browser/webster-collector-behavior.spec.js
+          add_if_selected tests/browser/audit-defect-regressions.spec.js
+          add_if_selected tests/browser/case-sensitive-routing-behavior.spec.js
+          add_if_selected tests/browser/site-feature-defaults.spec.js
+          add_if_selected tests/browser/multiverse-tool-view.spec.js
+          add_if_selected tests/browser/multiverse-handoff.spec.js
+          add_if_selected tests/browser/blb-passive-new-tab-targets.spec.js
+          add_if_selected tests/browser/source-page-collector-behavior.spec.js
+          add_if_selected tests/browser/blb-verse-link-navigation.spec.js
+          add_if_selected tests/browser/criteria-search-navigation.spec.js
+          if (( ${#specs[@]} == 0 )); then
+            echo "No Group A behavior specs selected for this run."
+            exit 0
+          fi
+          for spec in "${specs[@]}"; do
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            node --check "$spec"
+          done
+          printf 'Running %d selected Group A behavior specs in one Playwright process.\n' "${#specs[@]}"
+          # Keep the established one-worker, fail-fast behavior, including the
+          # audit-defect suite that previously specified --workers=1 explicitly.
+          npx playwright test "${specs[@]}" --workers=1
       # Keep both reference-context regressions in this targeted suite so range/context fixes are exercised on branch pushes.
       - name: Run extension source-page and reference-context regressions
         if: ${{ !cancelled() && inputs.full_browser_suite == 'true' && !contains(inputs.changed_browser_specs, 'tests/browser/extension-lifecycle.spec.js') }}
