@@ -143,33 +143,31 @@ jobs:
             exit 1
           fi
 
-          # These three cases are owned by dedicated execution workflows:
-          # two physical browser-input tests run with Xvfb/xdotool, while the
-          # performance spec runs with the benchmark matrix and its own
-          # authenticated content-script fixture. Running them here in the
-          # generic per-test headless harness is not equivalent coverage.
-          alt_count=$(grep -F "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" | wc -l | tr -d ' ')
-          right_click_count=$(grep -F "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action" "$test_list" | wc -l | tr -d ' ')
-          performance_count=$(grep -F "› Show on BLB performance benchmark" "$test_list" | wc -l | tr -d ' ')
-          if [[ "$alt_count" -ne 1 || "$right_click_count" -ne 1 || "$performance_count" -ne 1 ]]; then
-            echo "::error::Expected exactly one delegated Alt+B test, right-click test, and performance benchmark; found $alt_count/$right_click_count/$performance_count."
+          # These two cases are owned by dedicated execution workflows:
+          # the physical Alt+B browser-input test runs with Xvfb/xdotool, while
+          # the performance spec runs with the benchmark matrix and its own
+          # authenticated content-script fixture. The right-click lifecycle
+          # regression remains in this headless run.
+          alt_count=$(grep -F -c "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" || true)
+          performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
+          if [[ "$alt_count" -ne 1 || "$performance_count" -ne 1 ]]; then
+            echo "::error::Expected exactly one delegated Alt+B test and performance benchmark; found $alt_count/$performance_count."
             exit 1
           fi
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
           awk '
             index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
-            index($0, "› a real MV3 service-worker termination is recovered by the physical right-click BLB context-menu action") == 0 &&
             index($0, "› Show on BLB performance benchmark") == 0
           ' "$test_list" > "$test_list.filtered"
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
           delegated=$((discovered_before_delegation - discovered_after_delegation))
-          if [[ "$delegated" -ne 3 ]]; then
-            echo "::error::Expected to delegate exactly 3 tests to dedicated workflows, found $delegated."
+          if [[ "$delegated" -ne 2 ]]; then
+            echo "::error::Expected to delegate exactly 2 tests to dedicated workflows, found $delegated."
             exit 1
           fi
           total=$discovered_after_delegation
-          echo "Delegated tests: $delegated (2 native-browser cases + 1 performance benchmark)."
+          echo "Delegated tests: $delegated (1 physical-browser case + 1 performance benchmark)."
           echo "Browser test cases discovered after delegation: $total"
           if [[ "$total" -eq 0 ]]; then
             echo "No headless browser tests remain after delegation."
