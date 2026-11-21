@@ -80,6 +80,25 @@ test('includes extension HTML script entrypoints and packaged data fallback depe
   assert.ok(result.reachable.includes('extension/corpus-fallback.js'));
 });
 
+
+test('discovers Playwright specs and GitHub Actions Node commands as execution roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
+    'playwright.config.js': "module.exports = { testDir: './tests/browser' };",
+    'tests/browser/example.spec.js': 'test("example", async () => {});',
+    'tests/browser/progress-reporter.js': 'module.exports = class Reporter {};',
+    '.github/workflows/ci.yml': "jobs:\\n  checks:\\n    steps:\\n      - run: node --test scripts/ci-check.test.js\\n      - run: node regression-suite/tests/run-regression.mjs extension",
+    'scripts/ci-check.test.js': "require('./ci-helper.js');",
+    'scripts/ci-helper.js': 'module.exports = true;',
+    'regression-suite/tests/run-regression.mjs': 'export const ready = true;'
+  });
+  assert.ok(result.roots.includes('playwright.config.js'));
+  assert.ok(result.roots.includes('tests/browser/example.spec.js'));
+  assert.ok(result.roots.includes('scripts/ci-check.test.js'));
+  assert.ok(result.roots.includes('regression-suite/tests/run-regression.mjs'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/ci-check.test.js', 'scripts/ci-helper.js'));
+});
+
 test('propagates imported function calls and object/callback parameter bindings across modules', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
