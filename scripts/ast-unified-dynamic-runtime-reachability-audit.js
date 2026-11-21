@@ -596,10 +596,23 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const topComputedPropertyKeys = [...computedPropertyKeys].map(([expression, value]) => ({
     expression, count: value.count, examples: value.examples
   })).sort((a, b) => b.count - a.count || a.expression.localeCompare(b.expression)).slice(0, 40);
+  const computedPropertyCallSites = uncertainty.filter(site =>
+    site.kind === 'unresolved-computed-property' && ['call', 'construct'].includes(site.accessRole)
+  ).map(site => ({ file: site.file, line: site.line, expression: site.expression, propertyExpression: site.propertyExpression, role: site.accessRole, affectedRoots: site.affectedRoots }));
+  const unresolvedLoaderSites = uncertainty.filter(site => [
+    'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
+    'chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts',
+    'dom-script-src-injection', 'dom-script-setAttribute-injection', 'require'
+  ].includes(site.kind)).map(site => ({
+    file: site.file, line: site.line, kind: site.kind, expression: site.expression,
+    scopePath: site.scopePath || null, affectedRoots: site.affectedRoots
+  }));
   const uncertaintySummary = {
     byKind: Object.fromEntries([...uncertaintyByKind].sort((a, b) => b[1] - a[1])),
     byAffectedRoot: Object.fromEntries([...uncertaintyByRoot].sort((a, b) => a[0].localeCompare(b[0])).map(([rootName, kinds]) => [rootName, Object.fromEntries(kinds)])),
     computedPropertyRoles: Object.fromEntries([...computedPropertyRoles].sort((a, b) => b[1] - a[1])),
+    computedPropertyCallSites,
+    unresolvedLoaderSites,
     topComputedPropertyKeys,
     topFiles: topUncertaintyFiles
   };
@@ -626,6 +639,8 @@ function run(root) {
   console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
   console.log('Unresolved computed-property use roles: ' + JSON.stringify(result.uncertaintySummary.computedPropertyRoles));
+  console.log('Unresolved computed-property call/construct sites: ' + JSON.stringify(result.uncertaintySummary.computedPropertyCallSites));
+  console.log('Unresolved loader sites with affected roots: ' + JSON.stringify(result.uncertaintySummary.unresolvedLoaderSites));
   console.log('Most common unresolved computed-property expressions: ' + JSON.stringify(result.uncertaintySummary.topComputedPropertyKeys));
   console.log('Top uncertainty source files: ' + JSON.stringify(result.uncertaintySummary.topFiles));
   for (const error of result.parseErrors) console.error(error.file + ': ' + error.error);
