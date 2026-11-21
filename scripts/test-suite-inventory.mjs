@@ -16,13 +16,13 @@ function listPattern(pattern) {
   const slash = pattern.lastIndexOf('/');
   const directory = slash < 0 ? '.' : pattern.slice(0, slash);
   const filePattern = slash < 0 ? pattern : pattern.slice(slash + 1);
-  const escaped = filePattern.replace(/[.+^()|[\\]\\\\]/g, '\\\\$&').replace(/\\*/g, '.*');
+  const escaped = filePattern.split('').map(char => '.+^()|[]\\'.includes(char) ? '\\' + char : char).join('').replaceAll('*', '.*');
   const expression = new RegExp('^' + escaped + '$');
   const absoluteDirectory = path.join(root, directory);
   if (!fs.existsSync(absoluteDirectory)) return [];
   return fs.readdirSync(absoluteDirectory, { withFileTypes: true })
     .filter(entry => entry.isFile() && expression.test(entry.name))
-    .map(entry => path.posix.join(directory.replace(/\\\\/g, '/'), entry.name)).sort();
+    .map(entry => path.posix.join(directory, entry.name)).sort();
 }
 const classified = new Set();
 for (const suite of manifest.suites) {
@@ -44,7 +44,7 @@ for (const suite of manifest.suites) {
   }
   if (suite.id === 'ast-reachability-audit-tests') {
     for (const file of files) {
-      const analysis = file.replace(/\\.test\\.js$/, '.js');
+      const analysis = file.endsWith('.test.js') ? file.slice(0, -8) + '.js' : file;
       if (!fs.existsSync(path.join(root, analysis))) fail('AST regression test has no matching audit program: ' + file);
     }
   }
@@ -64,7 +64,7 @@ function walk(directory) {
     const absolute = path.join(directory,entry.name);
     if (entry.isDirectory()) walk(absolute);
     else {
-      const relative = path.relative(root,absolute).replace(/\\\\/g,'/');
+      const relative = path.relative(root,absolute).split(path.sep).join('/');
       const lower = entry.name.toLowerCase();
       const looksLikeTest = lower.startsWith('test-') || lower.startsWith('test_') || lower.includes('.test.') || lower.includes('.spec.') || lower.includes('test-runner');
       if (looksLikeTest && !ignoredNames.has(entry.name)) candidates.push(relative);
