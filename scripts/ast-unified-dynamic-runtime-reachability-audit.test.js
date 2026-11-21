@@ -84,16 +84,21 @@ test('includes extension HTML script entrypoints and packaged data fallback depe
 test('discovers Playwright specs and GitHub Actions Node commands as execution roots', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
-    'playwright.config.js': "module.exports = { testDir: './tests/browser' };",
+    'playwright.config.js': "module.exports = { testDir: './tests/browser', reporter: [['./tests/browser/progress-reporter.js']] };",
     'tests/browser/example.spec.js': 'test("example", async () => {});',
     'tests/browser/progress-reporter.js': 'module.exports = class Reporter {};',
-    '.github/workflows/ci.yml': "jobs:\\n  checks:\\n    steps:\\n      - run: node --test scripts/ci-check.test.js\\n      - run: node regression-suite/tests/run-regression.mjs extension",
+    'tests/selector/contract.test.mjs': 'export const ready = true;',
+    'scripts/test-sample.js': 'module.exports = true;',
+    '.github/workflows/ci.yml': "jobs:\\n  checks:\\n    steps:\\n      - run: node --test scripts/ci-check.test.js\\n      - run: node --test tests/selector/*.test.mjs\\n      - run: node regression-suite/tests/run-regression.mjs extension\\n      - run: for test_file in scripts/test-*.js; do node \"$test_file\"; done",
     'scripts/ci-check.test.js': "require('./ci-helper.js');",
     'scripts/ci-helper.js': 'module.exports = true;',
     'regression-suite/tests/run-regression.mjs': 'export const ready = true;'
   });
   assert.ok(result.roots.includes('playwright.config.js'));
   assert.ok(result.roots.includes('tests/browser/example.spec.js'));
+  assert.ok(result.roots.includes('tests/browser/progress-reporter.js'));
+  assert.ok(result.roots.includes('tests/selector/contract.test.mjs'));
+  assert.ok(result.roots.includes('scripts/test-sample.js'));
   assert.ok(result.roots.includes('scripts/ci-check.test.js'));
   assert.ok(result.roots.includes('regression-suite/tests/run-regression.mjs'));
   assert.ok(edge(result, 'commonjs-require', 'scripts/ci-check.test.js', 'scripts/ci-helper.js'));
