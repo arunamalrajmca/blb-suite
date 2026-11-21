@@ -103,8 +103,12 @@ function staticValue(node, constants, depth = 0, bindings = null) {
     }
   }
   if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && bindings) {
-    const returnedCandidates = constants.get(bindings.get(node.callee));
-    if (Array.isArray(returnedCandidates)) return returnedCandidates;
+    const binding = bindings.get(node.callee);
+    const uniqueTopLevelBinding = constants.get('__uniqueTopLevelFunction:' + node.callee.name);
+    if (!binding || binding === uniqueTopLevelBinding) {
+      const returnedCandidates = constants.get(uniqueTopLevelBinding || binding);
+      if (Array.isArray(returnedCandidates)) return returnedCandidates;
+    }
   }
   return undefined;
 }
@@ -188,7 +192,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
     // Summarize functions whose every statically known array return can be
     // enumerated. The union is an over-approximation of possible injected files.
-    visit(ast, node => {
+    const topLevelFunctionCounts = new Map();
+    visit(ast, (node, parent) => {
+      if (node.type === 'FunctionDeclaration' && node.id && parent && parent.type === 'Program') {
+        topLevelFunctionCounts.set(node.id.name, (topLevelFunctionCounts.get(node.id.name) || 0) + 1);
+      }
       if (node.type !== 'FunctionDeclaration' || !node.id) return;
       const candidates = [];
       visit(node.body, child => {
@@ -202,6 +210,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const values = [...new Set(candidates)];
           constants.set(key, values);
           functionArraySummaries.push({ file: rel(root, file), name: node.id.name, binding: key, values });
+          if (parent && parent.type === 'Program' && topLevelFunctionCounts.get(node.id.name) === 1) {
+            constants.set('__uniqueTopLevelFunction:' + node.id.name, key);
+          }
         }
       }
     });
