@@ -51,7 +51,12 @@ for (const suite of manifest.suites) {
   for (const delegation of suite.delegations || []) {
     if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
     if (!readRepoFile(delegation.testFile).includes(delegation.testTitle)) fail('Delegated test title is missing from its declared spec: ' + delegation.testFile);
-    if (!readRepoFile(delegation.workflow).includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
+    const delegatedWorkflow = readRepoFile(delegation.workflow);
+    if (!delegatedWorkflow.includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
+    if (delegation.environment === 'x11-headed-chromium') {
+      if (!delegatedWorkflow.includes('BLB_HEADFUL_EXTENSION_TESTS: \'1\'')) fail('X11-owned browser test must enable headed extension mode: ' + delegation.testTitle);
+      if (!delegatedWorkflow.includes('xvfb-run -a')) fail('X11-owned browser test must execute under Xvfb: ' + delegation.testTitle);
+    }
   }
   counts.push({ id:suite.id, count:files.length });
 }
