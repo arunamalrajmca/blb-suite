@@ -27,7 +27,7 @@ function parse(file) {
   const source = fs.readFileSync(file, 'utf8');
   let error;
   for (const sourceType of ['script', 'module']) {
-    try { return acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true, allowHashBang: true }); }
+    try { return acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true, ranges: true, allowHashBang: true }); }
     catch (e) { error = e; }
   }
   throw new Error(path.relative(process.cwd(), file) + ': ' + error.message);
@@ -362,7 +362,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'MemberExpression' && node.computed) {
         const key = staticValue(node.property, constants, 0, bindings);
         if (key === undefined) {
-          uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'computed-property', certainty: 'unresolved-computed-property', affectedRoots: [] });
+          uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'unresolved-computed-property', certainty: 'unresolved-computed-property', affectedRoots: [] });
         } else sites.push({ file: rel(root, file), line: node.loc.start.line, kind: 'constant-computed-property', expression: String(key), resolved: null, certainty: 'resolved-constant-key', affectedRoots: [] });
       }
     });
