@@ -129,6 +129,21 @@ function bindingMap(ast) {
   }
   return ids;
 }
+function directFunctionReturns(functionNode) {
+  const returns = [];
+  function walk(node, root = false) {
+    if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
+    if (!root && ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+    if (node.type === 'ReturnStatement') returns.push(node);
+    for (const [key, value] of Object.entries(node)) {
+      if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+      if (Array.isArray(value)) value.forEach(child => walk(child));
+      else if (value && typeof value.type === 'string') walk(value);
+    }
+  }
+  walk(functionNode.body, true);
+  return returns;
+}
 function analyze(root = path.resolve(__dirname, '..')) {
   root = path.resolve(root);
   const files = walk(root), fileSet = new Set(files), asts = new Map(), errors = [];
@@ -200,21 +215,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
     visit(ast, (node, parent) => {
       if (node.type !== 'FunctionDeclaration' || !node.id) return;
-      const candidates = [];
-      visit(node.body, child => {
-        if (child.type !== 'ReturnStatement' || !child.argument) return;
-        const value = staticValue(child.argument, constants, 0, bindings);
-        if (Array.isArray(value)) candidates.push(...value);
-      });
-      if (candidates.length) {
-        const key = bindings.get(node.id);
-        if (key) {
-          const values = [...new Set(candidates)];
-          constants.set(key, values);
-          functionArraySummaries.push({ file: rel(root, file), name: node.id.name, binding: key, values });
-          if (parent && parent.type === 'Program' && topLevelFunctionCounts.get(node.id.name) === 1) {
-            constants.set('__uniqueTopLevelFunction:' + node.id.name, key);
-          }
+      const returns = directFunctionReturns(node);
+      if (!returns.length || returns.some(item => !item.argument)) return;
+      const returnedArrays = returns.map(item => staticValue(item.argument, constants, 0, bindings));
+      // Only summarize when every direct return is a statically enumerable
+      // array of non-empty strings. Ignore nested callback returns and mixed
+      // or unknown return paths rather than inventing an incomplete target set.
+      if (returnedArrays.some(value => !Array.isArray(value) ||
+          value.some(item => typeof item !== 'string' || !item))) return;
+      const candidates = returnedArrays.flat();
+      const key = bindings.get(node.id);
+      if (key) {
+        const values = [...new Set(candidates)];
+        constants.set(key, values);
+        functionArraySummaries.push({ file: rel(root, file), name: node.id.name, binding: key, values });
+        if (parent && parent.type === 'Program' && topLevelFunctionCounts.get(node.id.name) === 1) {
+          constants.set('__uniqueTopLevelFunction:' + node.id.name, key);
         }
       }
     });
@@ -634,7 +650,13 @@ function run(root) {
   console.log('Reachable files: ' + result.reachable.length);
   console.log('Unreachable inventory only (not deletion candidates): ' + result.unreachableInventory.length);
   console.log('Unreachable files scoped as uncertain dynamic targets: ' + result.uncertainFiles.length);
-  console.log('Definite unreachable inventory after scoped uncertainty: ' + result.definiteUnreachable.length);
+  console.log('Files not reached from configured execution roots (inventory only; not a dead-code proof): ' + result.definiteUnreachable.length);
+  const unreachedByArea = new Map();
+  for (const file of result.definiteUnreachable) {
+    const area = file.split('/')[0] || '[root]';
+    unreachedByArea.set(area, (unreachedByArea.get(area) || 0) + 1);
+  }
+  console.log('Not-reached inventory by top-level area: ' + JSON.stringify(Object.fromEntries([...unreachedByArea].sort((a, b) => b[1] - a[1]))));
   console.log('Static function array-return summaries: ' + JSON.stringify(result.functionArraySummaries));
   console.log('Uncertainty observations by kind: ' + JSON.stringify(result.uncertaintySummary.byKind));
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
