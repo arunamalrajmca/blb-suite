@@ -2200,15 +2200,22 @@ test('persistent registration failure keeps current and subsequent same-tab docu
   await extensionWorker.evaluate(async value => {
     await unregisterRuntimeContentScriptForPattern(value);
     const api=chrome.scripting;
+    const originalDescriptor=Object.getOwnPropertyDescriptor(api,'registerContentScripts');
     const original=api.registerContentScripts;
-    globalThis.__registrationFailureAudit={original,attempts:0};
-    api.registerContentScripts=async function(scripts) {
-      if((scripts||[]).some(script => (script.matches||[]).includes('https://example.com/*'))) {
-        globalThis.__registrationFailureAudit.attempts++;
-        throw new Error('simulated persistent registration rejection');
+    globalThis.__registrationFailureAudit={originalDescriptor,original,attempts:0,hookInstalled:false};
+    Object.defineProperty(api,'registerContentScripts',{
+      configurable:true,
+      enumerable:originalDescriptor?.enumerable ?? true,
+      writable:true,
+      value:async function(scripts) {
+        if((scripts||[]).some(script => (script.matches||[]).includes('https://example.com/*'))) {
+          globalThis.__registrationFailureAudit.attempts++;
+          throw new Error('simulated persistent registration rejection');
+        }
+        return original.call(api,scripts);
       }
-      return original.call(api,scripts);
-    };
+    });
+    globalThis.__registrationFailureAudit.hookInstalled=api.registerContentScripts!==original;
   },pattern);
   await page.route('https://example.com/**',route=>route.fulfill({
     status:200,
@@ -2217,6 +2224,12 @@ test('persistent registration failure keeps current and subsequent same-tab docu
   }));
 
   try {
+    const hookState=await extensionWorker.evaluate(()=>({
+      installed:globalThis.__registrationFailureAudit?.hookInstalled===true,
+      methodOverridden:chrome.scripting.registerContentScripts!==globalThis.__registrationFailureAudit?.original
+    }));
+    expect(hookState.installed,'registration failure interceptor must replace the extension worker API method').toBe(true);
+    expect(hookState.methodOverridden).toBe(true);
     await page.goto('https://example.com/registration-failure-first',{waitUntil:'domcontentloaded'});
     const tabId=await getTabIdForUrl(extensionWorker,pattern);
     expect(Number.isInteger(tabId)).toBe(true);
@@ -2246,7 +2259,7 @@ test('persistent registration failure keeps current and subsequent same-tab docu
   } finally {
     await extensionWorker.evaluate(async value=>{
       const audit=globalThis.__registrationFailureAudit;
-      if(audit?.original) chrome.scripting.registerContentScripts=audit.original;
+      if(audit?.originalDescriptor) Object.defineProperty(chrome.scripting,'registerContentScripts',audit.originalDescriptor);
       delete globalThis.__registrationFailureAudit;
       await unregisterRuntimeContentScriptForPattern(value).catch(()=>{});
     },pattern).catch(()=>{});
