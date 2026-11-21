@@ -157,3 +157,25 @@ test('reports uncertainty observations grouped by kind, affected root, and sourc
   assert.ok(result.uncertaintySummary.byAffectedRoot['scripts/main.js']);
   assert.ok(result.uncertaintySummary.topFiles.some(item => item.file === 'scripts/main.js'));
 });
+
+
+test('resolves importScripts loop targets from a constant array', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "const files = ['./one.js', './two.js']; for (const file of files) { importScripts(file); }",
+    'scripts/one.js': 'self.one = true;',
+    'scripts/two.js': 'self.two = true;'
+  });
+  assert.ok(edge(result, 'importScripts', 'scripts/main.js', 'scripts/one.js'));
+  assert.ok(edge(result, 'importScripts', 'scripts/main.js', 'scripts/two.js'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'importScripts').length, 0);
+});
+
+test('does not treat executeScript inline func bodies as unresolved file targets', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "chrome.scripting.executeScript({ target: { tabId: 1 }, func: () => document.title });"
+  });
+  assert.ok(result.dynamicSites.some(item => item.kind === 'chrome.scripting.executeScript.func'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.executeScript').length, 0);
+});
