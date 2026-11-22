@@ -490,17 +490,48 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
     reasons.get(file).add(reason);
   };
 
-  const packagePath = path.join(root, 'package.json');
-  if (fs.existsSync(packagePath)) {
-    const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-    if (typeof pkg.main === 'string') {
-      const target = resolveModuleSpecifier(path.join(root, 'package.json'), './' + pkg.main, files);
-      if (target.file) add(target.file, 'package.main');
+  // Every package manifest may define executable entrypoints. Treat public
+  // package fields as external-consumer roots, and include workspace manifests.
+  const packageFiles = walkFiles(root, file => path.basename(file) === 'package.json');
+  const addPackageTarget = (packageFile, value, reason, filesSet) => {
+    if (typeof value !== 'string' || !value.startsWith('./')) return;
+    if (value.includes('*')) {
+      const pattern = new RegExp('^' + value.slice(2).split('*')
+        .map(part => part.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('.*') + '$');
+      for (const file of filesSet) {
+        const relativeFile = path.relative(path.dirname(packageFile), file).split(path.sep).join('/');
+        if (pattern.test(relativeFile)) add(file, reason);
+      }
+      return;
     }
+    const target = resolveModuleSpecifier(packageFile, value, filesSet);
+    if (target.file) add(target.file, reason);
+  };
+  for (const packageFile of packageFiles) {
+    let pkg;
+    try { pkg = JSON.parse(fs.readFileSync(packageFile, 'utf8')); } catch (_) { continue; }
+    const packageName = relative(root, packageFile);
+    for (const field of ['main', 'module', 'browser', 'types', 'typings', 'unpkg', 'jsdelivr']) {
+      const value = pkg[field];
+      if (typeof value === 'string') addPackageTarget(packageFile, value.startsWith('./') ? value : './' + value, 'package:' + field + ':' + packageName, files);
+      else if (field === 'browser' && value && typeof value === 'object') {
+        for (const replacement of Object.values(value)) addPackageTarget(packageFile, replacement, 'package:browser-map:' + packageName, files);
+      }
+    }
+    const binValues = typeof pkg.bin === 'string' ? [pkg.bin] : Object.values(pkg.bin || {});
+    for (const value of binValues) {
+      if (typeof value === 'string') addPackageTarget(packageFile, value.startsWith('./') ? value : './' + value, 'package:bin:' + packageName, files);
+    }
+    const collectExportTargets = value => {
+      if (typeof value === 'string') addPackageTarget(packageFile, value, 'package:exports:' + packageName, files);
+      else if (Array.isArray(value)) value.forEach(collectExportTargets);
+      else if (value && typeof value === 'object') Object.values(value).forEach(collectExportTargets);
+    };
+    collectExportTargets(pkg.exports);
     for (const [name, command] of Object.entries(pkg.scripts || {})) {
       for (const match of String(command).matchAll(/(?:^|\s)(\.{0,2}\/)?([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-        const candidate = path.resolve(root, match[1] || '', match[2]);
-        add(candidate, 'package-script:' + name);
+        const candidate = path.resolve(path.dirname(packageFile), match[1] || '', match[2]);
+        add(candidate, 'package-script:' + name + ':' + packageName);
       }
     }
   }
