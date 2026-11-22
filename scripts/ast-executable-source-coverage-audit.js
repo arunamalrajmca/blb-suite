@@ -236,11 +236,46 @@ function discover(root) {
       }
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
           ['Worker', 'SharedWorker'].includes(node.callee.name)) {
-        let request = literal(node.arguments[0]);
         const arg = node.arguments[0];
-        if (arg?.type === 'NewExpression' && arg.callee.type === 'Identifier' && arg.callee.name === 'URL') request = literal(arg.arguments[0]);
-        const target = request !== null ? addRequest(request, path.dirname(file), normalize(root, file), 'worker-script') : null;
-        dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: node.callee.name, target: request, certainty: target ? 'resolved-worker-target' : 'unresolved-worker-target' });
+        let request = null, baseDirectory = null, resolutionKind = 'worker-script';
+        if (arg?.type === 'NewExpression' && arg.callee.type === 'Identifier' && arg.callee.name === 'URL') {
+          request = literal(arg.arguments[0]);
+          const base = arg.arguments[1];
+          if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') {
+            baseDirectory = path.dirname(file);
+            resolutionKind = 'worker-script-import-meta-url';
+          } else if (base?.type === 'CallExpression' && base.callee.type === 'MemberExpression' &&
+              ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(
+                (function memberName(value) {
+                  if (!value) return '';
+                  if (value.type === 'Identifier') return value.name;
+                  if (value.type === 'MemberExpression') return memberName(value.object) + '.' +
+                    (value.computed ? literal(value.property) : value.property.name);
+                  return '';
+                })(base.callee))) {
+            baseDirectory = extension;
+            resolutionKind = 'worker-script-runtime-url';
+          }
+        } else if (arg?.type === 'CallExpression' && arg.callee.type === 'MemberExpression') {
+          const api = (function memberName(value) {
+            if (!value) return '';
+            if (value.type === 'Identifier') return value.name;
+            if (value.type === 'MemberExpression') return memberName(value.object) + '.' +
+              (value.computed ? literal(value.property) : value.property.name);
+            return '';
+          })(arg.callee);
+          if (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(api)) {
+            request = literal(arg.arguments[0]);
+            baseDirectory = extension;
+            resolutionKind = 'worker-script-runtime-url';
+          }
+        }
+        const target = request !== null && baseDirectory
+          ? addRequest(request, baseDirectory, normalize(root, file), resolutionKind) : null;
+        dynamicSites.push({
+          file: normalize(root, file), line: node.loc.start.line, api: node.callee.name, target: request,
+          certainty: target ? 'resolved-worker-target' : 'worker-target-runtime-base-uncertain'
+        });
         if (target && !visited.has(target)) queue.push(target);
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
