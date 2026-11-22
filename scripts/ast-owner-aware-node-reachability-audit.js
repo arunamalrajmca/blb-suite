@@ -555,6 +555,9 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
   const packageFiles = walkFiles(root, file => path.basename(file) === 'package.json');
   const addPackageTarget = (packageFile, value, reason, filesSet) => {
     if (typeof value !== 'string' || !value.startsWith('./')) return;
+    // TypeScript declaration entrypoints are package metadata, not executable
+    // JavaScript modules; keep them outside this JS reachability graph.
+    if (/\.(?:d\.)?[cm]?tsx?$/i.test(value)) return;
     if (value.includes('*')) {
       const pattern = new RegExp('^' + value.slice(2).split('*')
         .map(part => part.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('.*') + '$');
