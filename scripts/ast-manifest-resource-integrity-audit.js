@@ -127,10 +127,10 @@ function auditManifest(extensionRoot) {
       if (path.extname(file).toLowerCase() === '.css') cssQueue.add(file);
     }
   }
-  if (!fs.existsSync(manifestPath)) return { errors: ['manifest.json is missing'], references };
+  if (!fs.existsSync(manifestPath)) return { errors: ['manifest.json is missing'], references, uncertainties };
   let manifest;
   try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
-  catch (error) { return { errors: ['manifest.json is invalid JSON: ' + error.message], references }; }
+  catch (error) { return { errors: ['manifest.json is invalid JSON: ' + error.message], references, uncertainties }; }
 
   const addMap = (owner, value, kind) => {
     if (typeof value === 'string') add(owner, value, kind);
@@ -273,6 +273,21 @@ function auditManifest(extensionRoot) {
     }
     return '';
   };
+  function addModuleDependency(owner, request, kind, baseDirectory) {
+    const decoded = cleanUrlPath(request);
+    if (decoded === null) {
+      recordError(owner + ': invalid URL encoding in ' + kind + ': ' + request);
+      return null;
+    }
+    const relative = decoded.replace(/^\/+/, '');
+    const base = path.resolve(decoded.startsWith('/') ? root : baseDirectory, relative);
+    const candidates = path.extname(base) ? [base] : [
+      base, base + '.js', base + '.mjs', base + '.cjs', base + '.json',
+      path.join(base, 'index.js'), path.join(base, 'index.mjs'), path.join(base, 'index.cjs')
+    ];
+    const found = candidates.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+    return add(owner, found ? normalize(root, found) : request, kind, found ? root : baseDirectory);
+  }
   const jsFiles = files.filter(file => /\.(?:js|mjs|cjs)$/i.test(file));
   for (const file of jsFiles) {
     const owner = normalize(root, file);
@@ -286,10 +301,11 @@ function auditManifest(extensionRoot) {
       uncertainties.push({ owner, line: null, kind: 'unparsed-javascript-resource-source', detail: parseError?.message || 'parse failed' });
       continue;
     }
-    const arrays = new Map(), objects = new Map();
+    const arrays = new Map(), arrayNodes = new Map(), objects = new Map();
     walkAst(ast, node => {
       if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' || !node.init) return;
       if (node.init.type === 'ArrayExpression') {
+        arrayNodes.set(node.id.name, node.init);
         const values = staticArray(node.init);
         if (values) arrays.set(node.id.name, values);
       }
@@ -299,17 +315,17 @@ function auditManifest(extensionRoot) {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
         const request = node.source.value;
-        if (request.startsWith('.') || request.startsWith('/')) add(owner, request, 'JavaScript module dependency', path.dirname(file));
+        if (request.startsWith('.') || request.startsWith('/')) addModuleDependency(owner, request, 'JavaScript module dependency', path.dirname(file));
       }
       if (node.type === 'ImportExpression') {
         const request = literal(node.source);
         if (request !== null && (request.startsWith('.') || request.startsWith('/'))) {
-          add(owner, request, 'JavaScript dynamic module dependency', path.dirname(file));
+          addModuleDependency(owner, request, 'JavaScript dynamic module dependency', path.dirname(file));
         } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-module-resource-target' });
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require') {
         const request = literal(node.arguments[0]);
-        if (request?.startsWith('.')) add(owner, request, 'JavaScript CommonJS dependency', path.dirname(file));
+        if (request?.startsWith('.')) addModuleDependency(owner, request, 'JavaScript CommonJS dependency', path.dirname(file));
         else if (request === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-require-resource-target' });
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'importScripts') {
@@ -317,7 +333,7 @@ function auditManifest(extensionRoot) {
           const values = argument.type === 'SpreadElement' && argument.argument.type === 'Identifier'
             ? arrays.get(argument.argument.name) || null
             : argument.type === 'SpreadElement' ? staticArray(argument.argument) : [literal(argument)].filter(value => value !== null);
-          if (values) for (const value of values) add(owner, value, 'JavaScript importScripts dependency', path.dirname(file));
+          if (values) for (const value of values) addModuleDependency(owner, value, 'JavaScript importScripts dependency', path.dirname(file));
           else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-importScripts-resource-target' });
         }
       }
@@ -331,12 +347,7 @@ function auditManifest(extensionRoot) {
         }
         if (method === 'registerContentScripts') {
           let descriptors = node.arguments[0];
-          if (descriptors?.type === 'Identifier') {
-            const name = descriptors.name;
-            descriptors = null;
-            // Object/array alias handling is bounded to direct literal declarations.
-            for (const [key, values] of arrays) if (key === name) descriptors = values;
-          }
+          if (descriptors?.type === 'Identifier') descriptors = arrayNodes.get(descriptors.name) || null;
           const entries = descriptors?.type === 'ArrayExpression' ? descriptors.elements :
             Array.isArray(descriptors) ? descriptors : [];
           if (!entries.length) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-content-script-registration-resource' });
@@ -377,9 +388,9 @@ function auditManifest(extensionRoot) {
         const argument = node.arguments[0];
         const request = literal(argument);
         if (request !== null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'worker-relative-url-base-uncertain', target: request });
-        else if (argument?.type !== 'NewExpression' || argument.callee.name !== 'URL') {
-          uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
-        }
+        else if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
+          if (literal(argument.arguments[0]) === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
+        } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
           memberPath(node.callee).endsWith('serviceWorker.register')) {
