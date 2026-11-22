@@ -405,7 +405,7 @@ test('tracks aliased global eval, reassigned Function constructors, and imported
   const boundaries = result.uncertainty.filter(item =>
     ['unresolved-dynamic-execution', 'string-timer-execution'].includes(item.kind)
   );
-  assert.ok(boundaries.some(item => item.executionBoundary === 'direct-or-aliased-eval'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'aliased-eval'));
   assert.ok(boundaries.some(item => item.executionBoundary === 'function-constructor'));
   assert.ok(boundaries.some(item => item.executionBoundary === 'node-vm'));
   assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
