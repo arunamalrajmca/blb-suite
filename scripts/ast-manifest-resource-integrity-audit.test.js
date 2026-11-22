@@ -162,3 +162,46 @@ test('normalizes extension-root-relative and URL-encoded manifest resource paths
     assert.ok(result.references.some(item => item.path === 'background.js'));
   } finally { f.cleanup(); }
 });
+
+
+test('detects symlink escapes reached through wildcard resource patterns', () => {
+  const f = fixture();
+  try {
+    const outside = path.join(f.root, 'outside.js');
+    fs.writeFileSync(outside, 'outside');
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      web_accessible_resources: [{ resources: ['assets/*.js'], matches: ['<all_urls>'] }]
+    }));
+    fs.mkdirSync(path.join(f.root, 'assets'), { recursive: true });
+    fs.symlinkSync(outside, path.join(f.root, 'assets/escape.js'));
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('wildcard resolves through symlink outside extension root')));
+  } finally { f.cleanup(); }
+});
+
+test('allows external HTML resources but rejects external manifest resource paths', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'https://example.invalid/worker.js' }
+    }));
+    f.write('page.html', '<script src=\"https://example.invalid/page.js\"></script>');
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('external URL is not a packaged resource path')));
+    assert.ok(!result.errors.some(error => error.includes('example.invalid/page.js')));
+  } finally { f.cleanup(); }
+});
+
+test('does not split data URLs into false srcset resource references', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({ manifest_version: 3 }));
+    f.write('page.html', '<img srcset=\"data:image/png;base64,AAAA 1x, image.png 2x\">');
+    f.write('image.png');
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.references.some(item => item.path === 'image.png'));
+  } finally { f.cleanup(); }
+});
