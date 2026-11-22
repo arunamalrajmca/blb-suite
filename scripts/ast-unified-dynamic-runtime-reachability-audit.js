@@ -639,6 +639,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
           dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
             ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
         }
+        if (target && node.right.type === 'MemberExpression') {
+          const rightPath = memberPath(node.right);
+          if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(rightPath)) dynamicCallableBindings.set(target, 'eval-alias');
+          else if (['globalThis.Function', 'window.Function', 'self.Function'].includes(rightPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
+          else if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(rightPath)) {
+            dynamicCallableBindings.set(target, 'string-timer-alias');
+          }
+        }
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
           node.init && node.init.type === 'Identifier') {
