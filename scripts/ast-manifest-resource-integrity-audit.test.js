@@ -83,3 +83,82 @@ test('validates web accessible resources and reports missing explicit files', ()
     assert.ok(result.errors.some(error => error.includes('missing web-accessible resource: assets/missing.json')));
   } finally { f.cleanup(); }
 });
+
+
+test('checks wildcard web-accessible resource patterns against actual packaged files', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      web_accessible_resources: [{ resources: ['assets/*.js'], matches: ['<all_urls>'] }]
+    }));
+    f.write('assets/one.js');
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.every(error => !error.includes('assets/*.js')));
+    assert.ok(result.references.some(item => item.path === 'assets/one.js'));
+  } finally { f.cleanup(); }
+});
+
+test('reports wildcard patterns that match no packaged resources', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      web_accessible_resources: [{ resources: ['assets/*.missing'], matches: ['<all_urls>'] }]
+    }));
+    f.write('assets/present.js');
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('matches no packaged files')));
+  } finally { f.cleanup(); }
+});
+
+test('checks CSS url and import resources plus additional manifest resource owners', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      default_locale: 'en',
+      declarative_net_request: { rule_resources: [{ id: 'rules', enabled: true, path: 'rules.json' }] },
+      theme: { images: { theme_frame: 'theme.png' } }
+    }));
+    f.write('_locales/en/messages.json', '{}');
+    f.write('rules.json', '{}');
+    f.write('theme.png');
+    f.write('styles/main.css', '@import \"./nested.css\"; .icon { background: url(\"../images/icon.svg\"); }');
+    f.write('styles/nested.css', '.nested { background: url(\"../images/missing.svg\"); }');
+    f.write('images/icon.svg', '<svg/>');
+    const result = auditManifest(f.root);
+    assert.ok(result.references.some(item => item.kind === 'locale messages'));
+    assert.ok(result.references.some(item => item.kind === 'declarative ruleset'));
+    assert.ok(result.errors.some(error => error.includes('missing CSS referenced resource: ../images/missing.svg')));
+  } finally { f.cleanup(); }
+});
+
+test('rejects symlinks that resolve outside the extension package root', () => {
+  const f = fixture();
+  try {
+    const outside = path.join(f.root, 'outside.js');
+    fs.writeFileSync(outside, 'outside');
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'escape.js' }
+    }));
+    fs.symlinkSync(outside, path.join(f.root, 'escape.js'));
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('symlink escapes extension root')));
+  } finally { f.cleanup(); }
+});
+
+test('normalizes extension-root-relative and URL-encoded manifest resource paths', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: '/background%2Ejs' }
+    }));
+    f.write('background.js');
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.references.some(item => item.path === 'background.js'));
+  } finally { f.cleanup(); }
+});
