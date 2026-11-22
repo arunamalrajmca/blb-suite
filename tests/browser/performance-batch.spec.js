@@ -4,9 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const scenarios = (process.env.BLB_PERF_TARGET === 'kjv-range-resolver')
-  ? ['range-resolver', 'selection', 'fresh', 'reuse']
-  : ['paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse'];
+const scenarios = ['paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse'];
 const samples = Number(process.env.BLB_PERF_SAMPLES || 11);
 const baselineSource = path.resolve(process.env.BLB_BASELINE_EXTENSION_PATH || '');
 const candidateSource = path.resolve(process.env.BLB_CANDIDATE_EXTENSION_PATH || '');
@@ -215,9 +213,6 @@ async function runScenario(expect, scenario, page, context, worker, extensionId)
     return { handoffMs: Date.now() - started, firstTabMs, secondTabMs };
   }
 
-  if (scenario === 'range-resolver') {
-    throw new Error('range-resolver batch samples require the dedicated resolver benchmark harness');
-  }
   throw new Error('Unknown performance scenario: ' + scenario);
 }
 
