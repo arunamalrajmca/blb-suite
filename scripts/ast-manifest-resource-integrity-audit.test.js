@@ -351,3 +351,18 @@ test('validates resource references through aliased require, importScripts, runt
     }
   } finally { f.cleanup(); }
 });
+
+
+test('supports legacy string-form web-accessible resources', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 2,
+      web_accessible_resources: ['legacy-resource.js']
+    }));
+    f.write('legacy-resource.js');
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.references.some(item => item.path === 'legacy-resource.js' && item.kind === 'web-accessible resource'));
+  } finally { f.cleanup(); }
+});
