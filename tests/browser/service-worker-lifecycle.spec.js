@@ -307,8 +307,28 @@ test('a real MV3 service-worker termination is recovered by the Alt+B command me
     );
     expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
 
-    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
-    expect(closed.success).toBe(true);
+    // Use the ServiceWorker domain's explicit stop operation rather than
+    // Target.closeTarget. The latter can acknowledge a close request while an
+    // extension worker remains alive under concurrent browser load.
+    const workerVersions=new Map();
+    cdp.on('ServiceWorker.workerVersionUpdated', ({versions=[]}) => {
+      for (const version of versions) {
+        if (version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)) {
+          workerVersions.set(version.versionId,version);
+        }
+      }
+    });
+    await cdp.send('ServiceWorker.enable');
+    await expect.poll(() => [...workerVersions.values()].find(version =>
+      version.runningStatus==='running' &&
+      version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
+    )?.versionId,{timeout:5000}).toBeTruthy();
+    const workerVersion=[...workerVersions.values()].find(version =>
+      version.runningStatus==='running' &&
+      version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerVersion,'running extension worker version must be observable').toBeTruthy();
+    await cdp.send('ServiceWorker.stopWorker',{versionId:workerVersion.versionId});
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
       return current.some(target => target.targetId===workerTarget.targetId);
