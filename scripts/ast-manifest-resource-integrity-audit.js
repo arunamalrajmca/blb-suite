@@ -335,14 +335,48 @@ function auditManifest(extensionRoot) {
       continue;
     }
     const arrays = new Map(), arrayNodes = new Map(), objects = new Map();
+    const loaderAliases = new Map(), requireAliases = new Set();
+    const supportedLoaderApis = new Set([
+      'importScripts', 'chrome.scripting.executeScript', 'browser.scripting.executeScript',
+      'chrome.tabs.executeScript', 'browser.tabs.executeScript',
+      'chrome.scripting.registerContentScripts', 'browser.scripting.registerContentScripts',
+      'chrome.userScripts.register', 'browser.userScripts.register',
+      'chrome.runtime.getURL', 'browser.runtime.getURL',
+      'navigator.serviceWorker.register'
+    ]);
     walkAst(ast, node => {
-      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' || !node.init) return;
-      if (node.init.type === 'ArrayExpression') {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
+        if (node.init.type === 'Identifier') {
+          if (node.init.name === 'require' || requireAliases.has(node.init.name)) requireAliases.add(node.id.name);
+          if (node.init.name === 'importScripts' || loaderAliases.has(node.init.name)) {
+            loaderAliases.set(node.id.name, node.init.name === 'importScripts' ? 'importScripts' : loaderAliases.get(node.init.name));
+          }
+        }
+        if (node.init.type === 'MemberExpression') {
+          const api = memberPath(node.init);
+          if (supportedLoaderApis.has(api)) loaderAliases.set(node.id.name, api);
+          if (api === 'module.require') requireAliases.add(node.id.name);
+        }
+        if (node.init.type === 'ArrayExpression') {
         arrayNodes.set(node.id.name, node.init);
         const values = staticArray(node.init);
         if (values) arrays.set(node.id.name, values);
       }
-      if (node.init.type === 'ObjectExpression') objects.set(node.id.name, node.init);
+        if (node.init.type === 'ObjectExpression') objects.set(node.id.name, node.init);
+      }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier') {
+        if (node.right.type === 'Identifier') {
+          if (node.right.name === 'require' || requireAliases.has(node.right.name)) requireAliases.add(node.left.name);
+          if (node.right.name === 'importScripts' || loaderAliases.has(node.right.name)) {
+            loaderAliases.set(node.left.name, node.right.name === 'importScripts' ? 'importScripts' : loaderAliases.get(node.right.name));
+          }
+        }
+        if (node.right.type === 'MemberExpression') {
+          const api = memberPath(node.right);
+          if (supportedLoaderApis.has(api)) loaderAliases.set(node.left.name, api);
+          if (api === 'module.require') requireAliases.add(node.left.name);
+        }
+      }
     });
     walkAst(ast, node => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
@@ -356,12 +390,14 @@ function auditManifest(extensionRoot) {
           addModuleDependency(owner, request, 'JavaScript dynamic module dependency', path.dirname(file));
         } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-module-resource-target' });
       }
-      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require') {
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          (node.callee.name === 'require' || requireAliases.has(node.callee.name))) {
         const request = literal(node.arguments[0]);
         if (request?.startsWith('.')) addModuleDependency(owner, request, 'JavaScript CommonJS dependency', path.dirname(file));
         else if (request === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-require-resource-target' });
       }
-      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'importScripts') {
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          (node.callee.name === 'importScripts' || loaderAliases.get(node.callee.name) === 'importScripts')) {
         for (const argument of node.arguments) {
           const values = argument.type === 'SpreadElement' && argument.argument.type === 'Identifier'
             ? arrays.get(argument.argument.name) || null
@@ -370,8 +406,9 @@ function auditManifest(extensionRoot) {
           else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-importScripts-resource-target' });
         }
       }
-      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
-        const api = memberPath(node.callee);
+      if (node.type === 'CallExpression' && (node.callee.type === 'MemberExpression' ||
+          (node.callee.type === 'Identifier' && loaderAliases.has(node.callee.name)))) {
+        const api = node.callee.type === 'Identifier' ? loaderAliases.get(node.callee.name) : memberPath(node.callee);
         const method = api.split('.').pop();
         if (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(api)) {
           const request = literal(node.arguments[0]);
