@@ -334,7 +334,14 @@ function discover(root) {
       if (node.type === 'CallExpression' && (node.callee.type === 'MemberExpression' ||
           (node.callee.type === 'Identifier' && loaderAliases.has(node.callee.name)))) {
         const calleePath = node.callee.type === 'Identifier' ? loaderAliases.get(node.callee.name) : expressionPath(node.callee);
-        const method = calleePath.split('.').pop();
+        // Resolve the terminal member directly as well as through the full
+        // alias path. This keeps method classification reliable when a
+        // computed/member-chain path is partially unresolved.
+        const directMethod = node.callee.type === 'MemberExpression'
+          ? (node.callee.computed ? literal(node.callee.property) :
+            node.callee.property.type === 'Identifier' ? node.callee.property.name : null)
+          : null;
+        const method = directMethod || calleePath.split('.').pop();
         if (method === 'registerContentScripts') {
           let options = node.arguments[0];
           if (options?.type === 'Identifier') options = literalArrayNodes.get(options.name) || null;
