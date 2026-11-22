@@ -5,11 +5,17 @@
 // bounded process-level parallel execution on the same checkout/dependencies.
 // Test assertions and complete analysis stdout are compared. A zero
 // unreachable-candidate count is never interpreted as proof of completeness.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { spawn } = require('node:child_process');
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const root = path.resolve(__dirname, '..');
 const workersArg = process.argv.find(x => x.startsWith('--workers='));
