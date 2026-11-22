@@ -453,9 +453,9 @@ test("test-only browser edits reuse the required reference workflow classifier",
   assert.match(workflow, /id: focused[\s\S]*?FOCUSED_SPECS=/);
   assert.match(workflow, /github\.event_name == 'pull_request'[\s\S]*?needs\.change-detection\.outputs\.runtime_changed == 'false'/);
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
-  assert.match(workflow, /--list "\$spec"/);
-  assert.match(workflow, /Playwright discovered no tests in \$spec/);
-  assert.match(workflow, /npx playwright test --config=playwright\.config\.js "\$spec"/);
+  assert.match(workflow, /--list.*"\$\{specs\[@\]\}"/);
+  assert.match(workflow, /Playwright discovered no tests in the selected focused behavior specs/);
+  assert.match(workflow, /npx playwright test --config=playwright\.config\.js "\$\{specs\[@\]\}"/);
 });
 
 test("MultiVerse tab-reuse regressions share the Group A runner with conservative full-suite coverage", () => {
@@ -512,14 +512,14 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.doesNotMatch(groupA, /case "\$spec" in/);
   assert.match(groupA, /browser_e2e_required:/);
-  assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
+  assert.ok(groupA.includes("BROWSER_E2E_REQUIRED: ${{ inputs.browser_e2e_required }}"));
+  assert.ok(groupA.includes('"$BROWSER_E2E_REQUIRED" == "true"'));
   assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
-  assert.match(referenceWorkflow, /--list "\$spec"/);
-  assert.match(referenceWorkflow, /Playwright discovered no tests in \$spec/);
-  assert.match(referenceWorkflow, /npx playwright test --config=playwright\.config\.js "\$spec"/);
-  assert.match(groupA, /npx playwright test "\$spec"/);
-  assert.match(groupA, /browser_e2e_required == 'true'/);
-  assert.match(groupB, /browser_e2e_required == 'true'/);
+  assert.match(referenceWorkflow, /--list --reporter=list "\$\{runnable_specs\[@\]\}"/);
+  assert.match(referenceWorkflow, /Playwright discovered no tests in the reference matrix group/);
+  assert.match(referenceWorkflow, /npx playwright test --config=playwright\.config\.js "\$\{runnable_specs\[@\]\}"/);
+  assert.match(groupA, /npx playwright test "\$\{specs\[@\]\}" --workers=1/);
+  assert.match(groupA, /npx playwright test "\$\{specs\[@\]\}"/);
 });
 
 test("core user-action E2E stays scoped to core-mapped or full-suite changes", () => {
