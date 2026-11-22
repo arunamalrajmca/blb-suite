@@ -175,7 +175,7 @@ jobs:
           performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
           performance_batch_count=$(grep -F -c "› Interleaved baseline/candidate performance batch preserves isolated samples" "$test_list" || true)
           if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 || "$performance_batch_count" -ne 1 ]]; then
-            echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, and performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count."
+            echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, original performance, and batched performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count/$performance_batch_count."
             exit 1
           fi
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
@@ -183,7 +183,8 @@ jobs:
             index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
             index($0, "› native Chromium _self prerender activation initializes the activated document without tab replacement") == 0 &&
             index($0, "› native Chromium _blank prerender activation initializes the activated document without tab replacement") == 0 &&
-            index($0, "› Show on BLB performance benchmark") == 0
+            index($0, "› Show on BLB performance benchmark") == 0 &&
+            index($0, "› Interleaved baseline/candidate performance batch preserves isolated samples") == 0
           ' "$test_list" > "$test_list.filtered"
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
