@@ -265,6 +265,27 @@ function discover(root) {
         }
         if (method === 'register' && /(?:^|\.)userScripts\.register$/.test(calleePath)) {
           dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'userScripts.register', certainty: 'runtime-registered-user-script' });
+          let descriptors = node.arguments[0];
+          if (descriptors?.type === 'Identifier') descriptors = literalArrayNodes.get(descriptors.name) || null;
+          const entries = descriptors?.type === 'ArrayExpression' ? descriptors.elements : [];
+          for (let descriptor of entries) {
+            if (descriptor?.type === 'Identifier') descriptor = literalObjects.get(descriptor.name) || descriptor;
+            for (const key of ['js', 'css']) {
+              const scripts = property(descriptor, key);
+              const scriptEntries = scripts?.type === 'Identifier' ? literalArrayNodes.get(scripts.name)?.elements :
+                scripts?.type === 'ArrayExpression' ? scripts.elements : [];
+              for (let script of scriptEntries || []) {
+                if (script?.type === 'Identifier') script = literalObjects.get(script.name) || script;
+                const request = literal(property(script, 'file'));
+                if (request !== null) {
+                  const target = addRequest(request, extension, normalize(root, file), 'runtime-userScripts-' + key);
+                  if (target && !visited.has(target) && key === 'js') queue.push(target);
+                } else if (literal(property(script, 'code')) !== null) {
+                  dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'userScripts.inline-code', certainty: 'runtime-generated-script-code' });
+                }
+              }
+            }
+          }
         }
       }
       if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
