@@ -274,17 +274,21 @@ jobs:
 
             parallel_status=0
             parallel_log="$RUNNER_TEMP/blb-concurrency-parallel.log"
-            npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0 > "$parallel_log" 2>&1 || parallel_status=$?
-            cat "$parallel_log"
-            parallel_summary=$(grep 'Test summary:' "$parallel_log" | tail -n 1 || true)
-            if [[ "$parallel_status" -ne 0 || "$parallel_summary" != *"4/4 completed"* || "$parallel_summary" != *"4 passed, 0 failed, 0 skipped"* ]]; then
-              echo "::error::Four-worker execution did not complete all four compatibility tests successfully."
-              parallel_status=1
-            fi
+            for parallel_round in 1 2 3; do
+              echo "Four-worker compatibility repetition [$parallel_round/3]."
+              round_status=0
+              npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0 > "$parallel_log" 2>&1 || round_status=$?
+              cat "$parallel_log"
+              parallel_summary=$(grep 'Test summary:' "$parallel_log" | tail -n 1 || true)
+              if [[ "$round_status" -ne 0 || "$parallel_summary" != *"4/4 completed"* || "$parallel_summary" != *"4 passed, 0 failed, 0 skipped"* ]]; then
+                echo "::error::Four-worker compatibility repetition [$parallel_round/3] did not complete all four tests successfully."
+                parallel_status=1
+              fi
+            done
             if [[ "$legacy_status" -ne 0 || "$parallel_status" -ne 0 ]]; then
               compatibility_status=1
             else
-              echo "Concurrency compatibility passed: 4/4 in legacy serial mode and 4/4 in one four-worker process."
+              echo "Concurrency compatibility passed: 4/4 in legacy serial mode and 12/12 across three four-worker repetitions."
             fi
           fi
 
