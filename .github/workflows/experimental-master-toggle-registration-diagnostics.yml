@@ -64,6 +64,19 @@ jobs:
           NO_COLOR: '1'
           FORCE_COLOR: '0'
 
+      - name: Stress the persistent-registration failure fallback exposed by the full concurrency comparison
+        run: |
+          mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
+          set -o pipefail
+          npx playwright test tests/browser/optional-host-permission-lifecycle.spec.js \
+            --grep "current-tab activation falls back when persistent content-script registration fails" \
+            --workers=4 --repeat-each=24 --max-failures=0 --reporter=list \
+            --output="${{ runner.temp }}/master-toggle-diagnostics/fallback-results" \
+            2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/fallback-stress.log"
+        env:
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+
       - name: Upload registration traces and Playwright failure evidence
         if: always()
         uses: actions/upload-artifact@v6
