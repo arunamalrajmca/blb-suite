@@ -439,24 +439,31 @@ function resolvePackageImport(fromFile, specifier, files) {
   let target = pkg.value.imports[specifier];
   let wildcard = null;
   if (target === undefined) {
-    for (const [key, value] of Object.entries(pkg.value.imports)) {
+    const matches = Object.entries(pkg.value.imports).map(([key, value]) => {
       const star = key.indexOf('*');
-      if (star < 0) continue;
+      if (star < 0) return null;
       const prefix = key.slice(0, star), suffix = key.slice(star + 1);
-      if (specifier.startsWith(prefix) && specifier.endsWith(suffix) && specifier.length >= prefix.length + suffix.length) {
-        wildcard = specifier.slice(prefix.length, specifier.length - suffix.length || undefined);
-        target = value;
-        break;
-      }
+      if (!specifier.startsWith(prefix) || !specifier.endsWith(suffix) ||
+          specifier.length < prefix.length + suffix.length) return null;
+      return { value, prefix, suffix, specificity: prefix.length + suffix.length };
+    }).filter(Boolean).sort((a, b) => b.specificity - a.specificity);
+    if (matches.length) {
+      const match = matches[0];
+      wildcard = specifier.slice(match.prefix.length, specifier.length - match.suffix.length || undefined);
+      target = match.value;
     }
   }
   if (target === undefined) return { unresolved: true, specifier, packageImport: true };
   const candidates = collectConditionalTargets(target).map(value =>
     wildcard === null ? value : value.replace('*', wildcard));
+  const resolvedFiles = [];
   for (const candidate of candidates) {
     if (!candidate.startsWith('./')) continue;
     const resolved = resolveLocalFile(path.resolve(pkg.directory, candidate), files);
-    if (resolved) return { ...resolved, packageImport: true };
+    if (resolved && !resolvedFiles.includes(resolved.file)) resolvedFiles.push(resolved.file);
+  }
+  if (resolvedFiles.length) {
+    return { file: resolvedFiles[0], alternatives: resolvedFiles.slice(1), external: false, packageImport: true };
   }
   if (candidates.some(value => !value.startsWith('./'))) {
     return { external: true, specifier, packageImport: true, targets: candidates };
@@ -590,6 +597,9 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (specifier !== null) {
       const resolution = resolveModuleSpecifier(filename, specifier, files);
       edges.push({ from: filename, specifier, kind, ...resolution });
+      for (const alternative of resolution.alternatives || []) {
+        edges.push({ from: filename, specifier, kind, file: alternative, external: false, packageImportAlternative: true });
+      }
     }
   });
   return { edges, dynamic };
