@@ -197,31 +197,18 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
     );
     expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
 
-    // Use the ServiceWorker domain's explicit stop operation rather than
-    // Target.closeTarget. The latter can acknowledge a close request while an
-    // extension worker remains alive under concurrent browser load.
-    const workerVersions=new Map();
-    cdp.on('ServiceWorker.workerVersionUpdated', ({versions=[]}) => {
-      for (const version of versions) {
-        if (version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)) {
-          workerVersions.set(version.versionId,version);
-        }
-      }
-    });
-    await cdp.send('ServiceWorker.enable');
-    await expect.poll(() => [...workerVersions.values()].find(version =>
-      version.runningStatus==='running' &&
-      version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
-    )?.versionId,{timeout:5000}).toBeTruthy();
-    const workerVersion=[...workerVersions.values()].find(version =>
-      version.runningStatus==='running' &&
-      version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
-    );
-    expect(workerVersion,'running extension worker version must be observable').toBeTruthy();
-    await cdp.send('ServiceWorker.stopWorker',{versionId:workerVersion.versionId});
+    // Chrome can acknowledge Target.closeTarget before the worker target is
+    // actually gone. Reissue the close while observing the same target within
+    // the original five-second termination budget; do not extend the deadline.
+    const destroyedTargets=new Set();
+    cdp.on('Target.targetDestroyed', ({targetId}) => destroyedTargets.add(targetId));
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target => target.targetId===workerTarget.targetId);
+      const stillRunning=current.some(target => target.targetId===workerTarget.targetId);
+      if (stillRunning && !destroyedTargets.has(workerTarget.targetId)) {
+        await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+      }
+      return stillRunning && !destroyedTargets.has(workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
     // This is the real page gesture and the dedicated Double-click message
@@ -307,31 +294,18 @@ test('a real MV3 service-worker termination is recovered by the Alt+B command me
     );
     expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
 
-    // Use the ServiceWorker domain's explicit stop operation rather than
-    // Target.closeTarget. The latter can acknowledge a close request while an
-    // extension worker remains alive under concurrent browser load.
-    const workerVersions=new Map();
-    cdp.on('ServiceWorker.workerVersionUpdated', ({versions=[]}) => {
-      for (const version of versions) {
-        if (version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)) {
-          workerVersions.set(version.versionId,version);
-        }
-      }
-    });
-    await cdp.send('ServiceWorker.enable');
-    await expect.poll(() => [...workerVersions.values()].find(version =>
-      version.runningStatus==='running' &&
-      version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
-    )?.versionId,{timeout:5000}).toBeTruthy();
-    const workerVersion=[...workerVersions.values()].find(version =>
-      version.runningStatus==='running' &&
-      version.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
-    );
-    expect(workerVersion,'running extension worker version must be observable').toBeTruthy();
-    await cdp.send('ServiceWorker.stopWorker',{versionId:workerVersion.versionId});
+    // Chrome can acknowledge Target.closeTarget before the worker target is
+    // actually gone. Reissue the close while observing the same target within
+    // the original five-second termination budget; do not extend the deadline.
+    const destroyedTargets=new Set();
+    cdp.on('Target.targetDestroyed', ({targetId}) => destroyedTargets.add(targetId));
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target => target.targetId===workerTarget.targetId);
+      const stillRunning=current.some(target => target.targetId===workerTarget.targetId);
+      if (stillRunning && !destroyedTargets.has(workerTarget.targetId)) {
+        await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+      }
+      return stillRunning && !destroyedTargets.has(workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
     // Send the exact runtime handoff used by the registered Alt+B command.
