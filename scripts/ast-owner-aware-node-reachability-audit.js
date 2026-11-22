@@ -537,11 +537,17 @@ function collectModuleEdges(source, filename, files) {
 function discoverNodeEntrypoints(root, files, sourceByFile) {
   const roots = new Set();
   const reasons = new Map();
+  const unresolvedEntrypoints = [];
   const add = (file, reason) => {
-    if (!files.has(file)) return;
+    if (!files.has(file)) {
+      const record = { file: relative(root, file), reason };
+      if (!unresolvedEntrypoints.some(item => item.file === record.file && item.reason === record.reason)) unresolvedEntrypoints.push(record);
+      return false;
+    }
     roots.add(file);
     if (!reasons.has(file)) reasons.set(file, new Set());
     reasons.get(file).add(reason);
+    return true;
   };
 
   // Every package manifest may define executable entrypoints. Treat public
@@ -552,14 +558,17 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
     if (value.includes('*')) {
       const pattern = new RegExp('^' + value.slice(2).split('*')
         .map(part => part.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('.*') + '$');
+      let matched = false;
       for (const file of filesSet) {
         const relativeFile = path.relative(path.dirname(packageFile), file).split(path.sep).join('/');
-        if (pattern.test(relativeFile)) add(file, reason);
+        if (pattern.test(relativeFile)) { add(file, reason); matched = true; }
       }
+      if (!matched) unresolvedEntrypoints.push({ file: relative(root, packageFile), reason, target: value, kind: 'unmatched-package-entrypoint-pattern' });
       return;
     }
     const target = resolveModuleSpecifier(packageFile, value, filesSet);
     if (target.file) add(target.file, reason);
+    else if (target.unresolved) unresolvedEntrypoints.push({ file: relative(root, packageFile), reason, target: value, kind: 'unresolved-package-entrypoint' });
   };
   for (const packageFile of packageFiles) {
     let pkg;
@@ -653,7 +662,7 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
       add(file, 'playwright-test-discovery');
     }
   }
-  return { roots: [...roots].sort(), reasons };
+  return { roots: [...roots].sort(), reasons, unresolvedEntrypoints };
 }
 
 function buildModuleGraph(root) {
@@ -713,6 +722,7 @@ function buildModuleGraph(root) {
     unresolved: unresolved.map(item => ({
       from: relative(root, item.from), specifier: item.specifier, kind: item.kind
     })),
+    unresolvedEntrypoints: entrypoints.unresolvedEntrypoints,
     reachable: [...reachable].map(file => relative(root, file)).sort(),
     candidates
   };
@@ -735,11 +745,15 @@ function run(root = path.resolve(__dirname, '..')) {
   console.log('Node module entrypoints: ' + graph.roots.length);
   console.log('Resolved local module edges: ' + graph.edges.filter(edge => edge.to).length);
   console.log('Unresolved relative module edges: ' + graph.unresolved.length);
+  console.log('Unresolved executable/package entrypoints: ' + graph.unresolvedEntrypoints.length);
   console.log('Dynamic module-loading sites: ' + graph.dynamic.length);
   console.log('Unreachable module candidates: ' + graph.candidates.length);
   for (const item of ownerFindings) {
     console.log(item.file + ':' + item.line + ' ' + item.owner + ' .' + item.name +
       ' [' + item.definition + '] — ' + item.reason);
+  }
+  for (const item of graph.unresolvedEntrypoints) {
+    console.log(item.file + ' [unresolved entrypoint] ' + (item.reason || '') + ' ' + (item.target || item.file));
   }
   for (const item of graph.candidates) {
     console.log(item.file + ' [module candidate] — ' + item.reason);
