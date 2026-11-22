@@ -1140,6 +1140,19 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
   assert.ok(batch.includes("paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse"));
 });
 
+test("repository-wide full audit remains opt-in and does not run for ordinary PR synchronization", () => {
+  const audit = readFileSync(
+    new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(audit.includes("types: [labeled, synchronize]"),
+    "the full audit may react to label/synchronize events but must gate execution");
+  assert.ok(
+    audit.includes("if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}"),
+    "the repository-wide audit must execute only on manual dispatch or its explicit opt-in label"
+  );
+});
+
 test("full audit delegates performance and physical-input tests to workflows triggered by audit changes", () => {
   const audit = readFileSync(
     new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
