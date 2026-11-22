@@ -215,15 +215,15 @@ test('discovers package main, module, browser, bin, exports, and nested workspac
       module: './module.mjs',
       browser: './browser.js',
       bin: { blb: './bin/cli.js' },
-      exports: { '.': { import: './dist/index.mjs', require: './dist/index.js' }, './feature': './dist/feature.js' }
+      exports: { '.': { import: './public/index.mjs', require: './public/index.js' }, './feature': './public/feature.js' }
     }));
-    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'dist/index.mjs', 'dist/index.js', 'dist/feature.js']) write(file);
+    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'public/index.mjs', 'public/index.js', 'public/feature.js']) write(file);
     write('packages/tool/package.json', JSON.stringify({ bin: './cli.js', scripts: { run: 'node scripts/run.js' } }));
     write('packages/tool/cli.js');
     write('packages/tool/scripts/run.js');
     const graph = buildModuleGraph(root);
     const roots = new Set(graph.roots.map(item => item.file));
-    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'dist/index.mjs', 'dist/index.js', 'dist/feature.js',
+    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'public/index.mjs', 'public/index.js', 'public/feature.js',
       'packages/tool/cli.js', 'packages/tool/scripts/run.js']) assert.ok(roots.has(file), file);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
