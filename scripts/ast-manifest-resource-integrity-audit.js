@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
-const SKIP = new Set(['.git', 'node_modules', 'dist', 'coverage']);
+const SKIP = new Set(['.git', 'coverage', 'test-results', 'playwright-report']);
 function normalize(file) { return file.split(path.sep).join('/'); }
 function inside(root, target) { return target === root || target.startsWith(root + path.sep); }
 function walkFiles(root) {
@@ -279,6 +279,15 @@ function auditManifest(extensionRoot) {
     }
     return '';
   };
+  function addUrlResource(owner, request, kind, baseDirectory) {
+    const decoded = cleanUrlPath(request);
+    if (decoded !== null) {
+      const relative = decoded.replace(/^\/+/, '');
+      const target = path.resolve(decoded.startsWith('/') ? root : baseDirectory, relative);
+      if (inside(root, target) && fs.existsSync(target) && fs.statSync(target).isDirectory()) return null;
+    }
+    return add(owner, request, kind, baseDirectory);
+  }
   function addModuleDependency(owner, request, kind, baseDirectory) {
     const decoded = cleanUrlPath(request);
     if (decoded === null) {
@@ -352,7 +361,7 @@ function auditManifest(extensionRoot) {
             const decoded = cleanUrlPath(request);
             const candidate = decoded === null ? null : path.resolve(root, decoded.replace(/^\/+/, ''));
             if (!candidate || !inside(root, candidate) || !fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
-              add(owner, request, 'runtime.getURL resource');
+              addUrlResource(owner, request, 'runtime.getURL resource', root);
             }
           } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-runtime-getURL-resource' });
         }
@@ -388,10 +397,10 @@ function auditManifest(extensionRoot) {
         const request = literal(node.arguments[0]);
         const base = node.arguments[1];
         if (request !== null && base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') {
-          add(owner, request, 'JavaScript URL relative to import.meta.url', path.dirname(file));
+          addUrlResource(owner, request, 'JavaScript URL relative to import.meta.url', path.dirname(file));
         } else if (request !== null && base?.type === 'CallExpression' &&
             ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(memberPath(base.callee))) {
-          add(owner, request, 'JavaScript URL relative to extension runtime URL');
+          addUrlResource(owner, request, 'JavaScript URL relative to extension runtime URL', root);
         }
       }
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
