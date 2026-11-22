@@ -204,6 +204,7 @@ function discover(root) {
     };
     const supportedLoaderApis = new Set([
       'importScripts', 'chrome.scripting.executeScript', 'browser.scripting.executeScript',
+      'chrome.tabs.executeScript', 'browser.tabs.executeScript',
       'chrome.scripting.registerContentScripts', 'browser.scripting.registerContentScripts',
       'chrome.userScripts.register', 'browser.userScripts.register',
       'chrome.runtime.getURL', 'browser.runtime.getURL',
