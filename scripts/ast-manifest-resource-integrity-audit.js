@@ -345,7 +345,7 @@ function auditManifest(extensionRoot) {
           if (request !== null) {
             const decoded = cleanUrlPath(request);
             const candidate = decoded === null ? null : path.resolve(root, decoded.replace(/^\/+/, ''));
-            if (!candidate || !fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
+            if (!candidate || !inside(root, candidate) || !fs.existsSync(candidate) || !fs.statSync(candidate).isDirectory()) {
               add(owner, request, 'runtime.getURL resource');
             }
           } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-runtime-getURL-resource' });
