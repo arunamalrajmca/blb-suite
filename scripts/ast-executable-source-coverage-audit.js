@@ -167,7 +167,9 @@ function discover(root) {
       if (src || !match[2].trim()) continue;
       const type = /\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes);
       const scriptType = (type?.[1] ?? type?.[2] ?? type?.[3] ?? '').toLowerCase();
-      if (!scriptType || /^(?:module|text\/javascript|application\/javascript|text\/ecmascript|application\/ecmascript)$/.test(scriptType)) {
+      if (scriptType === 'importmap') {
+        dynamicSites.push({ file: owner, line: null, api: 'html-import-map', certainty: 'module-specifier-resolution-map-not-applied' });
+      } else if (!/^(?:application\/(?:ld\+json|json)|speculationrules)$/.test(scriptType)) {
         dynamicSites.push({ file: owner, line: null, api: 'html-inline-script', certainty: 'inline-executable-source-not-in-js-file' });
       }
     }
