@@ -37,12 +37,16 @@ function auditManifest(extensionRoot) {
   const cssQueue = new Set();
   const checked = new Set();
   const recordError = message => { if (!errors.includes(message)) errors.push(message); };
-  function add(owner, value, kind, baseDirectory = root) {
+  function add(owner, value, kind, baseDirectory = root, allowExternal = false) {
     if (typeof value !== 'string' || !value.trim()) {
       recordError(owner + ': invalid empty ' + kind + ' path');
       return null;
     }
-    if (isExternal(value)) return null;
+    if (isExternal(value)) {
+      if (allowExternal) return null;
+      recordError(owner + ': external URL is not a packaged resource path: ' + value);
+      return null;
+    }
     const decoded = cleanUrlPath(value);
     if (decoded === null) {
       recordError(owner + ': invalid URL encoding in ' + kind + ': ' + value);
@@ -167,9 +171,10 @@ function auditManifest(extensionRoot) {
     return attrs;
   }
   function addSrcset(owner, value, baseDirectory) {
-    for (const candidate of value.split(',')) {
+    const candidates = value.match(/(?:data:[^\s]+|[^,\s]+)(?:\s+\d+(?:\.\d+)?[wx])?/gi) || [];
+    for (const candidate of candidates) {
       const request = candidate.trim().split(/\s+/)[0];
-      if (request && !/^data:/i.test(request)) add(owner, request, 'HTML srcset resource', baseDirectory);
+      if (request && !/^data:/i.test(request)) add(owner, request, 'HTML srcset resource', baseDirectory, true);
     }
   }
   const htmlFiles = files.filter(file => file.endsWith('.html'));
@@ -183,20 +188,20 @@ function auditManifest(extensionRoot) {
       const attrs = parseAttributes(match[2]);
       const base = path.dirname(htmlFile);
       const srcTags = new Set(['script', 'img', 'source', 'video', 'audio', 'iframe', 'embed', 'track', 'input']);
-      if (srcTags.has(tag) && attrs.has('src')) add(owner, attrs.get('src'), 'HTML ' + tag + ' src', base);
-      if (tag === 'video' && attrs.has('poster')) add(owner, attrs.get('poster'), 'HTML video poster', base);
-      if (tag === 'object' && attrs.has('data')) add(owner, attrs.get('data'), 'HTML object data', base);
-      if (tag === 'body' && attrs.has('background')) add(owner, attrs.get('background'), 'HTML background', base);
+      if (srcTags.has(tag) && attrs.has('src')) add(owner, attrs.get('src'), 'HTML ' + tag + ' src', base, true);
+      if (tag === 'video' && attrs.has('poster')) add(owner, attrs.get('poster'), 'HTML video poster', base, true);
+      if (tag === 'object' && attrs.has('data')) add(owner, attrs.get('data'), 'HTML object data', base, true);
+      if (tag === 'body' && attrs.has('background')) add(owner, attrs.get('background'), 'HTML background', base, true);
       if (attrs.has('srcset') && ['img', 'source'].includes(tag)) addSrcset(owner, attrs.get('srcset'), base);
       if (tag === 'link' && attrs.has('href')) {
         const rel = (attrs.get('rel') || '').toLowerCase().split(/\s+/);
         if (rel.some(value => ['stylesheet', 'icon', 'manifest', 'preload', 'modulepreload', 'prefetch', 'apple-touch-icon'].includes(value))) {
-          add(owner, attrs.get('href'), 'HTML link resource', base);
+          add(owner, attrs.get('href'), 'HTML link resource', base, true);
         }
       }
       if (['image', 'use'].includes(tag)) {
         const href = attrs.get('href') || attrs.get('xlink:href');
-        if (href) add(owner, href, 'HTML SVG resource', base);
+        if (href) add(owner, href, 'HTML SVG resource', base, true);
       }
       if (attrs.has('style')) scanCss(attrs.get('style'), owner + ' [style]', base);
     }
@@ -213,7 +218,7 @@ function auditManifest(extensionRoot) {
       let match;
       while ((match = pattern.exec(clean))) {
         const value = (match[1] ?? match[2] ?? match[3] ?? '').trim();
-        if (value) add(owner, value, 'CSS referenced resource', baseDirectory);
+        if (value) add(owner, value, 'CSS referenced resource', baseDirectory, true);
       }
     }
   }
