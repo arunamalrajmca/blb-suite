@@ -512,6 +512,36 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-module-require' });
       }
     }
+    if (node.type === 'NewExpression') {
+      const constructorName = node.callee.type === 'Identifier'
+        ? node.callee.name
+        : node.callee.type === 'MemberExpression'
+          ? staticKey(node.callee.property, node.callee.computed) : null;
+      if (constructorName === 'Worker') {
+        const argument = node.arguments[0];
+        let request = argument?.type === 'Literal' && typeof argument.value === 'string' ? argument.value : null;
+        let baseFile = path.join(root, 'package.json');
+        if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
+          request = argument.arguments[0]?.type === 'Literal' && typeof argument.arguments[0].value === 'string'
+            ? argument.arguments[0].value : null;
+          const base = argument.arguments[1];
+          if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') baseFile = filename;
+        }
+        if (request) {
+          const specifier = request.startsWith('.') || request.startsWith('/') ? request : './' + request;
+          const resolution = resolveModuleSpecifier(baseFile, specifier, files);
+          edges.push({ from: filename, specifier: request, kind: 'worker-thread-static-launch', ...resolution });
+        }
+        dynamic.push({
+          file: filename,
+          line: node.loc.start.line,
+          kind: 'worker-thread-launch',
+          staticTarget: request,
+          note: request ? 'Literal Worker target linked; worker options and runtime environment remain dynamic.' :
+            'Worker target is selected dynamically or through a nonliteral URL expression.'
+        });
+      }
+    }
     if (node.type === 'CallExpression') {
       const callName = node.callee.type === 'Identifier'
         ? node.callee.name
