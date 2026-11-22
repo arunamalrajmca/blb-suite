@@ -454,8 +454,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
           'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'
         ]);
-        if (callbackApis.has(method) && node.arguments.length) {
-          const callback = node.arguments[0];
+        const callbackIndex = ['addEventListener'].includes(method) ? 1 :
+          ['on', 'once', 'addListener'].includes(method) && node.arguments[0]?.type === 'Literal' &&
+            typeof node.arguments[0].value === 'string' ? 1 : 0;
+        if (callbackApis.has(method) && node.arguments.length > callbackIndex) {
+          const callback = node.arguments[callbackIndex];
           let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
           if (callback.type === 'Identifier') {
             callbackName = callback.name;
