@@ -1145,9 +1145,21 @@ test("full audit label suppresses the separate focused-regressions workflow to p
     new URL("../../.github/workflows/browser-e2e-focused-regressions.yml", import.meta.url),
     "utf8"
   );
+  const hardGate = readFileSync(
+    new URL("../../.github/workflows/browser-tests.yml", import.meta.url),
+    "utf8"
+  );
   assert.ok(
     workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') && !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
     "the full audit must own focused regression cases when both labels are present"
+  );
+  assert.ok(
+    hardGate.includes("github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
+    "the full audit must suppress the separate HARD-GATE regression workflow"
+  );
+  assert.ok(
+    hardGate.includes("always() && !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit'))"),
+    "the HARD-GATE must not publish a duplicate regression-gate status while the full audit owns it"
   );
 });
 
