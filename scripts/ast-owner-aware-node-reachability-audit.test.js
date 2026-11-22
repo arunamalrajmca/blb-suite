@@ -294,3 +294,28 @@ test('links literal child-process script targets launched through node, process.
     assert.equal(graph.edges.filter(edge => edge.kind === 'child-process-static-launch').length, 3);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('links literal worker_threads Worker targets from module-relative URLs and cwd-relative paths', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worker-thread-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const { Worker } = require('node:worker_threads');",
+      "new Worker(new URL('./module-worker.js', import.meta.url));",
+      "new Worker('scripts/cwd-worker.js');"
+    ].join('\n'));
+    write('scripts/module-worker.js');
+    write('scripts/cwd-worker.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/module-worker.js'));
+    assert.ok(reachable.has('scripts/cwd-worker.js'));
+    assert.equal(graph.edges.filter(edge => edge.kind === 'worker-thread-static-launch').length, 2);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
