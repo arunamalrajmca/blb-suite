@@ -290,11 +290,12 @@ test('follows aliases to importScripts and Chrome script injection APIs', () => 
     f.write('extension/background.js', [
       "const loadScripts = importScripts; loadScripts('worker-alias.js');",
       "const inject = chrome.scripting.executeScript; inject({ files: ['injected-alias.js'] });",
-      "const register = chrome.scripting.registerContentScripts; register([{ js: ['registered-alias.js'] }]);"
+      "const register = chrome.scripting.registerContentScripts; register([{ js: ['registered-alias.js'] }]);",
+      "const getURL = chrome.runtime.getURL; new Worker(new URL('worker-runtime-url.js', getURL('/')));"
     ].join('\n'));
-    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js']) f.write('extension/' + file);
+    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js', 'worker-runtime-url.js']) f.write('extension/' + file);
     const result = discover(f.root);
     const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
-    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js']) assert.ok(rooted.has('extension/' + file), file);
+    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js', 'worker-runtime-url.js']) assert.ok(rooted.has('extension/' + file), file);
   } finally { f.cleanup(); }
 });
