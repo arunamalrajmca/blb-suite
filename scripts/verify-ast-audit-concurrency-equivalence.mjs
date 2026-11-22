@@ -92,9 +92,14 @@ const fingerprint = {
     analysisSha256: task.auditFile ? digest(task.auditFile) : null
   }))
 };
+const activeChildren = new Set();
+function terminateActiveChildren() {
+  for (const child of activeChildren) child.kill('SIGTERM');
+}
 function run(command, args, label) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    activeChildren.add(child);
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -108,9 +113,10 @@ function run(command, args, label) {
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
-    child.on('error', error => { clearTimeout(timeout); reject(error); });
+    child.on('error', error => { clearTimeout(timeout); activeChildren.delete(child); reject(error); });
     child.on('close', code => {
       clearTimeout(timeout);
+      activeChildren.delete(child);
       const output = stdout + stderr;
       if (timedOut || code !== 0) {
         const log = path.join(temp, label.replace(/[^a-z0-9_-]/gi, '_') + '.failure.log');
@@ -151,7 +157,13 @@ async function parallel(round) {
       if (index >= tasks.length) return;
       const task = tasks[index];
       try { results.set(task.key, await executeTask(task, 'parallel-r' + round + '-w' + workerIndex)); }
-      catch (error) { failure = error; return; }
+      catch (error) {
+        if (!failure) {
+          failure = error;
+          terminateActiveChildren();
+        }
+        return;
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(workers, tasks.length) }, (_, i) => worker(i + 1)));
