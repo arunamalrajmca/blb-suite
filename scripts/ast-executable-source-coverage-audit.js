@@ -221,7 +221,8 @@ function discover(root) {
           if (!scripts.length) dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'registerContentScripts', certainty: 'dynamic-registration-target' });
         }
         if (method === 'executeScript') {
-          let options = node.arguments.find(argument => argument.type === 'ObjectExpression' || argument.type === 'Identifier');
+          let options = [...node.arguments].reverse().find(argument =>
+            argument.type === 'ObjectExpression' || (argument.type === 'Identifier' && literalObjects.has(argument.name)));
           if (options?.type === 'Identifier') options = literalObjects.get(options.name) || null;
           let values = staticArray(property(options, 'files'));
           const singleFile = literal(property(options, 'file'));
