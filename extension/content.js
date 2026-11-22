@@ -4212,6 +4212,30 @@ function handleContentSettingsChanged(changes, area) {
   }
 }
 chrome.storage.onChanged.addListener(handleContentSettingsChanged);
+
+// The background uses this handshake before reinjecting content.js into an
+// already-active tab. Reapply the current settings through the same refresh
+// path as storage.onChanged, then acknowledge only after the bundle is ready.
+const contentScriptRefreshHandshakeListener = (message, sender, sendResponse) => {
+  if (message?.type !== 'blbSuiteRefreshSiteFeatures' || sender?.id !== chrome.runtime.id) return false;
+  chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    siteHostAccessRevokedSites:{}
+  }).then(settings => {
+    const changes = Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, {newValue:value}]));
+    handleContentSettingsChanged(changes, 'local');
+    sendResponse({ok:true});
+  }).catch(() => {
+    try { sendResponse({ok:false}); } catch (_) {}
+  });
+  return true;
+};
+chrome.runtime.onMessage.addListener(contentScriptRefreshHandshakeListener);
+try { window.__blbSuiteRefreshHandshakeReadyV1 = true; } catch (_) {}
+
 const contentSettingsCleanup = () => {
   // Invalidate any storage-backed Double-click refresh still awaiting a read.
   // Otherwise an old bundle can resume after reinjection and reclaim the
@@ -4219,6 +4243,7 @@ const contentSettingsCleanup = () => {
   doubleClickSettingsRefreshGeneration += 1;
   disableDoubleClickBlb();
   chrome.storage.onChanged.removeListener(handleContentSettingsChanged);
+  chrome.runtime.onMessage.removeListener(contentScriptRefreshHandshakeListener);
   if (globalThis.__blbContentSettingsCleanup === contentSettingsCleanup) {
     delete globalThis.__blbContentSettingsCleanup;
   }
