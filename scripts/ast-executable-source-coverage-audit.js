@@ -7,14 +7,25 @@ const acorn = require('acorn');
 const SKIP = new Set(['.git', 'coverage', 'test-results', 'playwright-report']);
 const JS_EXTENSIONS = ['.js', '.mjs', '.cjs'];
 
-function walk(directory, predicate, output = []) {
+function walk(directory, predicate, output = [], symlinkPaths = [], rootDirectory = directory) {
   if (!fs.existsSync(directory)) return output;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (!SKIP.has(entry.name)) walk(path.join(directory, entry.name), predicate, output);
+      if (!SKIP.has(entry.name)) walk(absolute, predicate, output, symlinkPaths, rootDirectory);
     } else if (entry.isFile()) {
-      const absolute = path.join(directory, entry.name);
       if (predicate(absolute)) output.push(absolute);
+    } else if (entry.isSymbolicLink()) {
+      let real = null, isFile = false, isDirectory = false;
+      try {
+        real = fs.realpathSync(absolute);
+        const stat = fs.statSync(real);
+        isFile = stat.isFile();
+        isDirectory = stat.isDirectory();
+      } catch {}
+      const withinRoot = !!real && (real === rootDirectory || real.startsWith(rootDirectory + path.sep));
+      symlinkPaths.push({ path: absolute, real, isFile, isDirectory, withinRoot });
+      if (withinRoot && isFile && predicate(absolute)) output.push(absolute);
     }
   }
   return output.sort();
