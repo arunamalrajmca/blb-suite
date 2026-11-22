@@ -9,9 +9,10 @@ function walkFiles(root) {
   const files = [];
   function walk(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (entry.isSymbolicLink()) continue;
       const absolute = path.join(directory, entry.name);
-      if (entry.isDirectory() && !SKIP.has(entry.name)) walk(absolute);
+      if (entry.isSymbolicLink()) {
+        try { if (fs.statSync(absolute).isFile()) files.push(absolute); } catch {}
+      } else if (entry.isDirectory() && !SKIP.has(entry.name)) walk(absolute);
       else if (entry.isFile()) files.push(absolute);
     }
   }
