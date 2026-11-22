@@ -50,6 +50,7 @@ async function closeBlbTabs(worker) {
 }
 
 
+
 async function waitForBlbTabEvent(worker, pattern, timeout = 10000) {
   return worker.evaluate(({ patternSource, timeoutMs }) => new Promise((resolve, reject) => {
     const destinationPattern = new RegExp(patternSource, 'i');
@@ -76,12 +77,12 @@ async function waitForBlbTabEvent(worker, pattern, timeout = 10000) {
           id: tab.id,
           url: tab.url || '',
           pendingUrl: tab.pendingUrl || '',
-          effectiveUrl: /blueletterbible\\.org\\//i.test(tab.url || '')
+          effectiveUrl: /blueletterbible\.org\//i.test(tab.url || '')
             ? (tab.url || '')
             : (tab.pendingUrl || tab.url || ''),
           active: !!tab.active
         })).find(tab =>
-          /^(?:https?:\\/\\/)?(?:www\\.)?blueletterbible\\.org\\//i.test(tab.effectiveUrl) &&
+          /^(?:https?:\/\/)?(?:www\.)?blueletterbible\.org\//i.test(tab.effectiveUrl) &&
           destinationPattern.test(tab.effectiveUrl)
         );
         if (match) finish(null, match);
@@ -161,7 +162,7 @@ async function runScenario(expect, scenario, page, context, worker, extensionId)
     // some samples, which can dominate this short handoff measurement.
     const blbPromise = waitForBlbTabEvent(
       worker,
-      'blueletterbible\\\\.org\\\\/kjv\\\\/jhn\\\\/3\\\\/16\\\\/'
+      'blueletterbible\\.org\/kjv\/jhn\/3\/16\/'
     );
     const started = Date.now();
     await button.click();
