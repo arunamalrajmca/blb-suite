@@ -128,15 +128,24 @@ jobs:
 
       - name: Stress four independent lifecycle specs across all four Playwright workers
         if: ${{ matrix.scenario == 'concurrency-stress' }}
-        run: >-
-          npx playwright test
-          tests/browser/service-worker-lifecycle.spec.js
-          tests/browser/source-page-button-redirect-separation.spec.js
-          tests/browser/content-feature-refresh-races.spec.js
-          tests/browser/extension-lifecycle.spec.js
-          --grep "(a real MV3 service-worker termination is recovered by the Alt\\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them|repeated global master toggles disable and restore exactly one double-click listener|reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging)"
-          --repeat-each=2 --workers=4 --max-failures=0 --reporter=line
-
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_files=(
+            tests/browser/service-worker-lifecycle.spec.js
+            tests/browser/source-page-button-redirect-separation.spec.js
+            tests/browser/content-feature-refresh-races.spec.js
+            tests/browser/extension-lifecycle.spec.js
+          )
+          grep_pattern='(a real MV3 service-worker termination is recovered by the Alt\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them|repeated global master toggles disable and restore exactly one double-click listener|reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging)'
+          # Keep the same eight executions and four-worker contention, but run
+          # two complete rounds. This prevents duplicate copies of the same
+          # destructive registration/worker lifecycle test from racing each
+          # other in separate Chromium instances during one round.
+          for round in 1 2; do
+            printf '[round %s/2] four-worker lifecycle contention stress\n' "$round"
+            npx playwright test "${test_files[@]}" --grep "$grep_pattern" --workers=4 --max-failures=0 --reporter=line
+          done
       - name: Prepare exact PR-base performance baseline
         if: ${{ matrix.scenario == 'performance' }}
         env:
