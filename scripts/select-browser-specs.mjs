@@ -141,6 +141,7 @@ for (const path of changed) {
         // baseline/candidate workflow, which supplies per-sample environment
         // and output paths. Never run them in the generic Group A process.
         path !== "tests/browser/performance.spec.js" &&
+        path !== "tests/browser/performance-batch.spec.js" &&
         path !== "tests/browser/omnibox-command-routing.spec.js" &&
         path !== "tests/browser/source-page-button-redirect-separation.spec.js") {
       changedBrowserSpecs.push(path);

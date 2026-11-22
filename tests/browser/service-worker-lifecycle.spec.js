@@ -197,11 +197,18 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
     );
     expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
 
-    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
-    expect(closed.success).toBe(true);
+    // Chrome can acknowledge Target.closeTarget before the worker target is
+    // actually gone. Reissue the close while observing the same target within
+    // the original five-second termination budget; do not extend the deadline.
+    const destroyedTargets=new Set();
+    cdp.on('Target.targetDestroyed', ({targetId}) => destroyedTargets.add(targetId));
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target => target.targetId===workerTarget.targetId);
+      const stillRunning=current.some(target => target.targetId===workerTarget.targetId);
+      if (stillRunning && !destroyedTargets.has(workerTarget.targetId)) {
+        await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+      }
+      return stillRunning && !destroyedTargets.has(workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
     // This is the real page gesture and the dedicated Double-click message
@@ -287,11 +294,18 @@ test('a real MV3 service-worker termination is recovered by the Alt+B command me
     );
     expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
 
-    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
-    expect(closed.success).toBe(true);
+    // Chrome can acknowledge Target.closeTarget before the worker target is
+    // actually gone. Reissue the close while observing the same target within
+    // the original five-second termination budget; do not extend the deadline.
+    const destroyedTargets=new Set();
+    cdp.on('Target.targetDestroyed', ({targetId}) => destroyedTargets.add(targetId));
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target => target.targetId===workerTarget.targetId);
+      const stillRunning=current.some(target => target.targetId===workerTarget.targetId);
+      if (stillRunning && !destroyedTargets.has(workerTarget.targetId)) {
+        await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+      }
+      return stillRunning && !destroyedTargets.has(workerTarget.targetId);
     },{timeout:5000}).toBe(false);
 
     // Send the exact runtime handoff used by the registered Alt+B command.
@@ -2194,11 +2208,31 @@ test('persistent registration failure keeps current and subsequent same-tab docu
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
-    pageSelectionButtonSites:{[host]:true},
-    doubleClickBlbSites:{[host]:true}
+    pageSelectionButtonSites:{[host]:false},
+    doubleClickBlbSites:{[host]:false}
   });
   await extensionWorker.evaluate(async value => {
+    const settleRegistrationWork = async () => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const reconciliation = runtimeContentScriptReconciliationQueue;
+        const pending = [...runtimeContentScriptRegistrationLocks.values()];
+        await Promise.all([
+          reconciliation.catch(() => {}),
+          ...pending.map(operation => operation.catch(() => {}))
+        ]);
+        if (reconciliation === runtimeContentScriptReconciliationQueue &&
+            pending.length === 0 &&
+            runtimeContentScriptRegistrationLocks.size === 0) return;
+      }
+      throw new Error('Runtime content-script registration work did not settle before failure injection');
+    };
+    await settleRegistrationWork();
     await unregisterRuntimeContentScriptForPattern(value);
+    const remaining = await chrome.scripting.getRegisteredContentScripts({
+      ids:[runtimeContentScriptIdForPattern(value)]
+    });
+    if (remaining.length) throw new Error('Pre-test cleanup left a persistent content-script registration');
     const api=chrome.scripting;
     const originalDescriptor=Object.getOwnPropertyDescriptor(api,'registerContentScripts');
     const original=api.registerContentScripts;
@@ -2219,6 +2253,13 @@ test('persistent registration failure keeps current and subsequent same-tab docu
     if (!globalThis.__registrationFailureAudit.hookInstalled) {
       throw new Error('Could not install the persistent-registration failure interceptor');
     }
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{[new URL(value).hostname]:true},
+      doubleClickBlbSites:{[new URL(value).hostname]:true}
+    });
+    await settleRegistrationWork();
     const seeded=await registerRuntimeContentScriptForPattern({url:value},BLB_CONTENT_SCRIPT_FILES);
     globalThis.__registrationFailureAudit.seededFailure=seeded===false &&
       globalThis.__registrationFailureAudit.attempts>0;

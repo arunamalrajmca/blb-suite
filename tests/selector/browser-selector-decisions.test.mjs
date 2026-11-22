@@ -126,6 +126,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/multiverse-disjoint-chapter-post.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-post-failure-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/performance.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/performance-batch.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
@@ -243,8 +244,8 @@ test("mixed runtime and Study Sessions spec edits delegate the changed spec to i
     assert.match(output, /group_a_required=true/);
   });
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
-  assert.ok(workflow.includes("Run every non-delegated changed browser spec"));
-  assert.ok(workflow.includes("inputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js'"));
+  assert.ok(workflow.includes("Run selected Study Sessions regressions in one Playwright process"));
+  assert.ok(workflow.includes("inputs.study_sessions_required == 'true'"));
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
@@ -453,9 +454,9 @@ test("test-only browser edits reuse the required reference workflow classifier",
   assert.match(workflow, /id: focused[\s\S]*?FOCUSED_SPECS=/);
   assert.match(workflow, /github\.event_name == 'pull_request'[\s\S]*?needs\.change-detection\.outputs\.runtime_changed == 'false'/);
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
-  assert.match(workflow, /--list "\$spec"/);
-  assert.match(workflow, /Playwright discovered no tests in \$spec/);
-  assert.match(workflow, /npx playwright test --config=playwright\.config\.js "\$spec"/);
+  assert.match(workflow, /--list.*"\$\{specs\[@\]\}"/);
+  assert.match(workflow, /Playwright discovered no tests in the selected focused behavior specs/);
+  assert.match(workflow, /npx playwright test --config=playwright\.config\.js "\$\{specs\[@\]\}"/);
 });
 
 test("MultiVerse tab-reuse regressions share the Group A runner with conservative full-suite coverage", () => {
@@ -512,14 +513,14 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.doesNotMatch(groupA, /case "\$spec" in/);
   assert.match(groupA, /browser_e2e_required:/);
-  assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
+  assert.ok(groupA.includes("BROWSER_E2E_REQUIRED: ${{ inputs.browser_e2e_required }}"));
+  assert.ok(groupA.includes('"$BROWSER_E2E_REQUIRED" == "true"'));
   assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
-  assert.match(referenceWorkflow, /--list "\$spec"/);
-  assert.match(referenceWorkflow, /Playwright discovered no tests in \$spec/);
-  assert.match(referenceWorkflow, /npx playwright test --config=playwright\.config\.js "\$spec"/);
-  assert.match(groupA, /npx playwright test "\$spec"/);
-  assert.match(groupA, /browser_e2e_required == 'true'/);
-  assert.match(groupB, /browser_e2e_required == 'true'/);
+  assert.match(referenceWorkflow, /--list --reporter=list "\$\{runnable_specs\[@\]\}"/);
+  assert.match(referenceWorkflow, /Playwright discovered no tests in the reference matrix group/);
+  assert.match(referenceWorkflow, /npx playwright test --config=playwright\.config\.js "\$\{runnable_specs\[@\]\}"/);
+  assert.match(groupA, /npx playwright test "\$\{specs\[@\]\}" --workers=1/);
+  assert.match(groupA, /npx playwright test "\$\{specs\[@\]\}"/);
 });
 
 test("core user-action E2E stays scoped to core-mapped or full-suite changes", () => {
@@ -709,6 +710,7 @@ test("performance benchmark specs stay in the dedicated interleaved runner", () 
   withFixture((root, base) => {
     commitChange(root, "extension/background.js", "// shared runtime change\\n");
     commitChange(root, "tests/browser/performance.spec.js", "// benchmark regression change\\n");
+    commitChange(root, "tests/browser/performance-batch.spec.js", "// batched benchmark regression change\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=true/);
     assert.match(output, /changed_browser_specs=\n/);
@@ -1097,6 +1099,61 @@ test("selection text helper changes select both split extension suites", () => {
   });
 });
 
+
+
+
+test("four-worker lifecycle contention stress schedules four independent browser spec files", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-focused-regressions.yml", import.meta.url),
+    "utf8"
+  );
+  const start = workflow.indexOf("Stress four independent lifecycle specs across all four Playwright workers");
+  assert.notEqual(start, -1, "focused regression workflow must retain the four-worker contention scenario");
+  const block = workflow.slice(start, workflow.indexOf("      - name:", start + 20));
+  for (const spec of [
+    "tests/browser/service-worker-lifecycle.spec.js",
+    "tests/browser/source-page-button-redirect-separation.spec.js",
+    "tests/browser/content-feature-refresh-races.spec.js",
+    "tests/browser/extension-lifecycle.spec.js"
+  ]) assert.ok(block.includes(spec), "concurrency stress must include " + spec);
+  assert.match(block, /for round in 1 2/);
+  assert.match(block, /--workers=4 --max-failures=0 --reporter=line/);
+});
+
+test("performance batching retains interleaved paired samples with a fresh Chromium profile per sample", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url),
+    "utf8"
+  );
+  const batch = readFileSync(
+    new URL("../browser/performance-batch.spec.js", import.meta.url),
+    "utf8"
+  );
+  assert.ok(workflow.includes("tests/browser/performance-batch.spec.js --workers=1"));
+  assert.ok(workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-performance')"),
+    "the ci-run-performance label must run the measured interleaved benchmark");
+  assert.ok(workflow.includes("BLB_PERF_SAMPLES: 11"));
+  assert.ok(batch.includes("const samples = Number(process.env.BLB_PERF_SAMPLES || 11)"));
+  assert.ok(batch.includes("const total = scenarios.length * samples * 2"));
+  assert.ok(batch.includes("sample % 2 === 1 ? ['baseline', 'candidate'] : ['candidate', 'baseline']"));
+  assert.ok(batch.includes("chromium.launchPersistentContext('',"));
+  assert.ok(batch.includes("await context.close()"));
+  assert.ok(batch.includes("BLB_PERF_BATCH_SAMPLE"));
+  assert.ok(batch.includes("paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse"));
+});
+
+test("repository-wide full audit remains opt-in and does not run for ordinary PR synchronization", () => {
+  const audit = readFileSync(
+    new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(audit.includes("types: [labeled, synchronize]"),
+    "the full audit may react to label/synchronize events but must gate execution");
+  assert.ok(
+    audit.includes("if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}"),
+    "the repository-wide audit must execute only on manual dispatch or its explicit opt-in label"
+  );
+});
 
 test("full audit delegates performance and physical-input tests to workflows triggered by audit changes", () => {
   const audit = readFileSync(

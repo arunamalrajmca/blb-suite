@@ -196,6 +196,7 @@ try {
     'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/kjv-corpus-lazy-loading.spec.js',
     'tests/browser/performance.spec.js',
+    'tests/browser/performance-batch.spec.js',
     'tests/browser/test-' + 'only.spec.js'
   ];
   for (const file of fixtures) write(file);
