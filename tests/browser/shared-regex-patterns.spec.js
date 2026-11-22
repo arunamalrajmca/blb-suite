@@ -562,23 +562,38 @@ test('all reference orders preserve the middle selection through parsing and fin
 
 test('Chrome Web Store suppresses all extension injection and selection actions despite saved opt-ins', async ({extensionWorker}) => {
   const result = await extensionWorker.evaluate(async () => {
-    const tab = {
-      id:987655,
-      url:'https://chromewebstore.google.com/detail/example-extension',
-      title:'Chrome Web Store'
+    const originals = {
+      suiteEnabled:isSuiteEnabled,
+      permissionCheck:hasSelectionActionPermissionForTab,
+      pageEnabled:isPageButtonEnabledForHostname
     };
-    const settings = {
-      redirectEnabled:true,
-      pageSelectionButtonSites:{'chromewebstore.google.com':true},
-      doubleClickBlbSites:{'chromewebstore.google.com':true}
-    };
-    return {
-      scripts:contentScriptFilesForTab(tab, settings),
-      shouldInject:await shouldInjectContentScriptForTab(tab, settings),
-      contextMenu:await shouldShowBlbContextMenu(tab, 'John 3:16'),
-      hostnameBlocked:BLBShared.isSensitiveSiteHostname('chromewebstore.google.com'),
-      urlBlocked:BLBShared.isSensitiveSiteUrl(tab.url)
-    };
+    try {
+      await chrome.storage.local.set({masterEnabled:true,redirectEnabled:true});
+      isSuiteEnabled = async () => true;
+      hasSelectionActionPermissionForTab = async () => true;
+      isPageButtonEnabledForHostname = async () => true;
+      const tab = {
+        id:987655,
+        url:'https://chromewebstore.google.com/detail/example-extension',
+        title:'Chrome Web Store'
+      };
+      const settings = {
+        redirectEnabled:true,
+        pageSelectionButtonSites:{'chromewebstore.google.com':true},
+        doubleClickBlbSites:{'chromewebstore.google.com':true}
+      };
+      return {
+        scripts:contentScriptFilesForTab(tab, settings),
+        shouldInject:await shouldInjectContentScriptForTab(tab, settings),
+        contextMenu:await shouldShowBlbContextMenu(tab, 'John 3:16'),
+        hostnameBlocked:BLBShared.isSensitiveSiteHostname('chromewebstore.google.com'),
+        urlBlocked:BLBShared.isSensitiveSiteUrl(tab.url)
+      };
+    } finally {
+      isSuiteEnabled = originals.suiteEnabled;
+      hasSelectionActionPermissionForTab = originals.permissionCheck;
+      isPageButtonEnabledForHostname = originals.pageEnabled;
+    }
   });
   expect(result).toEqual({
     scripts:[],
