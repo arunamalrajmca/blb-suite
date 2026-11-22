@@ -1164,6 +1164,10 @@ test("full audit delegates performance and physical-input tests to workflows tri
     new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url),
     "utf8"
   );
+  const reference = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
+    "utf8"
+  );
 
   assert.ok(audit.includes("first_status=0") && audit.includes("second_status=0"),
     "both independent prior-failure reruns must execute even if the first one fails");
@@ -1183,12 +1187,18 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.ok(audit.includes("Expected to delegate exactly 5 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
   assert.ok(audit.includes("Interleaved baseline/candidate performance batch preserves isolated samples"),
     "the batched performance benchmark must remain delegated to its dedicated workflow");
+  assert.ok(native.includes("tests/browser/service-worker-shortcut-headed.spec.js"),
+    "the physical Alt+B test must have a dedicated native-browser owner");
   assert.ok(native.includes("tests/browser/native-prerender-activation.spec.js"),
-    "native prerender tests must execute in the Xvfb-backed browser workflow");
+    "both native prerender tests must execute in the Xvfb-backed browser workflow");
   assert.ok(native.includes(".github/workflows/manual-full-test-audit.yml"),
     "full-audit changes must trigger the native shortcut workflow");
+  assert.ok(performance.includes("tests/browser/performance-batch.spec.js --workers=1"),
+    "the batched benchmark must have a dedicated performance-workflow owner");
   assert.ok(performance.includes(".github/workflows/manual-full-test-audit.yml"),
     "full-audit changes must trigger the performance workflow");
+  assert.ok(reference.includes("!contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
+    "the References workflow must suppress its browser matrix when the full audit owns the suite");
   assert.ok(performance.includes("'ci-full-test-audit'"),
     "the opt-in full-audit label must run the delegated performance benchmark");
 });
