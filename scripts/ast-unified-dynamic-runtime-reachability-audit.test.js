@@ -389,3 +389,41 @@ test('keeps unresolved callback ownership explicit instead of silently assuming 
     item.registrationApi.includes('eventBus.on')
   ));
 });
+
+
+test('tracks aliased global eval, reassigned Function constructors, and imported or destructured Node vm execution', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const evaluate = globalThis.eval; evaluate(sourceText);',
+      'let compile; compile = Function; compile(\"return 1\")();',
+      \"const { runInNewContext: runVm } = require('node:vm'); runVm(sourceText, sandbox);\",
+      \"import { Script as VmScript } from 'node:vm'; new VmScript(sourceText);\",
+      \"window.setTimeout('runGenerated()', 1);\"
+    ].join(' ')
+  });
+  const boundaries = result.uncertainty.filter(item =>
+    ['unresolved-dynamic-execution', 'string-timer-execution'].includes(item.kind)
+  );
+  assert.ok(boundaries.some(item => item.executionBoundary === 'direct-or-aliased-eval'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'function-constructor'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'node-vm'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
+});
+
+test('records observer constructors, event-property handlers, and browser API callback ownership', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onResize(entries) { return entries.length; }',
+      'const observer = new ResizeObserver(onResize);',
+      'window.onmessage = event => event.data;',
+      'function onTabs(tabs) { return tabs.length; }',
+      'chrome.tabs.query({}, onTabs);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item => item.expression === 'ResizeObserver' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.expression === 'window.onmessage' && item.certainty === 'resolved-inline-callback'));
+  assert.ok(registrations.some(item => item.expression === 'chrome.tabs.query' && item.certainty === 'resolved-function-binding'));
+});
