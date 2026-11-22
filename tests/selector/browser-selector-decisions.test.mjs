@@ -126,6 +126,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/multiverse-disjoint-chapter-post.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-post-failure-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/performance.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/performance-batch.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
@@ -243,8 +244,8 @@ test("mixed runtime and Study Sessions spec edits delegate the changed spec to i
     assert.match(output, /group_a_required=true/);
   });
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
-  assert.ok(workflow.includes("Run every non-delegated changed browser spec"));
-  assert.ok(workflow.includes("inputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js'"));
+  assert.ok(workflow.includes("Run selected Study Sessions regressions in one Playwright process"));
+  assert.ok(workflow.includes("inputs.study_sessions_required == 'true'"));
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
