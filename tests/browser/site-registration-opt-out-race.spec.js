@@ -100,97 +100,123 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
       pageSelectionButtonSites:{},
       doubleClickBlbSites:{}
     });
-
-    await extensionWorker.evaluate(() => {
-      let resolveStarted;
-      let resolveRelease;
-      const started = new Promise(resolve=>{resolveStarted=resolve;});
-      const release = new Promise(resolve=>{resolveRelease=resolve;});
-      const original = chrome.tabs.sendMessage;
-      const originalExecuteScript = chrome.scripting.executeScript;
-      const gate = {started,release,resolveRelease,original,originalExecuteScript,blocked:false,response:null,targetTabId:null,fallbackInjectionCalls:0};
-      chrome.scripting.executeScript = async function(details,...args) {
-        if (details?.target?.tabId === gate.targetTabId &&
-            Array.isArray(details?.files) && details.files.includes('content.js')) gate.fallbackInjectionCalls++;
-        return originalExecuteScript.call(this,details,...args);
-      };
-      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__ = gate;
-      chrome.tabs.sendMessage = async function(tabId,message,...args) {
-        const response = await original.call(this,tabId,message,...args);
-        if (message?.type === 'blbSuiteRefreshSiteFeatures') gate.response = response;
-        // Hold only after the real content-script handshake has succeeded.
-        // The first refresh attempt may legitimately precede direct injection;
-        // blocking that attempt would test an early probe, not stale activation.
-        if (!gate.blocked && message?.type === 'blbSuiteRefreshSiteFeatures' && response?.ok === true) {
-          let tab = null;
-          try { tab = await chrome.tabs.get(tabId); } catch (_) {}
-          if (String(tab?.url || '').startsWith('https://christianity.com/')) {
-            gate.blocked = true;
-            gate.targetTabId = tabId;
-            resolveStarted();
-            await release;
-          }
-        }
-        return response;
-      };
-      if (chrome.tabs.sendMessage === original) {
-        throw new Error('Could not install the deterministic content-script handshake gate');
-      }
-    });
-    gateInstalled = true;
-
     await page.route('https://christianity.com/**',route=>route.fulfill({
       status:200,contentType:'text/html',
       body:'<!doctype html><html><head><title>Stale activation regression</title></head><body><main>Article</main></body></html>'
     }));
     await page.goto(sourceUrl,{waitUntil:'domcontentloaded'});
 
-    // The initial activation registers both worlds before it reaches the
-    // deliberately held refresh handshake. Keep that activation in flight.
-    await extensionWorker.evaluate(async () => {
-      await globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.started;
-    });
-    await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:true,mainWorld:true});
-    await expect.poll(async () => extensionWorker.evaluate(async () => {
-      const gate = globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__;
+    const tabId = await extensionWorker.evaluate(async url => {
+      const tabs = await chrome.tabs.query({url});
+      if (!tabs.length) throw new Error('Could not locate the regression tab');
+      return tabs[0].id;
+    },sourceUrl);
+
+    // Prime the tab with a fully initialized content script before holding the
+    // next activation handshake. This distinguishes handshake reuse from the
+    // expected first-time fallback injection on a page with no receiver yet.
+    const primed = await extensionWorker.evaluate(async id => ensureContentScriptInTab(id),tabId);
+    expect(primed).toBe(true);
+    const handshakeReady = async () => extensionWorker.evaluate(async id => {
       const [result] = await chrome.scripting.executeScript({
-        target:{tabId:gate.targetTabId},world:'ISOLATED',
+        target:{tabId:id},world:'ISOLATED',
         func:() => window.__blbSuiteRefreshHandshakeReadyV1 === true
       });
       return result?.result === true;
-    }), {timeout:15000}).toBe(true);
+    },tabId);
+    await expect.poll(handshakeReady,{timeout:15000}).toBe(true);
+
+    await extensionWorker.evaluate(id => {
+      let resolveStarted;
+      let resolveRelease;
+      let resolveRecoveryAttempt;
+      const started = new Promise(resolve=>{resolveStarted=resolve;});
+      const release = new Promise(resolve=>{resolveRelease=resolve;});
+      const recoveryAttempt = new Promise(resolve=>{resolveRecoveryAttempt=resolve;});
+      const originalSendMessage = chrome.tabs.sendMessage;
+      const originalExecuteScript = chrome.scripting.executeScript;
+      const originalEnsure = ensureContentScriptInTab;
+      const gate = {
+        started,release,recoveryAttempt,resolveRelease,resolveRecoveryAttempt,
+        originalSendMessage,originalExecuteScript,originalEnsure,
+        blocked:false,released:false,response:null,targetTabId:id,
+        fallbackInjectionCalls:0,recoverySawExistingLock:false
+      };
+      chrome.scripting.executeScript = async function(details,...args) {
+        if (details?.target?.tabId === gate.targetTabId &&
+            Array.isArray(details?.files) && details.files.includes('content.js')) gate.fallbackInjectionCalls++;
+        return originalExecuteScript.call(this,details,...args);
+      };
+      chrome.tabs.sendMessage = async function(targetId,message,...args) {
+        if (targetId === gate.targetTabId && message?.type === 'blbSuiteRefreshSiteFeatures' && !gate.released) {
+          if (!gate.blocked) {
+            gate.blocked = true;
+            resolveStarted();
+          }
+          await release;
+        }
+        const response = await originalSendMessage.call(this,targetId,message,...args);
+        if (targetId === gate.targetTabId && message?.type === 'blbSuiteRefreshSiteFeatures') gate.response = response;
+        return response;
+      };
+      globalThis.ensureContentScriptInTab = async function(targetId,...args) {
+        if (targetId === gate.targetTabId && gate.blocked && !gate.released) {
+          gate.recoverySawExistingLock = contentScriptInjectionLocks.has(targetId);
+          resolveRecoveryAttempt();
+        }
+        return originalEnsure.call(this,targetId,...args);
+      };
+      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__ = gate;
+      gate.activationPromise = ensureContentScriptInTab(id);
+    },tabId);
+    gateInstalled = true;
+
+    await extensionWorker.evaluate(() => globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.started);
+    await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:true,mainWorld:true});
     const fallbackInjectionCallsBeforeRecovery = await extensionWorker.evaluate(() =>
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.fallbackInjectionCalls
     );
+    expect(fallbackInjectionCallsBeforeRecovery).toBe(0);
 
-    // OFF removes both registrations while the original activation is still
-    // holding the per-tab in-flight promise.
+    // OFF removes both registrations while the new activation remains held.
     await extensionStorage.set({masterEnabled:false});
     await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:false,mainWorld:false});
 
-    // ON recovery encounters the older activation promise. Release it only
-    // after the new setting is committed so recovery must repair stale state.
+    // ON must enter ensureContentScriptInTab while the older activation is
+    // still in flight; only then release the held handshake.
     await extensionStorage.set({masterEnabled:true});
-    await extensionWorker.evaluate(() => {
-      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.resolveRelease();
-    });
+    await extensionWorker.evaluate(() => globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.recoveryAttempt);
+    const recoverySawExistingLock = await extensionWorker.evaluate(() =>
+      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.recoverySawExistingLock
+    );
+    expect(recoverySawExistingLock).toBe(true);
 
+    await extensionWorker.evaluate(() => {
+      const gate = globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__;
+      gate.released = true;
+      gate.resolveRelease();
+    });
     await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:true,mainWorld:true});
     await expect.poll(async () => extensionWorker.evaluate(() =>
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.response
-    ), {timeout:15000}).toEqual({ok:true});
+    ),{timeout:15000}).toEqual({ok:true});
     const fallbackInjectionCalls = await extensionWorker.evaluate(() =>
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.fallbackInjectionCalls
     );
     expect(fallbackInjectionCalls).toBe(fallbackInjectionCallsBeforeRecovery);
+    await extensionWorker.evaluate(async () => {
+      await globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.activationPromise;
+    });
   } finally {
     if (gateInstalled) {
       await extensionWorker.evaluate(() => {
         const gate = globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__;
         if (gate) {
+          gate.released = true;
           gate.resolveRelease();
-          chrome.tabs.sendMessage = gate.original;
+          chrome.tabs.sendMessage = gate.originalSendMessage;
           chrome.scripting.executeScript = gate.originalExecuteScript;
+          globalThis.ensureContentScriptInTab = gate.originalEnsure;
           delete globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__;
         }
       }).catch(()=>{});
