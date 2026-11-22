@@ -74,6 +74,14 @@ jobs:
               node "$audit_file"
             fi
           done
+          for audit_file in scripts/ast-*-audit.js; do
+            [[ -f "$audit_file" ]] || continue
+            test_file="${audit_file%.js}.test.js"
+            if [[ ! -f "$test_file" ]]; then
+              echo "Running analysis without a paired test file: $audit_file"
+              node "$audit_file"
+            fi
+          done
 
       # Compare the complete AST audit inventory, not only selected browser tests.
       # The old serial loop remains the reference; bounded parallel execution must
