@@ -274,6 +274,7 @@ test('reports inline HTML executable sources outside the JavaScript file invento
     const result = discover(f.root);
     const apis = result.dynamicSites.map(item => item.api);
     assert.ok(apis.includes('html-inline-script'));
+    assert.ok(apis.includes('html-import-map'));
     assert.ok(apis.includes('html-inline-event-handler'));
     assert.ok(apis.includes('html-javascript-url'));
     assert.ok(apis.includes('html-srcdoc'));
