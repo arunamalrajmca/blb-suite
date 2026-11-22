@@ -349,7 +349,7 @@ test('tracks dynamic execution boundaries as scoped uncertainty', () => {
       "const Generated = Function('return function generated() {}')();",
       "setTimeout('runPlugin()', 10);",
       "const vm = require('node:vm'); vm.runInNewContext(sourceText, sandbox);"
-    ].join('\\n'),
+    ].join(' '),
     'scripts/plugin.js': 'module.exports = true;'
   });
   const boundaries = result.uncertainty.filter(item =>
@@ -370,7 +370,7 @@ test('records framework callback ownership and resolves named and inline callbac
       'chrome.runtime.onMessage.addListener(onMessage);',
       'document.addEventListener("click", event => event.preventDefault());',
       'Promise.resolve().then(onMessage);'
-    ].join('\\n')
+    ].join(' ')
   });
   const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
   assert.equal(registrations.length, 3);
