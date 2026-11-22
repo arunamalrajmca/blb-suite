@@ -339,3 +339,53 @@ test('keeps indirect registered-content-script options explicitly uncertain', ()
   ));
 });
 
+
+
+test('tracks dynamic execution boundaries as scoped uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "eval(sourceText);",
+      "const Generated = Function('return function generated() {}')();",
+      "setTimeout('runPlugin()', 10);",
+      "const vm = require('node:vm'); vm.runInNewContext(sourceText, sandbox);"
+    ].join('\\n'),
+    'scripts/plugin.js': 'module.exports = true;'
+  });
+  const boundaries = result.uncertainty.filter(item =>
+    ['unresolved-dynamic-execution', 'string-timer-execution'].includes(item.kind)
+  );
+  assert.ok(boundaries.some(item => item.executionBoundary === 'direct-eval'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'function-constructor'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'node-vm'));
+  assert.ok(boundaries.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('records framework callback ownership and resolves named and inline callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'chrome.runtime.onMessage.addListener(onMessage);',
+      'document.addEventListener("click", event => event.preventDefault());',
+      'Promise.resolve().then(onMessage);'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.some(item => item.callback === 'onMessage' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.callback === '[inline callback]' && item.certainty === 'resolved-inline-callback'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps unresolved callback ownership explicit instead of silently assuming a callback target', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'eventBus.on("message", registry[getCallbackKey()]);'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.registrationApi.includes('eventBus.on')
+  ));
+});
