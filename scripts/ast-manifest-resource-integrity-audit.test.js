@@ -338,6 +338,7 @@ test('validates resource references through aliased require, importScripts, runt
       'const load = require; load(\"./module.js\");',
       'const loadWorker = importScripts; loadWorker(\"./worker.js\");',
       'const getURL = chrome.runtime.getURL; getURL(\"assets/icon.svg\");',
+      'new URL(\"worker-url.js\", getURL(\"/\"));',
       'const inject = chrome.scripting.executeScript; inject({ files: [\"injected.js\"] });'
     ].join('\n'));
     for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js', 'worker-url.js']) f.write(file);
