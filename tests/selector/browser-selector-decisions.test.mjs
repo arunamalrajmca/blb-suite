@@ -1165,6 +1165,11 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "utf8"
   );
 
+  assert.ok(audit.includes("first_status=0") && audit.includes("second_status=0"),
+    "both independent prior-failure reruns must execute even if the first one fails");
+  assert.ok(audit.includes("first_status=\"$first_status\" || \"$second_status\""),
+    "the audit must report failure if either independent rerun fails");
+
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
     "native Chromium _self prerender activation initializes the activated document without tab replacement",
