@@ -485,6 +485,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
             }
           }
           if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
+          if (target && node.init?.type === 'MemberExpression') {
+            const initPath = memberPath(node.init);
+            if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
+            if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
+            const sourceObject = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
+            const sourceMethod = initPath.split('.').pop();
+            if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
+          }
         } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
           for (const item of node.id.properties || []) {
             if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
