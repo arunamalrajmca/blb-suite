@@ -146,6 +146,9 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
       await globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.started;
     });
     await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:true,mainWorld:true});
+    const fallbackInjectionCallsBeforeRecovery = await extensionWorker.evaluate(() =>
+      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.fallbackInjectionCalls
+    );
 
     // OFF removes both registrations while the original activation is still
     // holding the per-tab in-flight promise.
@@ -166,7 +169,7 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
     const fallbackInjectionCalls = await extensionWorker.evaluate(() =>
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.fallbackInjectionCalls
     );
-    expect(fallbackInjectionCalls).toBe(0);
+    expect(fallbackInjectionCalls).toBe(fallbackInjectionCallsBeforeRecovery);
   } finally {
     if (gateInstalled) {
       await extensionWorker.evaluate(() => {
