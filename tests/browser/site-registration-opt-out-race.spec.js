@@ -107,7 +107,12 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
       const started = new Promise(resolve=>{resolveStarted=resolve;});
       const release = new Promise(resolve=>{resolveRelease=resolve;});
       const original = chrome.tabs.sendMessage;
-      const gate = {started,release,resolveRelease,original,blocked:false};
+      const originalExecuteScript = chrome.scripting.executeScript;
+      const gate = {started,release,resolveRelease,original,originalExecuteScript,blocked:false,response:null,fallbackInjectionCalls:0};
+      chrome.scripting.executeScript = async function(details,...args) {
+        if (Array.isArray(details?.files) && details.files.includes('content.js')) gate.fallbackInjectionCalls++;
+        return originalExecuteScript.call(this,details,...args);
+      };
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__ = gate;
       chrome.tabs.sendMessage = async function(tabId,message,...args) {
         if (!gate.blocked && message?.type === 'blbSuiteRefreshSiteFeatures') {
@@ -119,7 +124,9 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
             await release;
           }
         }
-        return original.call(this,tabId,message,...args);
+        const response = await original.call(this,tabId,message,...args);
+        if (message?.type === 'blbSuiteRefreshSiteFeatures') gate.response = response;
+        return response;
       };
       if (chrome.tabs.sendMessage === original) {
         throw new Error('Could not install the deterministic content-script handshake gate');
@@ -160,6 +167,7 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
         if (gate) {
           gate.resolveRelease();
           chrome.tabs.sendMessage = gate.original;
+          chrome.scripting.executeScript = gate.originalExecuteScript;
           delete globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__;
         }
       }).catch(()=>{});
