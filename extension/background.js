@@ -7169,7 +7169,7 @@ async function getActiveTabSelection(tabId, documentId = null) {
           if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
         };
         walk(range.cloneContents());
-        const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \\t]*\n[ \\t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
         return reconstructed || selection.toString();
       }
     });
@@ -7422,7 +7422,7 @@ async function ensureWebSelectionContextMenu() {
   if (selectionMenuEnsurePromise) return selectionMenuEnsurePromise;
   selectionMenuEnsurePromise = (async () => {
     const updateExisting = async () => chrome.contextMenus.update('blb-suite-web-selection', {
-      title:'Show on BLB\\tAlt+B',
+      title:'Show on BLB\tAlt+B',
       // Clear the old HTTP(S)-only restriction so the same persistent item
       // can also appear in browser-managed PDF viewer documents.
       documentUrlPatterns:[]
@@ -7438,7 +7438,7 @@ async function ensureWebSelectionContextMenu() {
     try {
       await chrome.contextMenus.create({
         id:'blb-suite-web-selection',
-        title:'Show on BLB\\tAlt+B',
+        title:'Show on BLB\tAlt+B',
         contexts:['selection'],
         // One item is shared by ordinary web pages and browser-managed PDF tabs.
         visible:false
