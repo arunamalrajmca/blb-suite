@@ -396,6 +396,12 @@ function auditManifest(extensionRoot) {
         if (request?.startsWith('.')) addModuleDependency(owner, request, 'JavaScript CommonJS dependency', path.dirname(file));
         else if (request === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-require-resource-target' });
       }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          memberPath(node.callee) === 'module.require') {
+        const request = literal(node.arguments[0]);
+        if (request?.startsWith('.')) addModuleDependency(owner, request, 'JavaScript module.require dependency', path.dirname(file));
+        else if (request === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-module.require-resource-target' });
+      }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
           (node.callee.name === 'importScripts' || loaderAliases.get(node.callee.name) === 'importScripts')) {
         for (const argument of node.arguments) {
