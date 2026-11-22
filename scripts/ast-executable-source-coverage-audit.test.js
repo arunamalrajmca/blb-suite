@@ -239,3 +239,20 @@ test('includes legacy manifest background script arrays as execution roots', () 
     assert.equal(legacy.classification, 'statically-rooted-or-imported');
   } finally { f.cleanup(); }
 });
+
+
+test('records service-worker and user-script registration as runtime ownership boundaries', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', [
+      "navigator.serviceWorker.register('./page-worker.js');",
+      "chrome.userScripts.register([{ id: 'user-script', js: [{ file: 'user-script.js' }] }]);"
+    ].join('\n'));
+    f.write('extension/page-worker.js');
+    f.write('extension/user-script.js');
+    const result = discover(f.root);
+    assert.ok(result.dynamicSites.some(item => item.api === 'serviceWorker.register' && item.target === './page-worker.js'));
+    assert.ok(result.dynamicSites.some(item => item.api === 'userScripts.register'));
+  } finally { f.cleanup(); }
+});
