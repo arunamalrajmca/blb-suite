@@ -59,7 +59,7 @@
         },
         {
           "file": "extension/background.js",
-          "requiredText": "const existingResult = await existing.catch(() => false);"
+          "requiredText": "const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});"
         },
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
