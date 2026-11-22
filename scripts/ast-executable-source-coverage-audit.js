@@ -305,7 +305,7 @@ function discover(root) {
               ((base.callee.type === 'MemberExpression' &&
                 ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(expressionPath(base.callee))) ||
                (base.callee.type === 'Identifier' &&
-                ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(base.callee.name)))) {
+                ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(base.callee.name))))) {
             baseDirectory = extension;
             resolutionKind = 'worker-script-runtime-url';
           }
