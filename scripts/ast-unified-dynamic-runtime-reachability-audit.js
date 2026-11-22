@@ -559,7 +559,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const callbackApis = new Set([
           'addListener', 'addEventListener', 'on', 'once', 'subscribe',
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
-          'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'
+          'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback',
+          'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback'
         ]);
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
@@ -570,18 +571,25 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) && lastArgumentIsCallable &&
           (node.arguments.length > 1 || lastArgument.type !== 'Identifier' ||
             callbackOnlyExtensionMethods.has(method) || functionDefs.has(file + '::' + bindings.get(lastArgument)));
-        const callbackIndex = isObserver ? 0 :
-          method === 'addEventListener' ? 1 :
-          ['on', 'once', 'addListener'].includes(method) && node.arguments[0]?.type === 'Literal' &&
-            typeof node.arguments[0].value === 'string' ? 1 :
-          extensionCallback ? node.arguments.length - 1 : 0;
-        if ((isObserver || callbackApis.has(method) || extensionCallback) &&
-            node.arguments.length > callbackIndex &&
-            !(['setTimeout', 'setInterval'].includes(method) && node.arguments[callbackIndex].type === 'Literal' &&
-              typeof node.arguments[callbackIndex].value === 'string')) {
+        const isCallbackCandidate = argument => argument &&
+          ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
+            'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
+        let callbackIndices = [];
+        if (isObserver) callbackIndices = [0];
+        else if (method === 'addEventListener') callbackIndices = [1];
+        else if (['on', 'once', 'addListener'].includes(method)) {
+          const candidates = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
+          if (candidates.length) callbackIndices = [candidates[candidates.length - 1]];
+        } else if (method === 'then') {
+          callbackIndices = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
+        } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
+        else if (callbackApis.has(method)) callbackIndices = [0];
+        for (const callbackIndex of callbackIndices) {
+          if (callbackIndex < 0 || callbackIndex >= node.arguments.length) continue;
           const callback = node.arguments[callbackIndex];
-          const api = pathName || method;
-          callbackRecord(callback, api, node.loc.start.line, sourceText.slice(callee.start, callee.end).slice(0, 160));
+          if (['setTimeout', 'setInterval'].includes(method) && callback.type === 'Literal' && typeof callback.value === 'string') continue;
+          callbackRecord(callback, pathName || method, node.loc.start.line,
+            sourceText.slice(callee.start, callee.end).slice(0, 160));
         }
       }
       // DOM-style and browser event property assignments are callback roots too.
@@ -589,7 +597,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           node.left.type === 'MemberExpression') {
         const eventName = memberPath(node.left).split('.').pop();
         if (/^on[a-z0-9_]+$/i.test(eventName) &&
-            ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.right.type)) {
+            ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression', 'CallExpression', 'ObjectExpression'].includes(node.right.type)) {
           callbackRecord(node.right, 'event-property:' + eventName, node.loc.start.line,
             sourceText.slice(node.left.start, node.left.end).slice(0, 160));
         }
