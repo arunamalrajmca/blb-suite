@@ -186,3 +186,22 @@ test('follows literal array and object aliases in importScripts and runtime regi
     for (const file of ['worker-dependency.js', 'registered.js', 'injected.js']) assert.ok(rooted.has('extension/' + file), file);
   } finally { f.cleanup(); }
 });
+
+
+test('records document.write, insertAdjacentHTML, and innerHTML script injection boundaries', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', [
+      "document.write('<script src=\"legacy.js\"></script>');",
+      "container.insertAdjacentHTML('beforeend', '<script src=\"another.js\"></script>');",
+      "container.innerHTML = markup;"
+    ].join('\n'));
+    const result = discover(f.root);
+    const injection = result.dynamicSites.filter(item => item.api.startsWith('dynamic-html-'));
+    assert.equal(injection.length, 3);
+    assert.ok(injection.some(item => item.targets.includes('legacy.js')));
+    assert.ok(injection.some(item => item.targets.includes('another.js')));
+    assert.ok(injection.some(item => item.certainty === 'dynamic-markup-or-script-target'));
+  } finally { f.cleanup(); }
+});
