@@ -3417,7 +3417,73 @@ async function ensureContentScriptInTab(tabId) {
     if (normalizeSiteHostname(hostnameFromTabUrl(current.url)) === BLB_HOSTNAME) return true;
     const currentFiles = contentScriptFilesForTab(current, latestSettings);
     if (!currentFiles.length) return false;
-    return ensureRuntimeContentScriptRegistered(current, currentFiles);
+    const registrationReady = await ensureRuntimeContentScriptRegistered(current, currentFiles);
+    current = await chrome.tabs.get(tabId).catch(() => null);
+    if (!current || !isHttpPageUrl(current.url) || isSensitiveSiteUrl(current.url) ||
+        originPatternForUrl(current.url) !== expectedOriginPattern ||
+        (current.pendingUrl && originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
+    if (!registrationReady) {
+      // Match the normal activation path's current-document fallback. A failed
+      // persistent registration must not disable a tab that can still accept
+      // direct injection, including when this call joined an older activation.
+      const optionalRedirectFiles = currentFiles.filter(file =>
+        SCRIPT_TAGGER_CONTENT_SCRIPT_FILES.includes(file) ||
+        BIBLEREF_RANGE_CONTENT_SCRIPT_FILES.includes(file)
+      );
+      const primaryFiles = currentFiles.filter(file => !optionalRedirectFiles.includes(file));
+      const injectionFiles = currentFiles.includes('content.js') ? primaryFiles : currentFiles;
+      try {
+        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
+      } catch (error) {
+        if (isTabUnavailableError(error)) return false;
+        console.error('KJV Scripture Tools current-tab fallback injection failed:', {
+          tabId, tabUrl:current.url, files:injectionFiles, error:String(error)
+        });
+        return false;
+      }
+      current = await chrome.tabs.get(tabId).catch(() => null);
+      if (!current || !isHttpPageUrl(current.url) || isSensitiveSiteUrl(current.url) ||
+          originPatternForUrl(current.url) !== expectedOriginPattern ||
+          (current.pendingUrl && originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
+      if (currentFiles.includes('content.js')) {
+        let refreshed = false;
+        for (let attempt = 0; attempt < 9; attempt++) {
+          if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100 * attempt));
+          try {
+            const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+            if (response?.ok === true) { refreshed = true; break; }
+          } catch (_) {}
+        }
+        if (!refreshed) return false;
+      }
+      if (optionalRedirectFiles.length) {
+        try {
+          await chrome.scripting.executeScript({target:{tabId}, files:optionalRedirectFiles});
+        } catch (error) {
+          console.warn('KJV Scripture Tools optional redirect-script injection failed; core page features remain active:', {
+            tabId, tabUrl:current.url, files:optionalRedirectFiles, error:String(error)
+          });
+        }
+      }
+      const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[
+        normalizeSiteHostname(hostnameFromTabUrl(current.url))
+      ];
+      if (collectorConfig?.mainWorldClickGuard === true && currentFiles.includes('content.js')) {
+        try {
+          await chrome.scripting.executeScript({
+            target:{tabId},
+            files:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
+            world:'MAIN'
+          });
+        } catch (error) {
+          console.error('KJV Scripture Tools MAIN-world script injection failed:', {
+            tabId, tabUrl:current.url, files:['source-page-collector-sites.js','redirect-christianity-main-world.js'], error:String(error)
+          });
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   const operation = (async () => {
