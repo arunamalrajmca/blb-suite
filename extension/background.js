@@ -3398,6 +3398,13 @@ async function ensureContentScriptInTab(tabId) {
     // below, but do not let that stale failure suppress a fresh current-tab
     // fallback when the live tab is eligible again.
     await existing.catch(() => false);
+    // A real activation removes its own lock in finally before this promise
+    // settles. Clear the same settled entry defensively as well, so an
+    // externally failed/stale promise cannot cause recursive recovery to
+    // observe itself forever.
+    if (contentScriptInjectionLocks.get(tabId) === existing) {
+      contentScriptInjectionLocks.delete(tabId);
+    }
     let current;
     try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
     if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url)) return false;
