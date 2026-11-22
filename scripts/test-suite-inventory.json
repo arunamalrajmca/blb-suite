@@ -39,7 +39,29 @@
           "environment": "dedicated-performance-runner"
         }
       ],
-      "executionEnvironment": "headless Chromium by default; only native browser UI/activation cases use headed Chromium under Xvfb/X11"
+      "executionEnvironment": "headless Chromium by default; only native browser UI/activation cases use headed Chromium under Xvfb/X11",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
+          "requiredText": "node scripts/compare-full-audit-concurrency.mjs"
+        },
+        {
+          "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+          "requiredText": "current-tab activation falls back when persistent content-script registration fails"
+        },
+        {
+          "file": "tests/browser/site-registration-opt-out-race.spec.js",
+          "requiredText": "master OFF-to-ON recovery repairs registrations"
+        },
+        {
+          "file": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": "BLB_MASTER_TOGGLE_TRACE"
+        },
+        {
+          "file": "extension/background.js",
+          "requiredText": "const existingResult = await existing.catch(() => false);"
+        }
+      ]
     },
     {
       "id": "selector-contract-tests",
