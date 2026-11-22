@@ -271,3 +271,20 @@ test('checks storage schema and legacy page-action manifest resources', () => {
     assert.ok(result.references.some(item => item.kind === 'icon'));
   } finally { f.cleanup(); }
 });
+
+
+test('includes packaged dist files in wildcard checks and reports CSS variable URLs as uncertainty', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      web_accessible_resources: [{ resources: ['dist/*.js'], matches: ['<all_urls>'] }]
+    }));
+    f.write('dist/runtime.js');
+    f.write('styles/dynamic.css', '.icon { background-image: url(var(--icon-url)); }');
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.references.some(item => item.path === 'dist/runtime.js'));
+    assert.ok(result.uncertainties.some(item => item.kind === 'dynamic-css-resource-url'));
+  } finally { f.cleanup(); }
+});
