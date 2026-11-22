@@ -462,3 +462,15 @@ test('reports Node module compilation and WebAssembly execution as dynamic-code 
   assert.ok(boundaries.includes('node-module-compile'));
   assert.ok(boundaries.includes('wasm-module-execution'));
 });
+
+
+test('tracks aliased and destructured string timer execution', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const delay = window.setTimeout; delay(\"runGenerated()\", 1);',
+      'const { setInterval: repeat } = globalThis; repeat(\"runGenerated()\", 1);'
+    ].join(' ')
+  });
+  assert.ok(result.uncertainty.filter(item => item.executionBoundary === 'string-timer').length >= 2);
+});
