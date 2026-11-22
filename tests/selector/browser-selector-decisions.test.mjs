@@ -1098,6 +1098,27 @@ test("selection text helper changes select both split extension suites", () => {
 });
 
 
+
+test("performance batching retains interleaved paired samples with a fresh Chromium profile per sample", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url),
+    "utf8"
+  );
+  const batch = readFileSync(
+    new URL("../browser/performance-batch.spec.js", import.meta.url),
+    "utf8"
+  );
+  assert.ok(workflow.includes("tests/browser/performance-batch.spec.js --workers=1"));
+  assert.ok(workflow.includes("BLB_PERF_SAMPLES: 11"));
+  assert.ok(batch.includes("const samples = Number(process.env.BLB_PERF_SAMPLES || 11)"));
+  assert.ok(batch.includes("const total = scenarios.length * samples * 2"));
+  assert.ok(batch.includes("sample % 2 === 1 ? ['baseline', 'candidate'] : ['candidate', 'baseline']"));
+  assert.ok(batch.includes("chromium.launchPersistentContext('',"));
+  assert.ok(batch.includes("await context.close()"));
+  assert.ok(batch.includes("BLB_PERF_BATCH_SAMPLE"));
+  assert.ok(batch.includes("paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse"));
+});
+
 test("full audit delegates performance and physical-input tests to workflows triggered by audit changes", () => {
   const audit = readFileSync(
     new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
