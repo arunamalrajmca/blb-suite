@@ -340,10 +340,10 @@ test('validates resource references through aliased require, importScripts, runt
       'const getURL = chrome.runtime.getURL; getURL(\"assets/icon.svg\");',
       'const inject = chrome.scripting.executeScript; inject({ files: [\"injected.js\"] });'
     ].join('\n'));
-    for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js']) f.write(file);
+    for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js', 'worker-url.js']) f.write(file);
     const result = auditManifest(f.root);
     assert.deepEqual(result.errors, []);
-    for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js']) {
+    for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js', 'worker-url.js']) {
       assert.ok(result.references.some(item => item.path === file), file);
     }
   } finally { f.cleanup(); }
