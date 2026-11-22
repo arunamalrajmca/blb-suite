@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
