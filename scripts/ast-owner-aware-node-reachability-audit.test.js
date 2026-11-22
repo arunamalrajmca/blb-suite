@@ -200,3 +200,54 @@ test('retains class methods consumed through a CommonJS class export', () => {
   ].join('\n'), 'reporter.js');
   assert.deepEqual(result.findings, []);
 });
+
+
+test('discovers package main, module, browser, bin, exports, and nested workspace roots', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'package-entry-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({
+      main: './main.js',
+      module: './module.mjs',
+      browser: './browser.js',
+      bin: { blb: './bin/cli.js' },
+      exports: { '.': { import: './dist/index.mjs', require: './dist/index.js' }, './feature': './dist/feature.js' }
+    }));
+    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'dist/index.mjs', 'dist/index.js', 'dist/feature.js']) write(file);
+    write('packages/tool/package.json', JSON.stringify({ bin: './cli.js', scripts: { run: 'node scripts/run.js' } }));
+    write('packages/tool/cli.js');
+    write('packages/tool/scripts/run.js');
+    const graph = buildModuleGraph(root);
+    const roots = new Set(graph.roots.map(item => item.file));
+    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'dist/index.mjs', 'dist/index.js', 'dist/feature.js',
+      'packages/tool/cli.js', 'packages/tool/scripts/run.js']) assert.ok(roots.has(file), file);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('resolves exact and wildcard package imports maps into local module graph edges', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'package-import-map-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({
+      imports: { '#internal': './scripts/internal.js', '#feature/*': './scripts/features/*.js' },
+      scripts: { run: 'node scripts/main.js' }
+    }));
+    write('scripts/main.js', "require('#internal'); import('#feature/alpha');");
+    write('scripts/internal.js', 'module.exports = true;');
+    write('scripts/features/alpha.js', 'export default true;');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/internal.js'));
+    assert.ok(reachable.has('scripts/features/alpha.js'));
+    assert.ok(graph.edges.some(edge => edge.specifier === '#internal' && edge.to === 'scripts/internal.js'));
+    assert.ok(graph.edges.some(edge => edge.specifier === '#feature/alpha' && edge.to === 'scripts/features/alpha.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
