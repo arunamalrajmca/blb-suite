@@ -160,6 +160,13 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
     });
 
     await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:true,mainWorld:true});
+    await expect.poll(async () => extensionWorker.evaluate(() =>
+      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.response
+    ), {timeout:15000}).toEqual({ok:true});
+    const fallbackInjectionCalls = await extensionWorker.evaluate(() =>
+      globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.fallbackInjectionCalls
+    );
+    expect(fallbackInjectionCalls).toBe(0);
   } finally {
     if (gateInstalled) {
       await extensionWorker.evaluate(() => {
