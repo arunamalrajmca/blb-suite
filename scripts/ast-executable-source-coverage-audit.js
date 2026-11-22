@@ -153,6 +153,16 @@ function discover(root) {
     visited.add(file);
     const ast = parsed.get(file);
     if (!ast) continue;
+    const literalArrays = new Map(), literalObjects = new Map();
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        if (node.init?.type === 'ArrayExpression') {
+          const values = staticArray(node.init);
+          if (values) literalArrays.set(node.id.name, values);
+        }
+        if (node.init?.type === 'ObjectExpression') literalObjects.set(node.id.name, node.init);
+      }
+    });
     visit(ast, (node, parent) => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
@@ -161,10 +171,16 @@ function discover(root) {
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'importScripts') {
         for (const arg of node.arguments) {
-          const request = literal(arg);
-          if (request !== null) {
-            const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-importScripts');
-            if (target && !visited.has(target)) queue.push(target);
+          const requests = arg.type === 'SpreadElement' && arg.argument.type === 'ArrayExpression'
+            ? staticArray(arg.argument)
+            : arg.type === 'SpreadElement' && arg.argument.type === 'Identifier'
+              ? literalArrays.get(arg.argument.name) || null
+              : [literal(arg)].filter(value => value !== null);
+          if (requests) {
+            for (const request of requests) {
+              const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-importScripts');
+              if (target && !visited.has(target)) queue.push(target);
+            }
           } else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'importScripts', certainty: 'dynamic-script-target' });
         }
       }
@@ -188,9 +204,11 @@ function discover(root) {
         const method = node.callee.computed ? literal(node.callee.property) :
           node.callee.property.type === 'Identifier' ? node.callee.property.name : null;
         if (method === 'registerContentScripts') {
-          const options = node.arguments[0];
+          let options = node.arguments[0];
+          if (options?.type === 'Identifier') options = literalArrays.has(options.name) ? { type: 'ArrayExpression', elements: literalArrays.get(options.name).map(value => ({ type: 'Literal', value })) } : null;
           const scripts = options?.type === 'ArrayExpression' ? options.elements : [];
-          for (const script of scripts) {
+          for (let script of scripts) {
+            if (script?.type === 'Identifier') script = literalObjects.get(script.name) || script;
             for (const key of ['js', 'css']) {
               const values = staticArray(property(script, key));
               if (values) for (const value of values) {
@@ -203,8 +221,11 @@ function discover(root) {
           if (!scripts.length) dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'registerContentScripts', certainty: 'dynamic-registration-target' });
         }
         if (method === 'executeScript') {
-          const options = node.arguments[0];
-          const values = staticArray(property(options, 'files'));
+          let options = node.arguments.find(argument => argument.type === 'ObjectExpression' || argument.type === 'Identifier');
+          if (options?.type === 'Identifier') options = literalObjects.get(options.name) || null;
+          let values = staticArray(property(options, 'files'));
+          const singleFile = literal(property(options, 'file'));
+          if (!values && singleFile !== null) values = [singleFile];
           if (values) for (const value of values) {
             const target = addRequest(value, extension, normalize(root, file), 'runtime-executeScript-file');
             if (target && !visited.has(target)) queue.push(target);
