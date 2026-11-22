@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const acorn = require('acorn');
 const SKIP = new Set(['.git', 'node_modules', 'dist', 'coverage']);
 function normalize(file) { return file.split(path.sep).join('/'); }
 function inside(root, target) { return target === root || target.startsWith(root + path.sep); }
@@ -34,6 +35,7 @@ function auditManifest(extensionRoot) {
   const manifestPath = path.join(root, 'manifest.json');
   const errors = [];
   const references = [];
+  const uncertainties = [];
   const files = walkFiles(root);
   const cssQueue = new Set();
   const checked = new Set();
@@ -232,14 +234,169 @@ function auditManifest(extensionRoot) {
     scannedCss.add(file);
     scanCss(fs.readFileSync(file, 'utf8'), normalize(root, file), path.dirname(file));
   }
-  return { errors, references };
+
+  // Inspect JavaScript-owned resource references as well. This catches local
+  // module dependencies, importScripts, runtime.getURL assets, and URL(...,
+  // import.meta.url) resources that never appear in HTML or the manifest.
+  function walkAst(node, callback, parent = null) {
+    if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
+    callback(node, parent);
+    for (const [key, value] of Object.entries(node)) {
+      if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+      if (Array.isArray(value)) value.forEach(child => walkAst(child, callback, node));
+      else if (value && typeof value.type === 'string') walkAst(value, callback, node);
+    }
+  }
+  const literal = node => {
+    if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+    if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+    return null;
+  };
+  const staticArray = node => {
+    if (node?.type !== 'ArrayExpression') return null;
+    const values = node.elements.map(literal);
+    return values.every(value => value !== null) ? values : null;
+  };
+  const objectProperty = (node, name) => {
+    if (node?.type !== 'ObjectExpression') return null;
+    const entry = node.properties.find(item => item.type === 'Property' &&
+      ((item.key.type === 'Identifier' && item.key.name === name) || literal(item.key) === name));
+    return entry?.value || null;
+  };
+  const memberPath = node => {
+    if (!node) return '';
+    if (node.type === 'Identifier') return node.name;
+    if (node.type === 'MemberExpression') {
+      const key = node.computed ? literal(node.property) :
+        node.property.type === 'Identifier' ? node.property.name : null;
+      return key === null ? '' : memberPath(node.object) + '.' + key;
+    }
+    return '';
+  };
+  const jsFiles = files.filter(file => /\.(?:js|mjs|cjs)$/i.test(file));
+  for (const file of jsFiles) {
+    const owner = normalize(root, file);
+    const source = fs.readFileSync(file, 'utf8');
+    let ast = null, parseError = null;
+    for (const sourceType of ['script', 'module']) {
+      try { ast = acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true, allowHashBang: true }); break; }
+      catch (error) { parseError = error; }
+    }
+    if (!ast) {
+      uncertainties.push({ owner, line: null, kind: 'unparsed-javascript-resource-source', detail: parseError?.message || 'parse failed' });
+      continue;
+    }
+    const arrays = new Map(), objects = new Map();
+    walkAst(ast, node => {
+      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' || !node.init) return;
+      if (node.init.type === 'ArrayExpression') {
+        const values = staticArray(node.init);
+        if (values) arrays.set(node.id.name, values);
+      }
+      if (node.init.type === 'ObjectExpression') objects.set(node.id.name, node.init);
+    });
+    walkAst(ast, node => {
+      if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
+          (node.type === 'ExportNamedDeclaration' && node.source)) {
+        const request = node.source.value;
+        if (request.startsWith('.') || request.startsWith('/')) add(owner, request, 'JavaScript module dependency', path.dirname(file));
+      }
+      if (node.type === 'ImportExpression') {
+        const request = literal(node.source);
+        if (request !== null && (request.startsWith('.') || request.startsWith('/'))) {
+          add(owner, request, 'JavaScript dynamic module dependency', path.dirname(file));
+        } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-module-resource-target' });
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'require') {
+        const request = literal(node.arguments[0]);
+        if (request?.startsWith('.')) add(owner, request, 'JavaScript CommonJS dependency', path.dirname(file));
+        else if (request === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-require-resource-target' });
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'importScripts') {
+        for (const argument of node.arguments) {
+          const values = argument.type === 'SpreadElement' && argument.argument.type === 'Identifier'
+            ? arrays.get(argument.argument.name) || null
+            : argument.type === 'SpreadElement' ? staticArray(argument.argument) : [literal(argument)].filter(value => value !== null);
+          if (values) for (const value of values) add(owner, value, 'JavaScript importScripts dependency', path.dirname(file));
+          else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-importScripts-resource-target' });
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+        const api = memberPath(node.callee);
+        const method = api.split('.').pop();
+        if (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(api)) {
+          const request = literal(node.arguments[0]);
+          if (request !== null) add(owner, request, 'runtime.getURL resource');
+          else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-runtime-getURL-resource' });
+        }
+        if (method === 'registerContentScripts') {
+          let descriptors = node.arguments[0];
+          if (descriptors?.type === 'Identifier') {
+            const name = descriptors.name;
+            descriptors = null;
+            // Object/array alias handling is bounded to direct literal declarations.
+            for (const [key, values] of arrays) if (key === name) descriptors = values;
+          }
+          const entries = descriptors?.type === 'ArrayExpression' ? descriptors.elements :
+            Array.isArray(descriptors) ? descriptors : [];
+          if (!entries.length) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-content-script-registration-resource' });
+          for (let entry of entries) {
+            if (entry?.type === 'Identifier') entry = objects.get(entry.name) || entry;
+            for (const key of ['js', 'css']) {
+              const field = objectProperty(entry, key);
+              const values = field?.type === 'Identifier' ? arrays.get(field.name) : staticArray(field);
+              if (values) for (const value of values) add(owner, value, 'runtime-registered ' + key);
+              else if (field) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-registered-' + key + '-resource' });
+            }
+          }
+        }
+        if (method === 'executeScript') {
+          let options = [...node.arguments].reverse().find(argument =>
+            argument.type === 'ObjectExpression' || (argument.type === 'Identifier' && objects.has(argument.name)));
+          if (options?.type === 'Identifier') options = objects.get(options.name) || null;
+          let values = objectProperty(options, 'files');
+          values = values?.type === 'Identifier' ? arrays.get(values.name) : staticArray(values);
+          const singleFile = literal(objectProperty(options, 'file'));
+          if (!values && singleFile !== null) values = [singleFile];
+          if (values) for (const value of values) add(owner, value, 'runtime executeScript file');
+          else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic executeScript resource target' });
+        }
+      }
+      if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'URL') {
+        const request = literal(node.arguments[0]);
+        const base = node.arguments[1];
+        if (request !== null && base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') {
+          add(owner, request, 'JavaScript URL relative to import.meta.url', path.dirname(file));
+        } else if (request !== null && base?.type === 'CallExpression' &&
+            ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(memberPath(base.callee))) {
+          add(owner, request, 'JavaScript URL relative to extension runtime URL');
+        }
+      }
+      if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
+          ['Worker', 'SharedWorker'].includes(node.callee.name)) {
+        const argument = node.arguments[0];
+        const request = literal(argument);
+        if (request !== null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'worker-relative-url-base-uncertain', target: request });
+        else if (argument?.type !== 'NewExpression' || argument.callee.name !== 'URL') {
+          uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          memberPath(node.callee).endsWith('serviceWorker.register')) {
+        uncertainties.push({ owner, line: node.loc.start.line, kind: 'service-worker-registration-runtime-base', target: literal(node.arguments[0]) });
+      }
+    });
+  }
+  return { errors, references, uncertainties };
 }
 function run(root = path.resolve(__dirname, '..', 'extension')) {
   const result = auditManifest(root);
   console.log('Extension manifest and packaged-resource integrity audit');
   console.log('Local resource references checked: ' + result.references.length);
   console.log('Integrity errors: ' + result.errors.length);
+  console.log('Dynamic or unresolved JavaScript resource sites: ' + result.uncertainties.length);
   for (const error of result.errors) console.error('FAIL: ' + error);
+  for (const item of result.uncertainties) console.log('UNCERTAIN: ' + item.owner + (item.line ? ':' + item.line : '') + ' ' + item.kind + (item.target ? ' ' + item.target : ''));
   if (!result.errors.length) console.log('PASS: all statically referenced extension resources exist within the extension root.');
   return result;
 }
