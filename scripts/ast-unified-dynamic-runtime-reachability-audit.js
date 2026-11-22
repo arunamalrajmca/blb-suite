@@ -410,6 +410,89 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     visit(ast, (node, parent) => {
       if (parent) parents.set(node, parent);
+      // Track code-generation/evaluation boundaries explicitly. These are
+      // uncertainty sites, never evidence that a target is unused.
+      if (node.type === 'CallExpression' || node.type === 'NewExpression') {
+        const callee = node.callee;
+        const memberName = callee.type === 'MemberExpression'
+          ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name)
+          : null;
+        const objectName = callee.type === 'MemberExpression' && callee.object.type === 'Identifier'
+          ? callee.object.name : null;
+        const directEval = callee.type === 'Identifier' && callee.name === 'eval';
+        const functionConstructor = callee.type === 'Identifier' &&
+          ['Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(callee.name);
+        const vmExecution = objectName === 'vm' &&
+          ['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script'].includes(memberName);
+        const indirectEval = callee.type === 'MemberExpression' &&
+          callee.object.type === 'Identifier' && callee.object.name === 'eval' &&
+          ['call', 'apply', 'bind'].includes(memberName);
+        const stringTimer = callee.type === 'Identifier' &&
+          ['setTimeout', 'setInterval'].includes(callee.name) &&
+          node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string';
+        if (directEval || functionConstructor || vmExecution || indirectEval || stringTimer) {
+          const kind = stringTimer ? 'string-timer-execution' : 'unresolved-dynamic-execution';
+          uncertainty.push({
+            file: rel(root, file), line: node.loc.start.line, kind,
+            certainty: 'unresolved-dynamic-execution',
+            expression: sourceText.slice(node.start, node.end).slice(0, 240),
+            executionBoundary: directEval ? 'direct-eval' : indirectEval ? 'indirect-eval' :
+              functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' : 'string-timer',
+            affectedRoots: []
+          });
+        }
+      }
+      // Framework/browser event APIs own callback invocation. Record the
+      // registration boundary and resolve a callback binding when possible.
+      if (node.type === 'CallExpression') {
+        const callee = node.callee;
+        const method = callee.type === 'MemberExpression'
+          ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name)
+          : callee.type === 'Identifier' ? callee.name : null;
+        const callbackApis = new Set([
+          'addListener', 'addEventListener', 'on', 'once', 'subscribe',
+          'then', 'catch', 'finally', 'setTimeout', 'setInterval',
+          'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'
+        ]);
+        if (callbackApis.has(method) && node.arguments.length) {
+          const callback = node.arguments[0];
+          let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
+          if (callback.type === 'Identifier') {
+            callbackName = callback.name;
+            const callbackKey = bindings.get(callback);
+            const definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+            if (definition) {
+              callbackTarget = rel(root, definition.file) + '::' + callbackKey;
+              certainty = 'resolved-function-binding';
+            }
+          } else if (callback.type === 'ArrowFunctionExpression' || callback.type === 'FunctionExpression') {
+            callbackName = '[inline callback]';
+            callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
+            certainty = 'resolved-inline-callback';
+          }
+          const api = callee.type === 'MemberExpression'
+            ? sourceText.slice(callee.start, callee.end).slice(0, 160) : method;
+          sites.push({
+            file: rel(root, file), line: node.loc.start.line,
+            kind: 'external-callback-registration', expression: api,
+            callback: callbackName, callbackTarget, certainty,
+            resolved: callbackTarget, affectedRoots: []
+          });
+          if (certainty === 'unresolved-callback-owner') {
+            uncertainty.push({
+              file: rel(root, file), line: node.loc.start.line,
+              kind: 'unresolved-external-callback-owner',
+              certainty, expression: sourceText.slice(node.start, node.end).slice(0, 240),
+              registrationApi: api, affectedRoots: []
+            });
+          }
+        }
+      }
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'Identifier' && node.right.type === 'Identifier') {
+        const target = bindings.get(node.left), source = bindings.get(node.right);
+        if (target && source) aliases.set(target, source);
+      }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
           node.init && node.init.type === 'Identifier') {
         const target = bindings.get(node.id), source = bindings.get(node.init);
