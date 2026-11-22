@@ -319,3 +319,23 @@ test('checks file-backed userScripts registrations in extension JavaScript', () 
     assert.ok(result.references.some(item => item.path === 'user-script.js' && item.kind === 'runtime userScripts js'));
   } finally { f.cleanup(); }
 });
+
+
+test('validates resource references through aliased require, importScripts, runtime URL and injection APIs', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({ manifest_version: 3 }));
+    f.write('background.js', [
+      'const load = require; load(\"./module.js\");',
+      'const loadWorker = importScripts; loadWorker(\"./worker.js\");',
+      'const getURL = chrome.runtime.getURL; getURL(\"assets/icon.svg\");',
+      'const inject = chrome.scripting.executeScript; inject({ files: [\"injected.js\"] });'
+    ].join('\n'));
+    for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js']) f.write(file);
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    for (const file of ['module.js', 'worker.js', 'assets/icon.svg', 'injected.js']) {
+      assert.ok(result.references.some(item => item.path === file), file);
+    }
+  } finally { f.cleanup(); }
+});
