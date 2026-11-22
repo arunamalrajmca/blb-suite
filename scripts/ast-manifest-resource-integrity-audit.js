@@ -485,7 +485,9 @@ function auditManifest(extensionRoot) {
         if (request !== null && base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') {
           addUrlResource(owner, request, 'JavaScript URL relative to import.meta.url', path.dirname(file));
         } else if (request !== null && base?.type === 'CallExpression' &&
-            ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(memberPath(base.callee))) {
+            (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(memberPath(base.callee)) ||
+              (base.callee.type === 'Identifier' &&
+                ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(base.callee.name))))) {
           addUrlResource(owner, request, 'JavaScript URL relative to extension runtime URL', root);
         }
       }
