@@ -116,7 +116,12 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
       };
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__ = gate;
       chrome.tabs.sendMessage = async function(tabId,message,...args) {
-        if (!gate.blocked && message?.type === 'blbSuiteRefreshSiteFeatures') {
+        const response = await original.call(this,tabId,message,...args);
+        if (message?.type === 'blbSuiteRefreshSiteFeatures') gate.response = response;
+        // Hold only after the real content-script handshake has succeeded.
+        // The first refresh attempt may legitimately precede direct injection;
+        // blocking that attempt would test an early probe, not stale activation.
+        if (!gate.blocked && message?.type === 'blbSuiteRefreshSiteFeatures' && response?.ok === true) {
           let tab = null;
           try { tab = await chrome.tabs.get(tabId); } catch (_) {}
           if (String(tab?.url || '').startsWith('https://christianity.com/')) {
@@ -126,8 +131,6 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
             await release;
           }
         }
-        const response = await original.call(this,tabId,message,...args);
-        if (message?.type === 'blbSuiteRefreshSiteFeatures') gate.response = response;
         return response;
       };
       if (chrome.tabs.sendMessage === original) {
