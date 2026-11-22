@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
 
-const SKIP = new Set(['node_modules', '.git', 'dist', 'coverage']);
+const SKIP = new Set(['.git', 'coverage', 'test-results', 'playwright-report']);
 const JS_EXTENSIONS = ['.js', '.mjs', '.cjs'];
 
 function walk(directory, predicate, output = []) {
