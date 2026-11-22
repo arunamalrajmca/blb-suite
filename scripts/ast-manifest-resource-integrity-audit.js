@@ -410,6 +410,28 @@ function auditManifest(extensionRoot) {
           if (values) for (const value of values) add(owner, value, 'runtime executeScript file');
           else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic executeScript resource target' });
         }
+        if (api.endsWith('userScripts.register')) {
+          let descriptors = node.arguments[0];
+          if (descriptors?.type === 'Identifier') descriptors = arrayNodes.get(descriptors.name) || null;
+          const entries = descriptors?.type === 'ArrayExpression' ? descriptors.elements : [];
+          if (!entries.length) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic userScripts registration resource' });
+          for (let descriptor of entries) {
+            if (descriptor?.type === 'Identifier') descriptor = objects.get(descriptor.name) || descriptor;
+            for (const key of ['js', 'css']) {
+              const scripts = objectProperty(descriptor, key);
+              const scriptEntries = scripts?.type === 'Identifier' ? arrayNodes.get(scripts.name)?.elements :
+                scripts?.type === 'ArrayExpression' ? scripts.elements : [];
+              for (let script of scriptEntries || []) {
+                if (script?.type === 'Identifier') script = objects.get(script.name) || script;
+                const request = literal(objectProperty(script, 'file'));
+                if (request !== null) add(owner, request, 'runtime userScripts ' + key);
+                else if (literal(objectProperty(script, 'code')) !== null) {
+                  uncertainties.push({ owner, line: node.loc.start.line, kind: 'runtime userScripts inline code' });
+                }
+              }
+            }
+          }
+        }
       }
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'URL') {
         const request = literal(node.arguments[0]);
