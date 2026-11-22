@@ -251,3 +251,22 @@ test('resolves exact and wildcard package imports maps into local module graph e
     assert.ok(graph.edges.some(edge => edge.specifier === '#feature/alpha' && edge.to === 'scripts/features/alpha.js'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('reports missing package and command entrypoints instead of silently dropping them', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'unresolved-package-entrypoints-'));
+  try {
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      main: './missing-main.js',
+      bin: { cli: './missing-bin.js' },
+      exports: { './feature': './missing-feature.js' },
+      scripts: { audit: 'node scripts/missing-audit.js' }
+    }));
+    const graph = buildModuleGraph(root);
+    const unresolved = graph.unresolvedEntrypoints.map(item => item.target || item.file);
+    for (const expected of ['./missing-main.js', './missing-bin.js', './missing-feature.js']) {
+      assert.ok(unresolved.includes(expected), expected);
+    }
+    assert.ok(graph.unresolvedEntrypoints.some(item => item.reason.includes('package-script:audit')));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
