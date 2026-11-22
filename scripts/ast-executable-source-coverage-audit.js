@@ -247,6 +247,15 @@ function discover(root) {
           }
           else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'executeScript', certainty: 'injected-function-or-dynamic-files' });
         }
+        const calleePath = node.callee.object.type === 'Identifier'
+          ? node.callee.object.name + '.' + method
+          : method;
+        if (method === 'register' && /(?:^|\.)serviceWorker\.register$/.test(calleePath)) {
+          dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'serviceWorker.register', target: literal(node.arguments[0]), certainty: 'runtime-document-base-or-dynamic-target' });
+        }
+        if (method === 'register' && /(?:^|\.)userScripts\.register$/.test(calleePath)) {
+          dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'userScripts.register', certainty: 'runtime-registered-user-script' });
+        }
       }
       if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
         const key = node.left.computed ? literal(node.left.property) :
