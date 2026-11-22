@@ -1140,6 +1140,17 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
   assert.ok(batch.includes("paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse"));
 });
 
+test("full audit label suppresses the separate focused-regressions workflow to prevent duplicate test ownership", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-focused-regressions.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(
+    workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') && !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
+    "the full audit must own focused regression cases when both labels are present"
+  );
+});
+
 test("full audit delegates performance and physical-input tests to workflows triggered by audit changes", () => {
   const audit = readFileSync(
     new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
