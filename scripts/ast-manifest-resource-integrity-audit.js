@@ -489,6 +489,8 @@ function auditManifest(extensionRoot) {
               (base.callee.type === 'Identifier' &&
                 ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(base.callee.name))))) {
           addUrlResource(owner, request, 'JavaScript URL relative to extension runtime URL', root);
+        } else if (request !== null && !isExternal(request) && !request.startsWith('#')) {
+          uncertainties.push({ owner, line: node.loc.start.line, kind: 'new-url-resource-base-unresolved', target: request });
         }
       }
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
