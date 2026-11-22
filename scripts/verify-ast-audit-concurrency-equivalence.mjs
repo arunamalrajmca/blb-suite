@@ -1,23 +1,28 @@
 #!/usr/bin/env node
 'use strict';
 
-// Compare the historical one-suite-at-a-time AST audit execution with an
-// isolated bounded-parallel execution on the same checkout and dependencies.
-// Test assertions and audit stdout are compared; timing-only TAP lines are
-// excluded. No result is inferred from a zero unreachable-candidate count.
+// Compare the historical one-suite-at-a-time AST audit execution with true
+// bounded process-level parallel execution on the same checkout/dependencies.
+// Test assertions and complete analysis stdout are compared. A zero
+// unreachable-candidate count is never interpreted as proof of completeness.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const crypto = require('node:crypto');
+const { spawn } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 const workersArg = process.argv.find(x => x.startsWith('--workers='));
-const workers = Math.max(1, Number(workersArg?.split('=')[1] || 4));
+const workers = Number(workersArg?.split('=')[1] || 4);
+const roundsArg = process.argv.find(x => x.startsWith('--rounds='));
+const rounds = Number(roundsArg?.split('=')[1] || 3);
+if (!Number.isInteger(workers) || workers < 2) throw new Error('Concurrency validation requires --workers >= 2');
+if (!Number.isInteger(rounds) || rounds < 2) throw new Error('Concurrency validation requires --rounds >= 2');
+
 const files = fs.readdirSync(path.join(root, 'scripts'))
   .filter(name => /^ast-.*-audit\.test\.js$/.test(name))
   .sort();
 if (!files.length) throw new Error('No scripts/ast-*-audit.test.js files discovered');
-
 const tasks = files.map(testName => {
   const testFile = path.join(root, 'scripts', testName);
   const auditFile = testFile.replace(/\.test\.js$/, '.js');
@@ -26,15 +31,39 @@ const tasks = files.map(testName => {
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ast-audit-concurrency-'));
 const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
 
+function digest(file) {
+  return fs.existsSync(file) ? crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') : 'missing';
+}
+const fingerprint = {
+  node: process.version,
+  packageLock: digest(path.join(root, 'package-lock.json')),
+  packageJson: digest(path.join(root, 'package.json')),
+  auditInventory: tasks.map(task => ({
+    test: task.testName,
+    testSha256: digest(task.testFile),
+    analysis: task.auditFile ? path.basename(task.auditFile) : null,
+    analysisSha256: task.auditFile ? digest(task.auditFile) : null
+  }))
+};
 function run(command, args, label) {
-  const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (result.error) throw result.error;
-  const output = (result.stdout || '') + (result.stderr || '');
-  if (result.status !== 0) {
-    fs.writeFileSync(path.join(temp, label.replace(/[^a-z0-9_-]/gi, '_') + '.failure.log'), output);
-    throw new Error(label + ' failed with exit ' + result.status + '\n' + output.slice(-12000));
-  }
-  return output;
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', code => {
+      const output = stdout + stderr;
+      if (code !== 0) {
+        const log = path.join(temp, label.replace(/[^a-z0-9_-]/gi, '_') + '.failure.log');
+        fs.writeFileSync(log, output);
+        reject(new Error(label + ' failed with exit ' + code + '; log=' + log + '\n' + output.slice(-12000)));
+      } else resolve(output);
+    });
+  });
 }
 function normalizeTestOutput(output) {
   return output.split(/\r?\n/)
@@ -42,65 +71,66 @@ function normalizeTestOutput(output) {
     .map(line => line.replace(/duration_ms:\s*[0-9.]+/g, 'duration_ms:<timing>'))
     .join('\n').trim();
 }
-function executeTask(task, mode) {
-  const testOutput = run(process.execPath, ['--test', task.testFile], mode + '-' + task.testName + '-test');
+async function executeTask(task, mode) {
+  const testOutput = await run(process.execPath, ['--test', task.testFile], mode + '-' + task.testName + '-test');
   const auditOutput = task.auditFile
-    ? run(process.execPath, [task.auditFile], mode + '-' + task.testName + '-analysis')
+    ? await run(process.execPath, [task.auditFile], mode + '-' + task.testName + '-analysis')
     : '';
   return { test: normalizeTestOutput(testOutput), audit: auditOutput.trim() };
 }
-function serial() {
+async function serial() {
   const results = new Map();
-  for (const task of tasks) results.set(task.testName, executeTask(task, 'serial'));
+  for (const task of tasks) results.set(task.testName, await executeTask(task, 'serial'));
   return results;
 }
-async function parallel() {
+async function parallel(round) {
   const results = new Map();
   let next = 0;
   let failure = null;
-  async function worker() {
+  async function worker(workerIndex) {
     while (!failure) {
       const index = next++;
       if (index >= tasks.length) return;
       const task = tasks[index];
-      try { results.set(task.testName, executeTask(task, 'parallel')); }
+      try { results.set(task.testName, await executeTask(task, 'parallel-r' + round + '-w' + workerIndex)); }
       catch (error) { failure = error; return; }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(workers, tasks.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(workers, tasks.length) }, (_, i) => worker(i + 1)));
   if (failure) throw failure;
   return results;
 }
-try {
-  console.log('AST audit concurrency equivalence');
+function compare(reference, candidate, label) {
+  const mismatches = [];
+  for (const task of tasks) {
+    const a = reference.get(task.testName);
+    const b = candidate.get(task.testName);
+    if (!a || !b || a.test !== b.test) mismatches.push({ suite: task.testName, area: 'test outcomes' });
+    if (!a || !b || a.audit !== b.audit) mismatches.push({ suite: task.testName, area: 'analysis output' });
+  }
+  if (mismatches.length) throw new Error(label + ' mismatches: ' + JSON.stringify(mismatches, null, 2));
+}
+(async () => {
+  console.log('AST audit serial/parallel equivalence');
   console.log('Commit: ' + (process.env.GITHUB_SHA || 'local checkout'));
-  console.log('Node: ' + process.version + '; AST audit suites: ' + tasks.length + '; parallel workers: ' + workers);
-  console.log('Mode A: historical serial loop, one test process and corresponding analysis process at a time.');
-  const serialResults = serial();
-  console.log('Mode A complete: ' + serialResults.size + '/' + tasks.length + ' suites.');
-  console.log('Mode B: bounded parallel isolated suite tasks.');
-  parallel().then(parallelResults => {
-    console.log('Mode B complete: ' + parallelResults.size + '/' + tasks.length + ' suites.');
-    const mismatches = [];
-    for (const task of tasks) {
-      const a = serialResults.get(task.testName);
-      const b = parallelResults.get(task.testName);
-      if (!a || !b || a.test !== b.test) mismatches.push({ suite: task.testName, area: 'test outcomes' });
-      if (!a || !b || a.audit !== b.audit) mismatches.push({ suite: task.testName, area: 'analysis output' });
-    }
-    if (mismatches.length) {
-      console.error('Concurrency equivalence FAILED: ' + JSON.stringify(mismatches, null, 2));
-      process.exitCode = 1;
-      return;
-    }
-    console.log('Concurrency equivalence PASSED: identical test outcomes and analysis output for ' + tasks.length + '/' + tasks.length + ' AST audit suites.');
-    console.log('This validates this checkout, dependency set, and worker count only; it does not prove absence of all possible races.');
-  }).catch(error => { console.error(error.stack || error); process.exitCode = 1; });
-} catch (error) {
+  console.log('Fingerprint: ' + JSON.stringify(fingerprint));
+  console.log('Suites: ' + tasks.length + '; actual process workers: ' + workers + '; parallel repetitions: ' + rounds);
+  console.log('Mode A: serial reference, one test/analysis process at a time.');
+  const serialResults = await serial();
+  if (serialResults.size !== tasks.length) throw new Error('Serial inventory incomplete: ' + serialResults.size + '/' + tasks.length);
+  console.log('Serial reference complete: ' + serialResults.size + '/' + tasks.length + '.');
+  for (let round = 1; round <= rounds; round++) {
+    console.log('Mode B parallel repetition [' + round + '/' + rounds + '].');
+    const result = await parallel(round);
+    if (result.size !== tasks.length) throw new Error('Parallel inventory incomplete in round ' + round + ': ' + result.size + '/' + tasks.length);
+    compare(serialResults, result, 'Parallel repetition ' + round);
+    console.log('Parallel repetition [' + round + '/' + rounds + '] identical: ' + result.size + '/' + tasks.length + ' suites.');
+  }
+  console.log('PASS: complete AST test outcomes and analysis output matched serial reference in ' + rounds + ' true parallel repetitions.');
+  console.log('Scope: this commit, dependency fingerprint, environment, and worker count only; this is not proof of race-freedom for all environments.');
+})().catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;
-} finally {
-  // Logs are retained only for the duration of the run; CI captures stdout.
-  // Failure logs are emitted by the thrown error before cleanup.
+}).finally(() => {
   process.on('exit', () => fs.rmSync(temp, { recursive: true, force: true }));
-}
+});
