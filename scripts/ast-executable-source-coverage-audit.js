@@ -88,6 +88,7 @@ function property(node, name) {
 }
 function discover(root) {
   root = path.resolve(root);
+  if (fs.existsSync(root)) root = fs.realpathSync(root);
   const extension = path.join(root, 'extension');
   const symlinkPaths = [];
   const extensionFiles = walk(extension, () => true, [], symlinkPaths);
