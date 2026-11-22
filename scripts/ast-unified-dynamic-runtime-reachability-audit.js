@@ -550,8 +550,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           'globalThis.Function', 'window.Function', 'self.Function'].includes(pathName) ||
           (calleeBinding && dynamicCallableBindings.has(calleeBinding) &&
             dynamicCallableBindings.get(calleeBinding).startsWith('function-constructor'));
+        const vmRequireObject = callee.type === 'MemberExpression' && requireVm(callee.object);
         const vmExecution = (objectBinding && vmNamespaceBindings.has(objectBinding) && vmMethods.has(method)) ||
-          (calleeBinding && vmMethodBindings.has(calleeBinding) && vmMethods.has(vmMethodBindings.get(calleeBinding)));
+          (calleeBinding && vmMethodBindings.has(calleeBinding) && vmMethods.has(vmMethodBindings.get(calleeBinding))) ||
+          (vmRequireObject && vmMethods.has(method));
         const moduleCompile = method === '_compile' && /(?:^|\.)_compile$/.test(pathName);
         const wasmExecution = (pathName.startsWith('WebAssembly.') &&
           ['compile', 'compileStreaming', 'instantiate', 'instantiateStreaming'].includes(method)) ||
