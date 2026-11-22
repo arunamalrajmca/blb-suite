@@ -407,7 +407,7 @@ function auditManifest(extensionRoot) {
         for (const argument of node.arguments) {
           const values = argument.type === 'SpreadElement' && argument.argument.type === 'Identifier'
             ? arrays.get(argument.argument.name) || null
-            : argument.type === 'SpreadElement' ? staticArray(argument.argument) : [literal(argument)].filter(value => value !== null);
+            : argument.type === 'SpreadElement' ? staticArray(argument.argument) : (() => { const value = literal(argument); return value === null ? null : [value]; })();
           if (values) for (const value of values) addModuleDependency(owner, value, 'JavaScript importScripts dependency', path.dirname(file));
           else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-importScripts-resource-target' });
         }
