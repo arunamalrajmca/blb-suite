@@ -447,3 +447,18 @@ test('resolves delegated event handlers, both Promise handlers, and React hook c
   assert.ok(registrations.some(item => item.callback === 'onRejected' && item.certainty === 'resolved-function-binding'));
   assert.ok(registrations.some(item => item.certainty === 'resolved-inline-callback'));
 });
+
+
+test('reports Node module compilation and WebAssembly execution as dynamic-code boundaries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "module._compile(sourceText, filename);",
+      "WebAssembly.compile(binaryBytes);",
+      "new WebAssembly.Module(binaryBytes);"
+    ].join(' ')
+  });
+  const boundaries = result.uncertainty.map(item => item.executionBoundary);
+  assert.ok(boundaries.includes('node-module-compile'));
+  assert.ok(boundaries.includes('wasm-module-execution'));
+});
