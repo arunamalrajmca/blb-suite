@@ -541,8 +541,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
         ]);
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
-        const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) &&
-          node.arguments.length && ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.arguments[node.arguments.length - 1]?.type);
+        const lastArgument = node.arguments[node.arguments.length - 1];
+        const callbackOnlyExtensionMethods = new Set(['getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'captureVisibleTab']);
+        const lastArgumentIsCallable = lastArgument &&
+          ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
+        const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) && lastArgumentIsCallable &&
+          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' ||
+            callbackOnlyExtensionMethods.has(method) || functionDefs.has(file + '::' + bindings.get(lastArgument)));
         const callbackIndex = isObserver ? 0 :
           method === 'addEventListener' ? 1 :
           ['on', 'once', 'addListener'].includes(method) && node.arguments[0]?.type === 'Literal' &&
@@ -570,12 +575,25 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'AssignmentExpression' && node.operator === '=' &&
           node.left.type === 'Identifier' && node.right.type === 'Identifier') {
         const target = bindings.get(node.left), source = bindings.get(node.right);
-        if (target && source) aliases.set(target, source);
+        if (target && source) {
+          aliases.set(target, source);
+          if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
+          if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
+          if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
+        }
+        if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(node.right.name)) {
+          dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' : 'function-constructor-alias');
+        }
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
           node.init && node.init.type === 'Identifier') {
         const target = bindings.get(node.id), source = bindings.get(node.init);
-        if (target && source) aliases.set(target, source);
+        if (target && source) {
+          aliases.set(target, source);
+          if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
+          if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
+          if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
+        }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const key = bindings.get(node.callee); if (key) calledBindings.add(key);
