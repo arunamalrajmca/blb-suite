@@ -145,9 +145,15 @@ function auditManifest(extensionRoot) {
   if (manifest.side_panel?.default_path) add('side_panel.default_path', manifest.side_panel.default_path, 'side panel');
   if (manifest.action?.default_popup) add('action.default_popup', manifest.action.default_popup, 'popup');
   if (manifest.browser_action?.default_popup) add('browser_action.default_popup', manifest.browser_action.default_popup, 'popup');
+  if (manifest.page_action?.default_popup) add('page_action.default_popup', manifest.page_action.default_popup, 'popup');
+  if (manifest.app?.launch?.local_path) add('app.launch.local_path', manifest.app.launch.local_path, 'app launch page');
+  if (manifest.storage?.managed_schema) add('storage.managed_schema', manifest.storage.managed_schema, 'managed storage schema');
   addMap('icons', manifest.icons, 'icon');
   addMap('action.default_icon', manifest.action?.default_icon, 'icon');
   addMap('browser_action.default_icon', manifest.browser_action?.default_icon, 'icon');
+  addMap('page_action.default_icon', manifest.page_action?.default_icon, 'icon');
+  for (const [index, item] of (manifest.nacl_modules || []).entries()) if (item.path) add('nacl_modules[' + index + '].path', item.path, 'NaCl module');
+  for (const [index, item] of (manifest.plugins || []).entries()) if (item.path) add('plugins[' + index + '].path', item.path, 'plugin resource');
   for (const [index, item] of (manifest.content_scripts || []).entries()) {
     for (const file of item.js || []) add('content_scripts[' + index + '].js', file, 'content script');
     for (const file of item.css || []) add('content_scripts[' + index + '].css', file, 'content stylesheet');
