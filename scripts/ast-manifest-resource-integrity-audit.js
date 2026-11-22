@@ -199,7 +199,7 @@ function auditManifest(extensionRoot) {
       if (request && !/^data:/i.test(request)) add(owner, request, 'HTML srcset resource', baseDirectory, true);
     }
   }
-  const htmlFiles = files.filter(file => file.endsWith('.html'));
+  const htmlFiles = files.filter(file => file.toLowerCase().endsWith('.html'));
   for (const htmlFile of htmlFiles) {
     const html = fs.readFileSync(htmlFile, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
     const owner = normalize(root, htmlFile);
@@ -244,7 +244,7 @@ function auditManifest(extensionRoot) {
       }
     }
   }
-  for (const file of files.filter(item => item.endsWith('.css'))) cssQueue.add(file);
+  for (const file of files.filter(item => item.toLowerCase().endsWith('.css'))) cssQueue.add(file);
   const scannedCss = new Set();
   while (cssQueue.size) {
     const file = cssQueue.values().next().value;
