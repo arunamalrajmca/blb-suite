@@ -242,16 +242,49 @@ function auditManifest(extensionRoot) {
   }
   function scanCss(source, owner, baseDirectory) {
     const clean = source.replace(/\/\*[\s\S]*?\*\//g, '');
-    const patterns = [
-      /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi,
-      /@import\s+(?:"([^"]+)"|'([^']+)')/gi
-    ];
-    for (const pattern of patterns) {
-      let match;
-      while ((match = pattern.exec(clean))) {
-        const value = (match[1] ?? match[2] ?? match[3] ?? '').trim();
-        if (value) add(owner, value, 'CSS referenced resource', baseDirectory, true);
+    // url() may contain nested functions such as var(--asset-url). Parse
+    // balanced parentheses instead of truncating at the first closing ')'.
+    const urlStart = /url\(\s*/gi;
+    let match;
+    while ((match = urlStart.exec(clean))) {
+      let index = urlStart.lastIndex;
+      let depth = 1;
+      let quote = null;
+      let escaped = false;
+      for (; index < clean.length; index++) {
+        const character = clean[index];
+        if (escaped) { escaped = false; continue; }
+        if (character === '\\') { escaped = true; continue; }
+        if (quote) {
+          if (character === quote) quote = null;
+          continue;
+        }
+        if (character === '"' || character === "'") { quote = character; continue; }
+        if (character === '(') depth++;
+        else if (character === ')') {
+          depth--;
+          if (depth === 0) break;
+        }
       }
+      if (depth !== 0) {
+        uncertainties.push({ owner, kind: 'unparsed-css-resource-url' });
+        urlStart.lastIndex = clean.length;
+        break;
+      }
+      const value = clean.slice(urlStart.lastIndex, index).trim();
+      if (value) {
+        if (/^(?:var|env)\s*\(/i.test(value)) {
+          uncertainties.push({ owner, kind: 'dynamic-css-resource-url', value });
+        } else {
+          add(owner, value.replace(/^(['"])([\s\S]*)\1$/, '$2'), 'CSS referenced resource', baseDirectory, true);
+        }
+      }
+      urlStart.lastIndex = index + 1;
+    }
+    const imports = /@import\s+(?:"([^"]+)"|'([^']+)')/gi;
+    while ((match = imports.exec(clean))) {
+      const value = (match[1] ?? match[2] ?? '').trim();
+      if (value) add(owner, value, 'CSS referenced resource', baseDirectory, true);
     }
   }
   for (const file of files.filter(item => item.toLowerCase().endsWith('.css'))) cssQueue.add(file);
