@@ -380,26 +380,27 @@ test('b v1 reuses its originating tab and leaves no blank command tab', async ({
   const result = await extensionWorker.evaluate(async () => {
     const origin = await chrome.tabs.create({url:'about:blank', active:true});
     await handleBCommand('v1', 'currentTab');
-    const tabs = await chrome.tabs.query({});
-    const originAfter = await chrome.tabs.get(origin.id).catch(() => null);
-    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
-    const tracked = data.blbSuiteMultiVerseTabSets || {};
-    return {
-      originId:origin.id,
-      originUrl:originAfter?.url || null,
-      blankTabs:tabs.filter(tab => /^about:blank(?:[#?].*)?$/i.test(String(tab.url || ''))).map(tab => tab.id),
-      trackedIds:tabs.filter(tab => tracked[String(tab.id)]?.key).map(tab => tab.id)
-    };
+    return { originId:origin.id };
   });
 
   // The originating tab first loads multiverse-post.html to submit the form.
-  // Wait for the POST navigation instead of asserting the intermediate URL.
+  // Wait for the POST navigation before inspecting the final tab state.
   await expect.poll(() => extensionWorker.evaluate(async id =>
     (await chrome.tabs.get(id).catch(() => null))?.url || '', result.originId),
     {timeout:15000}
   ).toContain('blueletterbible.org/tools/MultiVerse.cfm');
-  expect(result.blankTabs).not.toContain(result.originId);
-  expect(result.trackedIds).toContain(result.originId);
+
+  const finalState = await extensionWorker.evaluate(async id => {
+    const tabs = await chrome.tabs.query({});
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    return {
+      blankTabs:tabs.filter(tab => /^about:blank(?:[#?].*)?$/i.test(String(tab.url || ''))).map(tab => tab.id),
+      trackedIds:tabs.filter(tab => tracked[String(tab.id)]?.key).map(tab => tab.id)
+    };
+  }, result.originId);
+  expect(finalState.blankTabs).not.toContain(result.originId);
+  expect(finalState.trackedIds).toContain(result.originId);
 });
 
 test('case-sensitive search reuses the originating tab and leaves no blank orphan', async ({ context, extensionWorker }) => {
