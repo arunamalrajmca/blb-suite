@@ -527,7 +527,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           const base = argument.arguments[1];
           if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') baseFile = filename;
         }
-        if (request) {
+        if (request && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(request)) {
           const specifier = request.startsWith('.') || request.startsWith('/') ? request : './' + request;
           const resolution = resolveModuleSpecifier(baseFile, specifier, files);
           edges.push({ from: filename, specifier: request, kind: 'worker-thread-static-launch', ...resolution });
