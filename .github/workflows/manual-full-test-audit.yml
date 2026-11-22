@@ -173,7 +173,8 @@ jobs:
           prerender_self_count=$(grep -F -c "› native Chromium _self prerender activation initializes the activated document without tab replacement" "$test_list" || true)
           prerender_blank_count=$(grep -F -c "› native Chromium _blank prerender activation initializes the activated document without tab replacement" "$test_list" || true)
           performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
-          if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 ]]; then
+          performance_batch_count=$(grep -F -c "› Interleaved baseline/candidate performance batch preserves isolated samples" "$test_list" || true)
+          if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 || "$performance_batch_count" -ne 1 ]]; then
             echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, and performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count."
             exit 1
           fi
@@ -187,12 +188,12 @@ jobs:
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
           delegated=$((discovered_before_delegation - discovered_after_delegation))
-          if [[ "$delegated" -ne 4 ]]; then
-            echo "::error::Expected to delegate exactly 4 tests to dedicated workflows, found $delegated."
+          if [[ "$delegated" -ne 5 ]]; then
+            echo "::error::Expected to delegate exactly 5 tests to dedicated workflows, found $delegated."
             exit 1
           fi
           total=$discovered_after_delegation
-          echo "Delegated tests: $delegated (Alt+B + two prerender cases + performance benchmark)."
+          echo "Delegated tests: $delegated (Alt+B + two prerender cases + original and batched performance benchmark cases)."
           echo "Browser test cases discovered after delegation: $total"
           if [[ "$total" -eq 0 ]]; then
             echo "No headless browser tests remain after delegation."
