@@ -274,7 +274,7 @@ function discover(root) {
             ? staticArray(arg.argument)
             : arg.type === 'SpreadElement' && arg.argument.type === 'Identifier'
               ? literalArrays.get(arg.argument.name) || null
-              : [literal(arg)].filter(value => value !== null);
+              : (() => { const value = literal(arg); return value === null ? null : [value]; })();
           if (requests) {
             for (const request of requests) {
               const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-importScripts');
