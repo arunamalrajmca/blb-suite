@@ -184,6 +184,11 @@ function auditManifest(extensionRoot) {
   for (const [name, file] of Object.entries(manifest.theme?.images || {})) add('theme.images.' + name, file, 'theme image');
   if (manifest.default_locale) add('_locales.default_locale', '_locales/' + manifest.default_locale + '/messages.json', 'locale messages');
   for (const [index, item] of (manifest.web_accessible_resources || []).entries()) {
+    if (typeof item === 'string') {
+      if (item.includes('*')) addPattern('web_accessible_resources[' + index + ']', item);
+      else add('web_accessible_resources[' + index + ']', item, 'web-accessible resource');
+      continue;
+    }
     for (const resource of item.resources || []) {
       if (resource.includes('*')) addPattern('web_accessible_resources[' + index + ']', resource);
       else add('web_accessible_resources[' + index + ']', resource, 'web-accessible resource');
