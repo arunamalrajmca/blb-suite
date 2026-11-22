@@ -1142,6 +1142,27 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
   assert.ok(batch.includes("paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse"));
 });
 
+test("full audit compares legacy per-test process isolation with four-worker scheduling", () => {
+  const audit = readFileSync(
+    new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(audit.includes('npx playwright test --test-list "$current_test" --max-failures=1'),
+    "legacy compatibility cases must run one test per Playwright process");
+  assert.ok(audit.includes('npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0'),
+    "the same compatibility cases must also run together with four workers");
+  assert.ok(audit.includes('npx playwright test --test-list "$test_list" --workers=4 --max-failures=0'),
+    "the complete browser inventory must still run with four workers after comparison");
+  for (const title of [
+    "a real MV3 service-worker termination is recovered by the Alt+B command message",
+    "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them",
+    "repeated global master toggles disable and restore exactly one double-click listener",
+    "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+  ]) {
+    assert.ok(audit.includes(title), "serial/parallel comparison must include " + title);
+  }
+});
+
 test("full audit label suppresses the separate focused-regressions workflow to prevent duplicate test ownership", () => {
   const workflow = readFileSync(
     new URL("../../.github/workflows/browser-e2e-focused-regressions.yml", import.meta.url),

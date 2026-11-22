@@ -224,14 +224,82 @@ jobs:
             exit 1
           fi
 
+          # Compare the historical one-process-per-test serial mode with the new
+          # one-process/four-worker mode on the same lifecycle-sensitive cases.
+          # The complete browser matrix still runs afterward without exclusions.
+          compatibility_list="$RUNNER_TEMP/blb-playwright-concurrency-compatibility.txt"
+          : > "$compatibility_list"
+          compatibility_titles=(
+            "a real MV3 service-worker termination is recovered by the Alt+B command message"
+            "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+            "repeated global master toggles disable and restore exactly one double-click listener"
+            "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+          )
+          compatibility_status=0
+          for title in "${compatibility_titles[@]}"; do
+            matches=$(grep -F "› $title" "$test_list" || true)
+            match_count=$(printf '%s\\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')
+            if [[ "$match_count" -ne 1 ]]; then
+              echo "::error::Expected one concurrency compatibility test for '$title', found $match_count."
+              compatibility_status=1
+              continue
+            fi
+            printf '%s\\n' "$matches" >> "$compatibility_list"
+          done
+
+          compatibility_count=$(wc -l < "$compatibility_list" | tr -d ' ')
+          if [[ "$compatibility_count" -ne 4 ]]; then
+            echo "::error::Expected exactly four concurrency compatibility tests, found $compatibility_count."
+            compatibility_status=1
+          else
+            echo "Comparing legacy isolated and four-worker scheduling for $compatibility_count lifecycle-sensitive tests."
+            legacy_status=0
+            serial_index=0
+            current_test="$RUNNER_TEMP/blb-concurrency-current-test.txt"
+            current_log="$RUNNER_TEMP/blb-concurrency-legacy.log"
+            while IFS= read -r test_id; do
+              serial_index=$((serial_index + 1))
+              echo "Legacy serial process [$serial_index/4]: $test_id"
+              printf '%s\\n' "$test_id" > "$current_test"
+              command_status=0
+              npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
+              cat "$current_log"
+              summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
+              if [[ "$command_status" -ne 0 || "$summary" != *"1/1 completed"* || "$summary" != *"1 passed, 0 failed, 0 skipped"* ]]; then
+                echo "::error::Legacy isolated execution failed or did not complete exactly one test: $test_id"
+                legacy_status=1
+                break
+              fi
+            done < "$compatibility_list"
+
+            parallel_status=0
+            parallel_log="$RUNNER_TEMP/blb-concurrency-parallel.log"
+            npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0 > "$parallel_log" 2>&1 || parallel_status=$?
+            cat "$parallel_log"
+            parallel_summary=$(grep 'Test summary:' "$parallel_log" | tail -n 1 || true)
+            if [[ "$parallel_status" -ne 0 || "$parallel_summary" != *"4/4 completed"* || "$parallel_summary" != *"4 passed, 0 failed, 0 skipped"* ]]; then
+              echo "::error::Four-worker execution did not complete all four compatibility tests successfully."
+              parallel_status=1
+            fi
+            if [[ "$legacy_status" -ne 0 || "$parallel_status" -ne 0 ]]; then
+              compatibility_status=1
+            else
+              echo "Concurrency compatibility passed: 4/4 in legacy serial mode and 4/4 in one four-worker process."
+            fi
+          fi
+
           # The prior known failures were rerun independently in the serial step above.
           # The focused-regressions workflow is suppressed when the full-audit label
           # is present, so this invocation owns every remaining browser test.
-          # This avoids 759 separate Node/Playwright startups while keeping every
+          # This avoids one Node/Playwright startup per browser test while keeping every
           # test case eligible to run even when another case fails.
           echo "Running all $total browser test cases with four isolated workers."
           browser_status=0
           npx playwright test --test-list "$test_list" --workers=4 --max-failures=0 || browser_status=$?
+          if [[ "$compatibility_status" -ne 0 ]]; then
+            echo "Legacy-versus-parallel concurrency compatibility check failed."
+            browser_status=1
+          fi
           if [[ "$browser_status" -ne 0 ]]; then
             echo "Browser audit completed with one or more failures; all scheduled tests were allowed to finish."
             exit "$browser_status"
