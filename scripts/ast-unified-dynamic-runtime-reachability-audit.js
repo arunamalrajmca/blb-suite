@@ -437,7 +437,19 @@ function analyze(root = path.resolve(__dirname, '..')) {
           seenCallbackAliases.add(callbackKey);
           callbackKey = aliases.get(callbackKey);
         }
-        const definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+        let definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+        // ESLint scope can leave a callback identifier unresolved in unusual
+        // script/global scopes. Keep the fallback local to this source file
+        // and exact function name; never resolve by repository-wide spelling.
+        if (!definition) {
+          for (const [key, candidate] of functionDefs) {
+            if (candidate.file === file &&
+                (candidate.node.id?.name === callback.name || key.startsWith(file + '::' + callback.name + '@'))) {
+              definition = candidate;
+              break;
+            }
+          }
+        }
         if (definition) {
           callbackTarget = rel(root, definition.file) + '::' + callbackKey;
           certainty = 'resolved-function-binding';
