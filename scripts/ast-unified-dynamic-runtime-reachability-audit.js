@@ -462,7 +462,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
           let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
           if (callback.type === 'Identifier') {
             callbackName = callback.name;
-            const callbackKey = bindings.get(callback);
+            let callbackKey = bindings.get(callback);
+            const seenCallbackAliases = new Set();
+            while (callbackKey && aliases.has(callbackKey) && !seenCallbackAliases.has(callbackKey)) {
+              seenCallbackAliases.add(callbackKey);
+              callbackKey = aliases.get(callbackKey);
+            }
             const definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
             if (definition) {
               callbackTarget = rel(root, definition.file) + '::' + callbackKey;
@@ -851,7 +856,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const loaderUncertainty = uncertainty.filter(site => [
     'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
     'chrome.scripting.registerContentScripts', 'dom-script-src-injection',
-    'dom-script-setAttribute-injection', 'require'
+    'dom-script-setAttribute-injection', 'require',
+    // Generated source may hide additional loaders or references. Keep the
+    // affected root's otherwise-unreached files uncertain rather than dead.
+    'unresolved-dynamic-execution', 'string-timer-execution'
   ].includes(site.kind));
   for (const [entry, seen] of rootReach) {
     const scopedSites = loaderUncertainty.filter(site => seen.has(path.resolve(root, site.file)));
