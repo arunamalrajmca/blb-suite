@@ -453,6 +453,9 @@ function auditManifest(extensionRoot) {
           if (values) for (const value of values) add(owner, value, 'runtime executeScript file');
           else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic executeScript resource target' });
         }
+        if (api.endsWith('serviceWorker.register')) {
+          uncertainties.push({ owner, line: node.loc.start.line, kind: 'service-worker-registration-runtime-base', target: literal(node.arguments[0]) });
+        }
         if (api.endsWith('userScripts.register')) {
           let descriptors = node.arguments[0];
           if (descriptors?.type === 'Identifier') descriptors = arrayNodes.get(descriptors.name) || null;
