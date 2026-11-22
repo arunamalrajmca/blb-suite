@@ -21,7 +21,7 @@ async function installMasterToggleRegistrationDiagnostics(extensionWorker) {
     const wrapApi = (owner, name, summarizeArgs, summarizeResult) => {
       const original = owner?.[name];
       if (typeof original !== 'function') return;
-      owner[name] = async function(...args) {
+      const wrapped = async function(...args) {
         const details = summarizeArgs(args);
         const id = state.nextId++;
         const startedAt = Date.now();
@@ -36,6 +36,12 @@ async function installMasterToggleRegistrationDiagnostics(extensionWorker) {
           throw error;
         }
       };
+      try {
+        owner[name] = wrapped;
+        if (owner[name] !== wrapped) record('diagnostics:patch-unavailable',{target:'api.'+name});
+      } catch (error) {
+        record('diagnostics:patch-error',{target:'api.'+name,error:String(error)});
+      }
     };
     wrapApi(chrome.scripting, 'getRegisteredContentScripts', args => ({ids:args[0]?.ids || null}),
       result => ({ids:(result || []).filter(item => (item.matches || []).includes(targetPattern) ||
@@ -63,7 +69,7 @@ async function installMasterToggleRegistrationDiagnostics(extensionWorker) {
       const original = globalThis[name];
       if (typeof original !== 'function') continue;
       availableFunctions.push(name);
-      globalThis[name] = async function(...args) {
+      const wrapped = async function(...args) {
         const id = state.nextId++;
         const startedAt = Date.now();
         record(name + ':start', {id,args:safe(args)});
@@ -77,6 +83,12 @@ async function installMasterToggleRegistrationDiagnostics(extensionWorker) {
           throw error;
         }
       };
+      try {
+        globalThis[name] = wrapped;
+        if (globalThis[name] !== wrapped) record('diagnostics:patch-unavailable',{target:name});
+      } catch (error) {
+        record('diagnostics:patch-error',{target:name,error:String(error)});
+      }
     }
     chrome.storage.onChanged.addListener((changes,area) => {
       if (area !== 'local') return;
@@ -90,10 +102,13 @@ async function installMasterToggleRegistrationDiagnostics(extensionWorker) {
     try { chrome.runtime.onSuspendCanceled.addListener(() => record('runtime:onSuspendCanceled')); } catch (_) {}
     for (const level of ['warn','error']) {
       const original = console[level]?.bind(console);
-      if (original) console[level] = (...args) => {
-        record('console:'+level,{messages:args.map(value=>String(value)).slice(0,5)});
-        return original(...args);
-      };
+      if (original) {
+        const wrapped = (...args) => {
+          record('console:'+level,{messages:args.map(value=>String(value)).slice(0,5)});
+          return original(...args);
+        };
+        try { console[level] = wrapped; } catch (_) {}
+      }
     }
     record('diagnostics:installed',{targetPattern,targetId,availableFunctions});
     return {installed:true,targetPattern,targetId,availableFunctions};
