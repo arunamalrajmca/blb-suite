@@ -270,3 +270,27 @@ test('reports missing package and command entrypoints instead of silently droppi
     assert.ok(graph.unresolvedEntrypoints.some(item => item.reason.includes('package-script:audit')));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('links literal child-process script targets launched through node, process.execPath, fork and shell commands', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'static-child-launches-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const cp = require('node:child_process');",
+      "cp.spawn(process.execPath, ['scripts/child.js']);",
+      "cp.fork('./scripts/forked.js');",
+      "cp.exec('node scripts/shell-launched.js');"
+    ].join('\n'));
+    for (const file of ['scripts/child.js', 'scripts/forked.js', 'scripts/shell-launched.js']) write(file);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const file of ['scripts/child.js', 'scripts/forked.js', 'scripts/shell-launched.js']) assert.ok(reachable.has(file), file);
+    assert.equal(graph.edges.filter(edge => edge.kind === 'child-process-static-launch').length, 3);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
