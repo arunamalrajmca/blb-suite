@@ -224,3 +224,18 @@ test('includes internal symlinked JavaScript roots and reports external symlink 
     fs.rmSync(outside, { recursive: true, force: true });
   } finally { f.cleanup(); }
 });
+
+
+test('includes legacy manifest background script arrays as execution roots', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 2,
+      background: { scripts: ['legacy-background.js'] }
+    }));
+    f.write('extension/legacy-background.js', 'self.legacyWorker = true;');
+    const result = discover(f.root);
+    const legacy = result.entries.find(item => item.file === 'extension/legacy-background.js');
+    assert.equal(legacy.classification, 'statically-rooted-or-imported');
+  } finally { f.cleanup(); }
+});
