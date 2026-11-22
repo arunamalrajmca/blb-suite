@@ -319,3 +319,34 @@ test('links literal worker_threads Worker targets from module-relative URLs and 
     assert.equal(graph.edges.filter(edge => edge.kind === 'worker-thread-static-launch').length, 2);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('uses the most specific package import pattern and retains all conditional targets', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conditional-package-imports-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({
+      imports: {
+        '#feature/*': './scripts/generic/*.js',
+        '#feature/special/*': './scripts/special/*.js',
+        '#conditional': { import: './scripts/esm.js', require: './scripts/cjs.js' }
+      },
+      scripts: { run: 'node scripts/main.js' }
+    }));
+    write('scripts/main.js', "require('#feature/special/alpha'); require('#conditional');");
+    write('scripts/special/alpha.js', 'module.exports = true;');
+    write('scripts/generic/special/alpha.js', 'module.exports = false;');
+    write('scripts/esm.js', 'export default true;');
+    write('scripts/cjs.js', 'module.exports = true;');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/special/alpha.js'));
+    assert.ok(!reachable.has('scripts/generic/special/alpha.js'));
+    assert.ok(reachable.has('scripts/esm.js'));
+    assert.ok(reachable.has('scripts/cjs.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
