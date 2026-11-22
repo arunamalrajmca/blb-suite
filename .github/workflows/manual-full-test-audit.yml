@@ -12,7 +12,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: full-test-audit-${{ github.ref }}
+  group: full-test-audit-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
