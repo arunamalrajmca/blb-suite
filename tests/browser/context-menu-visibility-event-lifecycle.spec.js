@@ -14,15 +14,21 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     const originalUpdate = chrome.contextMenus.update;
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
+    const originalPdfVisibilitySync = syncPdfSelectionContextMenuVisibility;
     const originalSelectionPermissionCheck = hasSelectionActionPermissionForTab;
     const createdTabIds = [];
     const createdWindowIds = [];
     const updates = [];
+    let pdfVisibilitySyncCalls = 0;
     let recordFocusEvent;
 
     try {
       selectionMenuKnownPresent = true;
       pdfSelectionMenuKnownPresent = true;
+      syncPdfSelectionContextMenuVisibility = async (...args) => {
+        pdfVisibilitySyncCalls += 1;
+        return originalPdfVisibilitySync(...args);
+      };
       // This test isolates menu lifecycle behavior; host-grant UX is covered
       // separately, so make the selected fixture host eligible deterministically.
       hasSelectionActionPermissionForTab = async tab =>
@@ -82,9 +88,10 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const activationShowsWebMenu = activationUpdates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
-      const activationSynchronizesPdfMenu = activationUpdates.filter(item =>
-        item.id === 'blb-suite-web-selection'
-      ).length >= 2;
+      // Web and PDF selections intentionally share one browser-owned menu ID.
+      // Observe the PDF synchronizer itself rather than expecting a second
+      // native update for an item that is now shared by both contexts.
+      const activationSynchronizesPdfMenu = pdfVisibilitySyncCalls > 0;
 
       // A navigation in an inactive tab must not change global menu visibility.
       updates.length = 0;
@@ -194,6 +201,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       chrome.contextMenus.update = originalUpdate;
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
+      syncPdfSelectionContextMenuVisibility = originalPdfVisibilitySync;
       hasSelectionActionPermissionForTab = originalSelectionPermissionCheck;
       if (recordFocusEvent) {
         chrome.windows.onFocusChanged.removeListener(recordFocusEvent);
@@ -208,7 +216,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.activationShowsWebMenu).toBe(true);
   expect(result.activationSynchronizesPdfMenu).toBe(true);
   const inactiveNavigationMenuUpdates = result.inactiveNavigationUpdates.filter(item =>
-    item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-web-selection'
+    item.id === 'blb-suite-web-selection'
   );
   expect(
     inactiveNavigationMenuUpdates.every(item =>
@@ -426,4 +434,80 @@ test('worker restart preserves web menu visibility while click-time eligibility 
   expect(result.ensured).toBe(true);
   expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B',documentUrlPatterns:[]});
   expect(result.sensitiveHostAllowed).toBe(false);
+});
+
+
+test('concurrent worker-restart menu initialization creates the persistent item only once', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originals = {
+      update:chrome.contextMenus.update,
+      create:chrome.contextMenus.create,
+      knownPresent:selectionMenuKnownPresent,
+      ensurePromise:selectionMenuEnsurePromise
+    };
+    let updateCalls = 0;
+    let createCalls = 0;
+    try {
+      selectionMenuKnownPresent = false;
+      selectionMenuEnsurePromise = null;
+      chrome.contextMenus.update = async (_id, details = {}) => {
+        // Visibility synchronization also calls update(); count only the
+        // existence/title refresh performed by ensureWebSelectionContextMenu.
+        if (Object.hasOwn(details, 'title')) {
+          updateCalls++;
+          throw new Error('Cannot find menu item');
+        }
+      };
+      chrome.contextMenus.create = async details => {
+        createCalls++;
+        await new Promise(resolve => setTimeout(resolve, 25));
+        return details.id;
+      };
+      const results = await Promise.all(Array.from({length:8}, () => ensureWebSelectionContextMenu()));
+      return {results,updateCalls,createCalls,knownPresent:selectionMenuKnownPresent};
+    } finally {
+      chrome.contextMenus.update = originals.update;
+      chrome.contextMenus.create = originals.create;
+      selectionMenuKnownPresent = originals.knownPresent;
+      selectionMenuEnsurePromise = originals.ensurePromise;
+    }
+  });
+  expect(result.results).toEqual(Array(8).fill(true));
+  expect(result.updateCalls).toBe(1);
+  expect(result.createCalls).toBe(1);
+  expect(result.knownPresent).toBe(true);
+});
+
+test('duplicate-ID creation race adopts the existing persistent selection menu', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originals = {
+      update:chrome.contextMenus.update,
+      create:chrome.contextMenus.create,
+      knownPresent:selectionMenuKnownPresent,
+      ensurePromise:selectionMenuEnsurePromise
+    };
+    let updateCalls = 0;
+    let createCalls = 0;
+    try {
+      selectionMenuKnownPresent = false;
+      selectionMenuEnsurePromise = null;
+      chrome.contextMenus.update = async (_id, details = {}) => {
+        if (!Object.hasOwn(details, 'title')) return;
+        updateCalls++;
+        if (updateCalls === 1) throw new Error('Cannot find menu item');
+      };
+      chrome.contextMenus.create = async () => {
+        createCalls++;
+        throw new Error('Cannot create item with duplicate id blb-suite-web-selection');
+      };
+      const ensured = await ensureWebSelectionContextMenu();
+      return {ensured,updateCalls,createCalls,knownPresent:selectionMenuKnownPresent};
+    } finally {
+      chrome.contextMenus.update = originals.update;
+      chrome.contextMenus.create = originals.create;
+      selectionMenuKnownPresent = originals.knownPresent;
+      selectionMenuEnsurePromise = originals.ensurePromise;
+    }
+  });
+  expect(result).toEqual({ensured:true,updateCalls:2,createCalls:1,knownPresent:true});
 });
