@@ -567,6 +567,10 @@ test('Chrome Web Store suppresses all extension injection and selection actions 
       permissionCheck:hasSelectionActionPermissionForTab,
       pageEnabled:isPageButtonEnabledForHostname
     };
+    const previousSettings = await chrome.storage.local.get({
+      masterEnabled:true,
+      redirectEnabled:false
+    });
     try {
       await chrome.storage.local.set({masterEnabled:true,redirectEnabled:true});
       isSuiteEnabled = async () => true;
@@ -593,6 +597,7 @@ test('Chrome Web Store suppresses all extension injection and selection actions 
       isSuiteEnabled = originals.suiteEnabled;
       hasSelectionActionPermissionForTab = originals.permissionCheck;
       isPageButtonEnabledForHostname = originals.pageEnabled;
+      await chrome.storage.local.set(previousSettings);
     }
   });
   expect(result).toEqual({
