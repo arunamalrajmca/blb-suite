@@ -40,10 +40,13 @@ jobs:
 
       - name: Run deterministic stale-activation regression
         run: |
+          mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
+          set -o pipefail
           npx playwright test tests/browser/site-registration-opt-out-race.spec.js \
             --grep "master OFF-to-ON recovery repairs registrations" \
             --workers=1 --repeat-each=3 --max-failures=0 --reporter=list \
-            --output="${{ runner.temp }}/master-toggle-diagnostics/deterministic-results"
+            --output="${{ runner.temp }}/master-toggle-diagnostics/deterministic-results" \
+            2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/deterministic.log"
         env:
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -51,10 +54,12 @@ jobs:
       - name: Run repeated OFF-to-ON registration recovery under four-worker contention
         run: |
           mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
+          set -o pipefail
           npx playwright test tests/browser/source-page-button-redirect-separation.spec.js \
             --grep "Suite master opt-out removes both registered worlds" \
             --workers=4 --repeat-each=24 --max-failures=0 --reporter=list \
-            --output="${{ runner.temp }}/master-toggle-diagnostics/test-results"
+            --output="${{ runner.temp }}/master-toggle-diagnostics/test-results" \
+            2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/stress.log"
         env:
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -64,9 +69,6 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: master-toggle-registration-diagnostics-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/master-toggle-diagnostics
-            test-results
-            playwright-report
+          path: ${{ runner.temp }}/master-toggle-diagnostics
           if-no-files-found: warn
           retention-days: 30
