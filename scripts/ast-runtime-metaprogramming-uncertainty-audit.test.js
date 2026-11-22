@@ -41,6 +41,13 @@ test('reports higher-order factories and callback contract boundaries', () => {
   assert.ok(has(result, 'higher-order-callback-boundary'));
 });
 
+test('surfaces dynamic code generation, dynamic imports, and dynamic scope', () => {
+  const result = run("eval(source); const generated = Function('return value')(); import(runtimeModule); with (runtimeObject) { invoke(); }");
+  assert.ok(has(result, 'dynamic-code-generation'));
+  assert.ok(has(result, 'dynamic-module-loading'));
+  assert.ok(has(result, 'dynamic-scope'));
+});
+
 test('keeps the census explicitly observational and never emits dead-code claims', () => {
   const result = run("const key = runtimeKey(); service[key]();");
   assert.ok(result.summary.total > 0);
