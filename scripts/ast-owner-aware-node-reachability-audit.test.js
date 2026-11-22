@@ -350,3 +350,28 @@ test('uses the most specific package import pattern and retains all conditional 
     assert.ok(reachable.has('scripts/cjs.js'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('follows local aliases of require and module.require calls', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'require-alias-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const load = require;',
+      "load('./first.js');",
+      'const loadAgain = module.require;',
+      "loadAgain('./second.js');"
+    ].join('\n'));
+    write('scripts/first.js');
+    write('scripts/second.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/first.js'));
+    assert.ok(reachable.has('scripts/second.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
