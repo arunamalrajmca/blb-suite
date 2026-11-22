@@ -41,7 +41,7 @@ globalThis.BLBShared = Object.freeze({
     'massgeneralbrigham.org', 'uclahealth.org', 'kp.org', 'apollohospitals.com',
     'unitedhealthcare.com', 'uhc.com', 'aetna.com', 'cigna.com', 'humana.com',
     'anthem.com', 'bcbs.com', 'geico.com', 'progressive.com', 'statefarm.com',
-    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov', 'chrome.google.com', 'github.com'
+    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov', 'chrome.google.com', 'chromewebstore.google.com', 'github.com'
   ]),
   isSensitiveSiteHostname(value) {
     let host = String(value || '').trim().toLowerCase().replace(/\.$/, '');
