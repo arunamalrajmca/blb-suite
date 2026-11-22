@@ -131,16 +131,45 @@ function discover(root) {
   }
 
   // Extension HTML is parsed as a resource inventory, including quoted and
-  // unquoted script src attributes and extension-root-relative URL paths.
+  // unquoted script src attributes, inline scripts and inline event handlers.
   for (const htmlFile of htmlFiles) {
     const html = fs.readFileSync(htmlFile, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-    const tagPattern = /<script\b([^>]*)>/gi;
+    const owner = normalize(root, htmlFile);
+    const tagPattern = /<([a-z][\w:-]*)\b([^>]*)>/gi;
     let match;
     while ((match = tagPattern.exec(html))) {
-      const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(match[1]);
-      if (!src) continue;
-      const request = src[1] ?? src[2] ?? src[3];
-      addRequest(request, path.dirname(htmlFile), normalize(root, htmlFile), 'html-script');
+      const tag = match[1].toLowerCase();
+      const attributes = new Map();
+      const attrPattern = /([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+      let attr;
+      while ((attr = attrPattern.exec(match[2]))) {
+        attributes.set(attr[1].toLowerCase(), attr[2] ?? attr[3] ?? attr[4] ?? '');
+      }
+      if (tag === 'script' && attributes.has('src')) {
+        addRequest(attributes.get('src'), path.dirname(htmlFile), owner, 'html-script');
+      }
+      for (const [name, value] of attributes) {
+        if (/^on[a-z]+$/i.test(name) && value.trim()) {
+          dynamicSites.push({ file: owner, line: null, api: 'html-inline-event-handler', target: name, certainty: 'inline-executable-source-not-in-js-file' });
+        }
+        if (name === 'href' && /^javascript:/i.test(value.trim())) {
+          dynamicSites.push({ file: owner, line: null, api: 'html-javascript-url', target: value.trim().slice(0, 120), certainty: 'inline-executable-source-not-in-js-file' });
+        }
+        if (name === 'srcdoc' && value.trim()) {
+          dynamicSites.push({ file: owner, line: null, api: 'html-srcdoc', certainty: 'inline-document-source-not-in-js-file' });
+        }
+      }
+    }
+    const inlineScripts = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+    while ((match = inlineScripts.exec(html))) {
+      const attributes = match[1];
+      const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes);
+      if (src || !match[2].trim()) continue;
+      const type = /\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attributes);
+      const scriptType = (type?.[1] ?? type?.[2] ?? type?.[3] ?? '').toLowerCase();
+      if (!scriptType || /^(?:module|text\/javascript|application\/javascript|text\/ecmascript|application\/ecmascript)$/.test(scriptType)) {
+        dynamicSites.push({ file: owner, line: null, api: 'html-inline-script', certainty: 'inline-executable-source-not-in-js-file' });
+      }
     }
   }
 
