@@ -284,15 +284,11 @@ function discover(root) {
           if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') {
             baseDirectory = path.dirname(file);
             resolutionKind = 'worker-script-import-meta-url';
-          } else if (base?.type === 'CallExpression' && base.callee.type === 'MemberExpression' &&
-              ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(
-                (function memberName(value) {
-                  if (!value) return '';
-                  if (value.type === 'Identifier') return value.name;
-                  if (value.type === 'MemberExpression') return memberName(value.object) + '.' +
-                    (value.computed ? literal(value.property) : value.property.name);
-                  return '';
-                })(base.callee))) {
+          } else if (base?.type === 'CallExpression' &&
+              ((base.callee.type === 'MemberExpression' &&
+                ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(expressionPath(base.callee))) ||
+               (base.callee.type === 'Identifier' &&
+                ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(base.callee.name)))) {
             baseDirectory = extension;
             resolutionKind = 'worker-script-runtime-url';
           }
