@@ -100,7 +100,7 @@ try {
     const oneTestPath = path.join(tempRoot, 'one-test.txt');
     fs.writeFileSync(oneTestPath, scheduled[index] + '\n');
     const logPath = path.join(reportRoot, 'serial-' + String(index + 1).padStart(4, '0') + '.log');
-    const result = run(['--test-list', oneTestPath, '--workers=1', '--max-failures=0', '--reporter=json'], { timeout: 180_000 });
+    const result = run(['--test-list', oneTestPath, '--workers=1', '--max-failures=1', '--reporter=json'], { timeout: 180_000 });
     fs.writeFileSync(logPath, (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
     let tests = [];
     let parseError = null;
@@ -127,7 +127,7 @@ try {
   console.log('[3/5] Running the complete inventory with four workers, three independent repetitions.');
   const parallelRounds = [];
   for (let round = 1; round <= 3; round++) {
-    const result = run(['--test-list', listPath, '--workers=4', '--max-failures=0', '--reporter=json'], { timeout: 21_000_000 });
+    const result = run(['--test-list', listPath, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
     fs.writeFileSync(path.join(reportRoot, 'parallel-round-' + round + '.log'),
       (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
     let tests = [];
