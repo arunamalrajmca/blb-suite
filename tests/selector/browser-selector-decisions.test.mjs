@@ -1130,6 +1130,8 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
     "utf8"
   );
   assert.ok(workflow.includes("tests/browser/performance-batch.spec.js --workers=1"));
+  assert.ok(workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-performance')"),
+    "the ci-run-performance label must run the measured interleaved benchmark");
   assert.ok(workflow.includes("BLB_PERF_SAMPLES: 11"));
   assert.ok(batch.includes("const samples = Number(process.env.BLB_PERF_SAMPLES || 11)"));
   assert.ok(batch.includes("const total = scenarios.length * samples * 2"));
@@ -1160,6 +1162,19 @@ test("full audit label suppresses the separate focused-regressions workflow to p
   assert.ok(
     hardGate.includes("always() && !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit'))"),
     "the HARD-GATE must not publish a duplicate regression-gate status while the full audit owns it"
+  );
+});
+
+test("repository-wide full audit remains opt-in and does not run for ordinary PR synchronization", () => {
+  const audit = readFileSync(
+    new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(audit.includes("types: [labeled, synchronize]"),
+    "the full audit may react to label/synchronize events but must gate execution");
+  assert.ok(
+    audit.includes("if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}"),
+    "the repository-wide audit must execute only on manual dispatch or its explicit opt-in label"
   );
 });
 
