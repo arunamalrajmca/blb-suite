@@ -579,8 +579,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (!foundFilesProperty && !foundFunction) uncertainty.push({ file: rel(root, file), line: node.loc.start.line, kind: 'chrome.scripting.executeScript', certainty: 'unresolved-injection-target', affectedRoots: [] });
         }
         if (method === 'registerContentScripts' && object === 'chrome.scripting') {
+          let foundJsProperty = false;
           visit(node.arguments[0], child => {
             if (child.type !== 'Property' || (child.key.name !== 'js' && child.key.value !== 'js')) return;
+            foundJsProperty = true;
             const entries = child.value.type === 'ArrayExpression'
               ? child.value.elements.map(entry => ({
                 node: entry,
@@ -604,6 +606,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
                 'unresolved-registered-script', [], staticPrefix(child.value, constants, bindings));
             }
           });
+          // Options assembled by a helper, alias, or object spread are not
+          // statically visible here. Preserve uncertainty instead of silently
+          // treating the registration as if it loaded no code.
+          if (!foundJsProperty) {
+            addSite(file, node, 'chrome.scripting.registerContentScripts', null, null,
+              'unresolved-registered-script', [], staticPrefix(node.arguments[0], constants, bindings));
+          }
         }
         if (callee.type === 'Identifier' && callee.name === 'require') {
           const spec = staticValue(node.arguments[0], constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
