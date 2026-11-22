@@ -205,3 +205,69 @@ test('does not split data URLs into false srcset resource references', () => {
     assert.ok(result.references.some(item => item.path === 'image.png'));
   } finally { f.cleanup(); }
 });
+
+
+test('checks JavaScript module, importScripts, runtime URL, URL constructor, and injection resources', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('background.js', [
+      "import './modules/helper.js';",
+      "importScripts('./worker-helper.js');",
+      "chrome.runtime.getURL('assets/icon.svg');",
+      "new URL('./assets/font.woff2', import.meta.url);",
+      "chrome.scripting.executeScript({ files: ['injected.js'] });",
+      "chrome.scripting.registerContentScripts([{ js: ['registered.js'] }]);",
+      "new URL('worker.js', chrome.runtime.getURL('/'));"
+    ].join('\n'));
+    for (const file of [
+      'modules/helper.js', 'worker-helper.js', 'assets/icon.svg', 'assets/font.woff2',
+      'injected.js', 'registered.js', 'worker.js'
+    ]) f.write(file);
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    for (const file of ['modules/helper.js', 'worker-helper.js', 'assets/icon.svg', 'assets/font.woff2', 'injected.js', 'registered.js', 'worker.js']) {
+      assert.ok(result.references.some(item => item.path === file), file);
+    }
+  } finally { f.cleanup(); }
+});
+
+test('reports missing JavaScript-owned resources and dynamic URL targets separately', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({ manifest_version: 3 }));
+    f.write('background.js', [
+      "chrome.runtime.getURL('missing.png');",
+      "new URL('./missing.svg', import.meta.url);",
+      "chrome.runtime.getURL(dynamicAssetName);",
+      "importScripts(dynamicScriptName);"
+    ].join('\n'));
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('missing runtime.getURL resource: missing.png')));
+    assert.ok(result.errors.some(error => error.includes('missing JavaScript URL relative to import.meta.url resource: ./missing.svg')));
+    assert.ok(result.uncertainties.some(item => item.kind === 'dynamic-runtime-getURL-resource'));
+    assert.ok(result.uncertainties.some(item => item.kind === 'dynamic-importScripts-resource-target'));
+  } finally { f.cleanup(); }
+});
+
+test('checks storage schema and legacy page-action manifest resources', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({
+      manifest_version: 2,
+      storage: { managed_schema: 'schema.json' },
+      page_action: { default_popup: 'page-action.html', default_icon: 'page-action.png' }
+    }));
+    f.write('schema.json');
+    f.write('page-action.html');
+    f.write('page-action.png');
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.references.some(item => item.kind === 'managed storage schema'));
+    assert.ok(result.references.some(item => item.kind === 'popup'));
+    assert.ok(result.references.some(item => item.kind === 'icon'));
+  } finally { f.cleanup(); }
+});
