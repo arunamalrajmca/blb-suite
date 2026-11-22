@@ -70,6 +70,7 @@ function dependencyVersion(name) {
 }
 const fingerprint = {
   node: process.version,
+  nodeVersions: process.versions,
   platform: process.platform,
   arch: process.arch,
   nodeOptions: process.env.NODE_OPTIONS || '',
@@ -95,6 +96,10 @@ const fingerprint = {
 const activeChildren = new Set();
 function terminateActiveChildren() {
   for (const child of activeChildren) child.kill('SIGTERM');
+  const forceKill = setTimeout(() => {
+    for (const child of activeChildren) child.kill('SIGKILL');
+  }, 5000);
+  forceKill.unref();
 }
 function run(command, args, label) {
   return new Promise((resolve, reject) => {
