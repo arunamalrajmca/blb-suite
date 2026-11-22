@@ -3386,7 +3386,39 @@ function reconcileRuntimeContentScriptRegistrations() {
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
-  if (existing) return existing;
+  if (existing) {
+    // A master OFF->ON transition can unregister a site's persistent scripts
+    // while an earlier document activation is still waiting for its content
+    // script handshake. The master-ON recovery path may then encounter this
+    // in-flight promise and otherwise mistake its earlier registration for a
+    // current one. Once the older activation settles, revalidate the live tab
+    // and repair its persistent registration before reporting success.
+    const existingResult = await existing.catch(() => false);
+    if (!existingResult) return false;
+    let current;
+    try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+    if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url)) return false;
+    const expectedOriginPattern = originPatternForUrl(current.url);
+    if (!expectedOriginPattern || (current.pendingUrl &&
+        originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
+    if (!(await hasHostAccessForTab(current))) return false;
+    const latestSettings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    if (latestSettings.masterEnabled === false ||
+        !(await shouldInjectContentScriptForTab(current, latestSettings))) return false;
+    try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+    if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url) ||
+        originPatternForUrl(current.url) !== expectedOriginPattern ||
+        (current.pendingUrl && originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
+    if (normalizeSiteHostname(hostnameFromTabUrl(current.url)) === BLB_HOSTNAME) return true;
+    const currentFiles = contentScriptFilesForTab(current, latestSettings);
+    if (!currentFiles.length) return false;
+    return ensureRuntimeContentScriptRegistered(current, currentFiles);
+  }
 
   const operation = (async () => {
     try {
