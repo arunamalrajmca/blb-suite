@@ -78,7 +78,7 @@ function property(node, name) {
 function discover(root) {
   root = path.resolve(root);
   const extension = path.join(root, 'extension');
-  const jsFiles = walk(extension, file => JS_EXTENSIONS.includes(path.extname(file)));
+  const jsFiles = walk(extension, file => JS_EXTENSIONS.includes(path.extname(file).toLowerCase()));
   const known = new Set(jsFiles);
   const roots = new Map();
   const dynamicSites = [];
@@ -123,7 +123,7 @@ function discover(root) {
 
   // Extension HTML is parsed as a resource inventory, including quoted and
   // unquoted script src attributes and extension-root-relative URL paths.
-  const htmlFiles = walk(extension, file => file.endsWith('.html'));
+  const htmlFiles = walk(extension, file => file.toLowerCase().endsWith('.html'));
   for (const htmlFile of htmlFiles) {
     const html = fs.readFileSync(htmlFile, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
     const tagPattern = /<script\b([^>]*)>/gi;
