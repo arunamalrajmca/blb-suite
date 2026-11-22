@@ -349,7 +349,11 @@ function discover(root) {
           for (let script of scripts) {
             if (script?.type === 'Identifier') script = literalObjects.get(script.name) || script;
             for (const key of ['js', 'css']) {
-              const values = staticArray(property(script, key));
+              const source = property(script, key);
+              // js/css are optional registration fields. An omitted field is
+              // not a dynamic target; only a present but non-static value is.
+              if (!source) continue;
+              const values = staticArray(source);
               if (values) for (const value of values) {
                 const target = addRequest(value, extension, normalize(root, file), 'runtime-registered-' + key);
                 if (target && !visited.has(target) && key === 'js') queue.push(target);
