@@ -191,14 +191,50 @@ function discover(root) {
     const ast = parsed.get(file);
     if (!ast) continue;
     const literalArrays = new Map(), literalArrayNodes = new Map(), literalObjects = new Map();
+    const loaderAliases = new Map();
+    const expressionPath = node => {
+      if (!node) return '';
+      if (node.type === 'Identifier') return node.name;
+      if (node.type === 'MemberExpression') {
+        const key = node.computed ? literal(node.property) :
+          node.property.type === 'Identifier' ? node.property.name : null;
+        return key === null ? '' : expressionPath(node.object) + '.' + key;
+      }
+      return '';
+    };
+    const supportedLoaderApis = new Set([
+      'importScripts', 'chrome.scripting.executeScript', 'browser.scripting.executeScript',
+      'chrome.scripting.registerContentScripts', 'browser.scripting.registerContentScripts',
+      'chrome.userScripts.register', 'browser.userScripts.register',
+      'chrome.runtime.getURL', 'browser.runtime.getURL',
+      'navigator.serviceWorker.register'
+    ]);
     visit(ast, node => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        if (node.init?.type === 'Identifier' &&
+            (node.init.name === 'importScripts' || loaderAliases.has(node.init.name))) {
+          loaderAliases.set(node.id.name, node.init.name === 'importScripts' ? 'importScripts' : loaderAliases.get(node.init.name));
+        }
+        if (node.init?.type === 'MemberExpression') {
+          const api = expressionPath(node.init);
+          if (supportedLoaderApis.has(api)) loaderAliases.set(node.id.name, api);
+        }
         if (node.init?.type === 'ArrayExpression') {
           literalArrayNodes.set(node.id.name, node.init);
           const values = staticArray(node.init);
           if (values) literalArrays.set(node.id.name, values);
         }
         if (node.init?.type === 'ObjectExpression') literalObjects.set(node.id.name, node.init);
+      }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier') {
+        if (node.right.type === 'Identifier' &&
+            (node.right.name === 'importScripts' || loaderAliases.has(node.right.name))) {
+          loaderAliases.set(node.left.name, node.right.name === 'importScripts' ? 'importScripts' : loaderAliases.get(node.right.name));
+        }
+        if (node.right.type === 'MemberExpression') {
+          const api = expressionPath(node.right);
+          if (supportedLoaderApis.has(api)) loaderAliases.set(node.left.name, api);
+        }
       }
     });
     visit(ast, (node, parent) => {
@@ -212,7 +248,8 @@ function discover(root) {
           if (target && !visited.has(target)) queue.push(target);
         }
       }
-      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'importScripts') {
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          (node.callee.name === 'importScripts' || loaderAliases.get(node.callee.name) === 'importScripts')) {
         for (const arg of node.arguments) {
           const requests = arg.type === 'SpreadElement' && arg.argument.type === 'ArrayExpression'
             ? staticArray(arg.argument)
@@ -278,9 +315,10 @@ function discover(root) {
         });
         if (target && !visited.has(target)) queue.push(target);
       }
-      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
-        const method = node.callee.computed ? literal(node.callee.property) :
-          node.callee.property.type === 'Identifier' ? node.callee.property.name : null;
+      if (node.type === 'CallExpression' && (node.callee.type === 'MemberExpression' ||
+          (node.callee.type === 'Identifier' && loaderAliases.has(node.callee.name)))) {
+        const calleePath = node.callee.type === 'Identifier' ? loaderAliases.get(node.callee.name) : expressionPath(node.callee);
+        const method = calleePath.split('.').pop();
         if (method === 'registerContentScripts') {
           let options = node.arguments[0];
           if (options?.type === 'Identifier') options = literalArrayNodes.get(options.name) || null;
@@ -311,21 +349,15 @@ function discover(root) {
           }
           else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'executeScript', certainty: 'injected-function-or-dynamic-files' });
         }
-        const calleePath = (() => {
-          const parts = [];
-          let current = node.callee;
-          while (current?.type === 'MemberExpression') {
-            const key = current.computed ? literal(current.property) :
-              current.property.type === 'Identifier' ? current.property.name : null;
-            if (key === null) return '';
-            parts.unshift(key);
-            current = current.object;
-          }
-          if (current?.type === 'Identifier') parts.unshift(current.name);
-          return parts.join('.');
-        })();
         if (method === 'register' && /(?:^|\.)serviceWorker\.register$/.test(calleePath)) {
           dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'serviceWorker.register', target: literal(node.arguments[0]), certainty: 'runtime-document-base-or-dynamic-target' });
+        }
+        if (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(calleePath)) {
+          const request = literal(node.arguments[0]);
+          if (request !== null) {
+            const target = addRequest(request, extension, normalize(root, file), 'runtime-getURL-alias');
+            if (target && !visited.has(target)) queue.push(target);
+          } else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'runtime.getURL', certainty: 'dynamic-runtime-resource-target' });
         }
         if (method === 'register' && /(?:^|\.)userScripts\.register$/.test(calleePath)) {
           dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'userScripts.register', certainty: 'runtime-registered-user-script' });
