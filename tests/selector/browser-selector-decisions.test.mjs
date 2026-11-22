@@ -1167,7 +1167,7 @@ test("full audit delegates performance and physical-input tests to workflows tri
 
   assert.ok(audit.includes("first_status=0") && audit.includes("second_status=0"),
     "both independent prior-failure reruns must execute even if the first one fails");
-  assert.ok(audit.includes("first_status=\"$first_status\" || \"$second_status\""),
+  assert.ok(audit.includes('"$first_status" -ne 0 || "$second_status" -ne 0'),
     "the audit must report failure if either independent rerun fails");
 
   for (const title of [
