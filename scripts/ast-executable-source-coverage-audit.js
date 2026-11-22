@@ -354,8 +354,14 @@ function discover(root) {
         if (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(calleePath)) {
           const request = literal(node.arguments[0]);
           if (request !== null) {
-            const target = addRequest(request, extension, normalize(root, file), 'runtime-getURL-alias');
-            if (target && !visited.has(target)) queue.push(target);
+            const decoded = (() => { try { return decodeURIComponent(request.split(/[?#]/, 1)[0]); } catch { return null; } })();
+            const candidate = decoded === null ? null : path.resolve(extension, decoded.replace(/^\/+/, ''));
+            const isDirectoryBase = candidate && candidate.startsWith(extension + path.sep) &&
+              fs.existsSync(candidate) && fs.statSync(candidate).isDirectory();
+            if (!isDirectoryBase) {
+              const target = addRequest(request, extension, normalize(root, file), 'runtime-getURL-alias');
+              if (target && !visited.has(target)) queue.push(target);
+            }
           } else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'runtime.getURL', certainty: 'dynamic-runtime-resource-target' });
         }
         if (method === 'register' && /(?:^|\.)userScripts\.register$/.test(calleePath)) {
