@@ -534,15 +534,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
             dynamicCallableBindings.get(calleeBinding).startsWith('function-constructor'));
         const vmExecution = (objectBinding && vmNamespaceBindings.has(objectBinding) && vmMethods.has(method)) ||
           (calleeBinding && vmMethodBindings.has(calleeBinding) && vmMethods.has(vmMethodBindings.get(calleeBinding)));
+        const moduleCompile = method === '_compile' && /(?:^|\.)_compile$/.test(pathName);
+        const wasmExecution = (pathName.startsWith('WebAssembly.') &&
+          ['compile', 'compileStreaming', 'instantiate', 'instantiateStreaming'].includes(method)) ||
+          (node.type === 'NewExpression' && pathName === 'WebAssembly.Module');
         const stringTimer = ['setTimeout', 'setInterval'].includes(method) &&
           node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' &&
           (['setTimeout', 'setInterval'].includes(pathName) ||
             ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName));
         const evalAlias = calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'eval-alias';
-        if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || stringTimer) {
+        if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || moduleCompile || wasmExecution || stringTimer) {
           const kind = stringTimer ? 'string-timer-execution' : 'unresolved-dynamic-execution';
           const boundary = directEval || evalAlias ? 'direct-or-aliased-eval' : indirectEval ? 'indirect-eval' :
-            functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' : 'string-timer';
+            functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' :
+            moduleCompile ? 'node-module-compile' : wasmExecution ? 'wasm-module-execution' : 'string-timer';
           uncertainty.push({
             file: rel(root, file), line: node.loc.start.line, kind,
             certainty: 'unresolved-dynamic-execution',
