@@ -3537,3 +3537,4 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
   )).toBe(true);
 });
 
+// Baseline CI reproduction marker: no production or test behavior changed.
