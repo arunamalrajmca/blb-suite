@@ -427,3 +427,23 @@ test('records observer constructors, event-property handlers, and browser API ca
   assert.ok(registrations.some(item => item.expression === 'window.onmessage' && item.certainty === 'resolved-inline-callback'));
   assert.ok(registrations.some(item => item.expression === 'chrome.tabs.query' && item.certainty === 'resolved-function-binding'));
 });
+
+
+test('resolves delegated event handlers, both Promise handlers, and React hook callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function handleClick(event) { return event.type; }',
+      'function onFulfilled(value) { return value; }',
+      'function onRejected(error) { throw error; }',
+      "jQuery(document).on('click', '.button', handleClick);",
+      'Promise.resolve().then(onFulfilled, onRejected);',
+      'useEffect(() => { initialize(); }, []);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item => item.callback === 'handleClick' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.callback === 'onFulfilled' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.callback === 'onRejected' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.certainty === 'resolved-inline-callback'));
+});
