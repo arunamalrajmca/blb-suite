@@ -1122,7 +1122,9 @@ test("full audit delegates performance and physical-input tests to workflows tri
   }
   assert.ok(!audit.includes("physical right-click BLB context-menu action"),
     "the headless full audit must retain the right-click lifecycle regression");
-  assert.ok(audit.includes("Expected to delegate exactly 4 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
+  assert.ok(audit.includes("Expected to delegate exactly 5 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
+  assert.ok(audit.includes("Interleaved baseline/candidate performance batch preserves isolated samples"),
+    "the batched performance benchmark must remain delegated to its dedicated workflow");
   assert.ok(native.includes("tests/browser/native-prerender-activation.spec.js"),
     "native prerender tests must execute in the Xvfb-backed browser workflow");
   assert.ok(native.includes(".github/workflows/manual-full-test-audit.yml"),
