@@ -427,3 +427,74 @@ test('worker restart preserves web menu visibility while click-time eligibility 
   expect(result.update).toEqual({id:'blb-suite-web-selection',title:'Show on BLB\tAlt+B',documentUrlPatterns:[]});
   expect(result.sensitiveHostAllowed).toBe(false);
 });
+
+
+test('concurrent worker-restart menu initialization creates the persistent item only once', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originals = {
+      update:chrome.contextMenus.update,
+      create:chrome.contextMenus.create,
+      knownPresent:selectionMenuKnownPresent,
+      ensurePromise:selectionMenuEnsurePromise
+    };
+    let updateCalls = 0;
+    let createCalls = 0;
+    try {
+      selectionMenuKnownPresent = false;
+      selectionMenuEnsurePromise = null;
+      chrome.contextMenus.update = async () => {
+        updateCalls++;
+        throw new Error('Cannot find menu item');
+      };
+      chrome.contextMenus.create = async details => {
+        createCalls++;
+        await new Promise(resolve => setTimeout(resolve, 25));
+        return details.id;
+      };
+      const results = await Promise.all(Array.from({length:8}, () => ensureWebSelectionContextMenu()));
+      return {results,updateCalls,createCalls,knownPresent:selectionMenuKnownPresent};
+    } finally {
+      chrome.contextMenus.update = originals.update;
+      chrome.contextMenus.create = originals.create;
+      selectionMenuKnownPresent = originals.knownPresent;
+      selectionMenuEnsurePromise = originals.ensurePromise;
+    }
+  });
+  expect(result.results).toEqual(Array(8).fill(true));
+  expect(result.updateCalls).toBe(1);
+  expect(result.createCalls).toBe(1);
+  expect(result.knownPresent).toBe(true);
+});
+
+test('duplicate-ID creation race adopts the existing persistent selection menu', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originals = {
+      update:chrome.contextMenus.update,
+      create:chrome.contextMenus.create,
+      knownPresent:selectionMenuKnownPresent,
+      ensurePromise:selectionMenuEnsurePromise
+    };
+    let updateCalls = 0;
+    let createCalls = 0;
+    try {
+      selectionMenuKnownPresent = false;
+      selectionMenuEnsurePromise = null;
+      chrome.contextMenus.update = async () => {
+        updateCalls++;
+        if (updateCalls === 1) throw new Error('Cannot find menu item');
+      };
+      chrome.contextMenus.create = async () => {
+        createCalls++;
+        throw new Error('Cannot create item with duplicate id blb-suite-web-selection');
+      };
+      const ensured = await ensureWebSelectionContextMenu();
+      return {ensured,updateCalls,createCalls,knownPresent:selectionMenuKnownPresent};
+    } finally {
+      chrome.contextMenus.update = originals.update;
+      chrome.contextMenus.create = originals.create;
+      selectionMenuKnownPresent = originals.knownPresent;
+      selectionMenuEnsurePromise = originals.ensurePromise;
+    }
+  });
+  expect(result).toEqual({ensured:true,updateCalls:2,createCalls:1,knownPresent:true});
+});
