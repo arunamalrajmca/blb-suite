@@ -404,12 +404,7 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
   };
 }
 
-function resolveModuleSpecifier(fromFile, specifier, files) {
-  if (!specifier.startsWith('.')) return { external: true, specifier };
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  if (path.extname(base) === '.json' && fs.existsSync(base)) {
-    return { external: true, dataDependency: true, specifier };
-  }
+function resolveLocalFile(base, files) {
   const candidates = [];
   if (path.extname(base)) candidates.push(base);
   else {
@@ -417,7 +412,66 @@ function resolveModuleSpecifier(fromFile, specifier, files) {
     for (const extension of JS_EXTENSIONS) candidates.push(path.join(base, 'index' + extension));
   }
   const resolved = candidates.find(candidate => files.has(candidate));
-  return resolved ? { file: resolved, external: false } : { unresolved: true, specifier };
+  return resolved ? { file: resolved, external: false } : null;
+}
+function nearestPackage(fromFile) {
+  let directory = path.dirname(fromFile);
+  while (true) {
+    const packagePath = path.join(directory, 'package.json');
+    if (fs.existsSync(packagePath)) {
+      try { return { directory, value: JSON.parse(fs.readFileSync(packagePath, 'utf8')) }; }
+      catch (_) { return { directory, value: {} }; }
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+function collectConditionalTargets(value, output = []) {
+  if (typeof value === 'string') output.push(value);
+  else if (Array.isArray(value)) value.forEach(item => collectConditionalTargets(item, output));
+  else if (value && typeof value === 'object') Object.values(value).forEach(item => collectConditionalTargets(item, output));
+  return output;
+}
+function resolvePackageImport(fromFile, specifier, files) {
+  const pkg = nearestPackage(fromFile);
+  if (!pkg || !pkg.value.imports || typeof pkg.value.imports !== 'object') return null;
+  let target = pkg.value.imports[specifier];
+  let wildcard = null;
+  if (target === undefined) {
+    for (const [key, value] of Object.entries(pkg.value.imports)) {
+      const star = key.indexOf('*');
+      if (star < 0) continue;
+      const prefix = key.slice(0, star), suffix = key.slice(star + 1);
+      if (specifier.startsWith(prefix) && specifier.endsWith(suffix) && specifier.length >= prefix.length + suffix.length) {
+        wildcard = specifier.slice(prefix.length, specifier.length - suffix.length || undefined);
+        target = value;
+        break;
+      }
+    }
+  }
+  if (target === undefined) return { unresolved: true, specifier, packageImport: true };
+  const candidates = collectConditionalTargets(target).map(value =>
+    wildcard === null ? value : value.replace('*', wildcard));
+  for (const candidate of candidates) {
+    if (!candidate.startsWith('./')) continue;
+    const resolved = resolveLocalFile(path.resolve(pkg.directory, candidate), files);
+    if (resolved) return { ...resolved, packageImport: true };
+  }
+  if (candidates.some(value => !value.startsWith('./'))) {
+    return { external: true, specifier, packageImport: true, targets: candidates };
+  }
+  return { unresolved: true, specifier, packageImport: true, targets: candidates };
+}
+function resolveModuleSpecifier(fromFile, specifier, files) {
+  if (specifier.startsWith('#')) return resolvePackageImport(fromFile, specifier, files) ||
+    { unresolved: true, specifier, packageImport: true };
+  if (!specifier.startsWith('.')) return { external: true, specifier };
+  const base = path.resolve(path.dirname(fromFile), specifier);
+  if (path.extname(base) === '.json' && fs.existsSync(base)) {
+    return { external: true, dataDependency: true, specifier };
+  }
+  return resolveLocalFile(base, files) || { unresolved: true, specifier };
 }
 
 function collectModuleEdges(source, filename, files) {
