@@ -131,21 +131,6 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      # Recheck the two historically failing cases serially before the complete
-      # four-worker audit. Each invocation retains the original test assertions.
-      - name: Re-run prior full-audit failures independently
-        id: isolated_browser_failures
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx playwright test tests/browser/extension-reference-actions.spec.js \
-            --grep "Article verse cues resolve context outside Facebook" \
-            --workers=1 --max-failures=0 --reporter=line
-          npx playwright test tests/browser/service-worker-lifecycle.spec.js \
-            --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
-            --workers=1 --max-failures=0 --reporter=line
-
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
       # complete test list, then execute the complete test list in one Playwright process with four workers.
@@ -188,9 +173,8 @@ jobs:
           prerender_self_count=$(grep -F -c "› native Chromium _self prerender activation initializes the activated document without tab replacement" "$test_list" || true)
           prerender_blank_count=$(grep -F -c "› native Chromium _blank prerender activation initializes the activated document without tab replacement" "$test_list" || true)
           performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
-          performance_batch_count=$(grep -F -c "› Interleaved baseline/candidate performance batch preserves isolated samples" "$test_list" || true)
-          if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 || "$performance_batch_count" -ne 1 ]]; then
-            echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, original performance, and batched performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count/$performance_batch_count."
+          if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 ]]; then
+            echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, and performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count."
             exit 1
           fi
           discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
@@ -198,18 +182,17 @@ jobs:
             index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
             index($0, "› native Chromium _self prerender activation initializes the activated document without tab replacement") == 0 &&
             index($0, "› native Chromium _blank prerender activation initializes the activated document without tab replacement") == 0 &&
-            index($0, "› Show on BLB performance benchmark") == 0 &&
-            index($0, "› Interleaved baseline/candidate performance batch preserves isolated samples") == 0
+            index($0, "› Show on BLB performance benchmark") == 0
           ' "$test_list" > "$test_list.filtered"
           mv "$test_list.filtered" "$test_list"
           discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
           delegated=$((discovered_before_delegation - discovered_after_delegation))
-          if [[ "$delegated" -ne 5 ]]; then
-            echo "::error::Expected to delegate exactly 5 tests to dedicated workflows, found $delegated."
+          if [[ "$delegated" -ne 4 ]]; then
+            echo "::error::Expected to delegate exactly 4 tests to dedicated workflows, found $delegated."
             exit 1
           fi
           total=$discovered_after_delegation
-          echo "Delegated tests: $delegated (Alt+B + two prerender cases + original and batched performance benchmark cases)."
+          echo "Delegated tests: $delegated (Alt+B + two prerender cases + performance benchmark)."
           echo "Browser test cases discovered after delegation: $total"
           if [[ "$total" -eq 0 ]]; then
             echo "No headless browser tests remain after delegation."
@@ -289,7 +272,6 @@ jobs:
           PYTHON: ${{ steps.python.outcome }}
           CORPUS: ${{ steps.corpus.outcome }}
           BROWSER: ${{ steps.browser.outcome }}
-          ISOLATED_BROWSER_FAILURES: ${{ steps.isolated_browser_failures.outcome }}
           PACKAGE: ${{ steps.package.outcome }}
           RESOLVER: ${{ steps.resolver.outcome }}
           SELECTION: ${{ steps.selection.outcome }}
@@ -307,7 +289,6 @@ jobs:
             echo "| Standalone JavaScript test scripts | $SCRIPTS |"
             echo "| Python unittest suite | $PYTHON |"
             echo "| KJV corpus integrity | $CORPUS |"
-            echo "| Prior failures rerun independently | $ISOLATED_BROWSER_FAILURES |"
             echo "| All Playwright browser specs | $BROWSER |"
             echo "| Regression package | $PACKAGE |"
             echo "| Regression resolver | $RESOLVER |"
@@ -316,7 +297,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$ISOLATED_BROWSER_FAILURES" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
