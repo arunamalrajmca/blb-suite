@@ -306,3 +306,16 @@ test('reports external directory symlinks and internal directory symlinks as an 
     fs.rmSync(outside, { recursive: true, force: true });
   } finally { f.cleanup(); }
 });
+
+
+test('checks file-backed userScripts registrations in extension JavaScript', () => {
+  const f = fixture();
+  try {
+    f.write('manifest.json', JSON.stringify({ manifest_version: 3 }));
+    f.write('background.js', "chrome.userScripts.register([{ js: [{ file: 'user-script.js' }] }]);");
+    f.write('user-script.js');
+    const result = auditManifest(f.root);
+    assert.deepEqual(result.errors, []);
+    assert.ok(result.references.some(item => item.path === 'user-script.js' && item.kind === 'runtime userScripts js'));
+  } finally { f.cleanup(); }
+});
