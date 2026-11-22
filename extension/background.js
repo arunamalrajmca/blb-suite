@@ -3431,22 +3431,30 @@ async function ensureContentScriptInTab(tabId) {
         BIBLEREF_RANGE_CONTENT_SCRIPT_FILES.includes(file)
       );
       const primaryFiles = currentFiles.filter(file => !optionalRedirectFiles.includes(file));
-      const injectionFiles = currentFiles.includes('content.js') ? primaryFiles : currentFiles;
-      try {
-        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
-      } catch (error) {
-        if (isTabUnavailableError(error)) return false;
-        console.error('KJV Scripture Tools current-tab fallback injection failed:', {
-          tabId, tabUrl:current.url, files:injectionFiles, error:String(error)
-        });
-        return false;
+      let refreshed = false;
+      if (currentFiles.includes('content.js')) {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+          refreshed = response?.ok === true;
+        } catch (_) {}
+      }
+      if (!refreshed) {
+        const injectionFiles = currentFiles.includes('content.js') ? primaryFiles : currentFiles;
+        try {
+          await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
+        } catch (error) {
+          if (isTabUnavailableError(error)) return false;
+          console.error('KJV Scripture Tools current-tab fallback injection failed:', {
+            tabId, tabUrl:current.url, files:injectionFiles, error:String(error)
+          });
+          return false;
+        }
       }
       current = await chrome.tabs.get(tabId).catch(() => null);
       if (!current || !isHttpPageUrl(current.url) || isSensitiveSiteUrl(current.url) ||
           originPatternForUrl(current.url) !== expectedOriginPattern ||
           (current.pendingUrl && originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
-      if (currentFiles.includes('content.js')) {
-        let refreshed = false;
+      if (currentFiles.includes('content.js') && !refreshed) {
         for (let attempt = 0; attempt < 9; attempt++) {
           if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100 * attempt));
           try {
