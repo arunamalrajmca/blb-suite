@@ -375,3 +375,30 @@ test('follows local aliases of require and module.require calls', () => {
     assert.ok(reachable.has('scripts/second.js'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('follows module.createRequire and imported createRequire loader factories', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'create-require-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "import { createRequire as makeRequire } from 'node:module';",
+      'const load = makeRequire(import.meta.url);',
+      "load('./esm-loaded.js');",
+      "const { createRequire } = require('node:module');",
+      'const loadAgain = createRequire(import.meta.url);',
+      "loadAgain('./cjs-loaded.js');"
+    ].join('\n'));
+    write('scripts/esm-loaded.js');
+    write('scripts/cjs-loaded.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/esm-loaded.js'));
+    assert.ok(reachable.has('scripts/cjs-loaded.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
