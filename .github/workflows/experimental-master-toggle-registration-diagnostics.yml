@@ -38,6 +38,16 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Run deterministic stale-activation regression
+        run: |
+          npx playwright test tests/browser/site-registration-opt-out-race.spec.js \
+            --grep "master OFF-to-ON recovery repairs registrations" \
+            --workers=1 --repeat-each=3 --max-failures=0 --reporter=list \
+            --output="${{ runner.temp }}/master-toggle-diagnostics/deterministic-results"
+        env:
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+
       - name: Run repeated OFF-to-ON registration recovery under four-worker contention
         run: |
           mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
