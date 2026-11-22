@@ -73,7 +73,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
           : [];
         add(file, node, 'proxy-construction', 'Proxy traps: ' + (traps.join(', ') || 'dynamic/unknown'));
       }
+      if (node.type === 'ImportExpression') {
+        add(file, node, 'dynamic-module-loading', 'import() target is resolved at runtime and may not be statically enumerable');
+      }
+      if (node.type === 'WithStatement') {
+        add(file, node, 'dynamic-scope', 'with statement makes identifier/property resolution dependent on runtime object shape');
+      }
       if (node.type === 'CallExpression') {
+        const calleeName = node.callee.type === 'Identifier' ? node.callee.name : null;
+        if (calleeName === 'eval') {
+          add(file, node, 'dynamic-code-generation', 'eval may execute source that is invisible to static reachability analysis');
+        }
+        if (calleeName === 'Function' ||
+            (node.callee.type === 'MemberExpression' && !node.callee.computed && node.callee.property.name === 'constructor')) {
+          add(file, node, 'dynamic-code-generation', 'Function constructor or constructor access may create executable code dynamically');
+        }
         const name = memberName(node.callee);
         if (node.callee.type === 'MemberExpression' && node.callee.object.type === 'Identifier' &&
             node.callee.object.name === 'Reflect') {
