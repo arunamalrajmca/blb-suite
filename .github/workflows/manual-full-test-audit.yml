@@ -131,6 +131,21 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
+      # Recheck the two historically failing cases serially before the complete
+      # four-worker audit. Each invocation retains the original test assertions.
+      - name: Re-run prior full-audit failures independently
+        id: isolated_browser_failures
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx playwright test tests/browser/extension-reference-actions.spec.js \
+            --grep "Article verse cues resolve context outside Facebook" \
+            --workers=1 --max-failures=0 --reporter=line
+          npx playwright test tests/browser/service-worker-lifecycle.spec.js \
+            --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
+            --workers=1 --max-failures=0 --reporter=line
+
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
       # complete test list, then execute the complete test list in one Playwright process with four workers.
@@ -274,6 +289,7 @@ jobs:
           PYTHON: ${{ steps.python.outcome }}
           CORPUS: ${{ steps.corpus.outcome }}
           BROWSER: ${{ steps.browser.outcome }}
+          ISOLATED_BROWSER_FAILURES: ${{ steps.isolated_browser_failures.outcome }}
           PACKAGE: ${{ steps.package.outcome }}
           RESOLVER: ${{ steps.resolver.outcome }}
           SELECTION: ${{ steps.selection.outcome }}
@@ -291,6 +307,7 @@ jobs:
             echo "| Standalone JavaScript test scripts | $SCRIPTS |"
             echo "| Python unittest suite | $PYTHON |"
             echo "| KJV corpus integrity | $CORPUS |"
+            echo "| Prior failures rerun independently | $ISOLATED_BROWSER_FAILURES |"
             echo "| All Playwright browser specs | $BROWSER |"
             echo "| Regression package | $PACKAGE |"
             echo "| Regression resolver | $RESOLVER |"
@@ -299,7 +316,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$ISOLATED_BROWSER_FAILURES" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
