@@ -130,7 +130,7 @@ test('resolves imported helper function identity through local aliases and reass
  try{
   fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
   fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
-  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; let runner = invoke; const alias = runner; runner = alias; runner(api);");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; let runner; runner = invoke; const alias = runner; alias(api);");
   const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
