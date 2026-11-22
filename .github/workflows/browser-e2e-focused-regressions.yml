@@ -126,13 +126,15 @@ jobs:
           --grep "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
           --workers=1 --reporter=line
 
-      - name: Stress both full-audit failures concurrently under four Playwright workers
+      - name: Stress four independent lifecycle specs across all four Playwright workers
         if: ${{ matrix.scenario == 'concurrency-stress' }}
         run: >-
           npx playwright test
           tests/browser/service-worker-lifecycle.spec.js
           tests/browser/source-page-button-redirect-separation.spec.js
-          --grep "(a real MV3 service-worker termination is recovered by the Alt\\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them)"
+          tests/browser/content-feature-refresh-races.spec.js
+          tests/browser/extension-lifecycle.spec.js
+          --grep "(a real MV3 service-worker termination is recovered by the Alt\\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them|repeated global master toggles disable and restore exactly one double-click listener|reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging)"
           --repeat-each=2 --workers=4 --max-failures=0 --reporter=line
 
       - name: Prepare exact PR-base performance baseline
