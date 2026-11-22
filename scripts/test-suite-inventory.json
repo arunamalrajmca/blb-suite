@@ -60,6 +60,18 @@
         {
           "file": "extension/background.js",
           "requiredText": "const existingResult = await existing.catch(() => false);"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+        },
+        {
+          "file": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
+          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+        },
+        {
+          "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
         }
       ]
     },
