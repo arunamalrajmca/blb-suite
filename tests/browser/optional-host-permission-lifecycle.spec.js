@@ -459,6 +459,11 @@ test('current-tab activation falls back when persistent content-script registrat
   });
 
   const activated = await extensionWorker.evaluate(async () => {
+    // Drain startup/settings reconciliation before replacing the registration
+    // API. Otherwise an unrelated queued reconciliation can consume the
+    // deliberately failing registration stub and race the activation under test.
+    await reconcileRuntimeContentScriptRegistrations();
+    await runtimeContentScriptReconciliationQueue;
     const tabs = await chrome.tabs.query({url:'https://example.com/*'});
     const tab = tabs[0];
     if (!tab?.id) throw new Error('Expected the example.com test tab to exist');
