@@ -252,13 +252,15 @@ test('reports missing JavaScript-owned resources and dynamic URL targets separat
       "chrome.runtime.getURL('missing.png');",
       "new URL('./missing.svg', import.meta.url);",
       "chrome.runtime.getURL(dynamicAssetName);",
-      "importScripts(dynamicScriptName);"
+      "importScripts(dynamicScriptName);",
+      "new URL('./relative.png', document.baseURI);"
     ].join('\n'));
     const result = auditManifest(f.root);
     assert.ok(result.errors.some(error => error.includes('missing runtime.getURL resource: missing.png')));
     assert.ok(result.errors.some(error => error.includes('missing JavaScript URL relative to import.meta.url resource: ./missing.svg')));
     assert.ok(result.uncertainties.some(item => item.kind === 'dynamic-runtime-getURL-resource'));
     assert.ok(result.uncertainties.some(item => item.kind === 'dynamic-importScripts-resource-target'));
+    assert.ok(result.uncertainties.some(item => item.kind === 'new-url-resource-base-unresolved'));
   } finally { f.cleanup(); }
 });
 
