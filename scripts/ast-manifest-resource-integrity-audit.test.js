@@ -288,3 +288,21 @@ test('includes packaged dist files in wildcard checks and reports CSS variable U
     assert.ok(result.uncertainties.some(item => item.kind === 'dynamic-css-resource-url'));
   } finally { f.cleanup(); }
 });
+
+
+test('reports external directory symlinks and internal directory symlinks as an explicit boundary', () => {
+  const f = fixture();
+  try {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-extension-assets-'));
+    fs.writeFileSync(path.join(outside, 'asset.js'), 'outside');
+    f.write('manifest.json', JSON.stringify({ manifest_version: 3 }));
+    fs.symlinkSync(outside, path.join(f.root, 'external-assets'), 'dir');
+    fs.mkdirSync(path.join(f.root, 'internal-assets'));
+    f.write('internal-assets/asset.js');
+    fs.symlinkSync(path.join(f.root, 'internal-assets'), path.join(f.root, 'internal-assets-link'), 'dir');
+    const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('symlink escapes extension root')));
+    assert.ok(result.uncertainties.some(item => item.kind === 'internal-directory-symlink-not-traversed'));
+    fs.rmSync(outside, { recursive: true, force: true });
+  } finally { f.cleanup(); }
+});
