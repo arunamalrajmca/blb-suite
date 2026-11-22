@@ -14,15 +14,21 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     const originalUpdate = chrome.contextMenus.update;
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
+    const originalPdfVisibilitySync = syncPdfSelectionContextMenuVisibility;
     const originalSelectionPermissionCheck = hasSelectionActionPermissionForTab;
     const createdTabIds = [];
     const createdWindowIds = [];
     const updates = [];
+    let pdfVisibilitySyncCalls = 0;
     let recordFocusEvent;
 
     try {
       selectionMenuKnownPresent = true;
       pdfSelectionMenuKnownPresent = true;
+      syncPdfSelectionContextMenuVisibility = async (...args) => {
+        pdfVisibilitySyncCalls += 1;
+        return originalPdfVisibilitySync(...args);
+      };
       // This test isolates menu lifecycle behavior; host-grant UX is covered
       // separately, so make the selected fixture host eligible deterministically.
       hasSelectionActionPermissionForTab = async tab =>
@@ -82,9 +88,10 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const activationShowsWebMenu = activationUpdates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
-      const activationSynchronizesPdfMenu = activationUpdates.filter(item =>
-        item.id === 'blb-suite-web-selection'
-      ).length >= 2;
+      // Web and PDF selections intentionally share one browser-owned menu ID.
+      // Observe the PDF synchronizer itself rather than expecting a second
+      // native update for an item that is now shared by both contexts.
+      const activationSynchronizesPdfMenu = pdfVisibilitySyncCalls > 0;
 
       // A navigation in an inactive tab must not change global menu visibility.
       updates.length = 0;
@@ -194,6 +201,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       chrome.contextMenus.update = originalUpdate;
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
+      syncPdfSelectionContextMenuVisibility = originalPdfVisibilitySync;
       hasSelectionActionPermissionForTab = originalSelectionPermissionCheck;
       if (recordFocusEvent) {
         chrome.windows.onFocusChanged.removeListener(recordFocusEvent);
@@ -208,7 +216,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.activationShowsWebMenu).toBe(true);
   expect(result.activationSynchronizesPdfMenu).toBe(true);
   const inactiveNavigationMenuUpdates = result.inactiveNavigationUpdates.filter(item =>
-    item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-web-selection'
+    item.id === 'blb-suite-web-selection'
   );
   expect(
     inactiveNavigationMenuUpdates.every(item =>
