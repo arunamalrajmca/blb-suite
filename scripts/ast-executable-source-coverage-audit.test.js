@@ -258,3 +258,25 @@ test('records service-worker and user-script registration as runtime ownership b
     assert.equal(userScript.classification, 'statically-rooted-or-imported');
   } finally { f.cleanup(); }
 });
+
+
+test('reports inline HTML executable sources outside the JavaScript file inventory', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3 }));
+    f.write('extension/page.html', [
+      '<script>window.inlineScript = true;</script>',
+      '<script type=\"application/ld+json\">{\"name\":\"metadata\"}</script>',
+      '<button onclick=\"runAction()\">Run</button>',
+      '<a href=\"javascript:runAction()\">Run</a>',
+      '<iframe srcdoc=\"inline document\"></iframe>'
+    ].join('\n'));
+    const result = discover(f.root);
+    const apis = result.dynamicSites.map(item => item.api);
+    assert.ok(apis.includes('html-inline-script'));
+    assert.ok(apis.includes('html-inline-event-handler'));
+    assert.ok(apis.includes('html-javascript-url'));
+    assert.ok(apis.includes('html-srcdoc'));
+    assert.equal(apis.filter(api => api === 'html-inline-script').length, 1);
+  } finally { f.cleanup(); }
+});
