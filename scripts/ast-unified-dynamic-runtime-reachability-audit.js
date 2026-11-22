@@ -566,7 +566,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const evalAlias = calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'eval-alias';
         if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || moduleCompile || wasmExecution || stringTimer) {
           const kind = stringTimer ? 'string-timer-execution' : 'unresolved-dynamic-execution';
-          const boundary = directEval || evalAlias ? 'direct-or-aliased-eval' : indirectEval ? 'indirect-eval' :
+          const boundary = directEval ? 'direct-eval' : evalAlias ? 'aliased-eval' : indirectEval ? 'indirect-eval' :
             functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' :
             moduleCompile ? 'node-module-compile' : wasmExecution ? 'wasm-module-execution' : 'string-timer';
           uncertainty.push({
