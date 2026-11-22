@@ -485,6 +485,18 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const parsed = parseSource(source, filename);
   const edges = [];
   const dynamic = [];
+  const requireAliases = new Set();
+  walkAst(parsed.ast, node => {
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+      if (node.init?.type === 'Identifier' && (node.init.name === 'require' || requireAliases.has(node.init.name))) {
+        requireAliases.add(node.id.name);
+      }
+      if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
+          node.init.object.name === 'module' && node.init.property.name === 'require') requireAliases.add(node.id.name);
+    }
+    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' && node.right.type === 'Identifier' &&
+        (node.right.name === 'require' || requireAliases.has(node.right.name))) requireAliases.add(node.left.name);
+  });
   walkAst(parsed.ast, node => {
     let specifier = null;
     let kind = null;
@@ -500,7 +512,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-import-nonliteral' });
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
-               node.callee.name === 'require') {
+               (node.callee.name === 'require' || requireAliases.has(node.callee.name))) {
       if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
           typeof node.arguments[0].value === 'string') {
         specifier = node.arguments[0].value;
