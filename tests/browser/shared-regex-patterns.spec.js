@@ -558,3 +558,33 @@ test('all reference orders preserve the middle selection through parsing and fin
   expect(postRefs).toContain('1 corinthians 4:17');
   expect(postRefs).toContain('philippians 2:19-22');
 });
+
+
+test('Chrome Web Store suppresses all extension injection and selection actions despite saved opt-ins', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const tab = {
+      id:987655,
+      url:'https://chromewebstore.google.com/detail/example-extension',
+      title:'Chrome Web Store'
+    };
+    const settings = {
+      redirectEnabled:true,
+      pageSelectionButtonSites:{'chromewebstore.google.com':true},
+      doubleClickBlbSites:{'chromewebstore.google.com':true}
+    };
+    return {
+      scripts:contentScriptFilesForTab(tab, settings),
+      shouldInject:await shouldInjectContentScriptForTab(tab, settings),
+      contextMenu:await shouldShowBlbContextMenu(tab, 'John 3:16'),
+      hostnameBlocked:BLBShared.isSensitiveSiteHostname('chromewebstore.google.com'),
+      urlBlocked:BLBShared.isSensitiveSiteUrl(tab.url)
+    };
+  });
+  expect(result).toEqual({
+    scripts:[],
+    shouldInject:false,
+    contextMenu:false,
+    hostnameBlocked:true,
+    urlBlocked:true
+  });
+});
