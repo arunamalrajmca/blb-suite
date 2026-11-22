@@ -2132,37 +2132,47 @@ async function closeBlbTabs(extensionWorker) {
 }
 
 test('shared activation retries transient readiness failures while the same document remains eligible', async ({
-  page, extensionStorage, extensionWorker
+  extensionWorker
 }) => {
-  await extensionStorage.set({
-    masterEnabled:true,
-    redirectEnabled:false,
-    pageSelectionButtonSites:{'example.com':true},
-    doubleClickBlbSites:{'example.com':true}
-  });
-  await page.route('https://example.com/**',route => route.fulfill({
-    status:200,contentType:'text/html',
-    body:'<!doctype html><html><head><title>Activation retry fixture</title></head><body>John 3:16</body></html>'
-  }));
-  await page.goto('https://example.com/activation-retry',{waitUntil:'domcontentloaded'});
-  const tabId=await getTabIdForUrl(extensionWorker,'https://example.com/*');
-  expect(Number.isInteger(tabId)).toBe(true);
-  const result=await extensionWorker.evaluate(async id => {
-    const original=ensureContentScriptInTab;
+  const result=await extensionWorker.evaluate(async () => {
+    // Use a synthetic tab ID so real tabs.onCreated/onUpdated activation work
+    // cannot race the retry counter. The test is specifically about the retry
+    // loop: keep the same eligible document and make readiness succeed on try 3.
+    const syntheticTabId=2147483000;
+    const syntheticUrl='https://example.com/activation-retry';
+    const tabsGet=chrome.tabs.get;
+    const storageGet=chrome.storage.local.get;
+    const shouldInject=shouldInjectContentScriptForTab;
+    const hasHostAccess=hasHostAccessForTab;
+    const ensure=ensureContentScriptInTab;
     let attempts=0;
-    ensureContentScriptInTab=async () => ++attempts >= 3;
+    chrome.tabs.get=async tabId => tabId===syntheticTabId
+      ? {id:syntheticTabId,url:syntheticUrl}
+      : tabsGet.call(chrome.tabs,tabId);
+    chrome.storage.local.get=async defaults => ({
+      ...defaults,
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    shouldInjectContentScriptForTab=async () => true;
+    hasHostAccessForTab=async () => true;
+    ensureContentScriptInTab=async tabId => tabId===syntheticTabId && ++attempts>=3;
     try {
-      return {ok:await ensureContentScriptInTabWithRetry(id),attempts};
+      return {
+        ok:await ensureContentScriptInTabWithRetry(syntheticTabId,syntheticUrl),
+        attempts
+      };
     } finally {
-      ensureContentScriptInTab=original;
+      chrome.tabs.get=tabsGet;
+      chrome.storage.local.get=storageGet;
+      shouldInjectContentScriptForTab=shouldInject;
+      hasHostAccessForTab=hasHostAccess;
+      ensureContentScriptInTab=ensure;
     }
-  },tabId);
-  expect(result).toEqual({ok:true,attempts:3});
-  await extensionStorage.set({
-    pageSelectionButtonSites:{'example.com':false},
-    doubleClickBlbSites:{'example.com':false}
   });
-  await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+  expect(result).toEqual({ok:true,attempts:3});
 });
 
 test('GitHub and all subdomains are excluded before any content-script injection, even with redirects enabled', async ({
