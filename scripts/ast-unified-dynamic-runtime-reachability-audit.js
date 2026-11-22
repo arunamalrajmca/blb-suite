@@ -494,8 +494,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
               if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
               if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
             }
-            if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(node.init.name)) {
-              dynamicCallableBindings.set(target, node.init.name === 'eval' ? 'eval-alias' : 'function-constructor-alias');
+            if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction', 'setTimeout', 'setInterval'].includes(node.init.name)) {
+              dynamicCallableBindings.set(target, node.init.name === 'eval' ? 'eval-alias' :
+                ['setTimeout', 'setInterval'].includes(node.init.name) ? 'string-timer-alias' : 'function-constructor-alias');
             }
           }
           if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
@@ -503,6 +504,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const initPath = memberPath(node.init);
             if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
             if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
+            if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(initPath)) {
+              dynamicCallableBindings.set(target, 'string-timer-alias');
+            }
             const sourceObject = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
             const sourceMethod = initPath.split('.').pop();
             if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
@@ -513,6 +517,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const importedName = item.key.name || item.key.value;
             const target = bindings.get(item.value);
             if (target && vmMethods.has(importedName)) vmMethodBindings.set(target, importedName);
+          }
+        } else if (node.id.type === 'ObjectPattern' &&
+            node.init?.type === 'Identifier' && ['globalThis', 'window', 'self', 'global'].includes(node.init.name)) {
+          for (const item of node.id.properties || []) {
+            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
+            const importedName = item.key.name || item.key.value;
+            const target = bindings.get(item.value);
+            if (!target) continue;
+            if (importedName === 'eval') dynamicCallableBindings.set(target, 'eval-alias');
+            else if (['Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(importedName)) {
+              dynamicCallableBindings.set(target, 'function-constructor-alias');
+            } else if (['setTimeout', 'setInterval'].includes(importedName)) {
+              dynamicCallableBindings.set(target, 'string-timer-alias');
+            }
           }
         }
       }
@@ -541,7 +559,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const stringTimer = ['setTimeout', 'setInterval'].includes(method) &&
           node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' &&
           (['setTimeout', 'setInterval'].includes(pathName) ||
-            ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName));
+            ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName) ||
+            (calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'string-timer-alias'));
         const evalAlias = calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'eval-alias';
         if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || moduleCompile || wasmExecution || stringTimer) {
           const kind = stringTimer ? 'string-timer-execution' : 'unresolved-dynamic-execution';
@@ -616,8 +635,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
           if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
         }
-        if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(node.right.name)) {
-          dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' : 'function-constructor-alias');
+        if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction', 'setTimeout', 'setInterval'].includes(node.right.name)) {
+          dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
+            ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
         }
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
