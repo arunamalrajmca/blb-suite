@@ -474,7 +474,7 @@ function resolveModuleSpecifier(fromFile, specifier, files) {
   return resolveLocalFile(base, files) || { unresolved: true, specifier };
 }
 
-function collectModuleEdges(source, filename, files) {
+function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const parsed = parseSource(source, filename);
   const edges = [];
   const dynamic = [];
@@ -518,11 +518,40 @@ function collectModuleEdges(source, filename, files) {
         : (node.callee.type === 'MemberExpression'
           ? staticKey(node.callee.property, node.callee.computed) : null);
       if (['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'].includes(callName)) {
+        let launchedScript = null;
+        const command = node.arguments[0];
+        const commandValue = command?.type === 'Literal' && typeof command.value === 'string' ? command.value : null;
+        if (callName === 'fork') {
+          if (commandValue && /\.(?:c?js|mjs)$/i.test(commandValue)) launchedScript = commandValue;
+        } else if (['node', 'node.exe'].includes(commandValue?.toLowerCase())) {
+          const args = node.arguments[1];
+          if (args?.type === 'ArrayExpression') {
+            for (const item of args.elements) {
+              if (item?.type !== 'Literal' || typeof item.value !== 'string') continue;
+              if (/\.(?:c?js|mjs)$/i.test(item.value) && !item.value.startsWith('-')) {
+                launchedScript = item.value;
+                break;
+              }
+            }
+          }
+        } else if (['exec', 'execSync'].includes(callName) && commandValue) {
+          const match = /(?:^|\s)(?:node|node\.exe)(?:\s+--[^\s]+)*\s+["']?([^"'\s]+\.(?:c?js|mjs))\b/i.exec(commandValue);
+          if (match) launchedScript = match[1];
+        }
+        if (launchedScript) {
+          const request = launchedScript.startsWith('.') || launchedScript.startsWith('/')
+            ? launchedScript : './' + launchedScript;
+          const resolution = resolveModuleSpecifier(path.join(root, 'package.json'), request, files);
+          edges.push({ from: filename, specifier: launchedScript, kind: 'child-process-static-launch', ...resolution });
+        }
         dynamic.push({
           file: filename,
           line: node.loc.start.line,
           kind: 'child-process-launch',
-          note: 'The launched script may be selected through variables, arrays, or path expressions.'
+          staticTarget: launchedScript,
+          note: launchedScript
+            ? 'A literal child script target was linked; runtime arguments and cwd overrides may still alter execution.'
+            : 'The launched script may be selected through variables, arrays, shell text, or path expressions.'
         });
       }
     }
@@ -678,7 +707,7 @@ function buildModuleGraph(root) {
   const dynamic = [];
   const unresolved = [];
   for (const [file, source] of sourceByFile) {
-    const result = collectModuleEdges(source, file, files);
+    const result = collectModuleEdges(source, file, files, root);
     edges.push(...result.edges);
     dynamic.push(...result.dynamic);
     unresolved.push(...result.edges.filter(edge => edge.unresolved));
