@@ -84,6 +84,9 @@ function discover(root) {
   const htmlFiles = extensionFiles.filter(file => file.toLowerCase().endsWith('.html'));
   const known = new Set(jsFiles);
   const roots = new Map();
+  const symlinkTargetByPath = new Map(symlinkPaths
+    .filter(item => item.withinRoot && item.isFile && item.real)
+    .map(item => [item.path, item.real]));
   const dynamicSites = symlinkPaths.map(item => ({
     file: normalize(root, item.path), line: null, api: 'extension-source-symlink',
     target: item.real ? normalize(root, item.real) : null,
@@ -96,6 +99,8 @@ function discover(root) {
     if (!roots.has(file)) roots.set(file, []);
     const record = { owner, kind };
     if (!roots.get(file).some(item => item.owner === owner && item.kind === kind)) roots.get(file).push(record);
+    const realTarget = symlinkTargetByPath.get(file);
+    if (realTarget && realTarget !== file && known.has(realTarget)) add(realTarget, owner, kind);
   };
   const addRequest = (request, fromDirectory, owner, kind) => {
     const target = localPath(extension, fromDirectory, request);
