@@ -315,3 +315,27 @@ test('resolves registered content-script files through aliases and bounded helpe
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts').length, 0);
 });
 
+test('keeps indirect registered-content-script options explicitly uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': [
+      "function buildRegistrations() { return [{ id: 'late', matches: ['https://example.com/*'], js: ['scripts/late.js'] }]; }",
+      'const registrations = buildRegistrations();',
+      'chrome.scripting.registerContentScripts(registrations);',
+      'chrome.scripting.registerContentScripts(buildRegistrations());',
+      'chrome.scripting.registerContentScripts([{ ...getRegistrationOptions() }]);'
+    ].join(' '),
+    'extension/scripts/late.js': 'globalThis.late = true;'
+  });
+  const unknown = result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts');
+  assert.equal(unknown.length, 3, JSON.stringify(unknown));
+  assert.ok(unknown.every(item => item.file === 'extension/background.js'));
+  assert.ok(unknown.every(item => item.affectedRoots.includes('extension/background.js')));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'extension/scripts/late.js' &&
+    item.affectedRoots.includes('extension/background.js')
+  ));
+});
+
