@@ -71,6 +71,14 @@
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
           "requiredText": "AST_CONCURRENCY"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "for audit_file in scripts/ast-*-audit.js"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "if [[ ! -f \"$test_file\" ]]; then"
         }
       ],
       "executionEnvironment": "node"
