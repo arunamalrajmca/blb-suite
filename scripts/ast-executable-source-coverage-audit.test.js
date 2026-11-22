@@ -280,3 +280,20 @@ test('reports inline HTML executable sources outside the JavaScript file invento
     assert.equal(apis.filter(api => api === 'html-inline-script').length, 1);
   } finally { f.cleanup(); }
 });
+
+
+test('follows aliases to importScripts and Chrome script injection APIs', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', [
+      "const loadScripts = importScripts; loadScripts('worker-alias.js');",
+      "const inject = chrome.scripting.executeScript; inject({ files: ['injected-alias.js'] });",
+      "const register = chrome.scripting.registerContentScripts; register([{ js: ['registered-alias.js'] }]);"
+    ].join('\n'));
+    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js']) f.write('extension/' + file);
+    const result = discover(f.root);
+    const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
+    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js']) assert.ok(rooted.has('extension/' + file), file);
+  } finally { f.cleanup(); }
+});
