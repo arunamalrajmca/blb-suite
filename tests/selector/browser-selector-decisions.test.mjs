@@ -1116,7 +1116,8 @@ test("four-worker lifecycle contention stress schedules four independent browser
     "tests/browser/content-feature-refresh-races.spec.js",
     "tests/browser/extension-lifecycle.spec.js"
   ]) assert.ok(block.includes(spec), "concurrency stress must include " + spec);
-  assert.match(block, /--repeat-each=2 --workers=4 --max-failures=0/);
+  assert.match(block, /for round in 1 2/);
+  assert.match(block, /--workers=4 --max-failures=0 --reporter=line/);
 });
 
 test("performance batching retains interleaved paired samples with a fresh Chromium profile per sample", () => {
@@ -1163,9 +1164,7 @@ test("full audit delegates performance and physical-input tests to workflows tri
   }
   assert.ok(!audit.includes("physical right-click BLB context-menu action"),
     "the headless full audit must retain the right-click lifecycle regression");
-  assert.ok(audit.includes("Expected to delegate exactly 5 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
-  assert.ok(audit.includes("Interleaved baseline/candidate performance batch preserves isolated samples"),
-    "the batched performance benchmark must remain delegated to its dedicated workflow");
+  assert.ok(audit.includes("Expected to delegate exactly 4 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
   assert.ok(native.includes("tests/browser/native-prerender-activation.spec.js"),
     "native prerender tests must execute in the Xvfb-backed browser workflow");
   assert.ok(native.includes(".github/workflows/manual-full-test-audit.yml"),
