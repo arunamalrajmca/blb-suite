@@ -220,6 +220,8 @@ test('includes internal symlinked JavaScript roots and reports external symlink 
     const result = discover(f.root);
     const internal = result.entries.find(item => item.file === 'extension/internal.js');
     assert.equal(internal.classification, 'statically-rooted-or-imported');
+    const target = result.entries.find(item => item.file === 'extension/internal-target.js');
+    assert.equal(target.classification, 'statically-rooted-or-imported');
     assert.ok(result.dynamicSites.some(item => item.api === 'extension-source-symlink' && item.certainty === 'symlink-outside-extension-root'));
     fs.rmSync(outside, { recursive: true, force: true });
   } finally { f.cleanup(); }
