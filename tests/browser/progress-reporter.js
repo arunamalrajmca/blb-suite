@@ -3,7 +3,10 @@ class ProgressReporter {
     this.total = suite.allTests().length;
     this.aggregateProgress = process.env.BLB_PERF_AGGREGATE_PROGRESS === '1';
     this.started = 0;
+    this.completed = 0;
     this.startedTestIds = new Set();
+    this.completedTestIds = new Set();
+    this.runningTestIds = new Set();
     this.testIndexes = new Map(suite.allTests().map((test, index) => [test.id, index + 1]));
     this.passed = 0;
     this.failed = 0;
@@ -15,10 +18,15 @@ class ProgressReporter {
   onTestBegin(test) {
     this.startedTestIds.add(test.id);
     this.started = this.startedTestIds.size;
+    this.runningTestIds.add(test.id);
     if (!this.aggregateProgress) {
       const title = test.titlePath().filter(Boolean).join(' › ');
       const testIndex = this.testIndexes.get(test.id) || 0;
-      console.log(`\n… [${testIndex}/${this.total}] ${title}`);
+      const serial = `${String(testIndex).padStart(String(this.total).length, '0')}/${this.total}`;
+      const completed = `${String(this.completed).padStart(String(this.total).length, '0')}/${this.total}`;
+      console.log(
+        `\n… [${serial}] START ${title} | completed ${completed} | running ${this.runningTestIds.size} | passed ${this.passed} | failed ${this.failed} | skipped ${this.skipped}`
+      );
     }
   }
 
@@ -27,6 +35,11 @@ class ProgressReporter {
     const passed = status === 'passed';
     const failed = status === 'failed' || status === 'timedOut';
     const willRetry = failed && result.retry < test.retries;
+    this.runningTestIds.delete(test.id);
+    if (!willRetry && !this.completedTestIds.has(test.id)) {
+      this.completedTestIds.add(test.id);
+      this.completed += 1;
+    }
     if (passed) this.passed += 1;
     else if (failed && !willRetry) this.failed += 1;
     else if (status === 'skipped') this.skipped += 1;
@@ -39,7 +52,11 @@ class ProgressReporter {
     // tests that have started: parallel workers complete out of order.
     const testIndex = this.testIndexes.get(test.id) || 0;
     if (!this.aggregateProgress) {
-      console.log(`${color}${symbol} [${testIndex}/${this.total}] ${statusText} (attempt ${result.retry + 1}/${test.retries + 1}, ${(result.duration / 1000).toFixed(1)}s)${reset}`);
+      const serial = `${String(testIndex).padStart(String(this.total).length, '0')}/${this.total}`;
+      const completed = `${String(this.completed).padStart(String(this.total).length, '0')}/${this.total}`;
+      console.log(
+        `${color}${symbol} [${serial}] ${statusText} (attempt ${result.retry + 1}/${test.retries + 1}, ${(result.duration / 1000).toFixed(1)}s) | completed ${completed} | running ${this.runningTestIds.size} | passed ${this.passed} | failed ${this.failed} | skipped ${this.skipped}${reset}`
+      );
     }
 
     if (!failed) {
@@ -83,8 +100,8 @@ class ProgressReporter {
       `${this.skipped} skipped`,
       ...(this.other ? [`${this.other} other`] : [])
     ].join(', ');
-    if (!this.aggregateProgress) console.log(`\n${color}Test summary: ${this.started}/${this.total} completed — ${summary}${reset}`);
-    if (!this.aggregateProgress && this.started < this.total) {
+    if (!this.aggregateProgress) console.log(`\n${color}Test summary: ${this.completed}/${this.total} completed — ${summary}${reset}`);
+    if (!this.aggregateProgress && this.completed < this.total) {
       console.log(`Run ended before all tests completed (runner status: ${result.status.toUpperCase()}).`);
     }
   }

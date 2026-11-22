@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   focused:
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') && !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     strategy:
       fail-fast: false
       matrix:

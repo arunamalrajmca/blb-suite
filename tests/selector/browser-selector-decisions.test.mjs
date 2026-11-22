@@ -1142,6 +1142,50 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
   assert.ok(batch.includes("paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse"));
 });
 
+test("full audit compares legacy per-test process isolation with four-worker scheduling", () => {
+  const audit = readFileSync(
+    new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(audit.includes('npx playwright test --test-list "$current_test" --max-failures=1'),
+    "legacy compatibility cases must run one test per Playwright process");
+  assert.ok(audit.includes('npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0'),
+    "the same compatibility cases must also run together with four workers");
+  assert.ok(audit.includes('npx playwright test --test-list "$test_list" --workers=4 --max-failures=0'),
+    "the complete browser inventory must still run with four workers after comparison");
+  for (const title of [
+    "a real MV3 service-worker termination is recovered by the Alt+B command message",
+    "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them",
+    "repeated global master toggles disable and restore exactly one double-click listener",
+    "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+  ]) {
+    assert.ok(audit.includes(title), "serial/parallel comparison must include " + title);
+  }
+});
+
+test("full audit label suppresses the separate focused-regressions workflow to prevent duplicate test ownership", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-focused-regressions.yml", import.meta.url),
+    "utf8"
+  );
+  const hardGate = readFileSync(
+    new URL("../../.github/workflows/browser-tests.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(
+    workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-focused-regressions') && !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
+    "the full audit must own focused regression cases when both labels are present"
+  );
+  assert.ok(
+    hardGate.includes("github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
+    "the full audit must suppress the separate HARD-GATE regression workflow"
+  );
+  assert.ok(
+    hardGate.includes("always() && !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit'))"),
+    "the HARD-GATE must not publish a duplicate regression-gate status while the full audit owns it"
+  );
+});
+
 test("repository-wide full audit remains opt-in and does not run for ordinary PR synchronization", () => {
   const audit = readFileSync(
     new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
@@ -1168,6 +1212,15 @@ test("full audit delegates performance and physical-input tests to workflows tri
     new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url),
     "utf8"
   );
+  const reference = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
+    "utf8"
+  );
+
+  assert.ok(audit.includes("first_status=0") && audit.includes("second_status=0"),
+    "both independent prior-failure reruns must execute even if the first one fails");
+  assert.ok(audit.includes('"$first_status" -ne 0 || "$second_status" -ne 0'),
+    "the audit must report failure if either independent rerun fails");
 
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
@@ -1179,13 +1232,21 @@ test("full audit delegates performance and physical-input tests to workflows tri
   }
   assert.ok(!audit.includes("physical right-click BLB context-menu action"),
     "the headless full audit must retain the right-click lifecycle regression");
-  assert.ok(audit.includes("Expected to delegate exactly 4 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
+  assert.ok(audit.includes("Expected to delegate exactly 5 tests"), "full audit must fail if delegated test coverage changes unexpectedly");
+  assert.ok(audit.includes("Interleaved baseline/candidate performance batch preserves isolated samples"),
+    "the batched performance benchmark must remain delegated to its dedicated workflow");
+  assert.ok(native.includes("tests/browser/service-worker-shortcut-headed.spec.js"),
+    "the physical Alt+B test must have a dedicated native-browser owner");
   assert.ok(native.includes("tests/browser/native-prerender-activation.spec.js"),
-    "native prerender tests must execute in the Xvfb-backed browser workflow");
+    "both native prerender tests must execute in the Xvfb-backed browser workflow");
   assert.ok(native.includes(".github/workflows/manual-full-test-audit.yml"),
     "full-audit changes must trigger the native shortcut workflow");
+  assert.ok(performance.includes("tests/browser/performance-batch.spec.js --workers=1"),
+    "the batched benchmark must have a dedicated performance-workflow owner");
   assert.ok(performance.includes(".github/workflows/manual-full-test-audit.yml"),
     "full-audit changes must trigger the performance workflow");
+  assert.ok(reference.includes("!contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
+    "the References workflow must suppress its browser matrix when the full audit owns the suite");
   assert.ok(performance.includes("'ci-full-test-audit'"),
     "the opt-in full-audit label must run the delegated performance benchmark");
 });
