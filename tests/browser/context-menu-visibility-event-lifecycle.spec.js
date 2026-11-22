@@ -442,9 +442,13 @@ test('concurrent worker-restart menu initialization creates the persistent item 
     try {
       selectionMenuKnownPresent = false;
       selectionMenuEnsurePromise = null;
-      chrome.contextMenus.update = async () => {
-        updateCalls++;
-        throw new Error('Cannot find menu item');
+      chrome.contextMenus.update = async (_id, details = {}) => {
+        // Visibility synchronization also calls update(); count only the
+        // existence/title refresh performed by ensureWebSelectionContextMenu.
+        if (Object.hasOwn(details, 'title')) {
+          updateCalls++;
+          throw new Error('Cannot find menu item');
+        }
       };
       chrome.contextMenus.create = async details => {
         createCalls++;
@@ -479,7 +483,8 @@ test('duplicate-ID creation race adopts the existing persistent selection menu',
     try {
       selectionMenuKnownPresent = false;
       selectionMenuEnsurePromise = null;
-      chrome.contextMenus.update = async () => {
+      chrome.contextMenus.update = async (_id, details = {}) => {
+        if (!Object.hasOwn(details, 'title')) return;
         updateCalls++;
         if (updateCalls === 1) throw new Error('Cannot find menu item');
       };
