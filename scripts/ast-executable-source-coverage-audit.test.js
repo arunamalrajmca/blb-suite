@@ -205,3 +205,22 @@ test('records document.write, insertAdjacentHTML, and innerHTML script injection
     assert.ok(injection.some(item => item.certainty === 'dynamic-markup-or-script-target'));
   } finally { f.cleanup(); }
 });
+
+
+test('includes internal symlinked JavaScript roots and reports external symlink boundaries', () => {
+  const f = fixture();
+  try {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-extension-source-'));
+    fs.writeFileSync(path.join(outside, 'external.js'), 'self.external = true;');
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', "importScripts('internal.js', 'external.js');");
+    f.write('extension/internal-target.js', 'self.internal = true;');
+    fs.symlinkSync(path.join(f.root, 'extension/internal-target.js'), path.join(f.root, 'extension/internal.js'));
+    fs.symlinkSync(path.join(outside, 'external.js'), path.join(f.root, 'extension/external.js'));
+    const result = discover(f.root);
+    const internal = result.entries.find(item => item.file === 'extension/internal.js');
+    assert.equal(internal.classification, 'statically-rooted-or-imported');
+    assert.ok(result.dynamicSites.some(item => item.api === 'extension-source-symlink' && item.certainty === 'symlink-outside-extension-root'));
+    fs.rmSync(outside, { recursive: true, force: true });
+  } finally { f.cleanup(); }
+});
