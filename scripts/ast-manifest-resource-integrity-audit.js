@@ -6,12 +6,13 @@ const acorn = require('acorn');
 const SKIP = new Set(['.git', 'coverage', 'test-results', 'playwright-report']);
 function normalize(file) { return file.split(path.sep).join('/'); }
 function inside(root, target) { return target === root || target.startsWith(root + path.sep); }
-function walkFiles(root) {
+function walkFiles(root, symlinkPaths = []) {
   const files = [];
   function walk(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const absolute = path.join(directory, entry.name);
       if (entry.isSymbolicLink()) {
+        symlinkPaths.push(absolute);
         try { if (fs.statSync(absolute).isFile()) files.push(absolute); } catch {}
       } else if (entry.isDirectory() && !SKIP.has(entry.name)) walk(absolute);
       else if (entry.isFile()) files.push(absolute);
@@ -36,10 +37,22 @@ function auditManifest(extensionRoot) {
   const errors = [];
   const references = [];
   const uncertainties = [];
-  const files = walkFiles(root);
+  const symlinkPaths = [];
+  const files = walkFiles(root, symlinkPaths);
   const cssQueue = new Set();
   const checked = new Set();
   const recordError = message => { if (!errors.includes(message)) errors.push(message); };
+  for (const link of symlinkPaths) {
+    try {
+      const real = fs.realpathSync(link);
+      if (!inside(root, real)) recordError('symlink escapes extension root: ' + normalize(path.relative(root, link)));
+      else if (fs.statSync(real).isDirectory()) {
+        uncertainties.push({ owner: normalize(path.relative(root, link)), kind: 'internal-directory-symlink-not-traversed' });
+      }
+    } catch {
+      recordError('broken symlink in extension package: ' + normalize(path.relative(root, link)));
+    }
+  }
   function add(owner, value, kind, baseDirectory = root, allowExternal = false) {
     if (typeof value !== 'string' || !value.trim()) {
       recordError(owner + ': invalid empty ' + kind + ' path');
