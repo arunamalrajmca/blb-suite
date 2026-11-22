@@ -494,11 +494,26 @@ function auditManifest(extensionRoot) {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
           ['Worker', 'SharedWorker'].includes(node.callee.name)) {
         const argument = node.arguments[0];
-        const request = literal(argument);
-        if (request !== null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'worker-relative-url-base-uncertain', target: request });
-        else if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
+        if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
+          const request = literal(argument.arguments[0]);
+          const base = argument.arguments[1];
+          const knownBase = base?.type === 'MemberExpression' && base.object.type === 'MetaProperty' ||
+            (base?.type === 'CallExpression' &&
+              (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(memberPath(base.callee)) ||
+                (base.callee.type === 'Identifier' &&
+                  ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(base.callee.name)))));
+          if (request === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
+          else if (!knownBase) uncertainties.push({ owner, line: node.loc.start.line, kind: 'worker-url-base-unresolved', target: request });
+        } else if (argument?.type === 'CallExpression' &&
+            (['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(memberPath(argument.callee)) ||
+              (argument.callee.type === 'Identifier' &&
+                ['chrome.runtime.getURL', 'browser.runtime.getURL'].includes(loaderAliases.get(argument.callee.name))))) {
           if (literal(argument.arguments[0]) === null) uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
-        } else uncertainties.push({ owner, line: node.loc.start.line, kind: 'dynamic-worker-resource-target' });
+        } else {
+          const request = literal(argument);
+          uncertainties.push({ owner, line: node.loc.start.line, kind: request === null
+            ? 'dynamic-worker-resource-target' : 'worker-relative-url-base-uncertain', target: request });
+        }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
           memberPath(node.callee).endsWith('serviceWorker.register')) {
