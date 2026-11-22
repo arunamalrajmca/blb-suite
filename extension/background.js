@@ -8399,3 +8399,5 @@ installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastF
   })
   .catch(() => {})).catch(() => {});
 scheduleStudyAutoStopAlarmRefresh();
+
+// Baseline diagnostic marker: no runtime behavior change.
