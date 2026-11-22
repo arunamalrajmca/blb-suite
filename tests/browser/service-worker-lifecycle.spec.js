@@ -2143,7 +2143,7 @@ test('shared activation retries transient readiness failures while the same docu
     const tabs=chrome.tabs;
     const local=chrome.storage.local;
     const tabsGet=tabs.get.bind(tabs);
-    const localGet=local.get.bind(local);
+    const tabsGetDescriptor=Object.getOwnPropertyDescriptor(tabs,'get');
     const localGetDescriptor=Object.getOwnPropertyDescriptor(local,'get');
     const shouldInject=shouldInjectContentScriptForTab;
     const hasHostAccess=hasHostAccessForTab;
@@ -2171,7 +2171,8 @@ test('shared activation retries transient readiness failures while the same docu
         attempts
       };
     } finally {
-      tabs.get=tabsGet;
+      if(tabsGetDescriptor) Object.defineProperty(tabs,'get',tabsGetDescriptor);
+      else tabs.get=tabsGet;
       if(localGetDescriptor) Object.defineProperty(local,'get',localGetDescriptor);
       else delete local.get;
       shouldInjectContentScriptForTab=shouldInject;
