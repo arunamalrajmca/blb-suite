@@ -274,8 +274,8 @@ test('records service-worker and user-script registration as runtime ownership b
       "navigator.serviceWorker.register('./page-worker.js');",
       "chrome.userScripts.register([{ id: 'user-script', js: [{ file: 'user-script.js' }] }]);"
     ].join('\n'));
-    f.write('extension/page-worker.js');
-    f.write('extension/user-script.js');
+    f.write('extension/page-worker.js', '');
+    f.write('extension/user-script.js', '');
     const result = discover(f.root);
     assert.ok(result.dynamicSites.some(item => item.api === 'serviceWorker.register' && item.target === './page-worker.js'));
     assert.ok(result.dynamicSites.some(item => item.api === 'userScripts.register'));
@@ -291,6 +291,7 @@ test('reports inline HTML executable sources outside the JavaScript file invento
     f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3 }));
     f.write('extension/page.html', [
       '<script>window.inlineScript = true;</script>',
+      '<script type=\"importmap\">{\"imports\":{}}</script>',
       '<script type=\"application/ld+json\">{\"name\":\"metadata\"}</script>',
       '<button onclick=\"runAction()\">Run</button>',
       '<a href=\"javascript:runAction()\">Run</a>',
@@ -318,7 +319,7 @@ test('follows aliases to importScripts and Chrome script injection APIs', () => 
       "const register = chrome.scripting.registerContentScripts; register([{ js: ['registered-alias.js'] }]);",
       "const getURL = chrome.runtime.getURL; new Worker(new URL('worker-runtime-url.js', getURL('/')));"
     ].join('\n'));
-    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js', 'worker-runtime-url.js']) f.write('extension/' + file);
+    for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js', 'worker-runtime-url.js']) f.write('extension/' + file, '');
     const result = discover(f.root);
     const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
     for (const file of ['worker-alias.js', 'injected-alias.js', 'registered-alias.js', 'worker-runtime-url.js']) assert.ok(rooted.has('extension/' + file), file);
