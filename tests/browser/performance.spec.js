@@ -58,6 +58,55 @@ async function closeBlbTabs(extensionWorker) {
   return ids.length;
 }
 
+
+async function waitForBlbTabEvent(worker, pattern, timeout = 10000) {
+  return worker.evaluate(({ patternSource, timeoutMs }) => new Promise((resolve, reject) => {
+    const destinationPattern = new RegExp(patternSource, 'i');
+    let settled = false;
+    let inspecting = false;
+    let timer;
+    const cleanup = () => {
+      clearTimeout(timer);
+      chrome.tabs.onCreated.removeListener(inspect);
+      chrome.tabs.onUpdated.removeListener(inspect);
+    };
+    const finish = (error, match) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(match);
+    };
+    const inspect = () => {
+      if (settled || inspecting) return;
+      inspecting = true;
+      chrome.tabs.query({}).then(tabs => {
+        const match = tabs.map(tab => ({
+          id: tab.id,
+          url: tab.url || '',
+          pendingUrl: tab.pendingUrl || '',
+          effectiveUrl: /blueletterbible\\.org\\//i.test(tab.url || '')
+            ? (tab.url || '')
+            : (tab.pendingUrl || tab.url || ''),
+          active: !!tab.active
+        })).find(tab =>
+          /^(?:https?:\\/\\/)?(?:www\\.)?blueletterbible\\.org\\//i.test(tab.effectiveUrl) &&
+          destinationPattern.test(tab.effectiveUrl)
+        );
+        if (match) finish(null, match);
+      }).catch(error => finish(error)).finally(() => {
+        inspecting = false;
+      });
+    };
+    timer = setTimeout(() => finish(new Error(
+      'Timed out waiting for BLB tab matching ' + patternSource
+    )), timeoutMs);
+    chrome.tabs.onCreated.addListener(inspect);
+    chrome.tabs.onUpdated.addListener(inspect);
+    inspect();
+  }), { patternSource: pattern, timeoutMs: timeout });
+}
+
 async function waitForBlbTab(extensionWorker, predicate, timeout = 10000) {
   let match = null;
   await expect.poll(
@@ -122,17 +171,16 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     // tab, so requiring a newly allocated tab ID is not a valid contract.
     await closeBlbTabs(extensionWorker);
 
+    // Subscribe to Chrome's tab lifecycle events before the click. Polling
+    // chrome.tabs with expect.poll adds a 100ms+ observation quantization to
+    // some samples, which can dominate this short handoff measurement.
+    const blbPromise = waitForBlbTabEvent(
+      extensionWorker,
+      'blueletterbible\\\\.org\\\\/kjv\\\\/jhn\\\\/3\\\\/16\\\\/'
+    );
     const started = Date.now();
     await button.click();
-
-    // Observe Chrome's actual tab state through chrome.tabs, using the
-    // destination URL as the completion signal. This works for both the
-    // current candidate and the approved baseline whether the action creates
-    // a tab or reuses/updates one.
-    const blb = await waitForBlbTab(
-      extensionWorker,
-      tab => /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.effectiveUrl)
-    );
+    const blb = await blbPromise;
     expect(blb).toBeTruthy();
     const handoffMs = Date.now() - started;
 
