@@ -229,3 +229,58 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
     }).catch(()=>{});
   }
 });
+
+
+test('a failed in-flight activation does not suppress a fresh eligible current-tab fallback', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(async () => chrome.storage.local.get({
+    masterEnabled:true,redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}
+  }));
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},doubleClickBlbSites:{}
+    });
+    await page.goto('https://example.com/__blb-suite-regression__/failed-inflight-fallback', {
+      waitUntil:'domcontentloaded'
+    });
+    const tabId = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      return tabs[0]?.id ?? null;
+    });
+    expect(Number.isInteger(tabId)).toBe(true);
+    const primed = await extensionWorker.evaluate(async id => ensureContentScriptInTab(id),tabId);
+    expect(primed).toBe(true);
+
+    const activated = await extensionWorker.evaluate(async id => {
+      const pattern = 'https://example.com/*';
+      const scripts = await chrome.scripting.getRegisteredContentScripts();
+      const ids = scripts.filter(script => (script.matches || []).includes(pattern) &&
+        String(script.id || '').startsWith('blb-suite-runtime-')).map(script => script.id);
+      if (ids.length) await chrome.scripting.unregisterContentScripts({ids});
+      const failedActivation = Promise.resolve(false);
+      const originalRegister = chrome.scripting.registerContentScripts;
+      contentScriptInjectionLocks.set(id,failedActivation);
+      chrome.scripting.registerContentScripts = async () => {
+        throw new Error('Simulated persistent registration failure after stale activation');
+      };
+      try {
+        return await ensureContentScriptInTab(id);
+      } finally {
+        chrome.scripting.registerContentScripts = originalRegister;
+        if (contentScriptInjectionLocks.get(id) === failedActivation) {
+          contentScriptInjectionLocks.delete(id);
+        }
+      }
+    },tabId);
+    expect(activated).toBe(true);
+  } finally {
+    await extensionStorage.set({
+      masterEnabled:previous.masterEnabled,
+      redirectEnabled:previous.redirectEnabled,
+      pageSelectionButtonSites:previous.pageSelectionButtonSites,
+      doubleClickBlbSites:previous.doubleClickBlbSites
+    }).catch(()=>{});
+  }
+});
