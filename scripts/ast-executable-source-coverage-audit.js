@@ -356,7 +356,7 @@ function discover(root) {
           if (request !== null) {
             const decoded = (() => { try { return decodeURIComponent(request.split(/[?#]/, 1)[0]); } catch { return null; } })();
             const candidate = decoded === null ? null : path.resolve(extension, decoded.replace(/^\/+/, ''));
-            const isDirectoryBase = candidate && candidate.startsWith(extension + path.sep) &&
+            const isDirectoryBase = candidate && (candidate === extension || candidate.startsWith(extension + path.sep)) &&
               fs.existsSync(candidate) && fs.statSync(candidate).isDirectory();
             if (!isDirectoryBase) {
               const target = addRequest(request, extension, normalize(root, file), 'runtime-getURL-alias');
