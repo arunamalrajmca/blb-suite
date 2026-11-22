@@ -397,9 +397,9 @@ test('tracks aliased global eval, reassigned Function constructors, and imported
     'scripts/main.js': [
       'const evaluate = globalThis.eval; evaluate(sourceText);',
       'let compile; compile = Function; compile(\"return 1\")();',
-      \"const { runInNewContext: runVm } = require('node:vm'); runVm(sourceText, sandbox);\",
-      \"import { Script as VmScript } from 'node:vm'; new VmScript(sourceText);\",
-      \"window.setTimeout('runGenerated()', 1);\"
+      "const { runInNewContext: runVm } = require('node:vm'); runVm(sourceText, sandbox);",
+      "import { Script as VmScript } from 'node:vm'; new VmScript(sourceText);",
+      "window.setTimeout('runGenerated()', 1);"
     ].join(' ')
   });
   const boundaries = result.uncertainty.filter(item =>
