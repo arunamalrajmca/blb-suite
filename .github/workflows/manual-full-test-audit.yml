@@ -238,13 +238,13 @@ jobs:
           compatibility_status=0
           for title in "${compatibility_titles[@]}"; do
             matches=$(grep -F "› $title" "$test_list" || true)
-            match_count=$(printf '%s\\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')
+            match_count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')
             if [[ "$match_count" -ne 1 ]]; then
               echo "::error::Expected one concurrency compatibility test for '$title', found $match_count."
               compatibility_status=1
               continue
             fi
-            printf '%s\\n' "$matches" >> "$compatibility_list"
+            printf '%s\n' "$matches" >> "$compatibility_list"
           done
 
           compatibility_count=$(wc -l < "$compatibility_list" | tr -d ' ')
@@ -260,7 +260,7 @@ jobs:
             while IFS= read -r test_id; do
               serial_index=$((serial_index + 1))
               echo "Legacy serial process [$serial_index/4]: $test_id"
-              printf '%s\\n' "$test_id" > "$current_test"
+              printf '%s\n' "$test_id" > "$current_test"
               command_status=0
               npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
               cat "$current_log"
