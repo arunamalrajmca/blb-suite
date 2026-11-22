@@ -44,7 +44,7 @@ jobs:
           set -o pipefail
           npx playwright test tests/browser/site-registration-opt-out-race.spec.js \
             --grep "master OFF-to-ON recovery repairs registrations" \
-            --workers=1 --repeat-each=3 --max-failures=0 --reporter=list \
+            --workers=1 --repeat-each=3 --max-failures=1 --reporter=list \
             --output="${{ runner.temp }}/master-toggle-diagnostics/deterministic-results" \
             2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/deterministic.log"
         env:
@@ -57,7 +57,7 @@ jobs:
           set -o pipefail
           npx playwright test tests/browser/source-page-button-redirect-separation.spec.js \
             --grep "Suite master opt-out removes both registered worlds" \
-            --workers=4 --repeat-each=24 --max-failures=0 --reporter=list \
+            --workers=4 --repeat-each=24 --max-failures=1 --reporter=list \
             --output="${{ runner.temp }}/master-toggle-diagnostics/test-results" \
             2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/stress.log"
         env:
