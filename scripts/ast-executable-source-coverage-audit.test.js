@@ -254,5 +254,7 @@ test('records service-worker and user-script registration as runtime ownership b
     const result = discover(f.root);
     assert.ok(result.dynamicSites.some(item => item.api === 'serviceWorker.register' && item.target === './page-worker.js'));
     assert.ok(result.dynamicSites.some(item => item.api === 'userScripts.register'));
+    const userScript = result.entries.find(item => item.file === 'extension/user-script.js');
+    assert.equal(userScript.classification, 'statically-rooted-or-imported');
   } finally { f.cleanup(); }
 });
