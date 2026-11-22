@@ -251,6 +251,33 @@ function discover(root) {
         }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+        const method = node.callee.computed ? literal(node.callee.property) :
+          node.callee.property.type === 'Identifier' ? node.callee.property.name : null;
+        if (['write', 'writeln', 'insertAdjacentHTML'].includes(method)) {
+          const markup = node.arguments.map(literal).filter(value => value !== null).join(' ');
+          const targets = [...markup.matchAll(/<script\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi)]
+            .map(match => match[1] || match[2] || match[3]);
+          dynamicSites.push({
+            file: normalize(root, file), line: node.loc.start.line, api: 'dynamic-html-script-insertion',
+            targets, certainty: targets.length ? 'static-script-path-with-runtime-base' : 'dynamic-markup-or-script-target'
+          });
+        }
+      }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
+        const key = node.left.computed ? literal(node.left.property) :
+          node.left.property.type === 'Identifier' ? node.left.property.name : null;
+        if (['innerHTML', 'outerHTML'].includes(key)) {
+          const markup = literal(node.right);
+          const targets = markup === null ? [] :
+            [...markup.matchAll(/<script\b[^>]*\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi)]
+              .map(match => match[1] || match[2] || match[3]);
+          dynamicSites.push({
+            file: normalize(root, file), line: node.loc.start.line, api: 'dynamic-html-property-insertion',
+            targets, certainty: targets.length ? 'static-script-path-with-runtime-base' : 'dynamic-markup-or-script-target'
+          });
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
         const method = node.callee.property.name;
         if (method === 'setAttribute' && node.arguments[0]?.type === 'Literal' && node.arguments[0].value === 'src') {
           const request = literal(node.arguments[1]);
