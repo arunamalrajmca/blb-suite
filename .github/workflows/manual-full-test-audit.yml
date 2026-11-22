@@ -5,7 +5,10 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [ main ]
-    types: [labeled, synchronize]
+    # Start the expensive full audit only when explicitly requested by
+    # adding its label after all prerequisite checks have passed. A later
+    # synchronize must not launch a full audit against an unqualified head.
+    types: [labeled]
 
 permissions:
   contents: read
