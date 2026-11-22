@@ -169,3 +169,20 @@ test('retains parse failures as explicit uncertainty and unaccounted source inve
     assert.ok(result.dynamicSites.some(item => item.file === 'extension/legacy.js' && item.api === 'source-parse'));
   } finally { f.cleanup(); }
 });
+
+
+test('follows literal array and object aliases in importScripts and runtime registration APIs', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', [
+      "const workerFiles = ['worker-dependency.js']; importScripts(...workerFiles);",
+      "const registrations = [{ js: ['registered.js'] }]; chrome.scripting.registerContentScripts(registrations);",
+      "const injection = { files: ['injected.js'] }; chrome.scripting.executeScript(1, injection);"
+    ].join('\n'));
+    for (const file of ['worker-dependency.js', 'registered.js', 'injected.js']) f.write('extension/' + file, 'self.loaded = true;');
+    const result = discover(f.root);
+    const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
+    for (const file of ['worker-dependency.js', 'registered.js', 'injected.js']) assert.ok(rooted.has('extension/' + file), file);
+  } finally { f.cleanup(); }
+});
