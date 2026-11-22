@@ -78,10 +78,18 @@ function property(node, name) {
 function discover(root) {
   root = path.resolve(root);
   const extension = path.join(root, 'extension');
-  const jsFiles = walk(extension, file => JS_EXTENSIONS.includes(path.extname(file).toLowerCase()));
+  const symlinkPaths = [];
+  const extensionFiles = walk(extension, () => true, [], symlinkPaths);
+  const jsFiles = extensionFiles.filter(file => JS_EXTENSIONS.includes(path.extname(file).toLowerCase()));
+  const htmlFiles = extensionFiles.filter(file => file.toLowerCase().endsWith('.html'));
   const known = new Set(jsFiles);
   const roots = new Map();
-  const dynamicSites = [];
+  const dynamicSites = symlinkPaths.map(item => ({
+    file: normalize(root, item.path), line: null, api: 'extension-source-symlink',
+    target: item.real ? normalize(root, item.real) : null,
+    certainty: !item.real ? 'broken-symlink' : !item.withinRoot ? 'symlink-outside-extension-root' :
+      item.isDirectory ? 'internal-directory-symlink-not-traversed' : 'internal-file-symlink'
+  }));
   const parsed = new Map();
   const add = (file, owner, kind) => {
     if (!file || !known.has(file)) return;
@@ -123,7 +131,6 @@ function discover(root) {
 
   // Extension HTML is parsed as a resource inventory, including quoted and
   // unquoted script src attributes and extension-root-relative URL paths.
-  const htmlFiles = walk(extension, file => file.toLowerCase().endsWith('.html'));
   for (const htmlFile of htmlFiles) {
     const html = fs.readFileSync(htmlFile, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
     const tagPattern = /<script\b([^>]*)>/gi;
