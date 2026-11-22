@@ -167,8 +167,13 @@ function discover(root) {
     visit(ast, (node, parent) => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
-        const target = addRequest(node.source.value, path.dirname(file), normalize(root, file), 'static-module-import');
-        if (target && !visited.has(target)) queue.push(target);
+        const request = node.source.value;
+        if (!request.startsWith('.') && !request.startsWith('/')) {
+          dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'bare-module-specifier', target: request, certainty: 'external-or-import-map' });
+        } else {
+          const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-module-import');
+          if (target && !visited.has(target)) queue.push(target);
+        }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'importScripts') {
         for (const arg of node.arguments) {
@@ -187,10 +192,10 @@ function discover(root) {
       }
       if (node.type === 'ImportExpression') {
         const request = literal(node.source);
-        if (request !== null) {
+        if (request !== null && (request.startsWith('.') || request.startsWith('/'))) {
           const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-dynamic-import');
           if (target && !visited.has(target)) queue.push(target);
-        } else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'dynamic-import', certainty: 'dynamic-module-target' });
+        } else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'dynamic-import', target: request, certainty: request === null ? 'dynamic-module-target' : 'external-or-import-map' });
       }
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
           ['Worker', 'SharedWorker'].includes(node.callee.name)) {
