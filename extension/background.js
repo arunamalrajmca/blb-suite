@@ -3420,7 +3420,19 @@ async function ensureContentScriptInTab(tabId) {
     if (normalizeSiteHostname(hostnameFromTabUrl(current.url)) === BLB_HOSTNAME) return true;
     const currentFiles = contentScriptFilesForTab(current, latestSettings);
     if (!currentFiles.length) return false;
-    return ensureRuntimeContentScriptRegistered(current, currentFiles);
+    const registrationReady = await ensureRuntimeContentScriptRegistered(current, currentFiles);
+    if (registrationReady) return true;
+
+    // The older activation may have failed while its persistent registration
+    // was being updated. If that repair also fails, re-enter the normal
+    // activation path after the old lock has been released. That path performs
+    // a fresh eligibility check and still injects the current document when
+    // Chrome rejects persistent registration.
+    const newerActivation = contentScriptInjectionLocks.get(tabId);
+    if (newerActivation && newerActivation !== existing) {
+      await newerActivation.catch(() => false);
+    }
+    return ensureContentScriptInTab(tabId);
   }
 
   const operation = (async () => {
