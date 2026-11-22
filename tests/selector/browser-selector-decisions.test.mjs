@@ -710,6 +710,7 @@ test("performance benchmark specs stay in the dedicated interleaved runner", () 
   withFixture((root, base) => {
     commitChange(root, "extension/background.js", "// shared runtime change\\n");
     commitChange(root, "tests/browser/performance.spec.js", "// benchmark regression change\\n");
+    commitChange(root, "tests/browser/performance-batch.spec.js", "// batched benchmark regression change\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=true/);
     assert.match(output, /changed_browser_specs=\n/);
