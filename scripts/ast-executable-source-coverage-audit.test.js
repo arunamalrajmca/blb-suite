@@ -89,8 +89,8 @@ test('records dynamic registration and injection sites as unresolved ownership b
 
     const result = discover(f.root);
     assert.deepEqual(result.dynamicSites.map(item => item.api), [
-      'chrome.scripting.registerContentScripts',
-      'chrome.scripting.executeScript'
+      'registerContentScripts',
+      'executeScript'
     ]);
     assert.ok(result.dynamicSites.every(item => item.line > 0));
   } finally {
@@ -113,4 +113,59 @@ test('follows statically named ES module imports from an HTML entry point', () =
   } finally {
     f.cleanup();
   }
+});
+
+
+test('follows static dynamic imports and reports nonliteral imports as uncertainty', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', "import('./lazy.js'); import(getModuleName());");
+    f.write('extension/lazy.js', 'self.lazyLoaded = true;');
+    const result = discover(f.root);
+    const lazy = result.entries.find(item => item.file === 'extension/lazy.js');
+    assert.equal(lazy.classification, 'statically-rooted-or-imported');
+    assert.ok(result.dynamicSites.some(item => item.api === 'dynamic-import' && item.certainty === 'dynamic-module-target'));
+  } finally { f.cleanup(); }
+});
+
+test('discovers runtime registered scripts, executeScript files, and Worker targets', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', [
+      "chrome.scripting.registerContentScripts([{ js: ['registered.js'] }]);",
+      "chrome.scripting.executeScript({ target: { tabId: 1 }, files: ['injected.js'] });",
+      "new Worker(new URL('./worker.js', import.meta.url));"
+    ].join('\n'));
+    for (const file of ['registered.js', 'injected.js', 'worker.js']) f.write('extension/' + file, 'self.loaded = true;');
+    const result = discover(f.root);
+    const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
+    for (const file of ['registered.js', 'injected.js', 'worker.js']) assert.ok(rooted.has('extension/' + file), file);
+  } finally { f.cleanup(); }
+});
+
+test('handles extension-root-relative and query-suffixed HTML script paths', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3 }));
+    f.write('extension/popup.html', '<script src=/popup.js?v=2></script>');
+    f.write('extension/popup.js', 'window.ready = true;');
+    const result = discover(f.root);
+    const popup = result.entries.find(item => item.file === 'extension/popup.js');
+    assert.equal(popup.classification, 'statically-rooted-or-imported');
+  } finally { f.cleanup(); }
+});
+
+test('retains parse failures as explicit uncertainty and unaccounted source inventory', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }));
+    f.write('extension/background.js', 'self.ready = true;');
+    f.write('extension/legacy.js', 'function ( {');
+    const result = discover(f.root);
+    const broken = result.entries.find(item => item.file === 'extension/legacy.js');
+    assert.equal(broken.parseStatus, 'unparsed');
+    assert.ok(result.dynamicSites.some(item => item.file === 'extension/legacy.js' && item.api === 'source-parse'));
+  } finally { f.cleanup(); }
 });
