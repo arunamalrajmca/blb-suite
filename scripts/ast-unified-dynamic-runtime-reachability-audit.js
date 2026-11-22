@@ -556,10 +556,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const wasmExecution = (pathName.startsWith('WebAssembly.') &&
           ['compile', 'compileStreaming', 'instantiate', 'instantiateStreaming'].includes(method)) ||
           (node.type === 'NewExpression' && pathName === 'WebAssembly.Module');
-        const stringTimer = ['setTimeout', 'setInterval'].includes(method) &&
-          node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' &&
-          (['setTimeout', 'setInterval'].includes(pathName) ||
-            ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName) ||
+        const stringTimer = node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' &&
+          ((['setTimeout', 'setInterval'].includes(method) &&
+            (['setTimeout', 'setInterval'].includes(pathName) ||
+              ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName))) ||
             (calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'string-timer-alias'));
         const evalAlias = calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'eval-alias';
         if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || moduleCompile || wasmExecution || stringTimer) {
