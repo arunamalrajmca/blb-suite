@@ -63,6 +63,14 @@
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
           "requiredText": "audit_file=\"${test_file%.test.js}.js\""
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "AST_CONCURRENCY"
         }
       ],
       "executionEnvironment": "node"
