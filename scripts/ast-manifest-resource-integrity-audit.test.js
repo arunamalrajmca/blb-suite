@@ -136,8 +136,9 @@ test('checks CSS url and import resources plus additional manifest resource owne
 
 test('rejects symlinks that resolve outside the extension package root', () => {
   const f = fixture();
+  const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-extension-file-'));
   try {
-    const outside = path.join(f.root, 'outside.js');
+    const outside = path.join(outsideDirectory, 'outside.js');
     fs.writeFileSync(outside, 'outside');
     f.write('manifest.json', JSON.stringify({
       manifest_version: 3,
@@ -146,7 +147,10 @@ test('rejects symlinks that resolve outside the extension package root', () => {
     fs.symlinkSync(outside, path.join(f.root, 'escape.js'));
     const result = auditManifest(f.root);
     assert.ok(result.errors.some(error => error.includes('symlink escapes extension root')));
-  } finally { f.cleanup(); }
+  } finally {
+    fs.rmSync(outsideDirectory, { recursive: true, force: true });
+    f.cleanup();
+  }
 });
 
 test('normalizes extension-root-relative and URL-encoded manifest resource paths', () => {
@@ -166,8 +170,9 @@ test('normalizes extension-root-relative and URL-encoded manifest resource paths
 
 test('detects symlink escapes reached through wildcard resource patterns', () => {
   const f = fixture();
+  const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-extension-wildcard-'));
   try {
-    const outside = path.join(f.root, 'outside.js');
+    const outside = path.join(outsideDirectory, 'outside.js');
     fs.writeFileSync(outside, 'outside');
     f.write('manifest.json', JSON.stringify({
       manifest_version: 3,
@@ -176,8 +181,12 @@ test('detects symlink escapes reached through wildcard resource patterns', () =>
     fs.mkdirSync(path.join(f.root, 'assets'), { recursive: true });
     fs.symlinkSync(outside, path.join(f.root, 'assets/escape.js'));
     const result = auditManifest(f.root);
+    assert.ok(result.errors.some(error => error.includes('symlink escapes extension root')));
     assert.ok(result.errors.some(error => error.includes('wildcard resolves through symlink outside extension root')));
-  } finally { f.cleanup(); }
+  } finally {
+    fs.rmSync(outsideDirectory, { recursive: true, force: true });
+    f.cleanup();
+  }
 });
 
 test('allows external HTML resources but rejects external manifest resource paths', () => {
