@@ -474,3 +474,12 @@ test('tracks aliased and destructured string timer execution', () => {
   });
   assert.ok(result.uncertainty.filter(item => item.executionBoundary === 'string-timer').length >= 2);
 });
+
+
+test('detects Node vm execution when required inline rather than bound to a namespace', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "require('vm').runInThisContext(sourceText); new (require('node:vm').Script)(sourceText);"
+  });
+  assert.ok(result.uncertainty.some(item => item.executionBoundary === 'node-vm'));
+});
