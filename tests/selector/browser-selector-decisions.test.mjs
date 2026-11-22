@@ -1130,6 +1130,8 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
     "utf8"
   );
   assert.ok(workflow.includes("tests/browser/performance-batch.spec.js --workers=1"));
+  assert.ok(workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-performance')"),
+    "the ci-run-performance label must run the measured interleaved benchmark");
   assert.ok(workflow.includes("BLB_PERF_SAMPLES: 11"));
   assert.ok(batch.includes("const samples = Number(process.env.BLB_PERF_SAMPLES || 11)"));
   assert.ok(batch.includes("const total = scenarios.length * samples * 2"));

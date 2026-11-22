@@ -43,7 +43,7 @@ jobs:
   performance:
     name: Measured performance qualification
     # The full audit delegates performance.spec.js to this measured benchmark.
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
