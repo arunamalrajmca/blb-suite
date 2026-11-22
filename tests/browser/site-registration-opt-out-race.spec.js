@@ -108,9 +108,10 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
       const release = new Promise(resolve=>{resolveRelease=resolve;});
       const original = chrome.tabs.sendMessage;
       const originalExecuteScript = chrome.scripting.executeScript;
-      const gate = {started,release,resolveRelease,original,originalExecuteScript,blocked:false,response:null,fallbackInjectionCalls:0};
+      const gate = {started,release,resolveRelease,original,originalExecuteScript,blocked:false,response:null,targetTabId:null,fallbackInjectionCalls:0};
       chrome.scripting.executeScript = async function(details,...args) {
-        if (Array.isArray(details?.files) && details.files.includes('content.js')) gate.fallbackInjectionCalls++;
+        if (details?.target?.tabId === gate.targetTabId &&
+            Array.isArray(details?.files) && details.files.includes('content.js')) gate.fallbackInjectionCalls++;
         return originalExecuteScript.call(this,details,...args);
       };
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__ = gate;
@@ -120,6 +121,7 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
           try { tab = await chrome.tabs.get(tabId); } catch (_) {}
           if (String(tab?.url || '').startsWith('https://christianity.com/')) {
             gate.blocked = true;
+            gate.targetTabId = tabId;
             resolveStarted();
             await release;
           }
