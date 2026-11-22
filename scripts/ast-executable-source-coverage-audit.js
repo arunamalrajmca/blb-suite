@@ -153,10 +153,11 @@ function discover(root) {
     visited.add(file);
     const ast = parsed.get(file);
     if (!ast) continue;
-    const literalArrays = new Map(), literalObjects = new Map();
+    const literalArrays = new Map(), literalArrayNodes = new Map(), literalObjects = new Map();
     visit(ast, node => {
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         if (node.init?.type === 'ArrayExpression') {
+          literalArrayNodes.set(node.id.name, node.init);
           const values = staticArray(node.init);
           if (values) literalArrays.set(node.id.name, values);
         }
@@ -205,7 +206,7 @@ function discover(root) {
           node.callee.property.type === 'Identifier' ? node.callee.property.name : null;
         if (method === 'registerContentScripts') {
           let options = node.arguments[0];
-          if (options?.type === 'Identifier') options = literalArrays.has(options.name) ? { type: 'ArrayExpression', elements: literalArrays.get(options.name).map(value => ({ type: 'Literal', value })) } : null;
+          if (options?.type === 'Identifier') options = literalArrayNodes.get(options.name) || null;
           const scripts = options?.type === 'ArrayExpression' ? options.elements : [];
           for (let script of scripts) {
             if (script?.type === 'Identifier') script = literalObjects.get(script.name) || script;
