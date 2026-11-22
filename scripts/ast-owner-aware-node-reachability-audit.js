@@ -486,14 +486,45 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const edges = [];
   const dynamic = [];
   const requireAliases = new Set();
+  const createRequireAliases = new Set(['createRequire']);
   walkAst(parsed.ast, node => {
+    if (node.type === 'ImportDeclaration' && ['node:module', 'module'].includes(node.source.value)) {
+      for (const specifier of node.specifiers) {
+        if (specifier.type === 'ImportSpecifier' &&
+            (specifier.imported.name || specifier.imported.value) === 'createRequire') {
+          createRequireAliases.add(specifier.local.name);
+        }
+      }
+    }
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
       if (node.init?.type === 'Identifier' && (node.init.name === 'require' || requireAliases.has(node.init.name))) {
         requireAliases.add(node.id.name);
       }
       if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
           node.init.object.name === 'module' && node.init.property.name === 'require') requireAliases.add(node.id.name);
+      if (node.init?.type === 'MemberExpression' && node.init.property.name === 'createRequire') {
+        createRequireAliases.add(node.id.name);
+      }
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
+          createRequireAliases.has(node.init.callee.name)) requireAliases.add(node.id.name);
+      if (node.init?.type === 'ObjectExpression' && node.init.properties.some(item =>
+        item.type === 'Property' && (item.key.name || item.key.value) === 'createRequire')) {
+        // Keep object-literal exports of createRequire conservative unless a
+        // later binding explicitly invokes the imported function.
+      }
     }
+    if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern' &&
+        node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
+        (node.init.callee.name === 'require' || requireAliases.has(node.init.callee.name)) &&
+        node.init.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(node.init.arguments[0].value)) {
+      for (const property of node.id.properties) {
+        if (property.type === 'Property' && (property.key.name || property.key.value) === 'createRequire' &&
+            property.value.type === 'Identifier') createRequireAliases.add(property.value.name);
+      }
+    }
+    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' &&
+        node.right.type === 'CallExpression' && node.right.callee.type === 'Identifier' &&
+        createRequireAliases.has(node.right.callee.name)) requireAliases.add(node.left.name);
     if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' && node.right.type === 'Identifier' &&
         (node.right.name === 'require' || requireAliases.has(node.right.name))) requireAliases.add(node.left.name);
   });
