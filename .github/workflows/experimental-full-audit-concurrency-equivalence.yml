@@ -5,7 +5,10 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [ main ]
-    types: [labeled, synchronize]
+    # This exhaustive serial-versus-parallel comparison is an explicit
+    # qualification step, not a per-commit prerequisite. Add its label only
+    # after the focused prerequisites pass on the exact head commit.
+    types: [labeled]
 
 permissions:
   contents: read
