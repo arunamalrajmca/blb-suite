@@ -36,6 +36,10 @@ function digest(file) {
 }
 const fingerprint = {
   node: process.version,
+  platform: process.platform,
+  arch: process.arch,
+  acorn: require('acorn/package.json').version,
+  eslintScope: require('eslint-scope/package.json').version,
   packageLock: digest(path.join(root, 'package-lock.json')),
   packageJson: digest(path.join(root, 'package.json')),
   auditInventory: tasks.map(task => ({
