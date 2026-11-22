@@ -408,94 +408,163 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const imported = new Map(), scriptElementBindings = new Set();
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
+    const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
+    const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
+    const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
+    const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
+    const memberPath = node => {
+      if (!node) return '';
+      if (node.type === 'Identifier') return node.name;
+      if (node.type === 'ThisExpression') return 'this';
+      if (node.type === 'MemberExpression') {
+        const key = node.computed ? staticValue(node.property, constants, 0, bindings) :
+          node.property.type === 'Identifier' ? node.property.name : null;
+        return key === null ? '' : memberPath(node.object) + '.' + key;
+      }
+      if (node.type === 'SequenceExpression' && node.expressions.length) return memberPath(node.expressions[node.expressions.length - 1]);
+      return '';
+    };
+    const requireVm = node => node?.type === 'CallExpression' &&
+      node.callee.type === 'Identifier' && node.callee.name === 'require' &&
+      ['vm', 'node:vm'].includes(node.arguments[0]?.value);
+    const callbackRecord = (callback, api, line, expression) => {
+      let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
+      if (callback?.type === 'Identifier') {
+        callbackName = callback.name;
+        let callbackKey = bindings.get(callback);
+        const seenCallbackAliases = new Set();
+        while (callbackKey && aliases.has(callbackKey) && !seenCallbackAliases.has(callbackKey)) {
+          seenCallbackAliases.add(callbackKey);
+          callbackKey = aliases.get(callbackKey);
+        }
+        const definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+        if (definition) {
+          callbackTarget = rel(root, definition.file) + '::' + callbackKey;
+          certainty = 'resolved-function-binding';
+        }
+      } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
+        callbackName = '[inline callback]';
+        callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
+        certainty = 'resolved-inline-callback';
+      }
+      sites.push({
+        file: rel(root, file), line, kind: 'external-callback-registration',
+        expression, callback: callbackName, callbackTarget, certainty,
+        resolved: callbackTarget, affectedRoots: []
+      });
+      if (certainty === 'unresolved-callback-owner') {
+        uncertainty.push({
+          file: rel(root, file), line, kind: 'unresolved-external-callback-owner',
+          certainty, expression, registrationApi: api, affectedRoots: []
+        });
+      }
+    };
     visit(ast, (node, parent) => {
       if (parent) parents.set(node, parent);
+      // Resolve aliases of dynamic-code constructors and Node's vm namespace.
+      if (node.type === 'ImportDeclaration' && ['vm', 'node:vm'].includes(node.source.value)) {
+        for (const specifier of node.specifiers) {
+          const key = bindings.get(specifier.local);
+          if (!key) continue;
+          if (specifier.type === 'ImportNamespaceSpecifier') vmNamespaceBindings.add(key);
+          else if (specifier.type === 'ImportSpecifier') vmMethodBindings.set(key, specifier.imported.name || specifier.imported.value);
+        }
+      }
+      if (node.type === 'VariableDeclarator') {
+        if (node.id.type === 'Identifier') {
+          const target = bindings.get(node.id);
+          if (node.init?.type === 'Identifier') {
+            const source = bindings.get(node.init);
+            if (target && source) {
+              if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
+              if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
+              if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
+            }
+            if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(node.init.name)) {
+              dynamicCallableBindings.set(target, node.init.name === 'eval' ? 'eval-alias' : 'function-constructor-alias');
+            }
+          }
+          if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
+        } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
+          for (const item of node.id.properties || []) {
+            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
+            const importedName = item.key.name || item.key.value;
+            const target = bindings.get(item.value);
+            if (target && vmMethods.has(importedName)) vmMethodBindings.set(target, importedName);
+          }
+        }
+      }
       // Track code-generation/evaluation boundaries explicitly. These are
       // uncertainty sites, never evidence that a target is unused.
       if (node.type === 'CallExpression' || node.type === 'NewExpression') {
         const callee = node.callee;
-        const memberName = callee.type === 'MemberExpression'
-          ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name)
-          : null;
-        const objectName = callee.type === 'MemberExpression' && callee.object.type === 'Identifier'
-          ? callee.object.name : null;
-        const directEval = callee.type === 'Identifier' && callee.name === 'eval';
-        const functionConstructor = callee.type === 'Identifier' &&
-          ['Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(callee.name);
-        const vmExecution = objectName === 'vm' &&
-          ['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script'].includes(memberName);
-        const indirectEval = callee.type === 'MemberExpression' &&
-          callee.object.type === 'Identifier' && callee.object.name === 'eval' &&
-          ['call', 'apply', 'bind'].includes(memberName);
-        const stringTimer = callee.type === 'Identifier' &&
-          ['setTimeout', 'setInterval'].includes(callee.name) &&
-          node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string';
-        if (directEval || functionConstructor || vmExecution || indirectEval || stringTimer) {
+        const pathName = memberPath(callee);
+        const method = pathName.split('.').pop();
+        const calleeBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
+        const objectBinding = callee.type === 'MemberExpression' && callee.object.type === 'Identifier'
+          ? bindings.get(callee.object) : null;
+        const directEval = pathName === 'eval' || ['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(pathName);
+        const indirectEval = /(?:^|\.)(?:eval)\.(?:call|apply|bind)$/.test(pathName) ||
+          (pathName === 'Reflect.apply' && memberPath(node.arguments[0]) === 'eval');
+        const functionConstructor = ['Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction',
+          'globalThis.Function', 'window.Function', 'self.Function'].includes(pathName) ||
+          (calleeBinding && dynamicCallableBindings.has(calleeBinding) &&
+            dynamicCallableBindings.get(calleeBinding).startsWith('function-constructor'));
+        const vmExecution = (objectBinding && vmNamespaceBindings.has(objectBinding) && vmMethods.has(method)) ||
+          (calleeBinding && vmMethodBindings.has(calleeBinding) && vmMethods.has(vmMethodBindings.get(calleeBinding)));
+        const stringTimer = ['setTimeout', 'setInterval'].includes(method) &&
+          node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' &&
+          (['setTimeout', 'setInterval'].includes(pathName) ||
+            ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName));
+        const evalAlias = calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'eval-alias';
+        if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || stringTimer) {
           const kind = stringTimer ? 'string-timer-execution' : 'unresolved-dynamic-execution';
+          const boundary = directEval || evalAlias ? 'direct-or-aliased-eval' : indirectEval ? 'indirect-eval' :
+            functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' : 'string-timer';
           uncertainty.push({
             file: rel(root, file), line: node.loc.start.line, kind,
             certainty: 'unresolved-dynamic-execution',
             expression: sourceText.slice(node.start, node.end).slice(0, 240),
-            executionBoundary: directEval ? 'direct-eval' : indirectEval ? 'indirect-eval' :
-              functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' : 'string-timer',
-            affectedRoots: []
+            executionBoundary: boundary, affectedRoots: []
           });
         }
       }
-      // Framework/browser event APIs own callback invocation. Record the
-      // registration boundary and resolve a callback binding when possible.
-      if (node.type === 'CallExpression') {
+      // Framework/browser APIs and observer constructors own callback invocation.
+      if (node.type === 'CallExpression' || node.type === 'NewExpression') {
         const callee = node.callee;
-        const method = callee.type === 'MemberExpression'
-          ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name)
-          : callee.type === 'Identifier' ? callee.name : null;
+        const pathName = memberPath(callee);
+        const method = pathName.split('.').pop();
         const callbackApis = new Set([
           'addListener', 'addEventListener', 'on', 'once', 'subscribe',
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
           'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'
         ]);
-        const callbackIndex = ['addEventListener'].includes(method) ? 1 :
+        const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
+        const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
+        const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) &&
+          node.arguments.length && ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.arguments[node.arguments.length - 1]?.type);
+        const callbackIndex = isObserver ? 0 :
+          method === 'addEventListener' ? 1 :
           ['on', 'once', 'addListener'].includes(method) && node.arguments[0]?.type === 'Literal' &&
-            typeof node.arguments[0].value === 'string' ? 1 : 0;
-        if (callbackApis.has(method) && node.arguments.length > callbackIndex &&
+            typeof node.arguments[0].value === 'string' ? 1 :
+          extensionCallback ? node.arguments.length - 1 : 0;
+        if ((isObserver || callbackApis.has(method) || extensionCallback) &&
+            node.arguments.length > callbackIndex &&
             !(['setTimeout', 'setInterval'].includes(method) && node.arguments[callbackIndex].type === 'Literal' &&
               typeof node.arguments[callbackIndex].value === 'string')) {
           const callback = node.arguments[callbackIndex];
-          let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
-          if (callback.type === 'Identifier') {
-            callbackName = callback.name;
-            let callbackKey = bindings.get(callback);
-            const seenCallbackAliases = new Set();
-            while (callbackKey && aliases.has(callbackKey) && !seenCallbackAliases.has(callbackKey)) {
-              seenCallbackAliases.add(callbackKey);
-              callbackKey = aliases.get(callbackKey);
-            }
-            const definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
-            if (definition) {
-              callbackTarget = rel(root, definition.file) + '::' + callbackKey;
-              certainty = 'resolved-function-binding';
-            }
-          } else if (callback.type === 'ArrowFunctionExpression' || callback.type === 'FunctionExpression') {
-            callbackName = '[inline callback]';
-            callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
-            certainty = 'resolved-inline-callback';
-          }
-          const api = callee.type === 'MemberExpression'
-            ? sourceText.slice(callee.start, callee.end).slice(0, 160) : method;
-          sites.push({
-            file: rel(root, file), line: node.loc.start.line,
-            kind: 'external-callback-registration', expression: api,
-            callback: callbackName, callbackTarget, certainty,
-            resolved: callbackTarget, affectedRoots: []
-          });
-          if (certainty === 'unresolved-callback-owner') {
-            uncertainty.push({
-              file: rel(root, file), line: node.loc.start.line,
-              kind: 'unresolved-external-callback-owner',
-              certainty, expression: sourceText.slice(node.start, node.end).slice(0, 240),
-              registrationApi: api, affectedRoots: []
-            });
-          }
+          const api = pathName || method;
+          callbackRecord(callback, api, node.loc.start.line, sourceText.slice(callee.start, callee.end).slice(0, 160));
+        }
+      }
+      // DOM-style and browser event property assignments are callback roots too.
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'MemberExpression') {
+        const eventName = memberPath(node.left).split('.').pop();
+        if (/^on[a-z0-9_]+$/i.test(eventName) &&
+            ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(node.right.type)) {
+          callbackRecord(node.right, 'event-property:' + eventName, node.loc.start.line,
+            sourceText.slice(node.left.start, node.left.end).slice(0, 160));
         }
       }
       if (node.type === 'AssignmentExpression' && node.operator === '=' &&
