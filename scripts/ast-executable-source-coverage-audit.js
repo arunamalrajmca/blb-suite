@@ -247,9 +247,19 @@ function discover(root) {
           }
           else dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'executeScript', certainty: 'injected-function-or-dynamic-files' });
         }
-        const calleePath = node.callee.object.type === 'Identifier'
-          ? node.callee.object.name + '.' + method
-          : method;
+        const calleePath = (() => {
+          const parts = [];
+          let current = node.callee;
+          while (current?.type === 'MemberExpression') {
+            const key = current.computed ? literal(current.property) :
+              current.property.type === 'Identifier' ? current.property.name : null;
+            if (key === null) return '';
+            parts.unshift(key);
+            current = current.object;
+          }
+          if (current?.type === 'Identifier') parts.unshift(current.name);
+          return parts.join('.');
+        })();
         if (method === 'register' && /(?:^|\.)serviceWorker\.register$/.test(calleePath)) {
           dynamicSites.push({ file: normalize(root, file), line: node.loc.start.line, api: 'serviceWorker.register', target: literal(node.arguments[0]), certainty: 'runtime-document-base-or-dynamic-target' });
         }
