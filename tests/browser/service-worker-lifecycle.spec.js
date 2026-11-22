@@ -2140,33 +2140,40 @@ test('shared activation retries transient readiness failures while the same docu
     // loop: keep the same eligible document and make readiness succeed on try 3.
     const syntheticTabId=2147483000;
     const syntheticUrl='https://example.com/activation-retry';
-    const tabsGet=chrome.tabs.get;
-    const storageGet=chrome.storage.local.get;
+    const tabs=chrome.tabs;
+    const local=chrome.storage.local;
+    const tabsGet=tabs.get.bind(tabs);
+    const localGet=local.get.bind(local);
+    const localGetDescriptor=Object.getOwnPropertyDescriptor(local,'get');
     const shouldInject=shouldInjectContentScriptForTab;
     const hasHostAccess=hasHostAccessForTab;
     const ensure=ensureContentScriptInTab;
     let attempts=0;
-    chrome.tabs.get=async tabId => tabId===syntheticTabId
-      ? {id:syntheticTabId,url:syntheticUrl}
-      : tabsGet.call(chrome.tabs,tabId);
-    chrome.storage.local.get=async defaults => ({
-      ...defaults,
-      masterEnabled:true,
-      redirectEnabled:false,
-      pageSelectionButtonSites:{'example.com':true},
-      doubleClickBlbSites:{'example.com':true}
-    });
-    shouldInjectContentScriptForTab=async () => true;
-    hasHostAccessForTab=async () => true;
-    ensureContentScriptInTab=async tabId => tabId===syntheticTabId && ++attempts>=3;
     try {
+      tabs.get=async tabId => tabId===syntheticTabId
+        ? {id:syntheticTabId,url:syntheticUrl}
+        : tabsGet(tabId);
+      Object.defineProperty(local,'get',{
+        configurable:true,
+        value:async defaults => ({
+          ...defaults,
+          masterEnabled:true,
+          redirectEnabled:false,
+          pageSelectionButtonSites:{'example.com':true},
+          doubleClickBlbSites:{'example.com':true}
+        })
+      });
+      shouldInjectContentScriptForTab=async () => true;
+      hasHostAccessForTab=async () => true;
+      ensureContentScriptInTab=async tabId => tabId===syntheticTabId && ++attempts>=3;
       return {
         ok:await ensureContentScriptInTabWithRetry(syntheticTabId,syntheticUrl),
         attempts
       };
     } finally {
-      chrome.tabs.get=tabsGet;
-      chrome.storage.local.get=storageGet;
+      tabs.get=tabsGet;
+      if(localGetDescriptor) Object.defineProperty(local,'get',localGetDescriptor);
+      else delete local.get;
       shouldInjectContentScriptForTab=shouldInject;
       hasHostAccessForTab=hasHostAccess;
       ensureContentScriptInTab=ensure;
