@@ -7406,6 +7406,7 @@ async function shouldShowSelectionContextMenu(tab, selectionText = '') {
 
 let selectionMenuOperation = Promise.resolve();
 let selectionMenuKnownPresent = false;
+let selectionMenuEnsurePromise = null;
 let pdfSelectionMenuKnownPresent = false;
 // Keep only the newest visibility request. Opening a MultiVerse batch can
 // produce many tab events; serializing each stale snapshot delays the menu
@@ -7415,38 +7416,54 @@ let pdfSelectionVisibilitySyncGeneration = 0;
 
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
-  try {
-    // The native context-menu item persists across service-worker restarts.
-    // Preserve its last synchronized visibility while refreshing the title:
-    // deliberately omit `visible` from this update because Chrome retains that
-    // browser-owned state even though this worker's in-memory flags are reset.
-    // Hiding it here would remove the only user action capable of waking an
-    // otherwise-idle worker for a right-click. The tabs.onActivated sync below
-    // re-evaluates visibility after restart, and the click handler independently
-    // rechecks global state, site preference, host permission, and sensitive-site policy.
-    await chrome.contextMenus.update('blb-suite-web-selection', {
-      title:'Show on BLB\tAlt+B',
+  // Visibility syncs can arrive directly from several tab/content-script
+  // paths, outside the serialized install helpers. Share one in-flight
+  // existence check so a worker restart cannot race two create() calls.
+  if (selectionMenuEnsurePromise) return selectionMenuEnsurePromise;
+  selectionMenuEnsurePromise = (async () => {
+    const updateExisting = async () => chrome.contextMenus.update('blb-suite-web-selection', {
+      title:'Show on BLB\\tAlt+B',
       // Clear the old HTTP(S)-only restriction so the same persistent item
       // can also appear in browser-managed PDF viewer documents.
       documentUrlPatterns:[]
     });
-    selectionMenuKnownPresent = true;
-    return true;
-  } catch (_) {}
+    try {
+      // The native context-menu item persists across service-worker restarts.
+      // Preserve its last synchronized visibility while refreshing the title:
+      // deliberately omit `visible` because Chrome owns that state.
+      await updateExisting();
+      selectionMenuKnownPresent = true;
+      return true;
+    } catch (_) {}
+    try {
+      await chrome.contextMenus.create({
+        id:'blb-suite-web-selection',
+        title:'Show on BLB\\tAlt+B',
+        contexts:['selection'],
+        // One item is shared by ordinary web pages and browser-managed PDF tabs.
+        visible:false
+      });
+      selectionMenuKnownPresent = true;
+      return true;
+    } catch (createError) {
+      // A duplicate-ID error means the browser already owns the persistent
+      // item (for example, it appeared between update() and create()). Adopt
+      // it by retrying update rather than reporting a false installation
+      // failure or repeatedly attempting to create it.
+      try {
+        await updateExisting();
+        selectionMenuKnownPresent = true;
+        return true;
+      } catch (_) {
+        selectionMenuKnownPresent = false;
+        return false;
+      }
+    }
+  })();
   try {
-    await chrome.contextMenus.create({
-      id:'blb-suite-web-selection',
-      title:'Show on BLB\tAlt+B',
-      contexts:['selection'],
-      // One item is shared by ordinary web pages and browser-managed PDF tabs.
-      // The active-tab synchronizer applies the appropriate eligibility policy.
-      visible:false
-    });
-    selectionMenuKnownPresent = true;
-    return true;
-  } catch (_) {
-    selectionMenuKnownPresent = false;
-    return false;
+    return await selectionMenuEnsurePromise;
+  } finally {
+    selectionMenuEnsurePromise = null;
   }
 }
 
