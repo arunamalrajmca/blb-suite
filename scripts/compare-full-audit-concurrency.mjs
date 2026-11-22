@@ -1,0 +1,192 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const root = process.cwd();
+const cli = require.resolve('@playwright/test/cli');
+const reportRoot = process.env.BLB_CONCURRENCY_REPORT_DIR || path.join(root, 'artifacts', 'full-audit-concurrency');
+fs.mkdirSync(reportRoot, { recursive: true });
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-concurrency-'));
+const listPath = path.join(tempRoot, 'complete-browser-test-list.txt');
+const delegatedTitles = [
+  'a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut',
+  'native Chromium _self prerender activation initializes the activated document without tab replacement',
+  'native Chromium _blank prerender activation initializes the activated document without tab replacement',
+  'Show on BLB performance benchmark',
+  'Interleaved baseline/candidate performance batch preserves isolated samples'
+];
+
+function run(args, options = {}) {
+  return spawnSync(process.execPath, [cli, 'test', ...args], {
+    cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    timeout: options.timeout ?? 180_000,
+    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0', ...options.env }
+  });
+}
+function parseJsonReport(stdout, label) {
+  try { return JSON.parse(stdout); }
+  catch (error) { throw new Error(label + ': Playwright JSON reporter output was not valid JSON: ' + error.message); }
+}
+function collectTests(report) {
+  const found = [];
+  function visit(suites, parentTitles = []) {
+    for (const suite of suites || []) {
+      const suiteTitles = suite.title ? [...parentTitles, suite.title] : parentTitles;
+      for (const spec of suite.specs || []) {
+        for (const test of spec.tests || []) {
+          const results = test.results || [];
+          const last = results.length ? results[results.length - 1] : null;
+          const status = last?.status || (test.status === 'skipped' ? 'skipped' : null);
+          const file = spec.file || suite.file || '';
+          const line = spec.line || 0;
+          const column = spec.column || 0;
+          const title = [...suiteTitles, spec.title].filter(Boolean).join(' › ');
+          found.push({
+            key: [test.projectName || '', file, line, column, title].join('|'),
+            project: test.projectName || '', file, line, column, title, status,
+            expectedStatus: test.expectedStatus || null,
+            durationMs: last?.duration ?? null,
+            errors: (last?.errors || []).map(item => item.message || String(item))
+          });
+        }
+      }
+      visit(suite.suites, suiteTitles);
+    }
+  }
+  visit(report.suites);
+  return found;
+}
+function writeJson(file, value) {
+  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+}
+
+try {
+  console.log('[1/5] Discovering the complete Playwright browser inventory.');
+  const listing = run(['--list', '--reporter=list'], { timeout: 180_000 });
+  fs.writeFileSync(path.join(reportRoot, 'playwright-list.stdout.txt'), listing.stdout || '');
+  fs.writeFileSync(path.join(reportRoot, 'playwright-list.stderr.txt'), listing.stderr || '');
+  if (listing.status !== 0) throw new Error('Playwright --list failed with exit code ' + listing.status);
+  const entries = (listing.stdout || '').split(/\r?\n/)
+    .map(line => line.match(/^\s*(\[[^\]]+\] › [^\s]+\.spec\.js:\d+:\d+ › .*)$/)?.[1])
+    .filter(Boolean);
+  if (!entries.length) throw new Error('Playwright --list produced no recognized test-list entries.');
+  const delegated = [];
+  const scheduled = [];
+  for (const entry of entries) {
+    const matches = delegatedTitles.filter(title => entry.includes('› ' + title));
+    if (matches.length > 1) throw new Error('A test matched multiple delegation rules: ' + entry);
+    if (matches.length) delegated.push({ title: matches[0], entry });
+    else scheduled.push(entry);
+  }
+  for (const title of delegatedTitles) {
+    const count = delegated.filter(item => item.title === title).length;
+    if (count !== 1) throw new Error('Expected exactly one delegated test "' + title + '", found ' + count);
+  }
+  if (scheduled.length + delegated.length !== entries.length) throw new Error('Browser inventory accounting mismatch.');
+  fs.writeFileSync(listPath, scheduled.join('\n') + '\n');
+  writeJson(path.join(reportRoot, 'inventory.json'), {
+    discovered: entries.length, delegated: delegated.length, scheduled: scheduled.length,
+    delegatedTests: delegated, scheduledTests: scheduled
+  });
+  console.log('Discovered ' + entries.length + '; delegated to dedicated workflows ' + delegated.length + '; comparison inventory ' + scheduled.length + '.');
+
+  console.log('[2/5] Running the legacy one-test-per-process serial baseline.');
+  const serial = [];
+  const serialErrors = [];
+  for (let index = 0; index < scheduled.length; index++) {
+    const oneTestPath = path.join(tempRoot, 'one-test.txt');
+    fs.writeFileSync(oneTestPath, scheduled[index] + '\n');
+    const logPath = path.join(reportRoot, 'serial-' + String(index + 1).padStart(4, '0') + '.log');
+    const result = run(['--test-list', oneTestPath, '--workers=1', '--max-failures=0', '--reporter=json'], { timeout: 180_000 });
+    fs.writeFileSync(logPath, (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
+    let tests = [];
+    let parseError = null;
+    try { tests = collectTests(parseJsonReport(result.stdout || '', 'serial test ' + (index + 1))); }
+    catch (error) { parseError = error.message; }
+    const record = {
+      inventoryEntry: scheduled[index], exitCode: result.status, signal: result.signal || null,
+      timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'), tests, parseError
+    };
+    serial.push(record);
+    if (result.status !== 0 || tests.length !== 1 || !tests[0].status || parseError) {
+      serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
+        signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
+    }
+    if ((index + 1) % 10 === 0 || index + 1 === scheduled.length) {
+      console.log('Serial baseline [' + (index + 1) + '/' + scheduled.length + '] | processes=' + (index + 1) + ' | anomalies=' + serialErrors.length);
+    }
+  }
+  writeJson(path.join(reportRoot, 'serial-results.json'), serial);
+  writeJson(path.join(reportRoot, 'serial-errors.json'), serialErrors);
+  if (serial.length !== scheduled.length) throw new Error('Serial baseline did not produce one record per scheduled test.');
+  console.log('Serial baseline complete: ' + serial.length + ' isolated Playwright processes; anomalies=' + serialErrors.length + '.');
+
+  console.log('[3/5] Running the complete inventory with four workers, three independent repetitions.');
+  const parallelRounds = [];
+  for (let round = 1; round <= 3; round++) {
+    const result = run(['--test-list', listPath, '--workers=4', '--max-failures=0', '--reporter=json'], { timeout: 21_000_000 });
+    fs.writeFileSync(path.join(reportRoot, 'parallel-round-' + round + '.log'),
+      (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
+    let tests = [];
+    let parseError = null;
+    try { tests = collectTests(parseJsonReport(result.stdout || '', 'parallel repetition ' + round)); }
+    catch (error) { parseError = error.message; }
+    const record = {
+      repetition: round, exitCode: result.status, signal: result.signal || null,
+      timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'), tests, parseError
+    };
+    parallelRounds.push(record);
+    writeJson(path.join(reportRoot, 'parallel-round-' + round + '-results.json'), record);
+    console.log('Parallel repetition [' + round + '/3]: observed=' + tests.length + '/' + scheduled.length +
+      ', exit=' + result.status + ', parse=' + (parseError || 'ok'));
+  }
+
+  console.log('[4/5] Comparing exact test ownership and per-test outcomes.');
+  const serialByKey = new Map();
+  for (const record of serial) for (const test of record.tests) {
+    if (serialByKey.has(test.key)) serialErrors.push({ key: test.key, issue: 'duplicate serial test identity' });
+    serialByKey.set(test.key, test);
+  }
+  const comparisons = [];
+  for (const round of parallelRounds) {
+    const parallelByKey = new Map(round.tests.map(test => [test.key, test]));
+    const missing = [...serialByKey.keys()].filter(key => !parallelByKey.has(key));
+    const extra = [...parallelByKey.keys()].filter(key => !serialByKey.has(key));
+    const mismatches = [];
+    for (const [key, serialTest] of serialByKey) {
+      const parallelTest = parallelByKey.get(key);
+      if (parallelTest && serialTest.status !== parallelTest.status) {
+        mismatches.push({ key, serialStatus: serialTest.status, parallelStatus: parallelTest.status });
+      }
+    }
+    comparisons.push({
+      repetition: round.repetition, serialIdentities: serialByKey.size, parallelIdentities: parallelByKey.size,
+      missing, extra, statusMismatches: mismatches, parallelExitCode: round.exitCode, parallelParseError: round.parseError
+    });
+  }
+  const final = {
+    scheduledTestCount: scheduled.length, serialProcessCount: serial.length,
+    serialCollectedTestCount: serialByKey.size, serialAnomalies: serialErrors,
+    parallelRepetitions: comparisons,
+    equivalent: serialErrors.length === 0 && serialByKey.size === scheduled.length &&
+      comparisons.length === 3 && comparisons.every(item => item.parallelExitCode === 0 &&
+        !item.parallelParseError && item.parallelIdentities === scheduled.length &&
+        item.missing.length === 0 && item.extra.length === 0 && item.statusMismatches.length === 0)
+  };
+  writeJson(path.join(reportRoot, 'comparison-summary.json'), final);
+  console.log('[5/5] Comparison summary: ' + JSON.stringify({
+    equivalent: final.equivalent, inventory: final.scheduledTestCount,
+    serialProcesses: final.serialProcessCount, serialCollected: final.serialCollectedTestCount,
+    serialAnomalies: final.serialAnomalies.length,
+    parallel: final.parallelRepetitions.map(item => ({
+      repetition: item.repetition, observed: item.parallelIdentities, missing: item.missing.length,
+      extra: item.extra.length, statusMismatches: item.statusMismatches.length, exitCode: item.parallelExitCode
+    }))
+  }));
+  if (!final.equivalent) process.exitCode = 1;
+} finally {
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+}

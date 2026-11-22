@@ -6,6 +6,125 @@ const { execFileSync } = require('node:child_process');
 const vm = require('node:vm');
 
 const sourceExtensionPath = path.resolve(__dirname, '../../extension');
+
+async function installMasterToggleRegistrationDiagnostics(extensionWorker) {
+  return extensionWorker.evaluate(() => {
+    const targetPattern = 'https://christianity.com/*';
+    const targetId = runtimeContentScriptIdForPattern(targetPattern);
+    const state = {startedAt:Date.now(), events:[], nextId:1};
+    const record = (type, details = {}) => {
+      state.events.push({at:Date.now(), elapsedMs:Date.now()-state.startedAt, type, ...details});
+      if (state.events.length > 1200) state.events.splice(0, state.events.length-1200);
+    };
+    globalThis.__BLB_MASTER_TOGGLE_DIAGNOSTICS__ = state;
+    const safe = value => { try { return JSON.parse(JSON.stringify(value)); } catch (_) { return String(value); } };
+    const wrapApi = (owner, name, summarizeArgs, summarizeResult) => {
+      const original = owner?.[name];
+      if (typeof original !== 'function') return;
+      owner[name] = async function(...args) {
+        const details = summarizeArgs(args);
+        const id = state.nextId++;
+        const startedAt = Date.now();
+        record(name + ':start', {id, ...details});
+        try {
+          const result = await original.apply(this, args);
+          record(name + ':end', {id, durationMs:Date.now()-startedAt, ...summarizeResult(result)});
+          return result;
+        } catch (error) {
+          record(name + ':error', {id,durationMs:Date.now()-startedAt,errorName:error?.name || '',
+            errorMessage:error?.message || String(error),errorStack:error?.stack || ''});
+          throw error;
+        }
+      };
+    };
+    wrapApi(chrome.scripting, 'getRegisteredContentScripts', args => ({ids:args[0]?.ids || null}),
+      result => ({ids:(result || []).filter(item => (item.matches || []).includes(targetPattern) ||
+        [targetId,targetId+'-main-world'].includes(item.id)).map(item => item.id),count:(result || []).length}));
+    wrapApi(chrome.scripting, 'registerContentScripts', args => ({scripts:(args[0] || []).map(item => ({
+      id:item.id,matches:item.matches,js:item.js,world:item.world || 'ISOLATED',
+      persistAcrossSessions:item.persistAcrossSessions
+    }))}), result => ({result:safe(result)}));
+    wrapApi(chrome.scripting, 'updateContentScripts', args => ({scripts:(args[0] || []).map(item => ({
+      id:item.id,matches:item.matches,js:item.js,world:item.world
+    }))}), result => ({result:safe(result)}));
+    wrapApi(chrome.scripting, 'unregisterContentScripts', args => ({ids:args[0]?.ids || null}),
+      result => ({result:safe(result)}));
+    wrapApi(chrome.permissions, 'contains', args => ({origins:args[0]?.origins || null}),
+      result => ({granted:result}));
+
+    const wrappedFunctions = [
+      'reconcileRuntimeContentScriptRegistrations','reconcileRuntimeContentScriptRegistrationsNow',
+      'injectConfiguredTabsAfterExtensionUpdate','ensureContentScriptInTab','ensureContentScriptInTabWithRetry',
+      'ensureRuntimeContentScriptRegistered','registerRuntimeContentScriptForPattern',
+      'unregisterRuntimeContentScriptForPattern'
+    ];
+    const availableFunctions = [];
+    for (const name of wrappedFunctions) {
+      const original = globalThis[name];
+      if (typeof original !== 'function') continue;
+      availableFunctions.push(name);
+      globalThis[name] = async function(...args) {
+        const id = state.nextId++;
+        const startedAt = Date.now();
+        record(name + ':start', {id,args:safe(args)});
+        try {
+          const result = await original.apply(this,args);
+          record(name + ':end', {id,durationMs:Date.now()-startedAt,result:safe(result)});
+          return result;
+        } catch (error) {
+          record(name + ':error', {id,durationMs:Date.now()-startedAt,errorName:error?.name || '',
+            errorMessage:error?.message || String(error),errorStack:error?.stack || ''});
+          throw error;
+        }
+      };
+    }
+    chrome.storage.onChanged.addListener((changes,area) => {
+      if (area !== 'local') return;
+      const relevant = {};
+      for (const key of ['masterEnabled','redirectEnabled','pageSelectionButtonSites','doubleClickBlbSites']) {
+        if (changes[key]) relevant[key] = {oldValue:safe(changes[key].oldValue),newValue:safe(changes[key].newValue)};
+      }
+      if (Object.keys(relevant).length) record('storage:onChanged',{changes:relevant});
+    });
+    try { chrome.runtime.onSuspend.addListener(() => record('runtime:onSuspend')); } catch (_) {}
+    try { chrome.runtime.onSuspendCanceled.addListener(() => record('runtime:onSuspendCanceled')); } catch (_) {}
+    for (const level of ['warn','error']) {
+      const original = console[level]?.bind(console);
+      if (original) console[level] = (...args) => {
+        record('console:'+level,{messages:args.map(value=>String(value)).slice(0,5)});
+        return original(...args);
+      };
+    }
+    record('diagnostics:installed',{targetPattern,targetId,availableFunctions});
+    return {installed:true,targetPattern,targetId,availableFunctions};
+  });
+}
+
+async function readMasterToggleRegistrationDiagnostics(extensionWorker, workerEvents = []) {
+  try {
+    return await extensionWorker.evaluate(async () => {
+      const state = globalThis.__BLB_MASTER_TOGGLE_DIAGNOSTICS__;
+      const settings = await chrome.storage.local.get({
+        masterEnabled:null,redirectEnabled:null,pageSelectionButtonSites:{},doubleClickBlbSites:{}
+      });
+      const scripts = await chrome.scripting.getRegisteredContentScripts();
+      const tabs = await chrome.tabs.query({url:'https://christianity.com/*'});
+      return {
+        workerAvailable:true,settings,
+        registrations:scripts.filter(item => (item.matches || []).includes('https://christianity.com/*') ||
+          String(item.id || '').includes('3p3w7i')).map(item => ({
+          id:item.id,matches:item.matches,js:item.js,world:item.world || 'ISOLATED',
+          persistAcrossSessions:item.persistAcrossSessions
+        })),
+        tabs:tabs.map(tab=>({id:tab.id,url:tab.url,status:tab.status,pendingUrl:tab.pendingUrl || null})),
+        diagnosticsInstalled:!!state,diagnosticEvents:state?.events || []
+      };
+    });
+  } catch (error) {
+    return {workerAvailable:false,workerReadError:String(error?.message || error),workerEvents};
+  }
+}
+
 const testHosts = [];
 
 function readSourcePageCollectorRegistry(extensionPath) {
@@ -947,48 +1066,67 @@ test('BibleProject homepage stays excluded while nested pages expose Open Bible 
 
 
 test('Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them', async ({
-  page, extensionStorage, extensionWorker
-}) => {
+  page, extensionStorage, extensionWorker, context
+}, testInfo) => {
   const sourceUrl = 'https://christianity.com/__blb-suite-regression__/master-toggle';
   const originPattern = 'https://christianity.com/*';
+  const workerEvents = [];
+  const observeWorker = worker => {
+    workerEvents.push({type:'serviceworker-created',at:Date.now(),url:worker.url()});
+    try { worker.on('close',()=>workerEvents.push({type:'serviceworker-closed',at:Date.now(),url:worker.url()})); } catch (_) {}
+    try { worker.on('console',message=>workerEvents.push({
+      type:'serviceworker-console',at:Date.now(),level:message.type(),text:message.text()
+    })); } catch (_) {}
+  };
+  observeWorker(extensionWorker);
+  context.on('serviceworker',observeWorker);
+  const installed = await installMasterToggleRegistrationDiagnostics(extensionWorker);
+
+  const attachDiagnostics = async label => {
+    const diagnostics = await readMasterToggleRegistrationDiagnostics(extensionWorker,workerEvents);
+    diagnostics.workerEvents = workerEvents;
+    diagnostics.label = label;
+    await testInfo.attach('master-toggle-registration-'+label+'.json',{
+      body:Buffer.from(JSON.stringify(diagnostics,null,2)),contentType:'application/json'
+    });
+    return diagnostics;
+  };
+  const expectRegistrations = async (expected,label) => {
+    try {
+      await expect.poll(async () => extensionWorker.evaluate(async pattern => {
+        const id = runtimeContentScriptIdForPattern(pattern);
+        const scripts = await chrome.scripting.getRegisteredContentScripts({ids:[id,id+'-main-world']});
+        return {
+          isolated:scripts.some(script=>script.id===id),
+          mainWorld:scripts.some(script=>script.id===id+'-main-world')
+        };
+      },originPattern),{timeout:15000}).toEqual(expected);
+    } catch (error) {
+      const diagnostics = await attachDiagnostics(label+'-failure');
+      throw new Error(error.message+'\nMASTER-TOGGLE DIAGNOSTICS:\n'+JSON.stringify(diagnostics,null,2));
+    }
+  };
+
   await extensionStorage.set({
-    masterEnabled:true,
-    redirectEnabled:false,
-    pageSelectionButtonSites:{},
-    doubleClickBlbSites:{}
+    masterEnabled:true,redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}
   });
-  await page.route('https://christianity.com/**', route => route.fulfill({
-    status:200,
-    contentType:'text/html',
+  await page.route('https://christianity.com/**',route=>route.fulfill({
+    status:200,contentType:'text/html',
     body:'<!doctype html><html><head><title>Guard registration lifecycle</title></head><body><main>Article</main></body></html>'
   }));
-  await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
-
-  const readRegistrations = () => extensionWorker.evaluate(async pattern => {
-    const id = runtimeContentScriptIdForPattern(pattern);
-    const scripts = await chrome.scripting.getRegisteredContentScripts({
-      ids:[id, id + '-main-world']
-    });
-    return {
-      isolated:scripts.some(script => script.id === id),
-      mainWorld:scripts.some(script => script.id === id + '-main-world')
-    };
-  }, originPattern);
-
-  await expect.poll(readRegistrations, {timeout:15000}).toEqual({
-    isolated:true,
-    mainWorld:true
-  });
+  await page.goto(sourceUrl,{waitUntil:'domcontentloaded'});
+  await expectRegistrations({isolated:true,mainWorld:true},'initial-on');
 
   await extensionStorage.set({masterEnabled:false});
-  await expect.poll(readRegistrations, {timeout:15000}).toEqual({
-    isolated:false,
-    mainWorld:false
-  });
+  await expectRegistrations({isolated:false,mainWorld:false},'master-off');
 
   await extensionStorage.set({masterEnabled:true});
-  await expect.poll(readRegistrations, {timeout:15000}).toEqual({
-    isolated:true,
-    mainWorld:true
-  });
+  await expectRegistrations({isolated:true,mainWorld:true},'master-reenable');
+
+  await attachDiagnostics('success');
+  const finalDiagnostics = await readMasterToggleRegistrationDiagnostics(extensionWorker,workerEvents);
+  console.log('BLB_MASTER_TOGGLE_TRACE '+JSON.stringify({
+    installed,workerEvents,eventCount:finalDiagnostics.diagnosticEvents?.length || 0,
+    settings:finalDiagnostics.settings,registrations:finalDiagnostics.registrations
+  }));
 });
