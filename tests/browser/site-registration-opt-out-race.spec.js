@@ -148,6 +148,14 @@ test('master OFF-to-ON recovery repairs registrations after an older tab activat
       await globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__.started;
     });
     await expect.poll(readRegistrations,{timeout:15000}).toEqual({isolated:true,mainWorld:true});
+    await expect.poll(async () => extensionWorker.evaluate(async () => {
+      const gate = globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__;
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:gate.targetTabId},world:'ISOLATED',
+        func:() => window.__blbSuiteRefreshHandshakeReadyV1 === true
+      });
+      return result?.result === true;
+    }), {timeout:15000}).toBe(true);
     const fallbackInjectionCallsBeforeRecovery = await extensionWorker.evaluate(() =>
       globalThis.__BLB_MASTER_TOGGLE_ACTIVATION_GATE__?.fallbackInjectionCalls
     );
