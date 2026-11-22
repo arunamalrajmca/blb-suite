@@ -7169,7 +7169,7 @@ async function getActiveTabSelection(tabId, documentId = null) {
           if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
         };
         walk(range.cloneContents());
-        const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \\t]*\n[ \\t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
         return reconstructed || selection.toString();
       }
     });
