@@ -108,7 +108,7 @@ test('recognizes computed literal dynamic script API properties', () => {
     f.write('extension/background.js', [
       "chrome.scripting['registerContentScripts']([]);",
       "chrome.scripting['executeScript']({ target: { tabId: 1 }, func: () => true });"
-    ].join('\\n'));
+    ].join('\n'));
 
     const result = discover(f.root);
     assert.deepEqual(result.dynamicSites.map(item => item.api), [
