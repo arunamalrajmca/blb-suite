@@ -69,6 +69,8 @@ function dependencyVersion(name) {
   }
 }
 const fingerprint = {
+  commit: process.env.GITHUB_SHA || 'unknown',
+  ref: process.env.GITHUB_REF || '',
   node: process.version,
   nodeVersions: process.versions,
   platform: process.platform,
