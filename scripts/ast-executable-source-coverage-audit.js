@@ -115,6 +115,7 @@ function discover(root) {
       manifest = {};
     }
     if (manifest.background?.service_worker) addRequest(manifest.background.service_worker, extension, 'extension/manifest.json', 'manifest-service-worker');
+    for (const file of manifest.background?.scripts || []) addRequest(file, extension, 'extension/manifest.json', 'manifest-background-script');
     for (const [index, entry] of (manifest.content_scripts || []).entries()) {
       for (const file of entry.js || []) addRequest(file, extension, 'extension/manifest.json', 'manifest-content-script-' + index);
     }
