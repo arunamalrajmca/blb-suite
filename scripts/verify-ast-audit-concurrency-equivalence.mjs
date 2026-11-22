@@ -151,7 +151,13 @@ async function executeTask(task, mode) {
 }
 async function serial() {
   const results = new Map();
-  for (const task of tasks) results.set(task.key, await executeTask(task, 'serial'));
+  // Match the full-audit workflow exactly: each test and its paired analysis
+  // run together in sorted order, then any analysis-only scripts run afterward.
+  const workflowOrder = [
+    ...tasks.filter(task => task.testFile),
+    ...tasks.filter(task => !task.testFile)
+  ];
+  for (const task of workflowOrder) results.set(task.key, await executeTask(task, 'serial'));
   return results;
 }
 async function parallel(round) {
