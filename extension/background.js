@@ -3393,8 +3393,11 @@ async function ensureContentScriptInTab(tabId) {
     // in-flight promise and otherwise mistake its earlier registration for a
     // current one. Once the older activation settles, revalidate the live tab
     // and repair its persistent registration before reporting success.
-    const existingResult = await existing.catch(() => false);
-    if (!existingResult) return false;
+    // The older activation may have failed because its registration attempt
+    // raced a permission or setting transition. Revalidate current eligibility
+    // below, but do not let that stale failure suppress a fresh current-tab
+    // fallback when the live tab is eligible again.
+    await existing.catch(() => false);
     let current;
     try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
     if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url)) return false;
