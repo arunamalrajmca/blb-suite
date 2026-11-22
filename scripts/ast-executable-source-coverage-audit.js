@@ -71,7 +71,7 @@ function literal(node) {
   return null;
 }
 function staticArray(node) {
-  if (!node || node.type !== 'ArrayExpression') return [];
+  if (!node || node.type !== 'ArrayExpression') return null;
   const values = [];
   for (const item of node.elements) {
     const value = literal(item);
