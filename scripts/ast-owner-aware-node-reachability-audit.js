@@ -523,7 +523,9 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         const commandValue = command?.type === 'Literal' && typeof command.value === 'string' ? command.value : null;
         if (callName === 'fork') {
           if (commandValue && /\.(?:c?js|mjs)$/i.test(commandValue)) launchedScript = commandValue;
-        } else if (['node', 'node.exe'].includes(commandValue?.toLowerCase())) {
+        } else if (['node', 'node.exe'].includes(commandValue?.toLowerCase()) ||
+            (command?.type === 'MemberExpression' && command.object.type === 'Identifier' &&
+              command.object.name === 'process' && staticKey(command.property, command.computed) === 'execPath')) {
           const args = node.arguments[1];
           if (args?.type === 'ArrayExpression') {
             for (const item of args.elements) {
