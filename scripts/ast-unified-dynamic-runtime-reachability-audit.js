@@ -1013,8 +1013,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (['globalThis.Reflect', 'window.Reflect', 'self.Reflect'].includes(api)) reflectNamespaceBindings.add(target);
           if (['globalThis.Object', 'window.Object', 'self.Object'].includes(api)) objectNamespaceBindings.add(target);
           if (['globalThis.Proxy', 'window.Proxy', 'self.Proxy'].includes(api)) proxyConstructorBindings.add(target);
-          const reflectMethod = /(?:^|\\.)Reflect\\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
-          const objectMethod = /(?:^|\\.)Object\\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
+          const reflectMethod = /(?:^|\.)Reflect\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
+          const objectMethod = /(?:^|\.)Object\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
           if (reflectMethod) reflectMethodBindings.set(target, reflectMethod);
           if (objectMethod) objectMethodBindings.set(target, objectMethod);
           if (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable')) proxyRevocableBindings.add(target);
