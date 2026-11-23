@@ -763,8 +763,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && node.init.type === 'MemberExpression') {
           const api = runtimeMetaPath(node.init);
           if (api === 'globalThis.Proxy' || api === 'window.Proxy' || api === 'self.Proxy') proxyConstructorBindings.add(target);
-          const reflectMethod = api.startsWith('Reflect.') ? api.slice(8) : '';
-          const objectMethod = api.startsWith('Object.') ? api.slice(7) : '';
+          const reflectMethod = /(?:^|\\.)Reflect\\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
+          const objectMethod = /(?:^|\\.)Object\\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
           if (reflectMethod) reflectMethodBindings.set(target, reflectMethod);
           if (objectMethod) objectMethodBindings.set(target, objectMethod);
           if (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable')) proxyRevocableBindings.add(target);
