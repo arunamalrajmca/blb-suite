@@ -1061,6 +1061,7 @@ test('tracks namespace aliases through qualified globalThis, window, and self re
       'const anotherReflection = self.Reflect;',
       'reflection.get(target, key);',
       'objectApi.defineProperty(target, key, descriptor);',
+      'objectApi.keys(target);',
       'anotherReflection.ownKeys(target);'
     ].join(' ')
   });
