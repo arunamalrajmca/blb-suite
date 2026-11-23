@@ -998,6 +998,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const target = bindings.get(node.id);
         if (target && node.init.type === 'Identifier') {
           const source = bindings.get(node.init);
+          if (['Worker', 'SharedWorker'].includes(node.init.name)) workerConstructorBindings.add(target);
           if (node.init.name === 'document' || (source && documentNamespaceBindings.has(source))) documentNamespaceBindings.add(target);
           if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
           if (source && workerConstructorBindings.has(source)) workerConstructorBindings.add(target);
