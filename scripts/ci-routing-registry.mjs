@@ -338,7 +338,7 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js",
   "tests/browser/source-page-button-redirect-separation.spec.js",
-  
+  "tests/browser/master-toggle-four-action-recovery.spec.js"
 ]);
 
 
@@ -368,6 +368,5 @@ export const referenceDelegatedSpecs = new Set([
   "tests/browser/multiverse-disjoint-chapter-post.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
   "tests/browser/site-registration-opt-out-race.spec.js",
-  "tests/browser/source-page-button-redirect-separation.spec.js",
-  "tests/browser/master-toggle-four-action-recovery.spec.js"
+  "tests/browser/source-page-button-redirect-separation.spec.js"
 ]);
