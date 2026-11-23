@@ -643,7 +643,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
-    const scriptingNamespaceBindings = new Set();
+    const scriptingNamespaceBindings = new Set(), scriptingLoaderMethodBindings = new Map();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
     const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
@@ -749,6 +749,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target && node.init?.type === 'MemberExpression') {
             const initPath = memberPath(node.init);
             if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
+            if (['chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts'].includes(initPath)) scriptingLoaderMethodBindings.set(target, initPath.split('.').pop());
             if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
             if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
             if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(initPath)) {
@@ -757,6 +758,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const sourceObject = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
             const sourceMethod = initPath.split('.').pop();
             if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
+          }
+        } else if (node.id.type === 'ObjectPattern' && memberPath(node.init) === 'chrome.scripting') {
+          for (const item of node.id.properties || []) {
+            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
+            const importedName = item.key.name || item.key.value;
+            const target = bindings.get(item.value);
+            if (target && ['executeScript', 'registerContentScripts'].includes(importedName)) scriptingLoaderMethodBindings.set(target, importedName);
           }
         } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
           for (const item of node.id.properties || []) {
@@ -895,6 +903,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && node.right.type === 'MemberExpression') {
           const rightPath = memberPath(node.right);
           if (rightPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
+          if (['chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts'].includes(rightPath)) scriptingLoaderMethodBindings.set(target, rightPath.split('.').pop());
           if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(rightPath)) dynamicCallableBindings.set(target, 'eval-alias');
           else if (['globalThis.Function', 'window.Function', 'self.Function'].includes(rightPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
           else if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(rightPath)) {
@@ -1048,8 +1057,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
             }
           }
         }
-        const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) : null;
-        const object = callee.type === 'MemberExpression' ? memberPath(callee.object) : null;
+        const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) :
+          callee.type === 'Identifier' ? scriptingLoaderMethodBindings.get(bindings.get(callee)) : null;
+        const object = callee.type === 'MemberExpression' ? memberPath(callee.object) :
+          callee.type === 'Identifier' && scriptingLoaderMethodBindings.has(bindings.get(callee)) ? 'chrome.scripting' : null;
         if (method === 'executeScript' && object === 'chrome.scripting') {
           let foundFiles = [];
           let foundFilesProperty = false;
