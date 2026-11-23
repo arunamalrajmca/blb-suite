@@ -174,14 +174,6 @@ jobs:
             exit 1
           fi
 
-      - name: Upload corpus A/B measurements
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: blb-corpus-ab-full-audit
-          path: ${{ runner.temp }}/blb-performance.jsonl
-          if-no-files-found: warn
-          retention-days: 14
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
@@ -407,6 +399,15 @@ jobs:
             echo "Browser audit completed with one or more failures; all scheduled tests were allowed to finish."
             exit "$browser_status"
           fi
+
+      - name: Upload corpus A/B measurements
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-corpus-ab-full-audit
+          path: ${{ runner.temp }}/blb-performance.jsonl
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Report every audit result
         if: always()
