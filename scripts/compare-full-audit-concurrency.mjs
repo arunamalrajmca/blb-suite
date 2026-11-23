@@ -101,7 +101,7 @@ try {
   if (mode === 'screen') {
     console.log('[2/2] Running one complete four-worker screening pass (fail fast).');
     const result = run(['--test-list', listPath, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
-    fs.writeFileSync(path.join(reportRoot, 'screening.log'), (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+    fs.writeFileSync(path.join(reportRoot, 'screening.log'), (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
     let tests = [];
     let parseError = null;
     try { tests = collectTests(parseJsonReport(result.stdout || '', 'four-worker screening')); }
@@ -113,7 +113,7 @@ try {
       byKey.set(test.key, test);
     }
     const expected = new Set(scheduled.map(entry => {
-      const match = entry.match(/^\\s*\\[([^\\]]+)\\] › ([^\\s]+\\.spec\\.js):(\\d+):(\\d+) › (.*)$/);
+      const match = entry.match(/^\s*\[([^\]]+)\] › ([^\s]+\.spec\.js):(\d+):(\d+) › (.*)$/);
       return match ? [match[1], match[2], Number(match[3]), Number(match[4]), match[5]].join('|') : null;
     }).filter(Boolean));
     const missing = [...expected].filter(key => !byKey.has(key));
