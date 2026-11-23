@@ -1,28 +1,26 @@
 name: Experimental Full-Audit Concurrency Equivalence
-run-name: Browser Concurrency Sample — ${{ github.ref_name }} — Run ${{ github.run_number }}
+run-name: Full Browser Concurrency Equivalence — ${{ github.ref_name }} — Run ${{ github.run_number }}
 
 on:
   workflow_dispatch:
   pull_request:
     branches: [ main ]
-    # This representative serial-versus-parallel comparison is an explicit
-    # qualification step, not a per-commit prerequisite. It inventories every
-    # spec file but executes only risk-weighted representatives from each.
-    types: [labeled]
+    # Run on opt-in label and every subsequent PR-head update while the label remains.
+    types: [labeled, synchronize]
 
 permissions:
   contents: read
 
 concurrency:
-  group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}
+  group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  compare-representative-browser-inventory:
+  compare-complete-browser-inventory:
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') }}
     name: Compare representative one-worker and four-worker browser audits
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 360
     steps:
       - name: Checkout selected ref
         uses: actions/checkout@v5
@@ -47,7 +45,7 @@ jobs:
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
 
-      - name: Compare representative tests from every spec under both execution models
+      - name: Compare the complete browser inventory under both execution models
         id: comparison
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency
@@ -72,9 +70,9 @@ jobs:
           {
             echo "## Full-audit concurrency equivalence"
             echo
-            echo "Execution: one-worker serial baseline versus one four-worker run over the same risk-weighted sample; the complete inventory is still discovered and accounted for."
+            echo "Execution: legacy one-test-per-process serial baseline versus three complete four-worker repetitions over the exact same browser inventory."
             echo
             echo "Result: **$OUTCOME**"
             echo
-            echo "The uploaded artifact contains the complete discovered inventory, per-spec sample rationale, serial and parallel test records, logs, and exact identity/status/retry comparisons."
+            echo "The uploaded artifact contains the complete discovered inventory, one serial process record and log per test, three complete parallel run records, logs, and exact identity/status/retry comparisons."
           } >> "$GITHUB_STEP_SUMMARY"
