@@ -462,10 +462,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         else if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
           owner = { file, key: 'function@' + argument.loc.start.line, node: argument };
         }
-        if (!owner) continue;
         const mapKey = target.file + '::' + parameterKey;
         if (!callbackParameterOwners.has(mapKey)) callbackParameterOwners.set(mapKey, new Map());
-        callbackParameterOwners.get(mapKey).set(owner.file + '::' + owner.key, owner);
+        const ownerKey = owner ? owner.file + '::' + owner.key : '[unresolved-callsite]';
+        callbackParameterOwners.get(mapKey).set(ownerKey, owner || { unresolved: true });
       }
     });
   }
@@ -526,7 +526,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           certainty = 'resolved-function-binding';
         } else if (callbackKey) {
           const owners = callbackParameterOwners.get(file + '::' + callbackKey);
-          if (owners && owners.size === 1) {
+          if (owners && owners.size === 1 && ![...owners.values()][0].unresolved) {
             const owner = [...owners.values()][0];
             callbackTarget = rel(root, owner.file) + '::' + owner.key;
             certainty = 'resolved-interprocedural-callback-argument';
