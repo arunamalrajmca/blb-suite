@@ -48,7 +48,7 @@ function collectExportsAndImports(ast,file){
       for(const s of n.specifiers||[]){if(n.source)imports.push({source:n.source.value,imported:s.local.name||s.local.value,exported:s.exported.name||s.exported.value,reexport:true});else exports.set(s.exported.name||s.exported.value,s.local.name||s.local.value);}
     }
     if(n.type==='ExportDefaultDeclaration')exports.set('default',n.declaration.type==='Identifier'?n.declaration.name:((n.declaration.type==='FunctionDeclaration'||n.declaration.type==='ClassDeclaration')&&n.declaration.id?n.declaration.id.name:null));
-    if(n.type==='ExportAllDeclaration'&&n.source)imports.push({source:n.source.value,reexportAll:true});
+    if(n.type==='ExportAllDeclaration'&&n.source){if(n.exported)imports.push({source:n.source.value,imported:'*',exported:n.exported.name||n.exported.value,reexportNamespace:true});else imports.push({source:n.source.value,reexportAll:true});}
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='MemberExpression'){
       const obj=n.left.object.type==='Identifier'?n.left.object.name:null;
       const key=n.left.computed&&n.left.property.type==='Literal'?String(n.left.property.value):(!n.left.computed?n.left.property.name:null);
@@ -70,18 +70,24 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
     return {file,local:typeof local==='string'?local:null};
   }
   const next=new Set(active);next.add(key);
+  const explicit=data.imports.filter(item=>(item.reexport||item.reexportNamespace)&&item.exported===name);
+  if(explicit.length){
+    const candidates=new Map();
+    for(const item of explicit){
+      const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
+      const origin=item.reexportNamespace?{file:target,local:null,namespace:true,namespaceTarget:target}:
+        resolveExportOrigin(target,item.imported,meta,files,next);
+      if(origin)candidates.set(origin.namespace?'namespace::'+origin.namespaceTarget:origin.file+'::'+(origin.local||'[anonymous]'),origin);
+    }
+    return candidates.size===1?[...candidates.values()][0]:null;
+  }
   const candidates=new Map();
   for(const item of data.imports){
-    if(!item.reexport&&!item.reexportAll)continue;
-    const target=resolveLocal(file,item.source,new Set(files));
-    if(!target)continue;
-    if(item.reexport&&item.exported===name){
-      const origin=resolveExportOrigin(target,item.imported,meta,files,next);
-      if(origin)candidates.set(origin.file+'::'+(origin.local||'[anonymous]'),origin);
-    }else if(item.reexportAll&&name!=='default'){
-      const origin=resolveExportOrigin(target,name,meta,files,next);
-      if(origin)candidates.set(origin.file+'::'+(origin.local||'[anonymous]'),origin);
-    }
+    if(!item.reexportAll)continue;
+    if(name==='default')continue;
+    const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
+    const origin=resolveExportOrigin(target,name,meta,files,next);
+    if(origin)candidates.set(origin.namespace?'namespace::'+origin.namespaceTarget:origin.file+'::'+(origin.local||'[anonymous]'),origin);
   }
   return candidates.size===1?[...candidates.values()][0]:null;
 }
@@ -94,7 +100,7 @@ function exportedNames(file,meta,files,seen=new Set()){
     if(!item.reexport&&!item.reexportAll)continue;
     const target=resolveLocal(file,item.source,new Set(files));
     if(!target)continue;
-    if(item.reexport)names.add(item.exported);
+    if(item.reexport||item.reexportNamespace)names.add(item.exported);
     if(item.reexportAll)for(const name of exportedNames(target,meta,files,next))if(name!=='default')names.add(name);
   }
   return names;
@@ -112,6 +118,10 @@ function analyzeCrossModule(root,files){
       else externalImports.push(entry);
       continue;
     }
+    if(item.reexportNamespace){
+      links.push({from:path.relative(root,file),to:path.relative(root,target),imported:'*',exported:item.exported,exportedLocal:null,originFile:path.relative(root,target),namespace:true,unresolvedExport:false,reexport:true});
+      continue;
+    }
     if(item.reexportAll){
       for(const name of exportedNames(target,meta,files)){
         if(name==='default')continue;
@@ -126,7 +136,7 @@ function analyzeCrossModule(root,files){
       local:item.local||null,exportedLocal:origin?.local??null,
       originFile:origin?path.relative(root,origin.file):null,
       unresolvedExport:item.imported!=='*'&&!origin,dynamic:!!item.dynamic,line:item.line||null,
-      reexport:!!item.reexport
+      reexport:!!item.reexport,namespace:!!origin?.namespace
     });
   }
   for(const [file,data] of meta)for(const item of data.imports){
@@ -142,10 +152,17 @@ function analyzeCrossModule(root,files){
       });
       continue;
     }
-    const origin=originFor(target,item.imported);if(!origin||!origin.local)continue;
+    const origin=originFor(target,item.imported);if(!origin)continue;
     visit(asts.get(file),node=>{
       if(node.type!=='MemberExpression'||node.object.type!=='Identifier'||node.object.name!==item.local)return;
       const property=node.computed?(node.property.type==='Literal'&&(typeof node.property.value==='string'||typeof node.property.value==='number')?String(node.property.value):null):(node.property.name||null);
+      if(origin.namespace){
+        const memberOrigin=property===null?null:originFor(origin.namespaceTarget,property);
+        const entry={from:path.relative(root,file),to:path.relative(root,memberOrigin?.file||origin.namespaceTarget),local:item.local,exportedLocal:memberOrigin?.local??null,property,line:node.loc.start.line,namespace:true,unresolvedExport:property!==null&&!memberOrigin};
+        if(property===null||!memberOrigin)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
+        return;
+      }
+      if(!origin.local)return;
       const entry={from:path.relative(root,file),to:path.relative(root,origin.file),local:item.local,exportedLocal:origin.local,property,line:node.loc.start.line};
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
     });
@@ -189,9 +206,9 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     const localVariable=getTop(file,item.local);
     const target=resolveLocal(file,item.source,new Set(files));
     if(!localVariable||!target)continue;
-    if(item.imported==='*'||item.reexport)continue;
+    if(item.imported==='*'||item.reexport||item.reexportNamespace)continue;
     const origin=resolveExportOrigin(target,item.imported,meta,files);
-    if(!origin||!origin.local)continue;
+    if(!origin||!origin.local||origin.namespace)continue;
     const targetVariable=getTop(origin.file,origin.local);
     if(!targetVariable)continue;
     importsForVariable.set(localVariable,{file,target:origin.file,exportedLocal:origin.local,imported:item.imported,targetVariable});
