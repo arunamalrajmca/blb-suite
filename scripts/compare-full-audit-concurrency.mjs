@@ -114,7 +114,7 @@ try {
     }
     const expected = new Set(scheduled.map(entry => {
       const match = entry.match(/^\s*\[([^\]]+)\] › ([^\s]+\.spec\.js):(\d+):(\d+) › (.*)$/);
-      return match ? [match[1], match[2], Number(match[3]), Number(match[4]), match[5]].join('|') : null;
+      return match ? [match[1], match[2], Number(match[3]), Number(match[4]), path.basename(match[2]) + ' › ' + match[5]].join('|') : null;
     }).filter(Boolean));
     const missing = [...expected].filter(key => !byKey.has(key));
     const extra = [...byKey.keys()].filter(key => !expected.has(key));
