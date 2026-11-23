@@ -1040,7 +1040,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression') {
         const callee = node.callee;
-        const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') parts.unshift(n.name); return parts.filter(Boolean).join('.'); };
+        const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') { const key = bindings.get(n); parts.unshift(key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : n.name); } return parts.filter(Boolean).join('.'); };
         if (callee.type === 'Identifier' && callee.name === 'fetchPackagedJsonAssignment') {
           const spec = staticValue(node.arguments[0], constants, 0, bindings);
           const target = typeof spec === 'string' ? resolveInjected(spec) : null;
