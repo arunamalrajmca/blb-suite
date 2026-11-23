@@ -24,8 +24,8 @@ function literalString(n,file,pathIdentifiers=null) {
   if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers),b=literalString(n.right,file,pathIdentifiers);return a===null||b===null?null:a+b;}
   if(n.type==='Identifier'&&n.name==='__dirname')return path.dirname(file);
   if(n.type==='Identifier'&&n.name==='__filename')return file;
-  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.name==='path'&&['join','resolve'].includes(n.callee.property.name)){
-    const parts=n.arguments.map(x=>literalString(x,file));if(parts.some(x=>x===null))return null;
+  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(n.callee.object.name))&&['join','resolve'].includes(n.callee.property.name)){
+    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers));if(parts.some(x=>x===null))return null;
     return n.callee.property.name==='join'?path.join(...parts):path.resolve(...parts);
   }
   return null;
