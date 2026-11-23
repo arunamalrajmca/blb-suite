@@ -408,9 +408,14 @@ test('worker restart preserves web menu visibility while click-time eligibility 
     const originalPageEnabled = isPageButtonEnabledForHostname;
     const updates = [];
     try {
+      // Drain startup initialization before replacing the shared promise.
+      // Otherwise this test may reuse an in-flight startup promise and observe
+      // no call to the update stub installed below, depending on worker timing.
+      if (selectionMenuEnsurePromise) await selectionMenuEnsurePromise;
       // A restarted MV3 worker begins with this in-memory flag reset even
       // though the browser-owned context-menu item and its visibility persist.
       selectionMenuKnownPresent = false;
+      selectionMenuEnsurePromise = null;
       chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
       const ensured = await ensureWebSelectionContextMenu();
 
