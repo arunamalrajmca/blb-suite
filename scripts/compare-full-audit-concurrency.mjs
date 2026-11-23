@@ -43,7 +43,7 @@ function collectTests(report) {
           const file = spec.file || suite.file || '';
           const line = spec.line || 0;
           const column = spec.column || 0;
-          const title = [...suiteTitles, spec.title].filter(Boolean).join(' › ');
+          const title = [...suiteTitles.filter(value => value !== path.basename(file)), spec.title].filter(Boolean).join(' › ');
           found.push({
             key: [test.projectName || '', file, line, column, title].join('|'),
             project: test.projectName || '', file, line, column, title, status,
