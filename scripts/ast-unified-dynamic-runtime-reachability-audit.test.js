@@ -964,3 +964,28 @@ test('does not treat shadowed reflection namespaces as global APIs when destruct
   assert.equal(result.uncertainty.filter(item =>
     ['reflective-property-operation', 'reflective-property-enumeration', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
 });
+
+test('propagates chained reflection-method and revocable-proxy aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const reflection = Reflect;',
+      'const firstRead = reflection.get;',
+      'const read = firstRead;',
+      'const objectApi = Object;',
+      'const firstDefine = objectApi.defineProperty;',
+      'const define = firstDefine;',
+      'const revocable = Proxy.revocable;',
+      'const createRevocable = revocable;',
+      'read(target, key);',
+      'define(target, key, descriptor);',
+      'createRevocable(target, handler);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const kinds = result.uncertainty.map(item => item.kind);
+  assert.ok(kinds.includes('reflective-property-operation'));
+  assert.ok(kinds.includes('prototype-or-descriptor-mutation'));
+  assert.ok(kinds.includes('proxy-construction'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
