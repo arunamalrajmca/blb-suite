@@ -25,6 +25,7 @@ export const featureSpecs = [
     paths: ["extension/background.js"],
     specs: [
       "tests/browser/popup-master-toggle-regression.spec.js",
+      "tests/browser/master-toggle-four-action-recovery.spec.js",
       "tests/browser/popup-site-toggle-independence.spec.js",
       "tests/browser/facebook-selection-parser.spec.js",
       "tests/browser/substack-selection-parser.spec.js",
@@ -230,6 +231,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-hostnames.spec.js",
   "tests/browser/performance.spec.js",
   "tests/browser/performance-batch.spec.js",
   "tests/browser/site-feature-defaults.spec.js",
+  "tests/browser/master-toggle-four-action-recovery.spec.js",
   ,
   "tests/browser/webster-collector-behavior.spec.js",
   "tests/browser/blb-auto-hyperlinker.spec.js",
@@ -263,6 +265,7 @@ export const studySessionSpecs = new Set(["tests/browser/feature-lifecycle-regre
 export const togglePermissionSpecs = new Set([
   "tests/browser/popup-site-toggle-independence.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/master-toggle-four-action-recovery.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/optional-host-permission-lifecycle.spec.js"
 ]);
@@ -300,6 +303,7 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/site-feature-defaults.spec.js",
   "tests/browser/popup-site-toggle-independence.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/master-toggle-four-action-recovery.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/optional-host-permission-lifecycle.spec.js",
   "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
@@ -333,7 +337,8 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/omnibox-dictionary-routing.spec.js",
   "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js",
-  "tests/browser/source-page-button-redirect-separation.spec.js"
+  "tests/browser/source-page-button-redirect-separation.spec.js",
+  "tests/browser/master-toggle-four-action-recovery.spec.js"
 ]);
 
 

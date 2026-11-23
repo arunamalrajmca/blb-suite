@@ -356,6 +356,9 @@ test('right-click action remains usable after the service worker restarts with a
       // Simulate a fresh MV3 worker: its in-memory flag resets, while the
       // browser-owned context-menu item and its visible state survive.
       selectionMenuKnownPresent = false;
+      // Isolate the simulated restarted worker from any earlier in-flight
+      // initialization left by another test sharing this extension worker.
+      selectionMenuEnsurePromise = null;
       chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
       isSuiteEnabled = async () => true;
       getActiveTabSelection = async () => 'Romans 8:28';
@@ -399,6 +402,7 @@ test('worker restart preserves web menu visibility while click-time eligibility 
   const result = await extensionWorker.evaluate(async () => {
     const originalUpdate = chrome.contextMenus.update;
     const originalKnownPresent = selectionMenuKnownPresent;
+    const originalEnsurePromise = selectionMenuEnsurePromise;
     const originalSuiteEnabled = isSuiteEnabled;
     const originalPermissionCheck = hasSelectionActionPermissionForTab;
     const originalPageEnabled = isPageButtonEnabledForHostname;
@@ -425,6 +429,7 @@ test('worker restart preserves web menu visibility while click-time eligibility 
     } finally {
       chrome.contextMenus.update = originalUpdate;
       selectionMenuKnownPresent = originalKnownPresent;
+      selectionMenuEnsurePromise = originalEnsurePromise;
       isSuiteEnabled = originalSuiteEnabled;
       hasSelectionActionPermissionForTab = originalPermissionCheck;
       isPageButtonEnabledForHostname = originalPageEnabled;

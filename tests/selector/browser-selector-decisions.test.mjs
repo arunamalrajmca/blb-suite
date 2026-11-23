@@ -101,6 +101,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/replaced-tab-lifecycle-races.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-clipboard-reference-pattern.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/master-toggle-four-action-recovery.spec.js", "import { test } from './fixtures';\n");
   put(root, "tests/browser/popup-master-toggle-regression.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/popup-site-toggle-independence.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/facebook-selection-parser.spec.js", "import { test } from '@playwright/test';\n");

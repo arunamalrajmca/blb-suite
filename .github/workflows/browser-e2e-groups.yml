@@ -91,6 +91,7 @@ jobs:
           - tests/browser/popup-master-toggle-regression.spec.js
           - tests/browser/redirect-toggle-isolation.spec.js
           - tests/browser/optional-host-permission-lifecycle.spec.js
+          - tests/browser/master-toggle-four-action-recovery.spec.js
     steps:
       - uses: actions/checkout@v5
         with:

@@ -149,3 +149,81 @@ test('propagates literal computed-property keys through function parameters',()=
   assert.equal(r.interprocedural.dynamicPropertyReferences.filter(x=>x.from==='helper.js').length,0);
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('records statically composed dynamic imports as cross-module execution edges',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-edge-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import('./' + 'service.js');");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true&&x.imported==='*'));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('retains nonliteral dynamic imports as explicit cross-module uncertainty',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-unknown-'));
+ try{
+  fs.writeFileSync(path.join(root,'consumer.js'),"import('./plugins/' + process.env.PLUGIN);");
+  const files=[path.join(root,'consumer.js')],r=analyzeCrossModule(root,files);
+  assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('classifies literal bare-specifier dynamic imports as external packages',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-package-'));
+ try{
+  fs.writeFileSync(path.join(root,'consumer.js'),"import('some-package');");
+  const files=[path.join(root,'consumer.js')],r=analyzeCrossModule(root,files);
+  assert.ok(r.externalImports.some(x=>x.file==='consumer.js'&&x.source==='some-package'&&x.dynamic===true));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('resolves statically composed absolute dynamic imports from path.join and __dirname',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-absolute-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import nodePath from 'node:path';\nimport(nodePath.join(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('preserves dynamic import source line numbers for resolved and unresolved targets',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-lines-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const first = true;\nimport('./service.js');\nimport(runtimeTarget);");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.dynamic===true&&x.line===2));
+  assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.line===3));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('does not treat an unrelated shadowed path object as a Node path module',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-shadowed-path-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const path = { join: (a, b) => a + b };\nimport(path.join(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('resolves CommonJS node:path bindings for dynamic import expressions',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-cjs-path-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const path = require('node:path');\nimport(path.resolve(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});

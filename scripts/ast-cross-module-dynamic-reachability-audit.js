@@ -17,24 +17,31 @@ function walk(root) {
 }
 function parse(s,f) { let err; for(const sourceType of ['script','module']) try{return acorn.parse(s,{ecmaVersion:'latest',sourceType,locations:true,ranges:true,allowHashBang:true});}catch(e){err=e;} throw new Error(f+': '+err.message); }
 function visit(n,fn,p=null) { if(!n||typeof n!=='object'||typeof n.type!=='string')return; fn(n,p); for(const [k,v] of Object.entries(n)){if(['loc','start','end','range'].includes(k))continue;if(Array.isArray(v))v.forEach(x=>visit(x,fn,n));else if(v&&typeof v.type==='string')visit(v,fn,n);} }
-function literalString(n,file) {
+function literalString(n,file,pathIdentifiers=null) {
   if(!n)return null;
   if(n.type==='Literal'&&typeof n.value==='string')return n.value;
   if(n.type==='TemplateLiteral'&&!n.expressions.length)return n.quasis[0].value.cooked;
-  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file),b=literalString(n.right,file);return a===null||b===null?null:a+b;}
+  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers),b=literalString(n.right,file,pathIdentifiers);return a===null||b===null?null:a+b;}
   if(n.type==='Identifier'&&n.name==='__dirname')return path.dirname(file);
   if(n.type==='Identifier'&&n.name==='__filename')return file;
-  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.name==='path'&&['join','resolve'].includes(n.callee.property.name)){
-    const parts=n.arguments.map(x=>literalString(x,file));if(parts.some(x=>x===null))return null;
+  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(n.callee.object.name))&&['join','resolve'].includes(n.callee.property.name)){
+    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers));if(parts.some(x=>x===null))return null;
     return n.callee.property.name==='join'?path.join(...parts):path.resolve(...parts);
   }
   return null;
 }
-function resolveLocal(from,spec,files){if(!spec||!spec.startsWith('.'))return null;const b=path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
-function collectExportsAndImports(ast){
-  const exports=new Map(),imports=[];
+function resolveLocal(from,spec,files){if(!spec||(!path.isAbsolute(spec)&&!spec.startsWith('.')))return null;const b=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
+function collectExportsAndImports(ast,file){
+  const exports=new Map(),imports=[],pathIdentifiers=new Set();
+  visit(ast,n=>{
+    if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
+      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(specifier.local.name);
+    }
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(n.id.name);
+  });
   visit(ast,(n,parent)=>{
     if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
+    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true});
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
@@ -55,15 +62,15 @@ function collectExportsAndImports(ast){
 }
 function analyzeCrossModule(root,files){
   const asts=new Map(files.map(f=>[f,parse(fs.readFileSync(f,'utf8'),f)]));
-  const meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast)]));
+  const meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast,f)]));
   const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
   for(const [file,data] of meta)for(const i of data.imports){
     const target=resolveLocal(file,i.source,new Set(files));
-    if(!target){const item={file:path.relative(root,file),source:i.source};if(i.source.startsWith('.')||path.isAbsolute(i.source))unresolved.push(item);else externalImports.push(item);continue;}
+    if(!target){const item={file:path.relative(root,file),source:i.source,dynamic:!!i.dynamic,line:i.line||null};if((i.dynamic&&i.source===null)||(typeof i.source==='string'&&(i.source.startsWith('.')||path.isAbsolute(i.source))))unresolved.push(item);else externalImports.push(item);continue;}
     const exp=meta.get(target).exports;
     if(i.reexportAll){for(const [name,local] of exp)links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:local,reexport:true});continue;}
     const local=exp.get(i.imported);
-    links.push({from:path.relative(root,file),to:path.relative(root,target),imported:i.imported,local:i.local||null,exportedLocal:local===undefined?null:local,unresolvedExport:i.imported!=='*'&&local===undefined});
+    links.push({from:path.relative(root,file),to:path.relative(root,target),imported:i.imported,local:i.local||null,exportedLocal:local===undefined?null:local,unresolvedExport:i.imported!=='*'&&local===undefined,dynamic:!!i.dynamic,line:i.line||null});
   }
   for(const [file,data] of meta) for(const item of data.imports){
     if(!item.local||item.imported==='*') continue;
