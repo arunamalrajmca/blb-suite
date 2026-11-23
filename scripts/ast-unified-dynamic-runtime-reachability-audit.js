@@ -752,10 +752,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'VariableDeclarator' && node.init) {
         const target = node.id.type === 'Identifier' ? bindings.get(node.id) : null;
         if (target && node.init.type === 'Identifier') {
-          if (node.init.name === 'Proxy') proxyConstructorBindings.add(target);
-          if (node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
-          if (node.init.name === 'Object') objectNamespaceBindings.add(target);
           const source = bindings.get(node.init);
+          // Unresolved identifiers denote the global built-ins. A resolved
+          // binding with the same spelling is a local shadow and must not be
+          // promoted into a global API alias.
+          if (!source && node.init.name === 'Proxy') proxyConstructorBindings.add(target);
+          if (!source && node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
+          if (!source && node.init.name === 'Object') objectNamespaceBindings.add(target);
           if (source && proxyConstructorBindings.has(source)) proxyConstructorBindings.add(target);
           if (source && reflectNamespaceBindings.has(source)) reflectNamespaceBindings.add(target);
           if (source && objectNamespaceBindings.has(source)) objectNamespaceBindings.add(target);
@@ -791,6 +794,29 @@ function analyze(root = path.resolve(__dirname, '..')) {
             }
           }
         }
+      }
+      // Assignment-based aliases are common in lazy initialization and
+      // conditional setup. Track only direct, binding-resolved identifier targets.
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'Identifier' && node.right.type === 'Identifier') {
+        const target = bindings.get(node.left), source = bindings.get(node.right);
+        if (target && !source && node.right.name === 'Proxy') proxyConstructorBindings.add(target);
+        if (target && !source && node.right.name === 'Reflect') reflectNamespaceBindings.add(target);
+        if (target && !source && node.right.name === 'Object') objectNamespaceBindings.add(target);
+        if (target && source && proxyConstructorBindings.has(source)) proxyConstructorBindings.add(target);
+        if (target && source && reflectNamespaceBindings.has(source)) reflectNamespaceBindings.add(target);
+        if (target && source && objectNamespaceBindings.has(source)) objectNamespaceBindings.add(target);
+        if (target && source && reflectMethodBindings.has(source)) reflectMethodBindings.set(target, reflectMethodBindings.get(source));
+        if (target && source && objectMethodBindings.has(source)) objectMethodBindings.set(target, objectMethodBindings.get(source));
+        if (target && source && proxyRevocableBindings.has(source)) proxyRevocableBindings.add(target);
+      }
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'Identifier' && node.right.type === 'MemberExpression') {
+        const target = bindings.get(node.left), api = runtimeMetaPath(node.right);
+        if (target && /(?:^|\\.)Reflect\\./.test(api)) reflectMethodBindings.set(target, api.slice(api.lastIndexOf('Reflect.') + 8));
+        if (target && /(?:^|\\.)Object\\./.test(api)) objectMethodBindings.set(target, api.slice(api.lastIndexOf('Object.') + 7));
+        if (target && (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable'))) proxyRevocableBindings.add(target);
+        if (target && ['globalThis.Proxy','window.Proxy','self.Proxy'].includes(api)) proxyConstructorBindings.add(target);
       }
       if ((node.type === 'NewExpression' && runtimeMetaPath(node.callee) === 'Proxy') ||
           (node.type === 'CallExpression' && runtimeMetaPath(node.callee) === 'Proxy.revocable')) {
