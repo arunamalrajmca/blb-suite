@@ -616,6 +616,43 @@ test('keeps unresolved worker URLs explicitly uncertain within the creating root
   ));
 });
 
+
+test('keeps registration options passed through a cross-module wrapper explicitly uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': "import { install } from './registration.js'; install(buildEntries());",
+    'extension/registration.js': "export function install(entries) { chrome.scripting.registerContentScripts(entries); }",
+    'extension/scripts/runtime.js': 'globalThis.runtime = true;'
+  });
+  const unknown = result.uncertainty.find(item =>
+    item.file === 'extension/registration.js' && item.kind === 'chrome.scripting.registerContentScripts'
+  );
+  assert.ok(unknown);
+  assert.ok(unknown.affectedRoots.includes('extension/background.js'));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'extension/scripts/runtime.js' && item.affectedRoots.includes('extension/background.js')
+  ));
+  assert.ok(!edge(result, 'chrome.scripting.registerContentScripts', 'extension/registration.js', 'extension/scripts/runtime.js'));
+});
+
+test('resolves callback ownership through a two-module forwarding chain and re-export barrel', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function attach(handler) { chrome.runtime.onMessage.addListener(handler); }',
+    'scripts/forwarder.js': "import { attach } from './registrar.js'; export function forward(callback) { attach(callback); }",
+    'scripts/barrel.js': "export { forward as register } from './forwarder.js';",
+    'scripts/main.js': "import { register } from './barrel.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
 test('does not treat executeScript inline func bodies as unresolved file targets', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
