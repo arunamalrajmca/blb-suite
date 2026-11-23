@@ -3,8 +3,8 @@ const { test, expect } = require('./fixtures');
 test('master OFF-to-ON recovery preserves all four reference actions and opens the same KJV destination', async ({
   page, extensionWorker, extensionStorage
 }) => {
-  const sourceUrl = 'https://example.com/__blb-suite-regression__/master-toggle-four-actions';
-  const originPattern = 'https://example.com/*';
+  const sourceUrl = 'https://christianity.com/__blb-suite-regression__/master-toggle-four-actions';
+  const originPattern = 'https://christianity.com/*';
   const expectedPath = '/kjv/jhn/3/16/';
   const previous = await extensionWorker.evaluate(async () => chrome.storage.local.get({
     masterEnabled:true,
@@ -43,10 +43,10 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
     await extensionStorage.set({
       masterEnabled:true,
       redirectEnabled:false,
-      pageSelectionButtonSites:{'example.com':true},
-      doubleClickBlbSites:{'example.com':true}
+      pageSelectionButtonSites:{'christianity.com':true},
+      doubleClickBlbSites:{'christianity.com':true}
     });
-    await page.route('https://example.com/**', route => route.fulfill({
+    await page.route('https://christianity.com/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
       body:'<!doctype html><html><head><title>Master toggle four-action regression</title></head><body><main id="article"></main></body></html>'
