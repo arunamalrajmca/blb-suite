@@ -645,6 +645,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
     const scriptingNamespaceBindings = new Set(), scriptingLoaderMethodBindings = new Map();
     const proxyConstructorBindings = new Set(), reflectNamespaceBindings = new Set(), objectNamespaceBindings = new Set();
+    const reflectMethodBindings = new Map(), objectMethodBindings = new Map(), proxyRevocableBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
     const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
@@ -670,6 +671,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (key && proxyConstructorBindings.has(key)) return 'Proxy';
         if (key && reflectNamespaceBindings.has(key)) return 'Reflect';
         if (key && objectNamespaceBindings.has(key)) return 'Object';
+        if (key && reflectMethodBindings.has(key)) return 'Reflect.' + reflectMethodBindings.get(key);
+        if (key && objectMethodBindings.has(key)) return 'Object.' + objectMethodBindings.get(key);
+        if (key && proxyRevocableBindings.has(key)) return 'Proxy.revocable';
         // A resolved lexical binding shadows the corresponding global name.
         return key ? 'local:' + node.name : node.name;
       }
@@ -745,8 +749,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (parent) parents.set(node, parent);
       // Track direct aliases of the reflective primitives. This is deliberately
       // binding-aware: same-spelled local variables do not become global APIs.
-      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
-        const target = bindings.get(node.id);
+      if (node.type === 'VariableDeclarator' && node.init) {
+        const target = node.id.type === 'Identifier' ? bindings.get(node.id) : null;
         if (target && node.init.type === 'Identifier') {
           if (node.init.name === 'Proxy') proxyConstructorBindings.add(target);
           if (node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
@@ -759,9 +763,32 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && node.init.type === 'MemberExpression') {
           const api = runtimeMetaPath(node.init);
           if (api === 'globalThis.Proxy' || api === 'window.Proxy' || api === 'self.Proxy') proxyConstructorBindings.add(target);
+          const reflectMethod = api.startsWith('Reflect.') ? api.slice(8) : '';
+          const objectMethod = api.startsWith('Object.') ? api.slice(7) : '';
+          if (reflectMethod) reflectMethodBindings.set(target, reflectMethod);
+          if (objectMethod) objectMethodBindings.set(target, objectMethod);
+          if (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable')) proxyRevocableBindings.add(target);
+        }
+        // Destructured aliases such as const { get: read } = Reflect.
+        if (node.id.type === 'ObjectPattern') {
+          const namespace = runtimeMetaPath(node.init);
+          if (['Reflect', 'globalThis.Reflect', 'window.Reflect', 'self.Reflect'].includes(namespace) ||
+              ['Object', 'globalThis.Object', 'window.Object', 'self.Object'].includes(namespace)) {
+            for (const property of node.id.properties || []) {
+              if (property.type !== 'Property' || (property.computed && property.key.type !== 'Literal')) continue;
+              const name = property.computed ? String(property.key.value) : property.key.name;
+              const local = property.value.type === 'AssignmentPattern' ? property.value.left : property.value;
+              if (local.type !== 'Identifier') continue;
+              const localKey = bindings.get(local);
+              if (!localKey) continue;
+              if (namespace.endsWith('Reflect')) reflectMethodBindings.set(localKey, name);
+              else objectMethodBindings.set(localKey, name);
+            }
+          }
         }
       }
-      if (node.type === 'NewExpression' && runtimeMetaPath(node.callee) === 'Proxy') {
+      if ((node.type === 'NewExpression' && runtimeMetaPath(node.callee) === 'Proxy') ||
+          (node.type === 'CallExpression' && runtimeMetaPath(node.callee) === 'Proxy.revocable')) {
         addMetaUncertainty(node, 'proxy-construction', 'Proxy traps can synthesize property reads, writes, enumeration, descriptors, and callable/constructable behavior.');
       }
       if (node.type === 'CallExpression') {
