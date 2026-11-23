@@ -54,7 +54,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
 
-      - name: Upload serial and parallel comparison evidence
+      - name: Upload complete-inventory screening evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
