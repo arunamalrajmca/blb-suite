@@ -49,7 +49,7 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
     await page.route('https://christianity.com/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
-      body:'<!doctype html><html><head><title>Master toggle four-action regression</title></head><body><main id="article"></main></body></html>'
+      body:'<!doctype html><html><head><title>Master toggle four-action regression</title></head><body><article id="article" class="article-content"></article></body></html>'
     }));
     await page.goto(sourceUrl,{waitUntil:'domcontentloaded'});
 
