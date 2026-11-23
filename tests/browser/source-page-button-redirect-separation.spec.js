@@ -1145,3 +1145,83 @@ test('Suite master opt-out removes both registered worlds for guarded source hos
     settings:finalDiagnostics.settings,registrations:finalDiagnostics.registrations
   }));
 });
+
+test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB destination tab', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+
+  for (const host of ['sagacityweb.com','rediscover.bible']) {
+    const destinationUrl = host === 'rediscover.bible'
+      ? 'https://www.blueletterbible.org/search/preSearch.cfm?Criteria=Acts+1%3A1-7%3A59&t=ESV'
+      : 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    const referenceLabel = host === 'rediscover.bible' ? 'Acts 1:1–7:59' : 'John 3:16';
+    const homepage = 'https://' + host + '/';
+    const article = host === 'sagacityweb.com'
+      ? 'https://sagacityweb.com/the-digital-harlot-resisting-the-seduction-of-modern-babylon/'
+      : 'https://rediscover.bible/acts_intro.html';
+
+    await page.route('https://' + host + '/**', route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:'<!doctype html><html><head><title>Source reference fixture</title></head><body>' +
+        '<main><a id="bible-reference" target="_blank" href="' + destinationUrl +
+        '">' + referenceLabel + '</a></main></body></html>'
+    }));
+    await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:'<!doctype html><html><head><title>BLB destination</title></head><body>John 3:16 KJV</body></html>'
+    }));
+
+    await page.goto(homepage, {waitUntil:'domcontentloaded'});
+    const originPattern = 'https://' + host + '/*';
+    await expect.poll(() => extensionWorker.evaluate(async pattern => {
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const [isolated, mainWorld] = await Promise.all([
+        chrome.scripting.getRegisteredContentScripts({ids:[id]}),
+        chrome.scripting.getRegisteredContentScripts({ids:[id + '-main-world']})
+      ]);
+      return Boolean(isolated[0]?.js?.includes('content.js') &&
+        mainWorld[0]?.world === 'MAIN');
+    }, originPattern), {timeout:15000}).toBe(true);
+
+    await page.goto(article, {waitUntil:'domcontentloaded'});
+    await expect(page.locator('#bible-reference')).toBeVisible();
+    await expect.poll(() => page.evaluate(() =>
+      globalThis.__blbSourcePassageClickGuardInstalled === true
+    ), {timeout:10000}).toBe(true);
+
+    await page.locator('#bible-reference').click();
+    await expect.poll(() => extensionWorker.evaluate(async target => {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      return tabs.filter(tab => (tab.url || tab.pendingUrl || '') === target).length;
+    }, destinationUrl)).toBe(1);
+
+    const firstDestinationTab = await extensionWorker.evaluate(async target => {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      return tabs.find(tab => (tab.url || tab.pendingUrl || '') === target)?.id ?? null;
+    }, destinationUrl);
+    expect(firstDestinationTab).not.toBeNull();
+
+    await page.locator('#bible-reference').click();
+    await expect.poll(() => extensionWorker.evaluate(async target => {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      const matches = tabs.filter(tab => (tab.url || tab.pendingUrl || '') === target);
+      const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      return {count:matches.length, activeId:active?.id ?? null, matchId:matches[0]?.id ?? null};
+    }, destinationUrl)).toEqual({
+      count:1,
+      activeId:firstDestinationTab,
+      matchId:firstDestinationTab
+    });
+
+    await expect(page).toHaveURL(article);
+  }
+});
+

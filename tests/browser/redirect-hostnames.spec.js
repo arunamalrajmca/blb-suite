@@ -82,6 +82,8 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
     'gotquestions.org',
     'mercyhouseministry.com',
     'openbible.info',
+    'rediscover.bible',
+    'sagacityweb.com',
     'sarata.com'
   ]);
   const sharedCollectorHosts = Object.entries(registry)

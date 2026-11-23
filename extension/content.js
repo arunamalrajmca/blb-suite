@@ -243,6 +243,8 @@ function formatSourceBibleBookName(book) {
 
 function parseRef(text) {
   const value=decodeSafe(text).trim()
+    // Normalize Unicode range dashes used by source-page verse citations.
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
     // Normalize any supported verse cue before parsing the numeric reference.
     .replace(
       new RegExp(String.raw`\b${VERSE_CUE_TOKEN_SOURCE}\s*(?:\(\s*(\d+)\s*\)|(\d+))`, 'gi'),
@@ -250,7 +252,7 @@ function parseRef(text) {
     );
   // Accept normal references and BiblePortal's dotted form, e.g.
   // John 3:16, John 3 16, and John.3.16.
-  const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)(?:-(\d+))?)?$/);
+  const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)[a-z]?(?:-(\d+)[a-z]?)?)?$/i);
   return m ? {book:m[1].trim(),chapter:Number(m[2]),from:m[3]?Number(m[3]):1,to:m[4]?Number(m[4]):null} : null;
 }
 
@@ -352,6 +354,20 @@ function installChristianityLinkRedirect(isEnabled) {
     const label = String(typeof detail?.label === "string" ? detail.label : "").replace(/\s+/g, " ").trim();
     const host = String(location.hostname || "").toLowerCase().replace(/^www\./, "");
     let target = christianityBibleLinkTarget(href);
+    // Rediscover and Sagacity often link directly to BLB's search endpoint.
+    // Preserve that exact destination (including cross-chapter Criteria ranges)
+    // instead of forcing it through the single-chapter label parser.
+    if (!target && ["rediscover.bible", "sagacityweb.com"].includes(host)) {
+      try {
+        const linkedUrl = new URL(href, location.href);
+        const linkedHost = linkedUrl.hostname.toLowerCase().replace(/^www\./, "");
+        if (["blueletterbible.org", "blueletterbible.com"].includes(linkedHost) &&
+            (/^\/search\/preSearch\.cfm$/i.test(linkedUrl.pathname) ||
+             /^\/kjv\/[^/]+\/\d+(?:\/\d+(?:-\d+)?)?\/?$/i.test(linkedUrl.pathname))) {
+          target = linkedUrl.href;
+        }
+      } catch (_) {}
+    }
     if (!target && host === "sarata.com") target = sarataBibleLinkTarget(href);
     if (!target && ["openbible.info", "crossway.org", "sarata.com"].includes(host)) {
       const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
@@ -366,7 +382,7 @@ function installChristianityLinkRedirect(isEnabled) {
       const ref = parseMercyHouseBibleLink(href);
       if (ref) target = blbUrl(ref.book, ref.chapter, ref.from, ref.to);
     }
-    if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org", "churchofjesuschrist.org", "mercyhouseministry.com"].includes(host)) {
+    if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org", "churchofjesuschrist.org", "mercyhouseministry.com", "rediscover.bible", "sagacityweb.com"].includes(host)) {
       const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
       const parsed = parseRef(cleanLabel);
       if (parsed) target = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
@@ -572,7 +588,7 @@ const REDIRECT_HOSTS = new Set([
 let sourceBibleRedirectEnabled = false;
 let sourceBibleRedirectRefreshGeneration = 0;
 let sourceBibleRedirectAttempted = false;
-if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com", "rediscover.bible", "sagacityweb.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
   installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
 }
 
