@@ -887,6 +887,10 @@ test('reports reflective property enumeration and prototype/descriptor mutation 
     'scripts/main.js': [
       'const objectApi = Object;',
       'objectApi.getOwnPropertyDescriptors(target);',
+      'objectApi.getOwnPropertyDescriptor(target, runtimeKey);',
+      'objectApi.getPrototypeOf(target);',
+      'objectApi.hasOwn(target, runtimeKey);',
+      'Reflect.getPrototypeOf(target);',
       'objectApi.defineProperty(target, runtimeKey, descriptor);',
       'Reflect.setPrototypeOf(target, proto);',
       'target.__proto__ = proto;',
