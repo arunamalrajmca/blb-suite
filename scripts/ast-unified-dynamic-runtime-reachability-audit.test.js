@@ -860,3 +860,245 @@ test('detects Node vm execution when required inline rather than bound to a name
   });
   assert.ok(result.uncertainty.some(item => item.executionBoundary === 'node-vm'));
 });
+
+test('tracks Proxy and Reflect aliases as root-scoped metaprogramming uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const makeProxy = Proxy;',
+      'const reflection = Reflect;',
+      'const proxy = new makeProxy(target, { get(object, key) { return object[key]; }, ownKeys(object) { return Reflect.ownKeys(object); } });',
+      'reflection.get(proxy, runtimeKey);',
+      'reflection.set(proxy, runtimeKey, handler);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.ok(result.uncertainty.some(item => item.kind === 'proxy-construction'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'reflective-property-operation'));
+  for (const item of result.uncertainty.filter(item =>
+    ['proxy-construction', 'reflective-property-operation'].includes(item.kind))) {
+    assert.deepEqual(item.affectedRoots, ['scripts/main.js']);
+  }
+});
+
+test('reports reflective property enumeration and prototype/descriptor mutation APIs', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const objectApi = Object;',
+      'objectApi.getOwnPropertyDescriptors(target);',
+      'objectApi.getOwnPropertyDescriptor(target, runtimeKey);',
+      'objectApi.getPrototypeOf(target);',
+      'objectApi.hasOwn(target, runtimeKey);',
+      'Reflect.getPrototypeOf(target);',
+      'objectApi.defineProperty(target, runtimeKey, descriptor);',
+      'Reflect.setPrototypeOf(target, proto);',
+      'target.__proto__ = proto;',
+      'Widget.prototype.run = handler;'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.ok(result.uncertainty.some(item => item.kind === 'reflective-property-enumeration'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'prototype-or-descriptor-mutation'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'prototype-property-mutation'));
+});
+
+test('does not misclassify shadowed Proxy, Reflect, or Object bindings as global metaprogramming APIs', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function ordinary(Proxy, Reflect, Object) {',
+      '  new Proxy(target, handler);',
+      '  Reflect.get(target, key);',
+      '  Object.defineProperty(target, key, descriptor);',
+      '}',
+      'ordinary(localProxy, localReflect, localObject);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.equal(result.uncertainty.filter(item =>
+    ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
+});
+
+test('tracks destructured and direct aliases of Reflect and Object methods plus Proxy.revocable', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const { get: read, set: write, ownKeys: keys } = Reflect;',
+      'const define = Object.defineProperty;',
+      'const { getOwnPropertyDescriptors: descriptors } = Object;',
+      'const revokeFactory = Proxy.revocable;',
+      'read(target, runtimeKey);',
+      'write(target, runtimeKey, value);',
+      'keys(target);',
+      'define(target, runtimeKey, descriptor);',
+      'descriptors(target);',
+      'revokeFactory(target, handler);',
+      'const globalRead = globalThis.Reflect.get;',
+      'globalRead(target, runtimeKey);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const kinds = result.uncertainty.map(item => item.kind);
+  assert.ok(kinds.includes('reflective-property-operation'));
+  assert.ok(kinds.includes('reflective-property-enumeration'));
+  assert.ok(kinds.includes('prototype-or-descriptor-mutation'));
+  assert.ok(kinds.includes('proxy-construction'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('does not treat shadowed reflection namespaces as global APIs when destructured', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function ordinary(Reflect, Object) {',
+      '  const { get } = Reflect;',
+      '  const { defineProperty } = Object;',
+      '  get(target, key);',
+      '  defineProperty(target, key, descriptor);',
+      '}',
+      'ordinary(localReflect, localObject);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.equal(result.uncertainty.filter(item =>
+    ['reflective-property-operation', 'reflective-property-enumeration', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
+});
+
+test('propagates chained reflection-method and revocable-proxy aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const reflection = Reflect;',
+      'const firstRead = reflection.get;',
+      'const read = firstRead;',
+      'const objectApi = Object;',
+      'const firstDefine = objectApi.defineProperty;',
+      'const define = firstDefine;',
+      'const revocable = Proxy.revocable;',
+      'const createRevocable = revocable;',
+      'read(target, key);',
+      'define(target, key, descriptor);',
+      'createRevocable(target, handler);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const kinds = result.uncertainty.map(item => item.kind);
+  assert.ok(kinds.includes('reflective-property-operation'));
+  assert.ok(kinds.includes('prototype-or-descriptor-mutation'));
+  assert.ok(kinds.includes('proxy-construction'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('tracks destructured Proxy.revocable aliases without misclassifying shadowed Proxy', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const { revocable: createRevocable } = Proxy;',
+      'createRevocable(target, handler);',
+      'function local(Proxy) { const { revocable } = Proxy; revocable(target, handler); }'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const proxies = result.uncertainty.filter(item => item.kind === 'proxy-construction');
+  assert.equal(proxies.length, 1);
+  assert.deepEqual(proxies[0].affectedRoots, ['scripts/main.js']);
+});
+
+test('tracks assignment-based aliases of reflection APIs and Proxy constructors', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let reflection;',
+      'reflection = Reflect;',
+      'let read;',
+      'read = reflection.get;',
+      'let objectApi;',
+      'objectApi = Object;',
+      'let define;',
+      'define = objectApi.defineProperty;',
+      'let createProxy;',
+      'createProxy = Proxy;',
+      'new createProxy(target, handler);',
+      'read(target, runtimeKey);',
+      'define(target, runtimeKey, descriptor);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const kinds = result.uncertainty.map(item => item.kind);
+  assert.ok(kinds.includes('proxy-construction'));
+  assert.ok(kinds.includes('reflective-property-operation'));
+  assert.ok(kinds.includes('prototype-or-descriptor-mutation'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('does not promote aliases copied from locally shadowed Proxy, Reflect, or Object parameters', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function ordinary(Proxy, Reflect, Object) {',
+      '  const makeProxy = Proxy;',
+      '  const reflection = Reflect;',
+      '  const objectApi = Object;',
+      '  new makeProxy(target, handler);',
+      '  reflection.get(target, key);',
+      '  objectApi.defineProperty(target, key, descriptor);',
+      '}',
+      'ordinary(localProxy, localReflect, localObject);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.equal(result.uncertainty.filter(item =>
+    ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
+});
+
+test('tracks namespace aliases through qualified globalThis, window, and self references', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const reflection = globalThis.Reflect;',
+      'const objectApi = window.Object;',
+      'const anotherReflection = self.Reflect;',
+      'reflection.get(target, key);',
+      'objectApi.defineProperty(target, key, descriptor);',
+      'objectApi.keys(target);',
+      'anotherReflection.ownKeys(target);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.ok(result.uncertainty.some(item => item.kind === 'reflective-property-operation'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'reflective-property-enumeration'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'prototype-or-descriptor-mutation'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('keeps assignment-based reflection aliases scoped to their lexical bindings', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let globalReflection;',
+      'globalReflection = Reflect;',
+      'let globalRead;',
+      'globalRead = globalReflection.get;',
+      'globalRead(target, runtimeKey);',
+      'function local(Reflect, Object, Proxy) {',
+      '  let localReflection;',
+      '  localReflection = Reflect;',
+      '  let localDefine;',
+      '  localDefine = Object.defineProperty;',
+      '  let localProxy;',
+      '  localProxy = Proxy;',
+      '  localReflection.get(target, key);',
+      '  localDefine(target, key, descriptor);',
+      '  new localProxy(target, handler);',
+      '}',
+      'local(fakeReflect, fakeObject, fakeProxy);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const metaSites = result.uncertainty.filter(item =>
+    ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind));
+  assert.equal(metaSites.length, 1);
+  assert.equal(metaSites[0].kind, 'reflective-property-operation');
+  assert.deepEqual(metaSites[0].affectedRoots, ['scripts/main.js']);
+});
