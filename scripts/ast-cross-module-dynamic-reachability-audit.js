@@ -60,7 +60,7 @@ function analyzeCrossModule(root,files){
   const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
   for(const [file,data] of meta)for(const i of data.imports){
     const target=resolveLocal(file,i.source,new Set(files));
-    if(!target){const item={file:path.relative(root,file),source:i.source,dynamic:!!i.dynamic,line:i.line||null};if(i.dynamic|| (typeof i.source==='string'&&(i.source.startsWith('.')||path.isAbsolute(i.source))))unresolved.push(item);else externalImports.push(item);continue;}
+    if(!target){const item={file:path.relative(root,file),source:i.source,dynamic:!!i.dynamic,line:i.line||null};if((i.dynamic&&i.source===null)||(typeof i.source==='string'&&(i.source.startsWith('.')||path.isAbsolute(i.source))))unresolved.push(item);else externalImports.push(item);continue;}
     const exp=meta.get(target).exports;
     if(i.reexportAll){for(const [name,local] of exp)links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:local,reexport:true});continue;}
     const local=exp.get(i.imported);
