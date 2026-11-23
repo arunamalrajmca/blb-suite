@@ -177,6 +177,22 @@ test('resolves callback wrappers imported through an export-star barrel', () => 
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
+
+test('does not expose a default callback wrapper through export-star', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export default function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/barrel.js': "export * from './registrar.js';",
+    'scripts/main.js': "import register from './barrel.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
 test('keeps callback parameters uncertain when another callsite supplies an unknown value', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
