@@ -31,7 +31,7 @@ function literalString(n,file) {
   return null;
 }
 function resolveLocal(from,spec,files){if(!spec||!spec.startsWith('.'))return null;const b=path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
-function collectExportsAndImports(ast){
+function collectExportsAndImports(ast,file){
   const exports=new Map(),imports=[];
   visit(ast,(n,parent)=>{
     if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
@@ -56,7 +56,7 @@ function collectExportsAndImports(ast){
 }
 function analyzeCrossModule(root,files){
   const asts=new Map(files.map(f=>[f,parse(fs.readFileSync(f,'utf8'),f)]));
-  const meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast)]));
+  const meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast,f)]));
   const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
   for(const [file,data] of meta)for(const i of data.imports){
     const target=resolveLocal(file,i.source,new Set(files));
