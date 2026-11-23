@@ -170,3 +170,14 @@ test('retains nonliteral dynamic imports as explicit cross-module uncertainty',(
   assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('classifies literal bare-specifier dynamic imports as external packages',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-package-'));
+ try{
+  fs.writeFileSync(path.join(root,'consumer.js'),"import('some-package');");
+  const files=[path.join(root,'consumer.js')],r=analyzeCrossModule(root,files);
+  assert.ok(r.externalImports.some(x=>x.file==='consumer.js'&&x.source==='some-package'&&x.dynamic===true));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
