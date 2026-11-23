@@ -989,3 +989,18 @@ test('propagates chained reflection-method and revocable-proxy aliases', () => {
   assert.ok(kinds.includes('proxy-construction'));
   assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
 });
+
+test('tracks destructured Proxy.revocable aliases without misclassifying shadowed Proxy', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const { revocable: createRevocable } = Proxy;',
+      'createRevocable(target, handler);',
+      'function local(Proxy) { const { revocable } = Proxy; revocable(target, handler); }'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const proxies = result.uncertainty.filter(item => item.kind === 'proxy-construction');
+  assert.equal(proxies.length, 1);
+  assert.deepEqual(proxies[0].affectedRoots, ['scripts/main.js']);
+});
