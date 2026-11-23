@@ -47,7 +47,9 @@ function collectTests(report) {
           found.push({
             key: [test.projectName || '', file, line, column, title].join('|'),
             project: test.projectName || '', file, line, column, title, status,
+            overallStatus: test.status || status,
             expectedStatus: test.expectedStatus || null,
+            retryCount: Math.max(0, results.length - 1),
             durationMs: last?.duration ?? null,
             errors: (last?.errors || []).map(item => item.message || String(item))
           });
