@@ -644,6 +644,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
     const scriptingNamespaceBindings = new Set(), scriptingLoaderMethodBindings = new Map();
+    const proxyConstructorBindings = new Set(), reflectNamespaceBindings = new Set(), objectNamespaceBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
     const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
@@ -662,6 +663,27 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'SequenceExpression' && node.expressions.length) return memberPath(node.expressions[node.expressions.length - 1]);
       return '';
     };
+    const runtimeMetaPath = node => {
+      if (!node) return '';
+      if (node.type === 'Identifier') {
+        const key = bindings.get(node);
+        if (key && proxyConstructorBindings.has(key)) return 'Proxy';
+        if (key && reflectNamespaceBindings.has(key)) return 'Reflect';
+        if (key && objectNamespaceBindings.has(key)) return 'Object';
+        return node.name;
+      }
+      if (node.type === 'MemberExpression') {
+        const property = node.computed ? staticValue(node.property, constants, 0, bindings) :
+          node.property.type === 'Identifier' ? node.property.name : null;
+        return property === null || property === undefined ? '' : runtimeMetaPath(node.object) + '.' + String(property);
+      }
+      return '';
+    };
+    const addMetaUncertainty = (node, kind, detail) => uncertainty.push({
+      file: rel(root, file), line: node.loc.start.line, kind,
+      certainty: 'unresolved-runtime-metaprogramming', expression: sourceText.slice(node.start, node.end).slice(0, 240),
+      detail, affectedRoots: []
+    });
     const requireVm = node => node?.type === 'CallExpression' &&
       node.callee.type === 'Identifier' && node.callee.name === 'require' &&
       ['vm', 'node:vm'].includes(node.arguments[0]?.value);
@@ -720,6 +742,46 @@ function analyze(root = path.resolve(__dirname, '..')) {
     };
     visit(ast, (node, parent) => {
       if (parent) parents.set(node, parent);
+      // Track direct aliases of the reflective primitives. This is deliberately
+      // binding-aware: same-spelled local variables do not become global APIs.
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
+        const target = bindings.get(node.id);
+        if (target && node.init.type === 'Identifier') {
+          if (node.init.name === 'Proxy') proxyConstructorBindings.add(target);
+          if (node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
+          if (node.init.name === 'Object') objectNamespaceBindings.add(target);
+          const source = bindings.get(node.init);
+          if (source && proxyConstructorBindings.has(source)) proxyConstructorBindings.add(target);
+          if (source && reflectNamespaceBindings.has(source)) reflectNamespaceBindings.add(target);
+          if (source && objectNamespaceBindings.has(source)) objectNamespaceBindings.add(target);
+        }
+        if (target && node.init.type === 'MemberExpression') {
+          const api = runtimeMetaPath(node.init);
+          if (api === 'globalThis.Proxy' || api === 'window.Proxy' || api === 'self.Proxy') proxyConstructorBindings.add(target);
+        }
+      }
+      if (node.type === 'NewExpression' && runtimeMetaPath(node.callee) === 'Proxy') {
+        addMetaUncertainty(node, 'proxy-construction', 'Proxy traps can synthesize property reads, writes, enumeration, descriptors, and callable/constructable behavior.');
+      }
+      if (node.type === 'CallExpression') {
+        const api = runtimeMetaPath(node.callee);
+        if (/^Reflect\\.(?:get|set|has|ownKeys|getOwnPropertyDescriptor|defineProperty|deleteProperty|setPrototypeOf|construct|apply)$/.test(api)) {
+          addMetaUncertainty(node, 'reflective-property-operation', api + ' can observe or alter property access and call/construct behavior outside ordinary member-reference tracing.');
+        }
+        if (/^Object\\.(?:getOwnPropertyNames|getOwnPropertySymbols|keys|values|entries|getOwnPropertyDescriptors)$/.test(api)) {
+          addMetaUncertainty(node, 'reflective-property-enumeration', api + ' can discover property names and descriptors dynamically.');
+        }
+        if (/^(?:Object|Reflect)\\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|preventExtensions|seal|freeze|deleteProperty)$/.test(api)) {
+          addMetaUncertainty(node, 'prototype-or-descriptor-mutation', api + ' can change visible properties, descriptors, or inheritance.');
+        }
+      }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
+        const targetPath = runtimeMetaPath(node.left);
+        const property = node.left.computed ? staticValue(node.left.property, constants, 0, bindings) : node.left.property.name;
+        if (property === '__proto__' || property === 'prototype' || /\\.prototype\\./.test(targetPath)) {
+          addMetaUncertainty(node, 'prototype-property-mutation', 'Assignment to prototype-related property paths can alter later property lookup and inherited behavior.');
+        }
+      }
       // Resolve aliases of dynamic-code constructors and Node's vm namespace.
       if (node.type === 'ImportDeclaration' && ['vm', 'node:vm'].includes(node.source.value)) {
         for (const specifier of node.specifiers) {
