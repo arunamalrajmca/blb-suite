@@ -494,6 +494,34 @@ test('function array summaries exclude nested returns and reject mixed dynamic r
   assert.ok(!result.functionArraySummaries.some(item => item.name === 'uncertainFiles'));
 });
 
+
+test('resolves aliased chrome.scripting loader namespaces and preserves dynamic targets', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': [
+      'const scripting = chrome.scripting;',
+      'const scriptingAlias = scripting;',
+      "scriptingAlias.executeScript({ target: { tabId: 1 }, files: ['scripts/injected.js'] });",
+      "scripting.registerContentScripts([{ id: 'late', js: [{ file: 'scripts/registered.js' }] }]);",
+      'const lateOptions = getRuntimeRegistrationOptions();',
+      'scriptingAlias.registerContentScripts(lateOptions);'
+    ].join(' '),
+    'extension/scripts/injected.js': 'globalThis.injected = true;',
+    'extension/scripts/registered.js': 'globalThis.registered = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background.js', 'extension/scripts/injected.js'));
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/registered.js'));
+  const unresolved = result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts');
+  assert.equal(unresolved.length, 1);
+  assert.ok(unresolved[0].affectedRoots.includes('extension/background.js'));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'extension/scripts/registered.js' &&
+    item.affectedRoots.includes('extension/background.js')
+  ));
+});
+
 test('does not treat executeScript inline func bodies as unresolved file targets', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
