@@ -51,7 +51,9 @@ function collectTests(report) {
           const file = spec.file || suite.file || '';
           const line = spec.line || 0;
           const column = spec.column || 0;
-          const title = [...suiteTitles, spec.title].filter(Boolean).join(' › ');
+          // Playwright includes the spec filename as the outermost suite title;
+          // the inventory identity already carries the file separately.
+          const title = [...suiteTitles.filter(value => value !== path.basename(file)), spec.title].filter(Boolean).join(' › ');
           found.push({
             key: [test.projectName || '', file, line, column, title].join('|'),
             project: test.projectName || '',
