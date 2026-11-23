@@ -118,7 +118,7 @@ try {
     }).filter(Boolean));
     const missing = [...expected].filter(key => !byKey.has(key));
     const extra = [...byKey.keys()].filter(key => !expected.has(key));
-    const failures = tests.filter(test => test.status !== 'passed' && test.status !== 'skipped');
+    const failures = tests.filter(test => test.overallStatus !== 'expected' && test.status !== 'skipped');
     const summary = {
       mode, discoveredTestCount: entries.length, delegatedTestCount: delegated.length,
       scheduledTestCount: scheduled.length, observedTestCount: tests.length,
@@ -156,6 +156,8 @@ try {
     if (result.status !== 0 || tests.length !== 1 || !tests[0].status || parseError) {
       serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
         signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
+      console.log('Serial baseline stopped at first anomaly [' + (index + 1) + '/' + scheduled.length + '].');
+      break;
     }
     if ((index + 1) % 10 === 0 || index + 1 === scheduled.length) {
       console.log('Serial baseline [' + (index + 1) + '/' + scheduled.length + '] | processes=' + (index + 1) + ' | anomalies=' + serialErrors.length);
