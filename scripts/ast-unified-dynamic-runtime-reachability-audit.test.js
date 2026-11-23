@@ -91,6 +91,39 @@ test('resolves callback owners through an imported registration wrapper', () => 
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
+
+test('resolves callback wrappers imported through a named re-export alias', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/barrel.js': "export { register as subscribe } from './registrar.js';",
+    'scripts/main.js': "import { subscribe } from './barrel.js'; function onMessage(message) { return message; } subscribe(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves callback wrappers imported through an export-star barrel', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/barrel.js': "export * from './registrar.js';",
+    'scripts/main.js': "import { register } from './barrel.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
 test('keeps callback parameters uncertain when another callsite supplies an unknown value', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
