@@ -163,8 +163,19 @@ try {
     const mismatches = [];
     for (const [key, serialTest] of serialByKey) {
       const parallelTest = parallelByKey.get(key);
-      if (parallelTest && serialTest.status !== parallelTest.status) {
-        mismatches.push({ key, serialStatus: serialTest.status, parallelStatus: parallelTest.status });
+      if (parallelTest && (
+        serialTest.status !== parallelTest.status ||
+        serialTest.overallStatus !== parallelTest.overallStatus ||
+        serialTest.expectedStatus !== parallelTest.expectedStatus ||
+        serialTest.retryCount !== parallelTest.retryCount
+      )) {
+        mismatches.push({ key, serial: {
+          status: serialTest.status, overallStatus: serialTest.overallStatus,
+          expectedStatus: serialTest.expectedStatus, retryCount: serialTest.retryCount
+        }, parallel: {
+          status: parallelTest.status, overallStatus: parallelTest.overallStatus,
+          expectedStatus: parallelTest.expectedStatus, retryCount: parallelTest.retryCount
+        }});
       }
     }
     comparisons.push({
