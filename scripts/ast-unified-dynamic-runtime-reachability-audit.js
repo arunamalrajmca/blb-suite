@@ -454,6 +454,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
     return null;
   };
   const callbackParameterOwners = new Map();
+  const callbackParameterFlows = new Map();
+  const parameterSlots = new Set();
+  for (const [file, ast] of asts) {
+    visit(ast, node => {
+      if (!['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+      for (const parameter of node.params || []) {
+        if (parameter.type !== 'Identifier') continue;
+        const key = bindingByFile.get(file)?.get(parameter);
+        if (key) parameterSlots.add(file + '::' + key);
+      }
+    });
+  }
+  const addCallbackOwner = (slot, key, owner) => {
+    if (!callbackParameterOwners.has(slot)) callbackParameterOwners.set(slot, new Map());
+    callbackParameterOwners.get(slot).set(key, owner);
+  };
   for (const [file, ast] of asts) {
     visit(ast, node => {
       if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
@@ -465,18 +481,62 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (parameter.type !== 'Identifier') continue;
         const parameterKey = targetBindings.get(parameter);
         if (!parameterKey) continue;
+        const destinationSlot = target.file + '::' + parameterKey;
         const argument = node.arguments[index];
         let owner = null;
         if (argument.type === 'Identifier') owner = resolveFunctionOwner(file, argument);
         else if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
           owner = { file, key: 'function@' + argument.loc.start.line, node: argument };
         }
-        const mapKey = target.file + '::' + parameterKey;
-        if (!callbackParameterOwners.has(mapKey)) callbackParameterOwners.set(mapKey, new Map());
-        const ownerKey = owner ? owner.file + '::' + owner.key : '[unresolved-callsite]';
-        callbackParameterOwners.get(mapKey).set(ownerKey, owner || { unresolved: true });
+        if (owner) {
+          addCallbackOwner(destinationSlot, owner.file + '::' + owner.key, owner);
+          continue;
+        }
+        if (argument.type === 'Identifier') {
+          let sourceKey = bindingByFile.get(file)?.get(argument);
+          const aliases = functionAliasesByFile.get(file);
+          const seen = new Set();
+          while (sourceKey && aliases?.has(sourceKey) && !seen.has(sourceKey)) {
+            seen.add(sourceKey);
+            sourceKey = aliases.get(sourceKey);
+          }
+          const sourceSlot = sourceKey && file + '::' + sourceKey;
+          if (sourceSlot && parameterSlots.has(sourceSlot)) {
+            if (!callbackParameterFlows.has(destinationSlot)) callbackParameterFlows.set(destinationSlot, new Set());
+            callbackParameterFlows.get(destinationSlot).add(sourceSlot);
+            continue;
+          }
+        }
+        addCallbackOwner(destinationSlot, '[unresolved-callsite]', { unresolved: true });
       }
     });
+  }
+  // Propagate callback identities through arbitrarily nested wrapper parameters
+  // until stable. Unknown source parameters remain unknown; they are never
+  // silently discarded in favor of a different, apparently unique caller.
+  let callbackFlowChanged = true;
+  while (callbackFlowChanged) {
+    callbackFlowChanged = false;
+    for (const [destinationSlot, sources] of callbackParameterFlows) {
+      const destinationOwners = callbackParameterOwners.get(destinationSlot) || new Map();
+      for (const sourceSlot of sources) {
+        const sourceOwners = callbackParameterOwners.get(sourceSlot);
+        if (!sourceOwners) {
+          if (!destinationOwners.has('[unresolved-callsite]')) {
+            destinationOwners.set('[unresolved-callsite]', { unresolved: true });
+            callbackFlowChanged = true;
+          }
+          continue;
+        }
+        for (const [ownerKey, owner] of sourceOwners) {
+          if (!destinationOwners.has(ownerKey)) {
+            destinationOwners.set(ownerKey, owner);
+            callbackFlowChanged = true;
+          }
+        }
+      }
+      if (destinationOwners.size) callbackParameterOwners.set(destinationSlot, destinationOwners);
+    }
   }
 
   for (const [file, ast] of asts) {
