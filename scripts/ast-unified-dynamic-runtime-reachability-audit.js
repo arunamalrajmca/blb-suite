@@ -759,6 +759,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (source && proxyConstructorBindings.has(source)) proxyConstructorBindings.add(target);
           if (source && reflectNamespaceBindings.has(source)) reflectNamespaceBindings.add(target);
           if (source && objectNamespaceBindings.has(source)) objectNamespaceBindings.add(target);
+          if (source && reflectMethodBindings.has(source)) reflectMethodBindings.set(target, reflectMethodBindings.get(source));
+          if (source && objectMethodBindings.has(source)) objectMethodBindings.set(target, objectMethodBindings.get(source));
+          if (source && proxyRevocableBindings.has(source)) proxyRevocableBindings.add(target);
         }
         if (target && node.init.type === 'MemberExpression') {
           const api = runtimeMetaPath(node.init);
