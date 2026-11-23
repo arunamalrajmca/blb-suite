@@ -466,6 +466,26 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const unique = new Map(candidates.map(item => [item.file + '::' + item.key, item]));
     return unique.size === 1 ? [...unique.values()][0] : null;
   };
+  const objectMethodDefsByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file), methods = new Map();
+    visit(ast, node => {
+      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+          node.init?.type !== 'ObjectExpression') return;
+      const objectKey = bindings.get(node.id);
+      if (!objectKey) return;
+      for (const property of node.init.properties || []) {
+        if (property.type !== 'Property' || !['FunctionExpression', 'ArrowFunctionExpression'].includes(property.value?.type)) continue;
+        const name = property.computed
+          ? (property.key.type === 'Literal' ? String(property.key.value) : null)
+          : (property.key.name || String(property.key.value));
+        if (name !== null) methods.set(objectKey + '::' + name, {
+          file, key: objectKey + '.' + name + '@' + property.loc.start.line, node: property.value
+        });
+      }
+    });
+    objectMethodDefsByFile.set(file, methods);
+  }
   const resolveFunctionOwner = (file, identifier) => {
     const bindings = bindingByFile.get(file);
     let key = bindings && bindings.get(identifier);
@@ -487,6 +507,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
     if (imported) return resolveExportedFunction(imported.file, imported.importedName);
     return null;
   };
+  const resolveCallableOwner = (file, callee) => {
+    if (callee.type === 'Identifier') return resolveFunctionOwner(file, callee);
+    if (callee.type !== 'MemberExpression' || callee.object.type !== 'Identifier') return null;
+    const property = callee.computed
+      ? (callee.property.type === 'Literal' ? String(callee.property.value) : null)
+      : callee.property.name;
+    if (property === null) return null;
+    let objectKey = bindingByFile.get(file)?.get(callee.object);
+    const aliases = functionAliasesByFile.get(file), seen = new Set();
+    while (objectKey && aliases?.has(objectKey) && !seen.has(objectKey)) {
+      seen.add(objectKey);
+      objectKey = aliases.get(objectKey);
+    }
+    return objectKey && objectMethodDefsByFile.get(file)?.get(objectKey + '::' + property) || null;
+  };
   const callbackParameterOwners = new Map();
   const callbackParameterFlows = new Map();
   const parameterSlots = new Set();
@@ -506,8 +541,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
   };
   for (const [file, ast] of asts) {
     visit(ast, node => {
-      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
-      const target = resolveFunctionOwner(file, node.callee);
+      if (node.type !== 'CallExpression') return;
+      const target = resolveCallableOwner(file, node.callee);
       if (!target) return;
       const targetBindings = bindingByFile.get(target.file);
       for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
@@ -1046,7 +1081,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // Interprocedural direct-call and callback argument edges. Imported function
         // aliases are resolved to the declaring module; unresolved names are not guessed.
         if (callee.type === 'Identifier') {
-          const resolvedTarget = resolveFunctionOwner(file, callee);
+          const resolvedTarget = resolveCallableOwner(file, callee);
           const targetFunction = resolvedTarget ? { file: resolvedTarget.file, node: resolvedTarget.node } : null;
           if (targetFunction) {
             addEdge(file, targetFunction.file, 'function-call', file, node.loc.start.line, callee.name);
