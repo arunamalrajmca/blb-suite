@@ -363,8 +363,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
   }
 
   const exportsByFile = new Map();
+  const reExportsByFile = new Map();
+  const exportStarsByFile = new Map();
   for (const [file, ast] of asts) {
-    const bindings = bindingByFile.get(file), exported = new Map();
+    const bindings = bindingByFile.get(file), exported = new Map(), reExports = new Map(), exportStars = [];
     for (const statement of ast.body) {
       const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : null;
       if (declaration && declaration.type === 'FunctionDeclaration' && declaration.id) {
@@ -375,17 +377,32 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const key = bindings.get(item.id); if (key) exported.set(item.id.name, key);
         }
       }
+      if (statement.type === 'ExportDefaultDeclaration' && statement.declaration?.type === 'FunctionDeclaration' &&
+          statement.declaration.id) {
+        const key = bindings.get(statement.declaration.id);
+        if (key) exported.set('default', key);
+      }
       if (statement.type === 'ExportNamedDeclaration') {
         for (const spec of statement.specifiers || []) {
-          if (statement.source) continue;
-          const local = spec.local.name || spec.local.value;
           const name = spec.exported.name || spec.exported.value;
+          if (statement.source) {
+            const importedName = spec.local.name || spec.local.value;
+            if (!reExports.has(name)) reExports.set(name, []);
+            reExports.get(name).push({ source: statement.source.value, importedName });
+            continue;
+          }
+          const local = spec.local.name || spec.local.value;
           const key = [...bindings.entries()].find(([identifier]) => identifier.name === local)?.[1];
           if (key) exported.set(name, key);
         }
       }
+      if (statement.type === 'ExportAllDeclaration' && statement.source?.value) {
+        exportStars.push(statement.source.value);
+      }
     }
     exportsByFile.set(file, exported);
+    reExportsByFile.set(file, reExports);
+    exportStarsByFile.set(file, exportStars);
   }
 
   const functionDefs = new Map();
@@ -428,6 +445,27 @@ function analyze(root = path.resolve(__dirname, '..')) {
     importedFunctionsByFile.set(file, imported);
     functionAliasesByFile.set(file, aliases);
   }
+  const resolveExportedFunction = (file, name, seen = new Set()) => {
+    const identity = file + '::' + name;
+    if (seen.has(identity)) return null;
+    seen.add(identity);
+    const localKey = exportsByFile.get(file)?.get(name);
+    const localDefinition = localKey && functionDefs.get(file + '::' + localKey);
+    if (localDefinition) return { file, key: localKey, node: localDefinition.node };
+    const candidates = [];
+    for (const item of reExportsByFile.get(file)?.get(name) || []) {
+      const target = resolveFile(file, item.source, fileSet);
+      const resolved = target && resolveExportedFunction(target, item.importedName, new Set(seen));
+      if (resolved) candidates.push(resolved);
+    }
+    for (const source of exportStarsByFile.get(file) || []) {
+      const target = resolveFile(file, source, fileSet);
+      const resolved = target && resolveExportedFunction(target, name, new Set(seen));
+      if (resolved) candidates.push(resolved);
+    }
+    const unique = new Map(candidates.map(item => [item.file + '::' + item.key, item]));
+    return unique.size === 1 ? [...unique.values()][0] : null;
+  };
   const resolveFunctionOwner = (file, identifier) => {
     const bindings = bindingByFile.get(file);
     let key = bindings && bindings.get(identifier);
@@ -446,11 +484,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       return { file: candidate.file, key: candidateKey.slice(file.length + 2), node: candidate.node };
     }
     const imported = key && importedFunctionsByFile.get(file).get(key);
-    if (imported) {
-      const exportedKey = exportsByFile.get(imported.file) && exportsByFile.get(imported.file).get(imported.importedName);
-      definition = exportedKey && functionDefs.get(imported.file + '::' + exportedKey);
-      if (definition) return { file: definition.file, key: exportedKey, node: definition.node };
-    }
+    if (imported) return resolveExportedFunction(imported.file, imported.importedName);
     return null;
   };
   const callbackParameterOwners = new Map();
