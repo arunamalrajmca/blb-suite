@@ -580,6 +580,26 @@ test('tracks DOM script injection through aliased document and createElement bin
   });
   assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'scripts/injected.js'));
   assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'scripts/also-injected.js'));
+  assert.ok(result.dynamicSites.some(item => item.kind === 'dom-script-append' && item.expression === 'alias'));
+});
+
+
+test('tracks message-driven worker script loading as scoped uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "const WorkerAlias = Worker; const worker = new WorkerAlias('./message-worker.js'); worker.postMessage('./plugins/runtime.js');",
+    'scripts/message-worker.js': 'self.onmessage = event => importScripts(event.data);',
+    'scripts/plugins/runtime.js': 'self.runtime = true;'
+  });
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/message-worker.js'));
+  const dynamic = result.uncertainty.find(item =>
+    item.file === 'scripts/message-worker.js' && item.kind === 'importScripts'
+  );
+  assert.ok(dynamic);
+  assert.ok(dynamic.affectedRoots.includes('scripts/main.js'));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'scripts/plugins/runtime.js' && item.affectedRoots.includes('scripts/main.js')
+  ));
 });
 
 test('keeps unresolved worker URLs explicitly uncertain within the creating root', () => {
