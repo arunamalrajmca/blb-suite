@@ -138,6 +138,8 @@ try {
   console.log('[2/5] Running the legacy one-test-per-process serial baseline.');
   const serial = [];
   const serialErrors = [];
+  const serialStartedAt = Date.now();
+  const serialCheckpointPath = path.join(reportRoot, 'serial-checkpoint.json');
   for (let index = 0; index < scheduled.length; index++) {
     const oneTestPath = path.join(tempRoot, 'one-test.txt');
     fs.writeFileSync(oneTestPath, scheduled[index] + '\n');
@@ -153,6 +155,10 @@ try {
       timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'), tests, parseError
     };
     serial.push(record);
+    writeJson(serialCheckpointPath, {
+      completed: serial.length, scheduled: scheduled.length,
+      elapsedMs: Date.now() - serialStartedAt, serialErrors, records: serial
+    });
     if (result.status !== 0 || tests.length !== 1 || !tests[0].status || parseError) {
       serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
         signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
@@ -160,7 +166,10 @@ try {
       break;
     }
     if ((index + 1) % 10 === 0 || index + 1 === scheduled.length) {
-      console.log('Serial baseline [' + (index + 1) + '/' + scheduled.length + '] | processes=' + (index + 1) + ' | anomalies=' + serialErrors.length);
+      const elapsedMs = Date.now() - serialStartedAt;
+      const averageMs = elapsedMs / (index + 1);
+      const remainingMinutes = Math.ceil((scheduled.length - index - 1) * averageMs / 60_000);
+      console.log('Serial baseline [' + (index + 1) + '/' + scheduled.length + '] | elapsed=' + Math.round(elapsedMs / 60_000) + 'm | estimated remaining=' + remainingMinutes + 'm | anomalies=' + serialErrors.length);
     }
   }
   writeJson(path.join(reportRoot, 'serial-results.json'), serial);
