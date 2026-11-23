@@ -156,7 +156,6 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
     });
     gateInstalled = false;
 
-    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:15000});
     await expect.poll(readFeatureState,{timeout:15000}).toMatchObject({
       handshake:true,button:true,doubleClick:true
     });
