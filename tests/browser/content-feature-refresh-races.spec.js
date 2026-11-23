@@ -72,17 +72,6 @@ test('latest per-site selection settings win when content-script storage reads r
   }, tabId);
   expect(interception.installed).toBe(true);
 
-  // Queue older OFF reads first, then newer ON reads. Resolve ON before OFF
-  // to prove an obsolete storage response cannot undo the latest preference.
-  await extensionWorker.evaluate(() => chrome.storage.local.set({
-    pageSelectionButtonSites:{'example.com':false},
-    doubleClickBlbSites:{'example.com':false}
-  }));
-  await extensionWorker.evaluate(() => chrome.storage.local.set({
-    pageSelectionButtonSites:{'example.com':true},
-    doubleClickBlbSites:{'example.com':true}
-  }));
-
   const pendingReadSummary = async () => extensionWorker.evaluate(async id => {
     const [result] = await chrome.scripting.executeScript({
       target:{tabId:id},
@@ -103,10 +92,29 @@ test('latest per-site selection settings win when content-script storage reads r
     return result.result;
   }, tabId);
 
-  // The page may still have a startup refresh in flight when interception is
-  // installed. Do not assume an exact read count: identify each delayed read
-  // by its captured settings snapshot and force all newer ON snapshots to
-  // resolve before any older OFF snapshots.
+  // Queue older OFF reads first, then newer ON reads. Wait until both OFF
+  // snapshots have actually been intercepted before issuing the ON write:
+  // storage.onChanged listeners run asynchronously, so back-to-back writes
+  // can otherwise coalesce before the older refresh starts its storage read.
+  await extensionWorker.evaluate(() => chrome.storage.local.set({
+    pageSelectionButtonSites:{'example.com':false},
+    doubleClickBlbSites:{'example.com':false}
+  }));
+  await expect.poll(async () => {
+    const summary = await pendingReadSummary();
+    return ['pageSelectionButtonSites','doubleClickBlbSites'].every(key =>
+      summary[key].off > 0
+    );
+  }).toBe(true);
+
+  await extensionWorker.evaluate(() => chrome.storage.local.set({
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':true}
+  }));
+
+  // Do not assume an exact read count: identify each delayed read by its
+  // captured settings snapshot and force all newer ON snapshots to resolve
+  // before any older OFF snapshots.
   await expect.poll(async () => {
     const summary = await pendingReadSummary();
     return ['pageSelectionButtonSites','doubleClickBlbSites'].every(key =>

@@ -685,10 +685,10 @@ test.describe('core user-visible E2E', () => {
     });
     await page.waitForLoadState('load').catch(() => {});
     // Ensure the actual article content is present before marking its real cue.
-    const article = page.locator('.dt-post-body').first();
+    const article = page.locator('.available-content, .body.markup, .post-body, .dt-post-body').first();
     await expect(article, 'Supply of Grace article body must render').toBeVisible({ timeout: 20000 });
     await page.evaluate(() => {
-      const root = document.querySelector('.dt-post-body');
+      const root = document.querySelector('.available-content, .body.markup, .post-body, .dt-post-body');
       if (!root) throw new Error('Actual Supply of Grace article body not found');
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) {
@@ -725,7 +725,7 @@ test.describe('core user-visible E2E', () => {
     expect(diagnostic.associatedVerse, 'generic article cue must extract verse 1').toBe(1);
     await activateBlbTabForPath(extensionWorker, '/kjv/psa/136/1/', {
       fragment: '#sog-verse-cue',
-      selector: '.dt-post-body',
+      selector: '.available-content, .body.markup, .post-body, .dt-post-body',
       selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
     });
   });

@@ -494,6 +494,165 @@ test('function array summaries exclude nested returns and reject mixed dynamic r
   assert.ok(!result.functionArraySummaries.some(item => item.name === 'uncertainFiles'));
 });
 
+
+test('resolves aliased chrome.scripting loader namespaces and preserves dynamic targets', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': [
+      'const scripting = chrome.scripting;',
+      'const scriptingAlias = scripting;',
+      "scriptingAlias.executeScript({ target: { tabId: 1 }, files: ['scripts/injected.js'] });",
+      "scripting.registerContentScripts([{ id: 'late', js: [{ file: 'scripts/registered.js' }] }]);",
+      'const lateOptions = getRuntimeRegistrationOptions();',
+      'scriptingAlias.registerContentScripts(lateOptions);'
+    ].join(' '),
+    'extension/scripts/injected.js': 'globalThis.injected = true;',
+    'extension/scripts/registered.js': 'globalThis.registered = true;',
+    'extension/scripts/late.js': 'globalThis.late = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background.js', 'extension/scripts/injected.js'));
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/registered.js'));
+  const unresolved = result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts');
+  assert.equal(unresolved.length, 1);
+  assert.ok(unresolved[0].affectedRoots.includes('extension/background.js'));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'extension/scripts/late.js' &&
+    item.affectedRoots.includes('extension/background.js')
+  ));
+});
+
+
+test('resolves destructured and directly aliased chrome.scripting loader methods', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': [
+      'const { executeScript: inject, registerContentScripts: register } = chrome.scripting;',
+      "inject({ target: { tabId: 1 }, files: ['scripts/destructured.js'] });",
+      "const registerAlias = chrome.scripting.registerContentScripts;",
+      "registerAlias([{ id: 'alias', js: [{ file: 'scripts/aliased.js' }] }]);"
+    ].join(' '),
+    'extension/scripts/destructured.js': 'globalThis.destructured = true;',
+    'extension/scripts/aliased.js': 'globalThis.aliased = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background.js', 'extension/scripts/destructured.js'));
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/aliased.js'));
+});
+
+
+test('resolves Worker and SharedWorker entrypoints, including constructor aliases and URL literals', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "new Worker('./worker.js');",
+      "const WorkerAlias = Worker; new WorkerAlias(new URL('./module-worker.js', import.meta.url), { type: 'module' });",
+      "new SharedWorker('./shared-worker.js');"
+    ].join(' '),
+    'scripts/worker.js': 'self.onmessage = () => {};',
+    'scripts/module-worker.js': 'importScripts("./worker-dependency.js");',
+    'scripts/shared-worker.js': 'onconnect = () => {};',
+    'scripts/worker-dependency.js': 'self.dependency = true;'
+  });
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/module-worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/shared-worker.js'));
+  assert.ok(edge(result, 'importScripts', 'scripts/module-worker.js', 'scripts/worker-dependency.js'));
+});
+
+test('tracks DOM script injection through aliased document and createElement bindings', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const doc = document;',
+      'const create = doc.createElement;',
+      "const script = create('script');",
+      "script.src = './injected.js';",
+      'const alias = script;',
+      "alias.setAttribute('src', './also-injected.js');",
+      'const append = doc.head.appendChild;',
+      'append(alias);'
+    ].join(' '),
+    'extension/injected.js': 'globalThis.injected = true;',
+    'extension/also-injected.js': 'globalThis.alsoInjected = true;'
+  });
+  assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'extension/injected.js'));
+  assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'extension/also-injected.js'));
+  assert.ok(result.dynamicSites.some(item => item.kind === 'dom-script-append' && item.expression === 'alias'));
+});
+
+
+test('tracks message-driven worker script loading as scoped uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "const WorkerAlias = Worker; const worker = new WorkerAlias('./message-worker.js'); worker.postMessage('./plugins/runtime.js');",
+    'scripts/message-worker.js': 'self.onmessage = event => importScripts(event.data);',
+    'scripts/plugins/runtime.js': 'self.runtime = true;'
+  });
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/message-worker.js'));
+  const dynamic = result.uncertainty.find(item =>
+    item.file === 'scripts/message-worker.js' && item.kind === 'importScripts'
+  );
+  assert.ok(dynamic);
+  assert.ok(dynamic.affectedRoots.includes('scripts/main.js'));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'scripts/plugins/runtime.js' && item.affectedRoots.includes('scripts/main.js')
+  ));
+});
+
+test('keeps unresolved worker URLs explicitly uncertain within the creating root', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "const path = getWorkerPath(); new Worker(path);",
+    'scripts/plugins/runtime-worker.js': 'self.runtime = true;'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'worker-constructor' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'scripts/plugins/runtime-worker.js' && item.affectedRoots.includes('scripts/main.js')
+  ));
+});
+
+
+test('keeps registration options passed through a cross-module wrapper explicitly uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': "import { install } from './registration.js'; install(buildEntries());",
+    'extension/registration.js': "export function install(entries) { chrome.scripting.registerContentScripts(entries); }",
+    'extension/scripts/runtime.js': 'globalThis.runtime = true;'
+  });
+  const unknown = result.uncertainty.find(item =>
+    item.file === 'extension/registration.js' && item.kind === 'chrome.scripting.registerContentScripts'
+  );
+  assert.ok(unknown);
+  assert.ok(unknown.affectedRoots.includes('extension/background.js'));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'extension/scripts/runtime.js' && item.affectedRoots.includes('extension/background.js')
+  ));
+  assert.ok(!edge(result, 'chrome.scripting.registerContentScripts', 'extension/registration.js', 'extension/scripts/runtime.js'));
+});
+
+test('resolves callback ownership through a two-module forwarding chain and re-export barrel', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function attach(handler) { chrome.runtime.onMessage.addListener(handler); }',
+    'scripts/forwarder.js': "import { attach } from './registrar.js'; export function forward(callback) { attach(callback); }",
+    'scripts/barrel.js': "export { forward as register } from './forwarder.js';",
+    'scripts/main.js': "import { register } from './barrel.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
 test('does not treat executeScript inline func bodies as unresolved file targets', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),

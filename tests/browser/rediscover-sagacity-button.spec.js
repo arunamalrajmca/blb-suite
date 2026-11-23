@@ -11,8 +11,8 @@ const sourceCollectorSites = fs.readFileSync(path.join(root, 'extension/source-p
 test('Rediscover, Sagacity, and TSK use the existing current-page MultiVerse collector', () => {
   // Host-to-site IDs live in the shared registry imported by the worker,
   // not in the collector implementation itself.
-  expect(sourceCollectorSites).toContain('"rediscover.bible": { id:"rediscover" }');
-  expect(sourceCollectorSites).toContain('"sagacityweb.com": { id:"sagacity" }');
+  expect(sourceCollectorSites).toContain('"rediscover.bible": { id:"rediscover", mainWorldClickGuard:true }');
+  expect(sourceCollectorSites).toContain('"sagacityweb.com": { id:"sagacity", mainWorldClickGuard:true }');
   expect(sourceCollectorSites).toContain('"thetreasuryofscriptureknowledge.com": { id:"treasury" }');
   expect(sourceCollector).toContain('if (sourceSite && !isSourceHomepage)');
   expect(sourceCollector).toContain('document.querySelectorAll("a[href]")');

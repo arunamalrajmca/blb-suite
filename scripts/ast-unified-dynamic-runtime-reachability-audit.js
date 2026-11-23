@@ -639,16 +639,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
     const sourceText = fs.readFileSync(file, 'utf8');
     const loopValues = loopValuesByFile.get(file);
-    const imported = new Map(), scriptElementBindings = new Set();
+    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set(['Worker', 'SharedWorker']);
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
+    const scriptingNamespaceBindings = new Set(), scriptingLoaderMethodBindings = new Map();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
     const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
     const memberPath = node => {
       if (!node) return '';
-      if (node.type === 'Identifier') return node.name;
+      if (node.type === 'Identifier') {
+        const key = bindings.get(node);
+        return key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : node.name;
+      }
       if (node.type === 'ThisExpression') return 'this';
       if (node.type === 'MemberExpression') {
         const key = node.computed ? staticValue(node.property, constants, 0, bindings) :
@@ -730,6 +734,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const target = bindings.get(node.id);
           if (node.init?.type === 'Identifier') {
             const source = bindings.get(node.init);
+            if (target && source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
             if (target && source) {
               if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
               if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
@@ -743,6 +748,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
           if (target && node.init?.type === 'MemberExpression') {
             const initPath = memberPath(node.init);
+            if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
+            if (['chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts'].includes(initPath)) scriptingLoaderMethodBindings.set(target, initPath.split('.').pop());
             if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
             if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
             if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(initPath)) {
@@ -751,6 +758,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const sourceObject = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
             const sourceMethod = initPath.split('.').pop();
             if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
+          }
+        } else if (node.id.type === 'ObjectPattern' && memberPath(node.init) === 'chrome.scripting') {
+          for (const item of node.id.properties || []) {
+            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
+            const importedName = item.key.name || item.key.value;
+            const target = bindings.get(item.value);
+            if (target && ['executeScript', 'registerContentScripts'].includes(importedName)) scriptingLoaderMethodBindings.set(target, importedName);
           }
         } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
           for (const item of node.id.properties || []) {
@@ -882,8 +896,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
           dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
             ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
         }
+        if (target && node.right.type === 'Identifier') {
+          const source = bindings.get(node.right);
+          if (source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
+        }
         if (target && node.right.type === 'MemberExpression') {
           const rightPath = memberPath(node.right);
+          if (rightPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
+          if (['chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts'].includes(rightPath)) scriptingLoaderMethodBindings.set(target, rightPath.split('.').pop());
           if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(rightPath)) dynamicCallableBindings.set(target, 'eval-alias');
           else if (['globalThis.Function', 'window.Function', 'self.Function'].includes(rightPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
           else if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(rightPath)) {
@@ -974,8 +994,47 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
 
     visit(ast, (node, parent) => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init) {
+        const target = bindings.get(node.id);
+        if (target && node.init.type === 'Identifier') {
+          const source = bindings.get(node.init);
+          if (['Worker', 'SharedWorker'].includes(node.init.name)) workerConstructorBindings.add(target);
+          if (node.init.name === 'document' || (source && documentNamespaceBindings.has(source))) documentNamespaceBindings.add(target);
+          if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
+          if (source && appendChildMethodBindings.has(source)) appendChildMethodBindings.add(target);
+          if (source && workerConstructorBindings.has(source)) workerConstructorBindings.add(target);
+          if (source && scriptElementBindings.has(source)) scriptElementBindings.add(target);
+        }
+        if (target && node.init.type === 'MemberExpression') {
+          let owner = node.init.object;
+          while (owner && owner.type === 'MemberExpression') owner = owner.object;
+          const base = owner && owner.type === 'Identifier' ? bindings.get(owner) : null;
+          const prop = node.init.computed ? staticValue(node.init.property, constants, 0, bindings) : node.init.property.name;
+          const isDocumentOwner = owner?.type === 'Identifier' && (owner.name === 'document' || (base && documentNamespaceBindings.has(base)));
+          if (prop === 'createElement' && isDocumentOwner) createElementMethodBindings.add(target);
+          if (prop === 'appendChild' && isDocumentOwner) appendChildMethodBindings.add(target);
+        }
+        if (target && node.init.type === 'CallExpression') {
+          const callee = node.init.callee;
+          const prop = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) : null;
+          const base = callee.type === 'MemberExpression' && callee.object.type === 'Identifier' ? bindings.get(callee.object) : null;
+          const isCreateElement = prop === 'createElement' && (callee.object.name === 'document' || (base && documentNamespaceBindings.has(base)));
+          const isAliasedCreateElement = callee.type === 'Identifier' && createElementMethodBindings.has(bindings.get(callee));
+          if ((isCreateElement || isAliasedCreateElement) && node.init.arguments[0]?.value === 'script') scriptElementBindings.add(target);
+        }
+      }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier') {
+        const target = bindings.get(node.left);
+        if (target && node.right.type === 'Identifier') {
+          const source = bindings.get(node.right);
+          if (node.right.name === 'document' || (source && documentNamespaceBindings.has(source))) documentNamespaceBindings.add(target);
+          if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
+          if (source && scriptElementBindings.has(source)) scriptElementBindings.add(target);
+        }
+      }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
           node.init && node.init.type === 'CallExpression' &&
+
           node.init.callee.type === 'MemberExpression' &&
           node.init.callee.object.type === 'Identifier' && node.init.callee.object.name === 'document' &&
           node.init.callee.property.name === 'createElement' &&
@@ -1018,9 +1077,39 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target) addEdge(file, target, 'packaged-data-fallback', file, entry.loc.start.line, spec);
         }
       }
+      if (node.type === 'NewExpression') {
+        const constructorName = node.callee.type === 'Identifier' ? node.callee.name : null;
+        const constructorBinding = node.callee.type === 'Identifier' ? bindings.get(node.callee) : null;
+        const isWorker = ['Worker', 'SharedWorker'].includes(constructorName) ||
+          (constructorBinding && workerConstructorBindings.has(constructorBinding));
+        if (isWorker) {
+          const sourceNode = node.arguments[0];
+          const spec = sourceNode?.type === 'NewExpression' && sourceNode.callee.type === 'Identifier' && sourceNode.callee.name === 'URL'
+            ? staticValue(sourceNode.arguments[0], constants, 0, bindings)
+            : staticValue(sourceNode, constants, 0, bindings);
+          const target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+          addSite(file, node, 'worker-constructor', spec, target,
+            target ? 'resolved-local' : 'unresolved-worker-target', [], staticPrefix(sourceNode, constants, bindings));
+        }
+      }
+      if (node.type === 'CallExpression') {
+        const appendCallee = node.callee;
+        const appendMethod = appendCallee.type === 'MemberExpression'
+          ? (appendCallee.computed ? staticValue(appendCallee.property, constants, 0, bindings) : appendCallee.property.name)
+          : null;
+        const appendBinding = appendCallee.type === 'Identifier' ? bindings.get(appendCallee) : null;
+        const isAppendChild = appendMethod === 'appendChild' ||
+          (appendBinding && appendChildMethodBindings.has(appendBinding));
+        if (isAppendChild) {
+          for (const arg of node.arguments) {
+            if (arg.type !== 'Identifier' || !scriptElementBindings.has(bindings.get(arg))) continue;
+            sites.push({ file: rel(root, file), line: node.loc.start.line, kind: 'dom-script-append', expression: arg.name, resolved: null, certainty: 'resolved-script-element-append', affectedRoots: [] });
+          }
+        }
+      }
       if (node.type === 'CallExpression') {
         const callee = node.callee;
-        const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') parts.unshift(n.name); return parts.filter(Boolean).join('.'); };
+        const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') { const key = bindings.get(n); parts.unshift(key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : n.name); } return parts.filter(Boolean).join('.'); };
         if (callee.type === 'Identifier' && callee.name === 'fetchPackagedJsonAssignment') {
           const spec = staticValue(node.arguments[0], constants, 0, bindings);
           const target = typeof spec === 'string' ? resolveInjected(spec) : null;
@@ -1037,8 +1126,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
             }
           }
         }
-        const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) : null;
-        const object = callee.type === 'MemberExpression' ? memberPath(callee.object) : null;
+        const method = callee.type === 'MemberExpression' ? (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) :
+          callee.type === 'Identifier' ? scriptingLoaderMethodBindings.get(bindings.get(callee)) : null;
+        const object = callee.type === 'MemberExpression' ? memberPath(callee.object) :
+          callee.type === 'Identifier' && scriptingLoaderMethodBindings.has(bindings.get(callee)) ? 'chrome.scripting' : null;
         if (method === 'executeScript' && object === 'chrome.scripting') {
           let foundFiles = [];
           let foundFilesProperty = false;
@@ -1241,7 +1332,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const unresolvedByRoot = {}, uncertainFileRoots = new Map();
   const loaderUncertainty = uncertainty.filter(site => [
     'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
-    'chrome.scripting.registerContentScripts', 'dom-script-src-injection',
+    'chrome.scripting.registerContentScripts', 'worker-constructor', 'dom-script-src-injection',
     'dom-script-setAttribute-injection', 'require',
     // Generated source may hide additional loaders or references. Keep the
     // affected root's otherwise-unreached files uncertain rather than dead.
@@ -1311,7 +1402,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const unresolvedLoaderSites = uncertainty.filter(site => [
     'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
     'chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts',
-    'dom-script-src-injection', 'dom-script-setAttribute-injection', 'require'
+    'worker-constructor', 'dom-script-src-injection', 'dom-script-setAttribute-injection', 'require'
   ].includes(site.kind)).map(site => ({
     file: site.file, line: site.line, kind: site.kind, expression: site.expression,
     scopePath: site.scopePath || null, affectedRoots: site.affectedRoots

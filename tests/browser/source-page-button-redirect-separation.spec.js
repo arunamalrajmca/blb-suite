@@ -1200,12 +1200,12 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     await page.locator('#bible-reference').click();
     await expect.poll(() => extensionWorker.evaluate(async target => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.filter(tab => (tab.url || tab.pendingUrl || '') === target).length;
+      return tabs.filter(tab => tab.url === target || tab.pendingUrl === target).length;
     }, destinationUrl)).toBe(1);
 
     const firstDestinationTab = await extensionWorker.evaluate(async target => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.find(tab => (tab.url || tab.pendingUrl || '') === target)?.id ?? null;
+      return tabs.find(tab => tab.url === target || tab.pendingUrl === target)?.id ?? null;
     }, destinationUrl);
     expect(firstDestinationTab).not.toBeNull();
 

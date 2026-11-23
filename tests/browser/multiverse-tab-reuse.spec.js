@@ -735,7 +735,19 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
     });
 
     const originalGet = chrome.storage.local.get;
+    const originalSet = chrome.storage.local.set;
     let pendingReads = 0;
+    let completedCleanupWrites = 0;
+    let signalBothCleanupWrites;
+    const bothCleanupWrites = new Promise(resolve => { signalBothCleanupWrites = resolve; });
+    chrome.storage.local.set = async items => {
+      const result = await originalSet.call(chrome.storage.local, items);
+      if (items && Object.prototype.hasOwnProperty.call(items, 'blbSuitePendingMultiVerseRefsByTab')) {
+        completedCleanupWrites++;
+        if (completedCleanupWrites === 2) signalBothCleanupWrites();
+      }
+      return result;
+    };
     let activeReads = 0;
     let maxConcurrentReads = 0;
     let releaseReads;
@@ -763,7 +775,16 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
     try {
       await Promise.all([chrome.tabs.remove(first.id), chrome.tabs.remove(second.id)]);
       await bothReadsStarted;
-      await new Promise(resolve => setTimeout(resolve, 250));
+      // tabs.remove() resolves independently of the extension event listener.
+      // Observe both serialized storage writes directly; do not infer listener
+      // completion from the tabs.remove() promise or an arbitrary sleep.
+      await Promise.race([
+        bothCleanupWrites,
+        new Promise((_, reject) => setTimeout(
+          () => reject(new Error('Timed out waiting for both pending-reference cleanup writes')),
+          5000
+        ))
+      ]);
       const saved = await originalGet.call(chrome.storage.local, {
         blbSuitePendingMultiVerseRefsByTab:{}
       });
@@ -772,10 +793,12 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
         firstClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, firstKey),
         secondClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, secondKey),
         survivorPreserved:Array.isArray(map[survivorKey]),
-        maxConcurrentCleanupReads:maxConcurrentReads
+        maxConcurrentCleanupReads:maxConcurrentReads,
+        completedCleanupWrites
       };
     } finally {
       chrome.storage.local.get = originalGet;
+      chrome.storage.local.set = originalSet;
       await Promise.all([first.id, second.id].map(id => chrome.tabs.remove(id).catch(() => {})));
     }
   });
@@ -784,7 +807,8 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
     firstClosedEntryPresent:false,
     secondClosedEntryPresent:false,
     survivorPreserved:true,
-    maxConcurrentCleanupReads:1
+    maxConcurrentCleanupReads:1,
+    completedCleanupWrites:2
   });
 });
 
