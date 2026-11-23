@@ -1006,10 +1006,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (source && scriptElementBindings.has(source)) scriptElementBindings.add(target);
         }
         if (target && node.init.type === 'MemberExpression') {
-          const base = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
+          let owner = node.init.object;
+          while (owner && owner.type === 'MemberExpression') owner = owner.object;
+          const base = owner && owner.type === 'Identifier' ? bindings.get(owner) : null;
           const prop = node.init.computed ? staticValue(node.init.property, constants, 0, bindings) : node.init.property.name;
-          if (prop === 'createElement' && (node.init.object.name === 'document' || (base && documentNamespaceBindings.has(base)))) createElementMethodBindings.add(target);
-          if (prop === 'appendChild' && (node.init.object.name === 'document' || (base && documentNamespaceBindings.has(base)))) appendChildMethodBindings.add(target);
+          const isDocumentOwner = owner?.type === 'Identifier' && (owner.name === 'document' || (base && documentNamespaceBindings.has(base)));
+          if (prop === 'createElement' && isDocumentOwner) createElementMethodBindings.add(target);
+          if (prop === 'appendChild' && isDocumentOwner) appendChildMethodBindings.add(target);
         }
         if (target && node.init.type === 'CallExpression') {
           const callee = node.init.callee;
