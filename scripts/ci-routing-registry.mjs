@@ -338,7 +338,7 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js",
   "tests/browser/source-page-button-redirect-separation.spec.js",
-  "tests/browser/master-toggle-four-action-recovery.spec.js"
+  
 ]);
 
 
