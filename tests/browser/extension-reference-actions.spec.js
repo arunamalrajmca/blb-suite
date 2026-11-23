@@ -717,7 +717,7 @@ test.describe('core user-visible E2E', () => {
     // extraction; allow normal four-worker audit contention without hiding a
     // missing diagnostic or changing the expected result.
     await expect.poll(async () => page.locator('[data-blb-verse-context-diagnostic]').count(), {
-      timeout: 10000, intervals: [100, 200, 300, 500]
+      timeout: 20000, intervals: [100, 200, 300, 500]
     }).toBeGreaterThan(0);
     const diagnosticText = await page.locator('[data-blb-verse-context-diagnostic]').first()
       .getAttribute('data-blb-verse-context-diagnostic');
