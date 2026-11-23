@@ -43,6 +43,39 @@ test('resolves named callback owners passed through a same-module registration w
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
+
+test('propagates callback owners through multiple wrapper parameters and local aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'function registerInner(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'function registerMiddle(handler) { const forwarded = handler; registerInner(forwarded); }',
+      'function registerOuter(callback) { registerMiddle(callback); }',
+      'registerOuter(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'), registration.callbackTarget);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps nested callback wrappers uncertain when an intermediate parameter has no known caller', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function registerInner(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'function registerOuter(handler) { registerInner(handler); }'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
 test('resolves callback owners through an imported registration wrapper', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
