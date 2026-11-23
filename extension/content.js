@@ -360,10 +360,10 @@ function installChristianityLinkRedirect(isEnabled) {
     if (!target && ["rediscover.bible", "sagacityweb.com"].includes(host)) {
       try {
         const linkedUrl = new URL(href, location.href);
-        const linkedHost = linkedUrl.hostname.toLowerCase().replace(/^www\\./, "");
+        const linkedHost = linkedUrl.hostname.toLowerCase().replace(/^www\./, "");
         if (["blueletterbible.org", "blueletterbible.com"].includes(linkedHost) &&
-            (/^\\/search\\/preSearch\\.cfm$/i.test(linkedUrl.pathname) ||
-             /^\\/kjv\\/[^/]+\\/\\d+(?:\\/\\d+(?:-\\d+)?)?\\/?$/i.test(linkedUrl.pathname))) {
+            (/^\/search\/preSearch\.cfm$/i.test(linkedUrl.pathname) ||
+             /^\/kjv\/[^/]+\/\d+(?:\/\d+(?:-\d+)?)?\/?$/i.test(linkedUrl.pathname))) {
           target = linkedUrl.href;
         }
       } catch (_) {}
