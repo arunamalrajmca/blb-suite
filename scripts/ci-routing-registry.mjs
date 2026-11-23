@@ -267,8 +267,7 @@ export const togglePermissionSpecs = new Set([
   "tests/browser/popup-master-toggle-regression.spec.js",
   "tests/browser/master-toggle-four-action-recovery.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
-  "tests/browser/optional-host-permission-lifecycle.spec.js",
-  "tests/browser/master-toggle-four-action-recovery.spec.js"
+  "tests/browser/optional-host-permission-lifecycle.spec.js"
 ]);
 
 export const groupARequiredSpecs = new Set([
@@ -304,6 +303,7 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/site-feature-defaults.spec.js",
   "tests/browser/popup-site-toggle-independence.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/master-toggle-four-action-recovery.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/optional-host-permission-lifecycle.spec.js",
   "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
@@ -368,5 +368,6 @@ export const referenceDelegatedSpecs = new Set([
   "tests/browser/multiverse-disjoint-chapter-post.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
   "tests/browser/site-registration-opt-out-race.spec.js",
-  "tests/browser/source-page-button-redirect-separation.spec.js"
+  "tests/browser/source-page-button-redirect-separation.spec.js",
+  "tests/browser/master-toggle-four-action-recovery.spec.js"
 ]);
