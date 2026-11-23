@@ -542,6 +542,60 @@ test('resolves destructured and directly aliased chrome.scripting loader methods
   assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/aliased.js'));
 });
 
+
+test('resolves Worker and SharedWorker entrypoints, including constructor aliases and URL literals', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "new Worker('./worker.js');",
+      "const WorkerAlias = Worker; new WorkerAlias(new URL('./module-worker.js', import.meta.url), { type: 'module' });",
+      "new SharedWorker('./shared-worker.js');"
+    ].join(' '),
+    'scripts/worker.js': 'self.onmessage = () => {};',
+    'scripts/module-worker.js': 'importScripts("./worker-dependency.js");',
+    'scripts/shared-worker.js': 'onconnect = () => {};',
+    'scripts/worker-dependency.js': 'self.dependency = true;'
+  });
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/module-worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/shared-worker.js'));
+  assert.ok(edge(result, 'importScripts', 'scripts/module-worker.js', 'scripts/worker-dependency.js'));
+});
+
+test('tracks DOM script injection through aliased document and createElement bindings', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const doc = document;',
+      'const create = doc.createElement;',
+      "const script = create('script');",
+      "script.src = './injected.js';",
+      'const alias = script;',
+      "alias.setAttribute('src', './also-injected.js');",
+      'const append = doc.head.appendChild;',
+      'append(alias);'
+    ].join(' '),
+    'scripts/injected.js': 'globalThis.injected = true;',
+    'scripts/also-injected.js': 'globalThis.alsoInjected = true;'
+  });
+  assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'scripts/injected.js'));
+  assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'scripts/also-injected.js'));
+});
+
+test('keeps unresolved worker URLs explicitly uncertain within the creating root', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "const path = getWorkerPath(); new Worker(path);",
+    'scripts/plugins/runtime-worker.js': 'self.runtime = true;'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'worker-constructor' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'scripts/plugins/runtime-worker.js' && item.affectedRoots.includes('scripts/main.js')
+  ));
+});
+
 test('does not treat executeScript inline func bodies as unresolved file targets', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
