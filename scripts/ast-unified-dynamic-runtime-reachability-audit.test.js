@@ -1004,3 +1004,50 @@ test('tracks destructured Proxy.revocable aliases without misclassifying shadowe
   assert.equal(proxies.length, 1);
   assert.deepEqual(proxies[0].affectedRoots, ['scripts/main.js']);
 });
+
+test('tracks assignment-based aliases of reflection APIs and Proxy constructors', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let reflection;',
+      'reflection = Reflect;',
+      'let read;',
+      'read = reflection.get;',
+      'let objectApi;',
+      'objectApi = Object;',
+      'let define;',
+      'define = objectApi.defineProperty;',
+      'let createProxy;',
+      'createProxy = Proxy;',
+      'new createProxy(target, handler);',
+      'read(target, runtimeKey);',
+      'define(target, runtimeKey, descriptor);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const kinds = result.uncertainty.map(item => item.kind);
+  assert.ok(kinds.includes('proxy-construction'));
+  assert.ok(kinds.includes('reflective-property-operation'));
+  assert.ok(kinds.includes('prototype-or-descriptor-mutation'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('does not promote aliases copied from locally shadowed Proxy, Reflect, or Object parameters', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function ordinary(Proxy, Reflect, Object) {',
+      '  const makeProxy = Proxy;',
+      '  const reflection = Reflect;',
+      '  const objectApi = Object;',
+      '  new makeProxy(target, handler);',
+      '  reflection.get(target, key);',
+      '  objectApi.defineProperty(target, key, descriptor);',
+      '}',
+      'ordinary(localProxy, localReflect, localObject);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.equal(result.uncertainty.filter(item =>
+    ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
+});
