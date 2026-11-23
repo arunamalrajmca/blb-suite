@@ -354,6 +354,20 @@ function installChristianityLinkRedirect(isEnabled) {
     const label = String(typeof detail?.label === "string" ? detail.label : "").replace(/\s+/g, " ").trim();
     const host = String(location.hostname || "").toLowerCase().replace(/^www\./, "");
     let target = christianityBibleLinkTarget(href);
+    // Rediscover and Sagacity often link directly to BLB's search endpoint.
+    // Preserve that exact destination (including cross-chapter Criteria ranges)
+    // instead of forcing it through the single-chapter label parser.
+    if (!target && ["rediscover.bible", "sagacityweb.com"].includes(host)) {
+      try {
+        const linkedUrl = new URL(href, location.href);
+        const linkedHost = linkedUrl.hostname.toLowerCase().replace(/^www\\./, "");
+        if (["blueletterbible.org", "blueletterbible.com"].includes(linkedHost) &&
+            (/^\\/search\\/preSearch\\.cfm$/i.test(linkedUrl.pathname) ||
+             /^\\/kjv\\/[^/]+\\/\\d+(?:\\/\\d+(?:-\\d+)?)?\\/?$/i.test(linkedUrl.pathname))) {
+          target = linkedUrl.href;
+        }
+      } catch (_) {}
+    }
     if (!target && host === "sarata.com") target = sarataBibleLinkTarget(href);
     if (!target && ["openbible.info", "crossway.org", "sarata.com"].includes(host)) {
       const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
