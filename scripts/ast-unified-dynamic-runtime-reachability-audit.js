@@ -747,15 +747,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
     };
     visit(ast, (node, parent) => {
       if (parent) parents.set(node, parent);
-      // Track direct aliases of the reflective primitives. This is deliberately
-      // binding-aware: same-spelled local variables do not become global APIs.
+      // Track direct aliases of reflective primitives without promoting
+      // same-spelled lexical shadows into global built-ins.
       if (node.type === 'VariableDeclarator' && node.init) {
         const target = node.id.type === 'Identifier' ? bindings.get(node.id) : null;
         if (target && node.init.type === 'Identifier') {
-          if (node.init.name === 'Proxy') proxyConstructorBindings.add(target);
-          if (node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
-          if (node.init.name === 'Object') objectNamespaceBindings.add(target);
           const source = bindings.get(node.init);
+          if (!source && node.init.name === 'Proxy') proxyConstructorBindings.add(target);
+          if (!source && node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
+          if (!source && node.init.name === 'Object') objectNamespaceBindings.add(target);
           if (source && proxyConstructorBindings.has(source)) proxyConstructorBindings.add(target);
           if (source && reflectNamespaceBindings.has(source)) reflectNamespaceBindings.add(target);
           if (source && objectNamespaceBindings.has(source)) objectNamespaceBindings.add(target);
@@ -765,18 +765,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         if (target && node.init.type === 'MemberExpression') {
           const api = runtimeMetaPath(node.init);
-          if (api === 'globalThis.Proxy' || api === 'window.Proxy' || api === 'self.Proxy') proxyConstructorBindings.add(target);
-          const reflectMethod = /(?:^|\.)Reflect\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
-          const objectMethod = /(?:^|\.)Object\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
+          if (['globalThis.Proxy', 'window.Proxy', 'self.Proxy'].includes(api)) proxyConstructorBindings.add(target);
+          if (['globalThis.Reflect', 'window.Reflect', 'self.Reflect'].includes(api)) reflectNamespaceBindings.add(target);
+          if (['globalThis.Object', 'window.Object', 'self.Object'].includes(api)) objectNamespaceBindings.add(target);
+          const reflectMethod = /(?:^|\\.)Reflect\\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
+          const objectMethod = /(?:^|\\.)Object\\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
           if (reflectMethod) reflectMethodBindings.set(target, reflectMethod);
           if (objectMethod) objectMethodBindings.set(target, objectMethod);
           if (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable')) proxyRevocableBindings.add(target);
         }
-        // Destructured aliases such as const { get: read } = Reflect.
         if (node.id.type === 'ObjectPattern') {
           const namespace = runtimeMetaPath(node.init);
           if (['Reflect', 'globalThis.Reflect', 'window.Reflect', 'self.Reflect'].includes(namespace) ||
-              ['Object', 'globalThis.Object', 'window.Object', 'self.Object'].includes(namespace)) {
+              ['Object', 'globalThis.Object', 'window.Object', 'self.Object'].includes(namespace) ||
+              ['Proxy', 'globalThis.Proxy', 'window.Proxy', 'self.Proxy'].includes(namespace)) {
             for (const property of node.id.properties || []) {
               if (property.type !== 'Property' || (property.computed && property.key.type !== 'Literal')) continue;
               const name = property.computed ? String(property.key.value) : property.key.name;
@@ -785,7 +787,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
               const localKey = bindings.get(local);
               if (!localKey) continue;
               if (namespace.endsWith('Reflect')) reflectMethodBindings.set(localKey, name);
-              else objectMethodBindings.set(localKey, name);
+              else if (namespace.endsWith('Object')) objectMethodBindings.set(localKey, name);
+              else if (name === 'revocable') proxyRevocableBindings.add(localKey);
             }
           }
         }
@@ -992,6 +995,29 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && node.right.type === 'Identifier') {
           const source = bindings.get(node.right);
           if (source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
+        }
+        if (target && node.right.type === 'Identifier') {
+          const source = bindings.get(node.right);
+          if (!source && node.right.name === 'Proxy') proxyConstructorBindings.add(target);
+          if (!source && node.right.name === 'Reflect') reflectNamespaceBindings.add(target);
+          if (!source && node.right.name === 'Object') objectNamespaceBindings.add(target);
+          if (source && proxyConstructorBindings.has(source)) proxyConstructorBindings.add(target);
+          if (source && reflectNamespaceBindings.has(source)) reflectNamespaceBindings.add(target);
+          if (source && objectNamespaceBindings.has(source)) objectNamespaceBindings.add(target);
+          if (source && reflectMethodBindings.has(source)) reflectMethodBindings.set(target, reflectMethodBindings.get(source));
+          if (source && objectMethodBindings.has(source)) objectMethodBindings.set(target, objectMethodBindings.get(source));
+          if (source && proxyRevocableBindings.has(source)) proxyRevocableBindings.add(target);
+        }
+        if (target && node.right.type === 'MemberExpression') {
+          const api = runtimeMetaPath(node.right);
+          if (/^(?:globalThis|window|self)\\.Reflect$/.test(api)) reflectNamespaceBindings.add(target);
+          if (/^(?:globalThis|window|self)\\.Object$/.test(api)) objectNamespaceBindings.add(target);
+          if (/^(?:globalThis|window|self)\\.Proxy$/.test(api)) proxyConstructorBindings.add(target);
+          const reflectMethod = /(?:^|\\.)Reflect\\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
+          const objectMethod = /(?:^|\\.)Object\\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
+          if (reflectMethod) reflectMethodBindings.set(target, reflectMethod);
+          if (objectMethod) objectMethodBindings.set(target, objectMethod);
+          if (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable')) proxyRevocableBindings.add(target);
         }
         if (target && node.right.type === 'MemberExpression') {
           const rightPath = memberPath(node.right);
