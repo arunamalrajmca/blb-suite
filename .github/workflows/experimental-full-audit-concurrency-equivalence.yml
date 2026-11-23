@@ -17,8 +17,8 @@ concurrency:
 
 jobs:
   compare-complete-browser-inventory:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') }}
-    name: Compare representative one-worker and four-worker browser audits
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') && (github.event.action != 'labeled' || github.event.label.name == 'ci-full-audit-concurrency-equivalence')) }}
+    name: Compare complete legacy serial and four-worker browser audits
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
