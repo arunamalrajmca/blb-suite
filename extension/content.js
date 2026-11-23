@@ -243,6 +243,8 @@ function formatSourceBibleBookName(book) {
 
 function parseRef(text) {
   const value=decodeSafe(text).trim()
+    // Normalize Unicode range dashes used by source-page verse citations.
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
     // Normalize any supported verse cue before parsing the numeric reference.
     .replace(
       new RegExp(String.raw`\b${VERSE_CUE_TOKEN_SOURCE}\s*(?:\(\s*(\d+)\s*\)|(\d+))`, 'gi'),
@@ -250,7 +252,7 @@ function parseRef(text) {
     );
   // Accept normal references and BiblePortal's dotted form, e.g.
   // John 3:16, John 3 16, and John.3.16.
-  const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)(?:-(\d+))?)?$/);
+  const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)[a-z]?(?:-(\d+)[a-z]?)?)?$/i);
   return m ? {book:m[1].trim(),chapter:Number(m[2]),from:m[3]?Number(m[3]):1,to:m[4]?Number(m[4]):null} : null;
 }
 
