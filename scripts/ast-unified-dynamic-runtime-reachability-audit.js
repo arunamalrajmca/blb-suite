@@ -797,6 +797,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
           (node.type === 'CallExpression' && runtimeMetaPath(node.callee) === 'Proxy.revocable')) {
         addMetaUncertainty(node, 'proxy-construction', 'Proxy traps can synthesize property reads, writes, enumeration, descriptors, and callable/constructable behavior.');
       }
+      if (node.type === 'MemberExpression' && node.computed &&
+          staticValue(node.property, constants, 0, bindings) === undefined) {
+        const namespace = runtimeMetaPath(node.object);
+        if (/^(?:Reflect|Object|Proxy|(?:globalThis|window|self)\\.(?:Reflect|Object|Proxy))$/.test(namespace)) {
+          addMetaUncertainty(node, 'dynamic-reflective-api-name',
+            namespace + '[dynamic property] may select an introspection, mutation, or proxy API that cannot be identified statically.');
+        }
+      }
       if (node.type === 'CallExpression') {
         const api = runtimeMetaPath(node.callee);
         if (/^Reflect\.(?:get|set|has|ownKeys|getOwnPropertyDescriptor|getPrototypeOf|isExtensible|defineProperty|deleteProperty|setPrototypeOf|preventExtensions|construct|apply)$/.test(api)) {
