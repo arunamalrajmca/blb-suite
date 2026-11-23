@@ -58,6 +58,21 @@ test('resolves callback owners through an imported registration wrapper', () => 
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
+test('keeps callback parameters uncertain when another callsite supplies an unknown value', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) {}',
+      'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'register(onMessage); register(getRuntimeCallback());'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
 test('keeps callback parameters uncertain when callsites disagree on the owner', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -68,7 +83,7 @@ test('keeps callback parameters uncertain when callsites disagree on the owner',
       'register(first); register(second);'
     ].join(' ')
   });
-  const registration = result.sites.find(item => item.kind === 'external-callback-registration');
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
   assert.equal(registration.certainty, 'unresolved-callback-owner');
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
