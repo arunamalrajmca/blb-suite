@@ -38,8 +38,12 @@
       /^\/bible\/(?:chapter|verses)\/[^/]+\.\d+\.html$/i.test(url.pathname) &&
       /^#\d+:\d+(?:-\d+)?$/.test(url.hash);
     const isReferenceLabel = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z .'-]*\s+\d+(?::\d+[a-z]?(?:[-–]\d+[a-z]?)?|\s+\d+[a-z]?(?:[-–]\d+[a-z]?)?)?(?:\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\))?$/i.test(label);
+    const isBlbReferenceDestination = ["rediscover.bible", "sagacityweb.com"].includes(host) &&
+      ["blueletterbible.org", "blueletterbible.com"].includes(targetHost) &&
+      (/^\/search\/preSearch\.cfm$/i.test(url.pathname) ||
+       /^\/kjv\/[^/]+\/\d+(?:\/\d+(?:-\d+)?)?\/?$/i.test(url.pathname));
     if (!isChristianityPassage && !isChurchOfJesusChristVerse &&
-        !isMercyHouseVerse && !isSarataVerse && !isReferenceLabel) return;
+        !isMercyHouseVerse && !isSarataVerse && !isReferenceLabel && !isBlbReferenceDestination) return;
 
     const request = new CustomEvent("blb-suite-source-passage-click", {
       detail: JSON.stringify({ href:url.href, label }),
