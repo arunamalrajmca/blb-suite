@@ -90,8 +90,8 @@ test('resolves callback owners passed through object-literal method wrappers', (
   const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
   assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
-  assert.match(registration.callbackTarget, /::registrar\.register@2/);
-  assert.match(registration.callbackTarget, /onMessage@1:/);
+  assert.match(registration.callbackTarget, /scripts\/main\.js::onMessage@1:/);
+  assert.equal(registration.callbackTarget, registration.resolved);
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
@@ -108,8 +108,8 @@ test('resolves callback owners passed through aliased object-literal method wrap
   const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
   assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
-  assert.match(registration.callbackTarget, /::registrar\.register@2/);
-  assert.match(registration.callbackTarget, /onMessage@1:/);
+  assert.match(registration.callbackTarget, /scripts\/main\.js::onMessage@1:/);
+  assert.equal(registration.callbackTarget, registration.resolved);
 });
 
 
