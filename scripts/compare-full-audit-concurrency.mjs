@@ -95,6 +95,46 @@ try {
   });
   console.log('Discovered ' + entries.length + '; delegated to dedicated workflows ' + delegated.length + '; comparison inventory ' + scheduled.length + '.');
 
+  const mode = process.env.BLB_CONCURRENCY_MODE || 'full';
+  if (!['screen', 'full'].includes(mode)) throw new Error('Unknown BLB_CONCURRENCY_MODE: ' + mode);
+
+  if (mode === 'screen') {
+    console.log('[2/2] Running one complete four-worker screening pass (fail fast).');
+    const result = run(['--test-list', listPath, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
+    fs.writeFileSync(path.join(reportRoot, 'screening.log'), (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+    let tests = [];
+    let parseError = null;
+    try { tests = collectTests(parseJsonReport(result.stdout || '', 'four-worker screening')); }
+    catch (error) { parseError = error.message; }
+    const byKey = new Map();
+    const duplicates = [];
+    for (const test of tests) {
+      if (byKey.has(test.key)) duplicates.push(test.key);
+      byKey.set(test.key, test);
+    }
+    const expected = new Set(scheduled.map(entry => {
+      const match = entry.match(/^\\s*\\[([^\\]]+)\\] › ([^\\s]+\\.spec\\.js):(\\d+):(\\d+) › (.*)$/);
+      return match ? [match[1], match[2], Number(match[3]), Number(match[4]), match[5]].join('|') : null;
+    }).filter(Boolean));
+    const missing = [...expected].filter(key => !byKey.has(key));
+    const extra = [...byKey.keys()].filter(key => !expected.has(key));
+    const failures = tests.filter(test => test.status !== 'passed' && test.status !== 'skipped');
+    const summary = {
+      mode, discoveredTestCount: entries.length, delegatedTestCount: delegated.length,
+      scheduledTestCount: scheduled.length, observedTestCount: tests.length,
+      exitCode: result.status, timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'),
+      parseError, missing, extra, duplicates, failures,
+      complete: result.status === 0 && !parseError && tests.length === scheduled.length &&
+        missing.length === 0 && extra.length === 0 && duplicates.length === 0 && failures.length === 0
+    };
+    writeJson(path.join(reportRoot, 'screening-summary.json'), summary);
+    console.log('Screening summary: ' + JSON.stringify({
+      complete: summary.complete, observed: summary.observedTestCount, expected: summary.scheduledTestCount,
+      failures: failures.length, missing: missing.length, extra: extra.length, duplicates: duplicates.length,
+      exitCode: result.status
+    }));
+    if (!summary.complete) process.exitCode = 1;
+  } else {
   console.log('[2/5] Running the legacy one-test-per-process serial baseline.');
   const serial = [];
   const serialErrors = [];
@@ -205,6 +245,7 @@ try {
     }))
   }));
   if (!final.equivalent) process.exitCode = 1;
+  }
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 }
