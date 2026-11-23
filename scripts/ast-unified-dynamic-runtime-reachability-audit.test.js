@@ -575,8 +575,8 @@ test('tracks DOM script injection through aliased document and createElement bin
       'const append = doc.head.appendChild;',
       'append(alias);'
     ].join(' '),
-    'scripts/injected.js': 'globalThis.injected = true;',
-    'scripts/also-injected.js': 'globalThis.alsoInjected = true;'
+    'extension/injected.js': 'globalThis.injected = true;',
+    'extension/also-injected.js': 'globalThis.alsoInjected = true;'
   });
   assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'scripts/injected.js'));
   assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'scripts/also-injected.js'));
