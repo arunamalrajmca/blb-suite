@@ -20,7 +20,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') && (github.event.action != 'labeled' || github.event.label.name == 'ci-full-audit-concurrency-equivalence')) }}
     name: Fail-fast complete-inventory browser screening
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 120
     steps:
       - name: Checkout selected ref
         uses: actions/checkout@v5
@@ -63,9 +63,24 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Publish comparison result
+        if: always()
+        env:
+          OUTCOME: ${{ steps.comparison.outcome }}
+        run: |
+          {
+            echo "## Full-audit concurrency equivalence"
+            echo
+            echo "Execution: one complete four-worker screening pass with fail-fast enabled. A separate deep-qualification label enables the isolated serial baseline and three full repetitions."
+            echo
+            echo "Result: **$OUTCOME**"
+            echo
+            echo "The uploaded artifact contains the complete inventory, screening log, and exact test-identity/failure summary."
+          } >> "$GITHUB_STEP_SUMMARY"
+
 
   compare-complete-browser-inventory:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
     name: Deep legacy serial and three-repeat concurrency equivalence
     runs-on: ubuntu-latest
     timeout-minutes: 360
@@ -118,17 +133,3 @@ jobs:
             echo "The artifact contains the complete inventory, isolated serial logs/results, three parallel logs/results, and exact equivalence summary."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish comparison result
-        if: always()
-        env:
-          OUTCOME: ${{ steps.comparison.outcome }}
-        run: |
-          {
-            echo "## Full-audit concurrency equivalence"
-            echo
-            echo "Execution: one complete four-worker screening pass with fail-fast enabled. A separate deep-qualification label enables the isolated serial baseline and three full repetitions."
-            echo
-            echo "Result: **$OUTCOME**"
-            echo
-            echo "The uploaded artifact contains the complete inventory, screening log, and exact test-identity/failure summary."
-          } >> "$GITHUB_STEP_SUMMARY"
