@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}
+  group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
