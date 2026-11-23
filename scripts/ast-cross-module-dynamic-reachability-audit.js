@@ -135,7 +135,7 @@ function analyzeCrossModule(root,files){
       for(const name of exportedNames(target,meta,files)){
         if(name==='default')continue;
         const origin=originFor(target,name);
-        links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:origin?.local??null,originFile:origin?path.relative(root,origin.file):null,unresolvedExport:!origin,reexport:true});
+        links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:origin?.local??null,originFile:origin?path.relative(root,origin.file):null,unresolvedExport:!origin,reexport:true,namespace:!!origin?.namespace});
       }
       continue;
     }
