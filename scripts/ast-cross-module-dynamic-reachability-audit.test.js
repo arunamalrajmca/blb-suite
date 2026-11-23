@@ -290,3 +290,30 @@ test('preserves named default-function identity through an explicit re-export',(
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.js'&&x.imported==='runService'&&x.originFile==='service.js'&&x.exportedLocal==='run'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves export-star namespace re-exports as namespace identities',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reexport-star-namespace-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'barrel.js'),"export * as api from './service.js';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { api } from './barrel.js'; api.service.start();");
+  const files=['service.js','barrel.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.js'&&x.imported==='api'&&x.namespace&&!x.unresolvedExport));
+  assert.ok(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.local==='api'&&x.exportedLocal==='service'&&x.property==='service'&&x.namespace));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('explicit re-exports take precedence over conflicting export-star names',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reexport-explicit-precedence-'));
+ try{
+  fs.writeFileSync(path.join(root,'service-a.js'),'export const service = { alpha() {} };');
+  fs.writeFileSync(path.join(root,'service-b.js'),'export const service = { beta() {} };');
+  fs.writeFileSync(path.join(root,'barrel.js'),"export { service } from './service-a.js'; export * from './service-b.js';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './barrel.js'; service.alpha();");
+  const files=['service-a.js','service-b.js','barrel.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.js'&&x.imported==='service'&&x.originFile==='service-a.js'&&!x.unresolvedExport));
+  assert.ok(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service-a.js'&&x.property==='alpha'));
+  assert.equal(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service-b.js'&&x.property==='alpha'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
