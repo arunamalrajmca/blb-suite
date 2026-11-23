@@ -76,6 +76,23 @@ test('keeps nested callback wrappers uncertain when an intermediate parameter ha
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
+
+test('resolves callback wrappers declared as arrow-function variables', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'const register = callback => chrome.runtime.onMessage.addListener(callback);',
+      'register(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
 test('resolves callback owners through an imported registration wrapper', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -106,6 +123,7 @@ test('resolves callback wrappers imported through a named re-export alias', () =
   assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
   assert.match(registration.callbackTarget, /::onMessage@1:/);
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+  assert.ok(edge(result, 'function-call', 'scripts/main.js', 'scripts/registrar.js'));
 });
 
 test('resolves callback wrappers imported through an export-star barrel', () => {
