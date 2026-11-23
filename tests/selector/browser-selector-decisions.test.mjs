@@ -1220,10 +1220,21 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "utf8"
   );
 
-  assert.ok(audit.includes("first_status=0") && audit.includes("second_status=0"),
-    "both independent prior-failure reruns must execute even if the first one fails");
-  assert.ok(audit.includes('"$first_status" -ne 0 || "$second_status" -ne 0'),
-    "the audit must report failure if either independent rerun fails");
+  assert.ok(
+    audit.includes("npx playwright test \\\n            tests/browser/extension-reference-actions.spec.js \\\n            tests/browser/service-worker-lifecycle.spec.js"),
+    "both prior failures must run in one Playwright invocation"
+  );
+  assert.ok(
+    audit.includes('--grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable"'),
+    "the combined rerun must select exactly the two historical failures"
+  );
+  assert.ok(audit.includes("--workers=2 --max-failures=0 --reporter=line"),
+    "the combined rerun must preserve isolated workers and execute both cases after a failure");
+  assert.ok(
+    audit.includes("rerun_status=0") &&
+    audit.includes('if [[ "$rerun_status" -ne 0 || -z "$summary" || "$article_count" -ne 1 || "$lifecycle_count" -ne 1 ]]'),
+    "the audit must fail unless both expected tests pass exactly once"
+  );
 
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",

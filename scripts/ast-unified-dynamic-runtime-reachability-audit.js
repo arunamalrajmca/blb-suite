@@ -363,8 +363,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
   }
 
   const exportsByFile = new Map();
+  const reExportsByFile = new Map();
+  const exportStarsByFile = new Map();
   for (const [file, ast] of asts) {
-    const bindings = bindingByFile.get(file), exported = new Map();
+    const bindings = bindingByFile.get(file), exported = new Map(), reExports = new Map(), exportStars = [];
     for (const statement of ast.body) {
       const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : null;
       if (declaration && declaration.type === 'FunctionDeclaration' && declaration.id) {
@@ -375,17 +377,32 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const key = bindings.get(item.id); if (key) exported.set(item.id.name, key);
         }
       }
+      if (statement.type === 'ExportDefaultDeclaration' && statement.declaration?.type === 'FunctionDeclaration' &&
+          statement.declaration.id) {
+        const key = bindings.get(statement.declaration.id);
+        if (key) exported.set('default', key);
+      }
       if (statement.type === 'ExportNamedDeclaration') {
         for (const spec of statement.specifiers || []) {
-          if (statement.source) continue;
-          const local = spec.local.name || spec.local.value;
           const name = spec.exported.name || spec.exported.value;
+          if (statement.source) {
+            const importedName = spec.local.name || spec.local.value;
+            if (!reExports.has(name)) reExports.set(name, []);
+            reExports.get(name).push({ source: statement.source.value, importedName });
+            continue;
+          }
+          const local = spec.local.name || spec.local.value;
           const key = [...bindings.entries()].find(([identifier]) => identifier.name === local)?.[1];
           if (key) exported.set(name, key);
         }
       }
+      if (statement.type === 'ExportAllDeclaration' && statement.source?.value) {
+        exportStars.push(statement.source.value);
+      }
     }
     exportsByFile.set(file, exported);
+    reExportsByFile.set(file, reExports);
+    exportStarsByFile.set(file, exportStars);
   }
 
   const functionDefs = new Map();
@@ -399,6 +416,223 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const key = bindings.get(parent.id); if (key) functionDefs.set(file + '::' + key, { file, node });
       }
     });
+  }
+
+  // Resolve callback parameters through direct callsites. A wrapper such as
+  // register(handler) { api.addListener(handler); } owns no local function
+  // declaration for handler; its callers provide the actual callback.
+  // Resolve only when all observed callsites agree on one owner.
+  const importedFunctionsByFile = new Map();
+  const functionAliasesByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file);
+    const imported = new Map();
+    const aliases = new Map();
+    visit(ast, node => {
+      if (node.type === 'ImportDeclaration' && node.source.value) {
+        const target = resolveFile(file, node.source.value, fileSet);
+        if (!target) return;
+        for (const spec of node.specifiers || []) {
+          const importedName = spec.imported ? (spec.imported.name || spec.imported.value) : 'default';
+          imported.set(bindings.get(spec.local), { file: target, importedName });
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init && node.init.type === 'Identifier') {
+        const target = bindings.get(node.id), source = bindings.get(node.init);
+        if (target && source) aliases.set(target, source);
+      }
+    });
+    importedFunctionsByFile.set(file, imported);
+    functionAliasesByFile.set(file, aliases);
+  }
+  const resolveExportedFunction = (file, name, seen = new Set()) => {
+    const identity = file + '::' + name;
+    if (seen.has(identity)) return null;
+    seen.add(identity);
+    const localKey = exportsByFile.get(file)?.get(name);
+    const localDefinition = localKey && functionDefs.get(file + '::' + localKey);
+    if (localDefinition) return { file, key: localKey, node: localDefinition.node };
+    const candidates = [];
+    for (const item of reExportsByFile.get(file)?.get(name) || []) {
+      const target = resolveFile(file, item.source, fileSet);
+      const resolved = target && resolveExportedFunction(target, item.importedName, new Set(seen));
+      if (resolved) candidates.push(resolved);
+    }
+    // ECMAScript export-star never forwards a module's default export.
+    if (name !== 'default') for (const source of exportStarsByFile.get(file) || []) {
+      const target = resolveFile(file, source, fileSet);
+      const resolved = target && resolveExportedFunction(target, name, new Set(seen));
+      if (resolved) candidates.push(resolved);
+    }
+    const unique = new Map(candidates.map(item => [item.file + '::' + item.key, item]));
+    return unique.size === 1 ? [...unique.values()][0] : null;
+  };
+  const objectMethodDefsByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file), methods = new Map();
+    visit(ast, node => {
+      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+          node.init?.type !== 'ObjectExpression') return;
+      const objectKey = bindings.get(node.id);
+      if (!objectKey) return;
+      for (const property of node.init.properties || []) {
+        if (property.type !== 'Property' || !['FunctionExpression', 'ArrowFunctionExpression'].includes(property.value?.type)) continue;
+        const name = property.computed
+          ? (property.key.type === 'Literal' ? String(property.key.value) : null)
+          : (property.key.name || String(property.key.value));
+        if (name !== null) methods.set(objectKey + '::' + name, {
+          file, key: objectKey + '.' + name + '@' + property.loc.start.line, node: property.value
+        });
+      }
+    });
+    objectMethodDefsByFile.set(file, methods);
+  }
+  const resolveFunctionOwner = (file, identifier) => {
+    const bindings = bindingByFile.get(file);
+    let key = bindings && bindings.get(identifier);
+    const aliases = functionAliasesByFile.get(file);
+    const seen = new Set();
+    while (key && aliases && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
+    let definition = key && functionDefs.get(file + '::' + key);
+    if (definition) return { file: definition.file, key, node: definition.node };
+    // Script/global scopes can leave same-file function references unresolved.
+    // Use an exact local function name only when it has one definition.
+    const localMatches = [...functionDefs].filter(([candidateKey, candidate]) =>
+      candidate.file === file && candidate.node.id?.name === identifier.name
+    );
+    if (localMatches.length === 1) {
+      const [candidateKey, candidate] = localMatches[0];
+      return { file: candidate.file, key: candidateKey.slice(file.length + 2), node: candidate.node };
+    }
+    const imported = key && importedFunctionsByFile.get(file).get(key);
+    if (imported) return resolveExportedFunction(imported.file, imported.importedName);
+    return null;
+  };
+  const resolveCallableOwner = (file, callee) => {
+    if (callee.type === 'Identifier') return resolveFunctionOwner(file, callee);
+    if (callee.type !== 'MemberExpression' || callee.object.type !== 'Identifier') return null;
+    const property = callee.computed
+      ? (callee.property.type === 'Literal' ? String(callee.property.value) : null)
+      : callee.property.name;
+    if (property === null) return null;
+    let objectKey = bindingByFile.get(file)?.get(callee.object);
+    const aliases = functionAliasesByFile.get(file), seen = new Set();
+    while (objectKey && aliases?.has(objectKey) && !seen.has(objectKey)) {
+      seen.add(objectKey);
+      objectKey = aliases.get(objectKey);
+    }
+    return objectKey && objectMethodDefsByFile.get(file)?.get(objectKey + '::' + property) || null;
+  };
+  const callbackParameterOwners = new Map();
+  const callbackParameterFlows = new Map();
+  const parameterSlots = new Set();
+  for (const [file, ast] of asts) {
+    visit(ast, node => {
+      if (!['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+      for (const parameter of node.params || []) {
+        if (parameter.type !== 'Identifier') continue;
+        const key = bindingByFile.get(file)?.get(parameter);
+        if (key) parameterSlots.add(file + '::' + key);
+      }
+    });
+  }
+  const addCallbackOwner = (slot, key, owner) => {
+    if (!callbackParameterOwners.has(slot)) callbackParameterOwners.set(slot, new Map());
+    callbackParameterOwners.get(slot).set(key, owner);
+  };
+  for (const [file, ast] of asts) {
+    visit(ast, node => {
+      if (node.type !== 'CallExpression') return;
+      const target = resolveCallableOwner(file, node.callee);
+      if (!target) return;
+      const targetBindings = bindingByFile.get(target.file);
+      for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
+        const parameter = target.node.params[index];
+        if (parameter.type !== 'Identifier') continue;
+        const parameterKey = targetBindings.get(parameter);
+        if (!parameterKey) continue;
+        const destinationSlot = target.file + '::' + parameterKey;
+        const argument = node.arguments[index];
+        let owner = null;
+        if (argument.type === 'Identifier') owner = resolveFunctionOwner(file, argument);
+        else if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
+          owner = { file, key: 'function@' + argument.loc.start.line, node: argument };
+        }
+        if (owner) {
+          addCallbackOwner(destinationSlot, owner.file + '::' + owner.key, owner);
+          continue;
+        }
+        if (argument.type === 'Identifier') {
+          let sourceKey = bindingByFile.get(file)?.get(argument);
+          const aliases = functionAliasesByFile.get(file);
+          const seen = new Set();
+          while (sourceKey && aliases?.has(sourceKey) && !seen.has(sourceKey)) {
+            seen.add(sourceKey);
+            sourceKey = aliases.get(sourceKey);
+          }
+          const sourceSlot = sourceKey && file + '::' + sourceKey;
+          if (sourceSlot && parameterSlots.has(sourceSlot)) {
+            if (!callbackParameterFlows.has(destinationSlot)) callbackParameterFlows.set(destinationSlot, new Set());
+            callbackParameterFlows.get(destinationSlot).add(sourceSlot);
+            continue;
+          }
+        }
+        addCallbackOwner(destinationSlot, '[unresolved-callsite]', { unresolved: true });
+      }
+    });
+  }
+  // Propagate callback identities through arbitrarily nested wrapper parameters
+  // until stable. Unknown source parameters remain unknown; they are never
+  // silently discarded in favor of a different, apparently unique caller.
+  let callbackFlowChanged = true;
+  while (callbackFlowChanged) {
+    callbackFlowChanged = false;
+    for (const [destinationSlot, sources] of callbackParameterFlows) {
+      const destinationOwners = callbackParameterOwners.get(destinationSlot) || new Map();
+      for (const sourceSlot of sources) {
+        const sourceOwners = callbackParameterOwners.get(sourceSlot);
+        if (!sourceOwners) {
+          // A source parameter with its own incoming flow may resolve in a
+          // later fixed-point pass. Only a parameter with no observed caller
+          // and no further forwarding path is immediately unknown.
+          if (!callbackParameterFlows.has(sourceSlot) && !destinationOwners.has('[unresolved-callsite]')) {
+            destinationOwners.set('[unresolved-callsite]', { unresolved: true });
+            callbackFlowChanged = true;
+          }
+          continue;
+        }
+        for (const [ownerKey, owner] of sourceOwners) {
+          if (!destinationOwners.has(ownerKey)) {
+            destinationOwners.set(ownerKey, owner);
+            callbackFlowChanged = true;
+          }
+        }
+      }
+      if (destinationOwners.size) callbackParameterOwners.set(destinationSlot, destinationOwners);
+    }
+  }
+  // Any remaining ownerless forwarding cycle has no statically known source.
+  // Mark it uncertain, then propagate that uncertainty through the cycle.
+  for (const [slot] of callbackParameterFlows) {
+    if (!callbackParameterOwners.has(slot)) addCallbackOwner(slot, '[unresolved-callsite]', { unresolved: true });
+  }
+  let callbackUncertaintyChanged = true;
+  while (callbackUncertaintyChanged) {
+    callbackUncertaintyChanged = false;
+    for (const [destinationSlot, sources] of callbackParameterFlows) {
+      const destinationOwners = callbackParameterOwners.get(destinationSlot) || new Map();
+      for (const sourceSlot of sources) {
+        const sourceOwners = callbackParameterOwners.get(sourceSlot);
+        if (!sourceOwners && !destinationOwners.has('[unresolved-callsite]')) {
+          destinationOwners.set('[unresolved-callsite]', { unresolved: true });
+          callbackUncertaintyChanged = true;
+        } else if (sourceOwners?.has('[unresolved-callsite]') && !destinationOwners.has('[unresolved-callsite]')) {
+          destinationOwners.set('[unresolved-callsite]', { unresolved: true });
+          callbackUncertaintyChanged = true;
+        }
+      }
+      if (destinationOwners.size) callbackParameterOwners.set(destinationSlot, destinationOwners);
+    }
   }
 
   for (const [file, ast] of asts) {
@@ -455,6 +689,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (definition) {
           callbackTarget = rel(root, definition.file) + '::' + resolvedKey;
           certainty = 'resolved-function-binding';
+        } else if (callbackKey) {
+          const owners = callbackParameterOwners.get(file + '::' + callbackKey);
+          if (owners && owners.size === 1 && ![...owners.values()][0].unresolved) {
+            const owner = [...owners.values()][0];
+            callbackTarget = rel(root, owner.file) + '::' + owner.key;
+            certainty = 'resolved-interprocedural-callback-argument';
+          }
         }
       } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
         callbackName = '[inline callback]';
@@ -867,17 +1108,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // Interprocedural direct-call and callback argument edges. Imported function
         // aliases are resolved to the declaring module; unresolved names are not guessed.
         if (callee.type === 'Identifier') {
-          const localKey = bindings.get(callee);
-          let targetFunction = localKey && functionDefs.get(file + '::' + localKey);
-          if (!targetFunction && imported.has(callee.name)) {
-            const info = imported.get(callee.name);
-            const targetAst = asts.get(info.file), targetBindings = bindingByFile.get(info.file);
-            if (targetAst) visit(targetAst, n => {
-              if (n.type === 'FunctionDeclaration' && n.id && n.id.name === info.imported) {
-                const key = targetBindings.get(n.id); targetFunction = key && functionDefs.get(info.file + '::' + key);
-              }
-            });
-          }
+          const resolvedTarget = resolveCallableOwner(file, callee);
+          const targetFunction = resolvedTarget ? { file: resolvedTarget.file, node: resolvedTarget.node } : null;
           if (targetFunction) {
             addEdge(file, targetFunction.file, 'function-call', file, node.loc.start.line, callee.name);
             for (let i = 0; i < Math.min(node.arguments.length, targetFunction.node.params.length); i++) {

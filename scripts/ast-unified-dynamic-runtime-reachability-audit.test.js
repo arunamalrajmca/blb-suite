@@ -24,6 +24,224 @@ function edge(result, kind, from, to) {
   return result.edges.some(item => item.kind === kind && item.from === from && item.to === to);
 }
 
+
+test('resolves named callback owners passed through a same-module registration wrapper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'register(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'chrome.runtime.onMessage.addListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument', JSON.stringify(registration));
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'), registration.callbackTarget);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+
+test('propagates callback owners through multiple wrapper parameters and local aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'function registerInner(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'function registerMiddle(handler) { const forwarded = handler; registerInner(forwarded); }',
+      'function registerOuter(callback) { registerMiddle(callback); }',
+      'registerOuter(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'), registration.callbackTarget);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps nested callback wrappers uncertain when an intermediate parameter has no known caller', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function registerInner(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'function registerOuter(handler) { registerInner(handler); }'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
+
+
+test('resolves callback owners passed through object-literal method wrappers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'const registrar = { register(callback) { chrome.runtime.onMessage.addListener(callback); } };',
+      'registrar.register(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /scripts\/main\.js::onMessage@1:/);
+  assert.equal(registration.callbackTarget, registration.resolved);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves callback owners passed through aliased object-literal method wrappers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'const registrar = { register: callback => chrome.runtime.onMessage.addListener(callback) };',
+      'const alias = registrar;',
+      'alias.register(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /scripts\/main\.js::onMessage@1:/);
+  assert.equal(registration.callbackTarget, registration.resolved);
+});
+
+
+test('resolves callback owners through cyclic wrapper forwarding without losing known roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'function registerFirst(callback) { registerSecond(callback); }',
+      'function registerSecond(callback) { registerFirst(callback); chrome.runtime.onMessage.addListener(callback); }',
+      'registerFirst(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves callback wrappers declared as arrow-function variables', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'const register = callback => chrome.runtime.onMessage.addListener(callback);',
+      'register(onMessage);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves callback owners through an imported registration wrapper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/main.js': "import { register } from './registrar.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:52'), registration.callbackTarget);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+
+test('resolves callback wrappers imported through a named re-export alias', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/barrel.js': "export { register as subscribe } from './registrar.js';",
+    'scripts/main.js': "import { subscribe } from './barrel.js'; function onMessage(message) { return message; } subscribe(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+  assert.ok(edge(result, 'function-call', 'scripts/main.js', 'scripts/registrar.js'));
+});
+
+test('resolves callback wrappers imported through an export-star barrel', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/barrel.js': "export * from './registrar.js';",
+    'scripts/main.js': "import { register } from './barrel.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.match(registration.callbackTarget, /::onMessage@1:/);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+
+test('does not expose a default callback wrapper through export-star', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/registrar.js': 'export default function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'scripts/barrel.js': "export * from './registrar.js';",
+    'scripts/main.js': "import register from './barrel.js'; function onMessage(message) { return message; } register(onMessage);"
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.file === 'scripts/registrar.js' && item.kind === 'external-callback-registration'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
+test('keeps callback parameters uncertain when another callsite supplies an unknown value', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) {}',
+      'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'register(onMessage); register(getRuntimeCallback());'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
+test('keeps callback parameters uncertain when callsites disagree on the owner', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function first(message) {}',
+      'function second(message) {}',
+      'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'register(first); register(second);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
 test('resolves dynamic import, importScripts, executeScript files, and registered content scripts', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),

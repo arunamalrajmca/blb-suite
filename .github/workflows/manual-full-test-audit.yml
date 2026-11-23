@@ -150,28 +150,109 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      # Recheck the two historically failing cases serially before the complete
-      # four-worker audit. Each invocation retains the original test assertions.
+      # Recheck both historically failing cases in one Playwright invocation.
+      # Separate workers retain per-test browser isolation while avoiding a second
+      # Playwright startup. Assert the exact two-test inventory and full success.
       - name: Re-run prior full-audit failures independently
         id: isolated_browser_failures
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          first_status=0
-          npx playwright test tests/browser/extension-reference-actions.spec.js \
-            --grep "Article verse cues resolve context outside Facebook" \
-            --workers=1 --max-failures=0 --reporter=line || first_status=$?
+          rerun_log="$RUNNER_TEMP/blb-prior-audit-failures.log"
+          rerun_status=0
+          npx playwright test \
+            tests/browser/extension-reference-actions.spec.js \
+            tests/browser/service-worker-lifecycle.spec.js \
+            --grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
+            --workers=2 --max-failures=0 --reporter=line 2>&1 | tee "$rerun_log" || rerun_status=$?
 
-          second_status=0
-          npx playwright test tests/browser/service-worker-lifecycle.spec.js \
-            --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
-            --workers=1 --max-failures=0 --reporter=line || second_status=$?
-
-          echo "Independent rerun exit codes: article-cue=$first_status lifecycle=$second_status"
-          if [[ "$first_status" -ne 0 || "$second_status" -ne 0 ]]; then
+          # The line reporter emits concise output such as `2 passed (4.8s)`;
+          # it omits zero-valued failed/skipped counts. Validate that summary
+          # and confirm that each expected test title appeared exactly once.
+          summary=$(grep -E '^[[:space:]]*2 passed([[:space:]]|$)' "$rerun_log" | tail -n 1 || true)
+          article_count=$(grep -F -c 'Article verse cues resolve context outside Facebook' "$rerun_log" || true)
+          lifecycle_count=$(grep -F -c 'persistent registration failure keeps current and subsequent same-tab documents independently activatable' "$rerun_log" || true)
+          echo "Independent rerun summary: ${summary:-missing}"
+          echo "Expected test title counts: article=$article_count lifecycle=$lifecycle_count"
+          if [[ "$rerun_status" -ne 0 || -z "$summary" || "$article_count" -ne 1 || "$lifecycle_count" -ne 1 ]]; then
+            echo "::error::Expected both prior failures to pass exactly once; Playwright exit=$rerun_status summary=${summary:-missing} titles=$article_count/$lifecycle_count."
             exit 1
           fi
+
+      - name: Restore production manifest before package checks
+        if: always()
+        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
+
+      - name: Run KJV corpus and search-index integrity tests
+        id: corpus
+        continue-on-error: true
+        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
+
+      - name: Run package regression group
+        id: package
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=package
+
+      - name: Run resolver regression group
+        id: resolver
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=resolver
+
+      - name: Run selection regression group
+        id: selection
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=selection
+
+      - name: Run features regression group
+        id: features
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=features
+
+      # The job is sequential: defer the expensive browser matrix until all
+      # other audit sections have completed successfully.
+      - name: Gate full browser audit on all other suites
+        id: browser_gate
+        shell: bash
+        env:
+          INVENTORY: ${{ steps.inventory.outcome }}
+          AST: ${{ steps.ast.outcome }}
+          AST_CONCURRENCY: ${{ steps.ast_concurrency.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          SELECTOR: ${{ steps.selector.outcome }}
+          SCRIPTS: ${{ steps.scripts.outcome }}
+          PYTHON: ${{ steps.python.outcome }}
+          ISOLATED_BROWSER_FAILURES: ${{ steps.isolated_browser_failures.outcome }}
+          CORPUS: ${{ steps.corpus.outcome }}
+          PACKAGE: ${{ steps.package.outcome }}
+          RESOLVER: ${{ steps.resolver.outcome }}
+          SELECTION: ${{ steps.selection.outcome }}
+          FEATURES: ${{ steps.features.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for name in INVENTORY AST AST_CONCURRENCY BUILD SELECTOR SCRIPTS PYTHON ISOLATED_BROWSER_FAILURES CORPUS PACKAGE RESOLVER SELECTION FEATURES; do
+            value="${!name}"
+            echo "$name=$value"
+            if [[ "$value" != "success" ]]; then failed=1; fi
+          done
+          if [[ "$failed" -ne 0 ]]; then
+            echo "::error::Skipping the expensive full browser matrix because at least one other audit section failed or was skipped."
+            exit 1
+          fi
+          echo "All non-browser audit sections passed; starting the full browser matrix."
+
+      - name: Re-grant test-only generic host access for browser tests
+        if: ${{ steps.browser_gate.outcome == 'success' }}
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*','https://supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
@@ -180,6 +261,7 @@ jobs:
       # prevent any later test case from executing.
       - name: Run complete browser test list in one Playwright process
         id: browser
+        if: ${{ steps.browser_gate.outcome == 'success' }}
         continue-on-error: true
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
@@ -336,42 +418,6 @@ jobs:
           path: ${{ runner.temp }}/blb-performance.jsonl
           if-no-files-found: warn
           retention-days: 14
-      - name: Restore production manifest before package checks
-        if: always()
-        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
-
-      - name: Run KJV corpus and search-index integrity tests
-        id: corpus
-        continue-on-error: true
-        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
-
-      - name: Run package regression group
-        id: package
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=package
-
-      - name: Run resolver regression group
-        id: resolver
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=resolver
-
-      - name: Run selection regression group
-        id: selection
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=selection
-
-      - name: Run features regression group
-        id: features
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=features
 
       - name: Report every audit result
         if: always()
