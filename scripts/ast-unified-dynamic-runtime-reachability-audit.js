@@ -592,7 +592,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
       for (const sourceSlot of sources) {
         const sourceOwners = callbackParameterOwners.get(sourceSlot);
         if (!sourceOwners) {
-          if (!destinationOwners.has('[unresolved-callsite]')) {
+          // A source parameter with its own incoming flow may resolve in a
+          // later fixed-point pass. Only a parameter with no observed caller
+          // and no further forwarding path is immediately unknown.
+          if (!callbackParameterFlows.has(sourceSlot) && !destinationOwners.has('[unresolved-callsite]')) {
             destinationOwners.set('[unresolved-callsite]', { unresolved: true });
             callbackFlowChanged = true;
           }
@@ -603,6 +606,29 @@ function analyze(root = path.resolve(__dirname, '..')) {
             destinationOwners.set(ownerKey, owner);
             callbackFlowChanged = true;
           }
+        }
+      }
+      if (destinationOwners.size) callbackParameterOwners.set(destinationSlot, destinationOwners);
+    }
+  }
+  // Any remaining ownerless forwarding cycle has no statically known source.
+  // Mark it uncertain, then propagate that uncertainty through the cycle.
+  for (const [slot] of callbackParameterFlows) {
+    if (!callbackParameterOwners.has(slot)) addCallbackOwner(slot, '[unresolved-callsite]', { unresolved: true });
+  }
+  let callbackUncertaintyChanged = true;
+  while (callbackUncertaintyChanged) {
+    callbackUncertaintyChanged = false;
+    for (const [destinationSlot, sources] of callbackParameterFlows) {
+      const destinationOwners = callbackParameterOwners.get(destinationSlot) || new Map();
+      for (const sourceSlot of sources) {
+        const sourceOwners = callbackParameterOwners.get(sourceSlot);
+        if (!sourceOwners && !destinationOwners.has('[unresolved-callsite]')) {
+          destinationOwners.set('[unresolved-callsite]', { unresolved: true });
+          callbackUncertaintyChanged = true;
+        } else if (sourceOwners?.has('[unresolved-callsite]') && !destinationOwners.has('[unresolved-callsite]')) {
+          destinationOwners.set('[unresolved-callsite]', { unresolved: true });
+          callbackUncertaintyChanged = true;
         }
       }
       if (destinationOwners.size) callbackParameterOwners.set(destinationSlot, destinationOwners);
