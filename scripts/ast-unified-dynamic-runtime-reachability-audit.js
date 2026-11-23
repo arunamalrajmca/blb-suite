@@ -436,6 +436,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
     while (key && aliases && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
     let definition = key && functionDefs.get(file + '::' + key);
     if (definition) return { file: definition.file, key, node: definition.node };
+    // Script/global scopes can leave same-file function references unresolved.
+    // Use an exact local function name only when it has one definition.
+    const localMatches = [...functionDefs].filter(([candidateKey, candidate]) =>
+      candidate.file === file && candidate.node.id?.name === identifier.name
+    );
+    if (localMatches.length === 1) {
+      const [candidateKey, candidate] = localMatches[0];
+      return { file: candidate.file, key: candidateKey.slice(file.length + 2), node: candidate.node };
+    }
     const imported = key && importedFunctionsByFile.get(file).get(key);
     if (imported) {
       const exportedKey = exportsByFile.get(imported.file) && exportsByFile.get(imported.file).get(imported.importedName);
