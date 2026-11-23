@@ -30,7 +30,7 @@ function literalString(n,file) {
   }
   return null;
 }
-function resolveLocal(from,spec,files){if(!spec||!spec.startsWith('.'))return null;const b=path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
+function resolveLocal(from,spec,files){if(!spec||(!path.isAbsolute(spec)&&!spec.startsWith('.')))return null;const b=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
 function collectExportsAndImports(ast,file){
   const exports=new Map(),imports=[];
   visit(ast,(n,parent)=>{
