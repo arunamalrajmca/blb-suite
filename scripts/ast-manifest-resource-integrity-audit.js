@@ -4,7 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
 const SKIP = new Set(['.git', 'coverage', 'test-results', 'playwright-report']);
-function normalize(file) { return file.split(path.sep).join('/'); }
+function normalize(file, target) {
+  const value = target === undefined ? file : path.relative(file, target);
+  return value.split(path.sep).join('/');
+}
 function inside(root, target) { return target === root || target.startsWith(root + path.sep); }
 function walkFiles(root, symlinkPaths = []) {
   const files = [];
@@ -77,7 +80,7 @@ function auditManifest(extensionRoot) {
     let real;
     try { real = fs.realpathSync(target); }
     catch {
-      recordError(owner + ': missing ' + kind + ' resource: ' + value);
+      recordError(owner + ': missing ' + kind + (kind.endsWith('resource') ? '' : ' resource') + ': ' + value);
       return null;
     }
     if (!inside(root, real)) {
@@ -220,7 +223,7 @@ function auditManifest(extensionRoot) {
       const attrs = parseAttributes(match[2]);
       const base = path.dirname(htmlFile);
       const srcTags = new Set(['script', 'img', 'source', 'video', 'audio', 'iframe', 'embed', 'track', 'input']);
-      if (srcTags.has(tag) && attrs.has('src')) add(owner, attrs.get('src'), 'HTML ' + tag + ' src', base, true);
+      if (srcTags.has(tag) && attrs.has('src')) add(owner, attrs.get('src'), 'HTML ' + tag, base, true);
       if (tag === 'video' && attrs.has('poster')) add(owner, attrs.get('poster'), 'HTML video poster', base, true);
       if (tag === 'object' && attrs.has('data')) add(owner, attrs.get('data'), 'HTML object data', base, true);
       if (tag === 'body' && attrs.has('background')) add(owner, attrs.get('background'), 'HTML background', base, true);
