@@ -38,7 +38,7 @@ test('resolves named callback owners passed through a same-module registration w
     item.kind === 'external-callback-registration' && item.expression === 'chrome.runtime.onMessage.addListener'
   );
   assert.ok(registration);
-  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument');
+  assert.equal(registration.certainty, 'resolved-interprocedural-callback-argument', JSON.stringify(registration));
   assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'), registration.callbackTarget);
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
