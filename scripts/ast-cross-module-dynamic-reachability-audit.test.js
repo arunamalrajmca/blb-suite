@@ -317,3 +317,44 @@ test('explicit re-exports take precedence over conflicting export-star names',()
   assert.equal(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service-b.js'&&x.property==='alpha'),false);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves local import-then-export aliases to the original binding across barrels',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reexport-local-import-chain-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'alias.js'),"import { service as importedService } from './service.js'; export { importedService as api };");
+  fs.writeFileSync(path.join(root,'barrel.js'),"export { api as publicApi } from './alias.js';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { publicApi } from './barrel.js'; publicApi.start();");
+  const files=['service.js','alias.js','barrel.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.js'&&x.imported==='publicApi'&&x.originFile==='service.js'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.exportedLocal==='service'&&x.property==='start'));
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.property==='start'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('resolves a default export of a locally imported binding to its original owner',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reexport-local-default-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'alias.js'),"import { service } from './service.js'; export default service;");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import service from './alias.js'; service.start();");
+  const files=['service.js','alias.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='alias.js'&&x.imported==='default'&&x.originFile==='service.js'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.property==='start'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('traces nested namespace exports through star barrels to object member usage',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reexport-nested-namespace-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'namespace.js'),"export * as api from './service.js';");
+  fs.writeFileSync(path.join(root,'barrel.js'),"export * from './namespace.js';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import * as rootApi from './barrel.js'; rootApi.api.service.start();");
+  const files=['service.js','namespace.js','barrel.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.js'&&x.imported==='api'&&x.originFile==='service.js'&&x.namespace&&!x.unresolvedExport));
+  assert.ok(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.exportedLocal==='service'&&x.property==='service'&&x.namespace));
+  assert.ok(r.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.exportedLocal==='service'&&x.property==='start'&&x.namespace&&x.namespacePath.join('.')==='api.service'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
