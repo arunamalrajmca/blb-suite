@@ -578,8 +578,8 @@ test('tracks DOM script injection through aliased document and createElement bin
     'extension/injected.js': 'globalThis.injected = true;',
     'extension/also-injected.js': 'globalThis.alsoInjected = true;'
   });
-  assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'scripts/injected.js'));
-  assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'scripts/also-injected.js'));
+  assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'extension/injected.js'));
+  assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'extension/also-injected.js'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'dom-script-append' && item.expression === 'alias'));
 });
 
