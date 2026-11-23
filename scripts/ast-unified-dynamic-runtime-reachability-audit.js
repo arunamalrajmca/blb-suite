@@ -776,7 +776,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (node.id.type === 'ObjectPattern') {
           const namespace = runtimeMetaPath(node.init);
           if (['Reflect', 'globalThis.Reflect', 'window.Reflect', 'self.Reflect'].includes(namespace) ||
-              ['Object', 'globalThis.Object', 'window.Object', 'self.Object'].includes(namespace)) {
+              ['Object', 'globalThis.Object', 'window.Object', 'self.Object'].includes(namespace) ||
+              ['Proxy', 'globalThis.Proxy', 'window.Proxy', 'self.Proxy'].includes(namespace)) {
             for (const property of node.id.properties || []) {
               if (property.type !== 'Property' || (property.computed && property.key.type !== 'Literal')) continue;
               const name = property.computed ? String(property.key.value) : property.key.name;
@@ -785,7 +786,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
               const localKey = bindings.get(local);
               if (!localKey) continue;
               if (namespace.endsWith('Reflect')) reflectMethodBindings.set(localKey, name);
-              else objectMethodBindings.set(localKey, name);
+              else if (namespace.endsWith('Object')) objectMethodBindings.set(localKey, name);
+              else if (name === 'revocable') proxyRevocableBindings.add(localKey);
             }
           }
         }
