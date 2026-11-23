@@ -1046,17 +1046,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // Interprocedural direct-call and callback argument edges. Imported function
         // aliases are resolved to the declaring module; unresolved names are not guessed.
         if (callee.type === 'Identifier') {
-          const localKey = bindings.get(callee);
-          let targetFunction = localKey && functionDefs.get(file + '::' + localKey);
-          if (!targetFunction && imported.has(callee.name)) {
-            const info = imported.get(callee.name);
-            const targetAst = asts.get(info.file), targetBindings = bindingByFile.get(info.file);
-            if (targetAst) visit(targetAst, n => {
-              if (n.type === 'FunctionDeclaration' && n.id && n.id.name === info.imported) {
-                const key = targetBindings.get(n.id); targetFunction = key && functionDefs.get(info.file + '::' + key);
-              }
-            });
-          }
+          const resolvedTarget = resolveFunctionOwner(file, callee);
+          const targetFunction = resolvedTarget ? { file: resolvedTarget.file, node: resolvedTarget.node } : null;
           if (targetFunction) {
             addEdge(file, targetFunction.file, 'function-call', file, node.loc.start.line, callee.name);
             for (let i = 0; i < Math.min(node.arguments.length, targetFunction.node.params.length); i++) {
