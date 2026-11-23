@@ -174,6 +174,84 @@ jobs:
             exit 1
           fi
 
+      - name: Upload corpus A/B measurements
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-corpus-ab-full-audit
+          path: ${{ runner.temp }}/blb-performance.jsonl
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Restore production manifest before package checks
+        if: always()
+        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
+
+      - name: Run KJV corpus and search-index integrity tests
+        id: corpus
+        continue-on-error: true
+        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
+
+      - name: Run package regression group
+        id: package
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=package
+
+      - name: Run resolver regression group
+        id: resolver
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=resolver
+
+      - name: Run selection regression group
+        id: selection
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=selection
+
+      - name: Run features regression group
+        id: features
+        continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: node regression-suite/tests/run-regression.mjs extension --group=features
+
+      # The job is sequential: defer the expensive browser matrix until all
+      # other audit sections have completed successfully.
+      - name: Gate full browser audit on all other suites
+        id: browser_gate
+        shell: bash
+        env:
+          INVENTORY: ${{ steps.inventory.outcome }}
+          AST: ${{ steps.ast.outcome }}
+          AST_CONCURRENCY: ${{ steps.ast_concurrency.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          SELECTOR: ${{ steps.selector.outcome }}
+          SCRIPTS: ${{ steps.scripts.outcome }}
+          PYTHON: ${{ steps.python.outcome }}
+          ISOLATED_BROWSER_FAILURES: ${{ steps.isolated_browser_failures.outcome }}
+          CORPUS: ${{ steps.corpus.outcome }}
+          PACKAGE: ${{ steps.package.outcome }}
+          RESOLVER: ${{ steps.resolver.outcome }}
+          SELECTION: ${{ steps.selection.outcome }}
+          FEATURES: ${{ steps.features.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for name in INVENTORY AST AST_CONCURRENCY BUILD SELECTOR SCRIPTS PYTHON ISOLATED_BROWSER_FAILURES CORPUS PACKAGE RESOLVER SELECTION FEATURES; do
+            value="${!name}"
+            echo "$name=$value"
+            if [[ "$value" != "success" ]]; then failed=1; fi
+          done
+          if [[ "$failed" -ne 0 ]]; then
+            echo "::error::Skipping the expensive full browser matrix because at least one other audit section failed or was skipped."
+            exit 1
+          fi
+          echo "All non-browser audit sections passed; starting the full browser matrix."
+
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
       # complete test list, then execute the complete test list in one Playwright process with four workers.
@@ -181,6 +259,7 @@ jobs:
       # prevent any later test case from executing.
       - name: Run complete browser test list in one Playwright process
         id: browser
+        if: ${{ steps.browser_gate.outcome == 'success' }}
         continue-on-error: true
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
@@ -328,51 +407,6 @@ jobs:
             echo "Browser audit completed with one or more failures; all scheduled tests were allowed to finish."
             exit "$browser_status"
           fi
-
-      - name: Upload corpus A/B measurements
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: blb-corpus-ab-full-audit
-          path: ${{ runner.temp }}/blb-performance.jsonl
-          if-no-files-found: warn
-          retention-days: 14
-      - name: Restore production manifest before package checks
-        if: always()
-        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
-
-      - name: Run KJV corpus and search-index integrity tests
-        id: corpus
-        continue-on-error: true
-        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
-
-      - name: Run package regression group
-        id: package
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=package
-
-      - name: Run resolver regression group
-        id: resolver
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=resolver
-
-      - name: Run selection regression group
-        id: selection
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=selection
-
-      - name: Run features regression group
-        id: features
-        continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=features
 
       - name: Report every audit result
         if: always()
