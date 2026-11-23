@@ -1102,3 +1102,30 @@ test('keeps assignment-based reflection aliases scoped to their lexical bindings
   assert.equal(metaSites[0].kind, 'reflective-property-operation');
   assert.deepEqual(metaSites[0].affectedRoots, ['scripts/main.js']);
 });
+
+
+test('reports dynamic computed API names on Reflect, Object, and Proxy namespaces', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const reflection = Reflect;',
+      'const objectApi = globalThis.Object;',
+      'const proxyApi = self.Proxy;',
+      'const methodName = getMethodName();',
+      'reflection[methodName](target, key);',
+      'objectApi[methodName](target, descriptor);',
+      'new proxyApi[methodName](target, handler);',
+      'globalThis.Reflect[methodName](target, key);',
+      'window.Object[methodName](target, descriptor);',
+      'self.Proxy[methodName](target, handler);',
+      'function local(Reflect) { Reflect[getMethodName()](target, key); }'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const dynamicNames = result.uncertainty.filter(item => item.kind === 'dynamic-reflective-api-name');
+  assert.equal(dynamicNames.length, 6);
+  assert.ok(dynamicNames.every(item => item.affectedRoots.includes('scripts/main.js')));
+  assert.ok(dynamicNames.some(item => item.expression.includes('reflection[methodName]')));
+  assert.ok(dynamicNames.some(item => item.expression.includes('objectApi[methodName]')));
+  assert.ok(dynamicNames.some(item => item.expression.includes('proxyApi[methodName]')));
+});
