@@ -159,6 +159,7 @@ try {
     'tests/browser/redirect-toggle-isolation.spec.js',
     'tests/browser/multiverse-clipboard-reference-pattern.spec.js',
     'tests/browser/popup-master-toggle-regression.spec.js',
+    'tests/browser/master-toggle-four-action-recovery.spec.js',
     'tests/browser/popup-site-toggle-independence.spec.js',
     'tests/browser/facebook-selection-parser.spec.js',
     'tests/browser/substack-selection-parser.spec.js',
