@@ -643,12 +643,16 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
+    const scriptingNamespaceBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
     const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
     const memberPath = node => {
       if (!node) return '';
-      if (node.type === 'Identifier') return node.name;
+      if (node.type === 'Identifier') {
+        const key = bindings.get(node);
+        return key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : node.name;
+      }
       if (node.type === 'ThisExpression') return 'this';
       if (node.type === 'MemberExpression') {
         const key = node.computed ? staticValue(node.property, constants, 0, bindings) :
@@ -730,6 +734,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const target = bindings.get(node.id);
           if (node.init?.type === 'Identifier') {
             const source = bindings.get(node.init);
+            if (target && source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
             if (target && source) {
               if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
               if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
@@ -743,6 +748,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
           if (target && node.init?.type === 'MemberExpression') {
             const initPath = memberPath(node.init);
+            if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
             if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
             if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
             if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(initPath)) {
@@ -882,8 +888,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
           dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
             ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
         }
+        if (target && node.right.type === 'Identifier') {
+          const source = bindings.get(node.right);
+          if (source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
+        }
         if (target && node.right.type === 'MemberExpression') {
           const rightPath = memberPath(node.right);
+          if (rightPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
           if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(rightPath)) dynamicCallableBindings.set(target, 'eval-alias');
           else if (['globalThis.Function', 'window.Function', 'self.Function'].includes(rightPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
           else if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(rightPath)) {
