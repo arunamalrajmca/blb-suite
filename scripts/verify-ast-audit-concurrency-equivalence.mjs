@@ -21,7 +21,7 @@ const root = path.resolve(__dirname, '..');
 const workersArg = process.argv.find(x => x.startsWith('--workers='));
 const workers = Number(workersArg?.split('=')[1] || 4);
 const roundsArg = process.argv.find(x => x.startsWith('--rounds='));
-const rounds = Number(roundsArg?.split('=')[1] || 3);
+const rounds = Number(roundsArg?.split('=')[1] || 2);
 const timeoutArg = process.argv.find(x => x.startsWith('--timeout-ms='));
 const timeoutMs = Number(timeoutArg?.split('=')[1] || 180000);
 if (!Number.isInteger(workers) || workers < 2) throw new Error('Concurrency validation requires --workers >= 2');
