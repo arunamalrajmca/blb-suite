@@ -639,7 +639,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
     const sourceText = fs.readFileSync(file, 'utf8');
     const loopValues = loopValuesByFile.get(file);
-    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), workerConstructorBindings = new Set(['Worker', 'SharedWorker']);
+    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set(['Worker', 'SharedWorker']);
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
@@ -1001,6 +1001,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (['Worker', 'SharedWorker'].includes(node.init.name)) workerConstructorBindings.add(target);
           if (node.init.name === 'document' || (source && documentNamespaceBindings.has(source))) documentNamespaceBindings.add(target);
           if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
+          if (source && appendChildMethodBindings.has(source)) appendChildMethodBindings.add(target);
           if (source && workerConstructorBindings.has(source)) workerConstructorBindings.add(target);
           if (source && scriptElementBindings.has(source)) scriptElementBindings.add(target);
         }
@@ -1008,6 +1009,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const base = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
           const prop = node.init.computed ? staticValue(node.init.property, constants, 0, bindings) : node.init.property.name;
           if (prop === 'createElement' && (node.init.object.name === 'document' || (base && documentNamespaceBindings.has(base)))) createElementMethodBindings.add(target);
+          if (prop === 'appendChild' && (node.init.object.name === 'document' || (base && documentNamespaceBindings.has(base)))) appendChildMethodBindings.add(target);
         }
         if (target && node.init.type === 'CallExpression') {
           const callee = node.init.callee;
@@ -1089,6 +1091,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
           addSite(file, node, 'worker-constructor', spec, target,
             target ? 'resolved-local' : 'unresolved-worker-target', [], staticPrefix(sourceNode, constants, bindings));
+        }
+      }
+      if (node.type === 'CallExpression') {
+        const appendCallee = node.callee;
+        const appendMethod = appendCallee.type === 'MemberExpression'
+          ? (appendCallee.computed ? staticValue(appendCallee.property, constants, 0, bindings) : appendCallee.property.name)
+          : null;
+        const appendBinding = appendCallee.type === 'Identifier' ? bindings.get(appendCallee) : null;
+        const isAppendChild = appendMethod === 'appendChild' ||
+          (appendBinding && appendChildMethodBindings.has(appendBinding));
+        if (isAppendChild) {
+          for (const arg of node.arguments) {
+            if (arg.type !== 'Identifier' || !scriptElementBindings.has(bindings.get(arg))) continue;
+            sites.push({ file: rel(root, file), line: node.loc.start.line, kind: 'dom-script-append', expression: arg.name, resolved: null, certainty: 'resolved-script-element-append', affectedRoots: [] });
+          }
         }
       }
       if (node.type === 'CallExpression') {
