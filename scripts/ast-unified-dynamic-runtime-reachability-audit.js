@@ -800,7 +800,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'MemberExpression' && node.computed &&
           staticValue(node.property, constants, 0, bindings) === undefined) {
         const namespace = runtimeMetaPath(node.object);
-        if (/^(?:Reflect|Object|Proxy|(?:globalThis|window|self)\\.(?:Reflect|Object|Proxy))$/.test(namespace)) {
+        if (/^(?:Reflect|Object|Proxy|(?:globalThis|window|self)\.(?:Reflect|Object|Proxy))$/.test(namespace)) {
           addMetaUncertainty(node, 'dynamic-reflective-api-name',
             namespace + '[dynamic property] may select an introspection, mutation, or proxy API that cannot be identified statically.');
         }
