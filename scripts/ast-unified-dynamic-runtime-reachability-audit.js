@@ -670,7 +670,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (key && proxyConstructorBindings.has(key)) return 'Proxy';
         if (key && reflectNamespaceBindings.has(key)) return 'Reflect';
         if (key && objectNamespaceBindings.has(key)) return 'Object';
-        return node.name;
+        // A resolved lexical binding shadows the corresponding global name.
+        return key ? 'local:' + node.name : node.name;
       }
       if (node.type === 'MemberExpression') {
         const property = node.computed ? staticValue(node.property, constants, 0, bindings) :
