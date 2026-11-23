@@ -458,7 +458,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
       const resolved = target && resolveExportedFunction(target, item.importedName, new Set(seen));
       if (resolved) candidates.push(resolved);
     }
-    for (const source of exportStarsByFile.get(file) || []) {
+    // ECMAScript export-star never forwards a module's default export.
+    if (name !== 'default') for (const source of exportStarsByFile.get(file) || []) {
       const target = resolveFile(file, source, fileSet);
       const resolved = target && resolveExportedFunction(target, name, new Set(seen));
       if (resolved) candidates.push(resolved);
