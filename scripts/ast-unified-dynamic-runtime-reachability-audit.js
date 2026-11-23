@@ -212,7 +212,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const directory = path.resolve(root, path.dirname(normalized));
     if (!fs.existsSync(directory)) return;
     const pattern = path.basename(normalized);
-    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+    const matcher = new RegExp('^' + pattern.replace(/\./g, '\.').replace(/\*/g, '.*') + '$');
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       if (!entry.isFile() || !matcher.test(entry.name)) continue;
       const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
@@ -766,8 +766,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && node.init.type === 'MemberExpression') {
           const api = runtimeMetaPath(node.init);
           if (api === 'globalThis.Proxy' || api === 'window.Proxy' || api === 'self.Proxy') proxyConstructorBindings.add(target);
-          const reflectMethod = /(?:^|\\.)Reflect\\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
-          const objectMethod = /(?:^|\\.)Object\\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
+          const reflectMethod = /(?:^|\.)Reflect\./.test(api) ? api.slice(api.lastIndexOf('Reflect.') + 8) : '';
+          const objectMethod = /(?:^|\.)Object\./.test(api) ? api.slice(api.lastIndexOf('Object.') + 7) : '';
           if (reflectMethod) reflectMethodBindings.set(target, reflectMethod);
           if (objectMethod) objectMethodBindings.set(target, objectMethod);
           if (api === 'Proxy.revocable' || api.endsWith('.Proxy.revocable')) proxyRevocableBindings.add(target);
@@ -796,20 +796,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression') {
         const api = runtimeMetaPath(node.callee);
-        if (/^Reflect\\.(?:get|set|has|ownKeys|getOwnPropertyDescriptor|getPrototypeOf|isExtensible|defineProperty|deleteProperty|setPrototypeOf|preventExtensions|construct|apply)$/.test(api)) {
+        if (/^Reflect\.(?:get|set|has|ownKeys|getOwnPropertyDescriptor|getPrototypeOf|isExtensible|defineProperty|deleteProperty|setPrototypeOf|preventExtensions|construct|apply)$/.test(api)) {
           addMetaUncertainty(node, 'reflective-property-operation', api + ' can observe or alter property access and call/construct behavior outside ordinary member-reference tracing.');
         }
-        if (/^Object\\.(?:getOwnPropertyNames|getOwnPropertySymbols|getOwnPropertyDescriptor|getOwnPropertyDescriptors|getPrototypeOf|hasOwn|isExtensible|keys|values|entries)$/.test(api)) {
+        if (/^Object\.(?:getOwnPropertyNames|getOwnPropertySymbols|getOwnPropertyDescriptor|getOwnPropertyDescriptors|getPrototypeOf|hasOwn|isExtensible|keys|values|entries)$/.test(api)) {
           addMetaUncertainty(node, 'reflective-property-enumeration', api + ' can discover property names and descriptors dynamically.');
         }
-        if (/^(?:Object|Reflect)\\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|preventExtensions|seal|freeze|deleteProperty)$/.test(api)) {
+        if (/^(?:Object|Reflect)\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|preventExtensions|seal|freeze|deleteProperty)$/.test(api)) {
           addMetaUncertainty(node, 'prototype-or-descriptor-mutation', api + ' can change visible properties, descriptors, or inheritance.');
         }
       }
       if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
         const targetPath = runtimeMetaPath(node.left);
         const property = node.left.computed ? staticValue(node.left.property, constants, 0, bindings) : node.left.property.name;
-        if (property === '__proto__' || property === 'prototype' || /\\.prototype\\./.test(targetPath)) {
+        if (property === '__proto__' || property === 'prototype' || /\.prototype\./.test(targetPath)) {
           addMetaUncertainty(node, 'prototype-property-mutation', 'Assignment to prototype-related property paths can alter later property lookup and inherited behavior.');
         }
       }
