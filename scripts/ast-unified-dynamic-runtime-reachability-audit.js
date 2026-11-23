@@ -980,7 +980,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
       }
       if (node.type === 'AssignmentExpression' && node.operator === '=' &&
-          node.left.type === 'Identifier' && node.right.type === 'Identifier') {
+          node.left.type === 'Identifier') {
         const target = bindings.get(node.left), source = bindings.get(node.right);
         if (target && source) {
           aliases.set(target, source);
