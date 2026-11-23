@@ -1071,3 +1071,34 @@ test('tracks namespace aliases through qualified globalThis, window, and self re
   assert.ok(result.uncertainty.some(item => item.kind === 'prototype-or-descriptor-mutation'));
   assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
 });
+
+test('keeps assignment-based reflection aliases scoped to their lexical bindings', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let globalReflection;',
+      'globalReflection = Reflect;',
+      'let globalRead;',
+      'globalRead = globalReflection.get;',
+      'globalRead(target, runtimeKey);',
+      'function local(Reflect, Object, Proxy) {',
+      '  let localReflection;',
+      '  localReflection = Reflect;',
+      '  let localDefine;',
+      '  localDefine = Object.defineProperty;',
+      '  let localProxy;',
+      '  localProxy = Proxy;',
+      '  localReflection.get(target, key);',
+      '  localDefine(target, key, descriptor);',
+      '  new localProxy(target, handler);',
+      '}',
+      'local(fakeReflect, fakeObject, fakeProxy);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const metaSites = result.uncertainty.filter(item =>
+    ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind));
+  assert.equal(metaSites.length, 1);
+  assert.equal(metaSites[0].kind, 'reflective-property-operation');
+  assert.deepEqual(metaSites[0].affectedRoots, ['scripts/main.js']);
+});
