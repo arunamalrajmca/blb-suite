@@ -1156,8 +1156,11 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     doubleClickBlbSites:{}
   });
 
-  const destinationUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
   for (const host of ['sagacityweb.com','rediscover.bible']) {
+    const destinationUrl = host === 'rediscover.bible'
+      ? 'https://www.blueletterbible.org/kjv/act/17/10-12/'
+      : 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    const referenceLabel = host === 'rediscover.bible' ? 'Acts 17:10b-12a' : 'John 3:16';
     const homepage = 'https://' + host + '/';
     const article = host === 'sagacityweb.com'
       ? 'https://sagacityweb.com/the-digital-harlot-resisting-the-seduction-of-modern-babylon/'
@@ -1168,7 +1171,7 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       contentType:'text/html; charset=utf-8',
       body:'<!doctype html><html><head><title>Source reference fixture</title></head><body>' +
         '<main><a id="bible-reference" target="_blank" href="' + destinationUrl +
-        '">John 3:16</a></main></body></html>'
+        '">' + referenceLabel + '</a></main></body></html>'
     }));
     await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
       status:200,
@@ -1198,7 +1201,7 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
       return tabs.filter(tab => (tab.url || tab.pendingUrl || '') ===
-        'https://www.blueletterbible.org/kjv/jhn/3/16/').length;
+        destinationUrl).length;
     })).toBe(1);
 
     const firstDestinationTab = await extensionWorker.evaluate(async target => {
