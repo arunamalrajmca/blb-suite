@@ -212,7 +212,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const directory = path.resolve(root, path.dirname(normalized));
     if (!fs.existsSync(directory)) return;
     const pattern = path.basename(normalized);
-    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '
+    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       if (!entry.isFile() || !matcher.test(entry.name)) continue;
       const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
