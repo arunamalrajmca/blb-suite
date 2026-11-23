@@ -244,6 +244,10 @@ jobs:
           fi
           echo "All non-browser audit sections passed; starting the full browser matrix."
 
+      - name: Re-grant test-only generic host access for browser tests
+        if: ${{ steps.browser_gate.outcome == 'success' }}
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*','https://supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
       # complete test list, then execute the complete test list in one Playwright process with four workers.
