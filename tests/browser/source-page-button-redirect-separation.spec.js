@@ -1158,9 +1158,9 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
 
   for (const host of ['sagacityweb.com','rediscover.bible']) {
     const destinationUrl = host === 'rediscover.bible'
-      ? 'https://www.blueletterbible.org/kjv/act/17/10-12/'
+      ? 'https://www.blueletterbible.org/search/preSearch.cfm?Criteria=Acts+1%3A1-7%3A59&t=ESV'
       : 'https://www.blueletterbible.org/kjv/jhn/3/16/';
-    const referenceLabel = host === 'rediscover.bible' ? 'Acts 17:10b-12a' : 'John 3:16';
+    const referenceLabel = host === 'rediscover.bible' ? 'Acts 1:1–7:59' : 'John 3:16';
     const homepage = 'https://' + host + '/';
     const article = host === 'sagacityweb.com'
       ? 'https://sagacityweb.com/the-digital-harlot-resisting-the-seduction-of-modern-babylon/'
