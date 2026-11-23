@@ -141,6 +141,10 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
     await extensionWorker.evaluate(async () =>
       globalThis.__BLB_MASTER_TOGGLE_FOUR_ACTION_GATE__.activationPromise
     );
+    const fallbackInjectionCallsAfterRecovery = await extensionWorker.evaluate(() =>
+      globalThis.__BLB_MASTER_TOGGLE_FOUR_ACTION_GATE__?.fallbackInjectionCalls
+    );
+    expect(fallbackInjectionCallsAfterRecovery).toBe(0);
 
     // Restore the worker API wrappers before exercising user-facing actions.
     await extensionWorker.evaluate(() => {
@@ -194,7 +198,7 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
           const raw=document.querySelector('#article')?.getAttribute('data-blb-verse-context-resolution');
           try { return new URL(JSON.parse(raw).resolvedUrl).pathname; } catch (_) { return ''; }
         }),{timeout:10000}).toBe(expectedPath);
-        await page.locator('#blb-suite-page-selection-button').click();
+        await page.locator('#blb-suite-page-selection-button').evaluate(element => element.click());
       } else if (action === 'Alt+B') {
         await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
       } else if (action === 'Right-Click') {
