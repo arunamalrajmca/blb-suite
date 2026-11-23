@@ -16,9 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compare-complete-browser-inventory:
+  screen-complete-browser-inventory:
     if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') && (github.event.action != 'labeled' || github.event.label.name == 'ci-full-audit-concurrency-equivalence')) }}
-    name: Compare complete legacy serial and four-worker browser audits
+    name: Fail-fast complete-inventory browser screening
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -49,6 +49,7 @@ jobs:
         id: comparison
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency
+          BLB_CONCURRENCY_MODE: screen
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
@@ -62,6 +63,61 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+
+  compare-complete-browser-inventory:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    name: Deep legacy serial and three-repeat concurrency equivalence
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify repository test ownership inventory
+        run: node scripts/test-suite-inventory.mjs
+      - name: Compare complete inventory using isolated serial baseline and three parallel repetitions
+        id: comparison
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: full
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload deep comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-concurrency-deep-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Publish deep comparison result
+        if: always()
+        env:
+          OUTCOME: ${{ steps.comparison.outcome }}
+        run: |
+          {
+            echo "## Deep full-audit concurrency equivalence"
+            echo
+            echo "Execution: legacy one-test-per-process serial baseline versus three complete four-worker repetitions."
+            echo
+            echo "Result: **$OUTCOME**"
+            echo
+            echo "The artifact contains the complete inventory, isolated serial logs/results, three parallel logs/results, and exact equivalence summary."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publish comparison result
         if: always()
         env:
@@ -70,9 +126,9 @@ jobs:
           {
             echo "## Full-audit concurrency equivalence"
             echo
-            echo "Execution: legacy one-test-per-process serial baseline versus three complete four-worker repetitions over the exact same browser inventory."
+            echo "Execution: one complete four-worker screening pass with fail-fast enabled. A separate deep-qualification label enables the isolated serial baseline and three full repetitions."
             echo
             echo "Result: **$OUTCOME**"
             echo
-            echo "The uploaded artifact contains the complete discovered inventory, one serial process record and log per test, three complete parallel run records, logs, and exact identity/status/retry comparisons."
+            echo "The uploaded artifact contains the complete inventory, screening log, and exact test-identity/failure summary."
           } >> "$GITHUB_STEP_SUMMARY"
