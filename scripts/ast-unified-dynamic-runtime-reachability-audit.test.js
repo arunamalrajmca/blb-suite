@@ -509,7 +509,8 @@ test('resolves aliased chrome.scripting loader namespaces and preserves dynamic 
       'scriptingAlias.registerContentScripts(lateOptions);'
     ].join(' '),
     'extension/scripts/injected.js': 'globalThis.injected = true;',
-    'extension/scripts/registered.js': 'globalThis.registered = true;'
+    'extension/scripts/registered.js': 'globalThis.registered = true;',
+    'extension/scripts/late.js': 'globalThis.late = true;'
   });
   assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background.js', 'extension/scripts/injected.js'));
   assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/registered.js'));
@@ -517,7 +518,7 @@ test('resolves aliased chrome.scripting loader namespaces and preserves dynamic 
   assert.equal(unresolved.length, 1);
   assert.ok(unresolved[0].affectedRoots.includes('extension/background.js'));
   assert.ok(result.uncertainFiles.some(item =>
-    item.file === 'extension/scripts/registered.js' &&
+    item.file === 'extension/scripts/late.js' &&
     item.affectedRoots.includes('extension/background.js')
   ));
 });
