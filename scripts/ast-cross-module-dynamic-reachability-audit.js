@@ -35,6 +35,7 @@ function collectExportsAndImports(ast){
   const exports=new Map(),imports=[];
   visit(ast,(n,parent)=>{
     if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
+    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true});
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
@@ -59,11 +60,11 @@ function analyzeCrossModule(root,files){
   const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
   for(const [file,data] of meta)for(const i of data.imports){
     const target=resolveLocal(file,i.source,new Set(files));
-    if(!target){const item={file:path.relative(root,file),source:i.source};if(i.source.startsWith('.')||path.isAbsolute(i.source))unresolved.push(item);else externalImports.push(item);continue;}
+    if(!target){const item={file:path.relative(root,file),source:i.source,dynamic:!!i.dynamic,line:i.line||null};if(i.dynamic|| (typeof i.source==='string'&&(i.source.startsWith('.')||path.isAbsolute(i.source))))unresolved.push(item);else externalImports.push(item);continue;}
     const exp=meta.get(target).exports;
     if(i.reexportAll){for(const [name,local] of exp)links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:local,reexport:true});continue;}
     const local=exp.get(i.imported);
-    links.push({from:path.relative(root,file),to:path.relative(root,target),imported:i.imported,local:i.local||null,exportedLocal:local===undefined?null:local,unresolvedExport:i.imported!=='*'&&local===undefined});
+    links.push({from:path.relative(root,file),to:path.relative(root,target),imported:i.imported,local:i.local||null,exportedLocal:local===undefined?null:local,unresolvedExport:i.imported!=='*'&&local===undefined,dynamic:!!i.dynamic,line:i.line||null});
   }
   for(const [file,data] of meta) for(const item of data.imports){
     if(!item.local||item.imported==='*') continue;
