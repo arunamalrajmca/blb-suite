@@ -763,11 +763,20 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
     try {
       await Promise.all([chrome.tabs.remove(first.id), chrome.tabs.remove(second.id)]);
       await bothReadsStarted;
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const saved = await originalGet.call(chrome.storage.local, {
-        blbSuitePendingMultiVerseRefsByTab:{}
-      });
-      const map = saved.blbSuitePendingMultiVerseRefsByTab || {};
+      // tabs.remove() resolves independently of the extension event listener.
+      // Wait for both serialized onRemoved cleanup writes to become visible
+      // instead of assuming a fixed delay is long enough on a loaded runner.
+      let map = {};
+      const cleanupDeadline = Date.now() + 5000;
+      do {
+        const saved = await originalGet.call(chrome.storage.local, {
+          blbSuitePendingMultiVerseRefsByTab:{}
+        });
+        map = saved.blbSuitePendingMultiVerseRefsByTab || {};
+        if (!Object.prototype.hasOwnProperty.call(map, firstKey) &&
+            !Object.prototype.hasOwnProperty.call(map, secondKey)) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      } while (Date.now() < cleanupDeadline);
       return {
         firstClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, firstKey),
         secondClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, secondKey),
