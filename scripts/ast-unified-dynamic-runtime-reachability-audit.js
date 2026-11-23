@@ -1034,11 +1034,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
           node.init && node.init.type === 'CallExpression' &&
-          node.init.callee.type === 'MemberExpression' &&
-          node.init.callee.object.type === 'Identifier' && node.init.callee.object.name === 'document' &&
-          node.init.callee.property.name === 'createElement' &&
-          node.init.arguments[0] && node.init.arguments[0].type === 'Literal' &&
-          node.init.arguments[0].value === 'script') scriptElementBindings.add(bindings.get(node.id));
+
           node.init.callee.type === 'MemberExpression' &&
           node.init.callee.object.type === 'Identifier' && node.init.callee.object.name === 'document' &&
           node.init.callee.property.name === 'createElement' &&
