@@ -793,10 +793,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression') {
         const api = runtimeMetaPath(node.callee);
-        if (/^Reflect\\.(?:get|set|has|ownKeys|getOwnPropertyDescriptor|defineProperty|deleteProperty|setPrototypeOf|construct|apply)$/.test(api)) {
+        if (/^Reflect\\.(?:get|set|has|ownKeys|getOwnPropertyDescriptor|getPrototypeOf|isExtensible|defineProperty|deleteProperty|setPrototypeOf|preventExtensions|construct|apply)$/.test(api)) {
           addMetaUncertainty(node, 'reflective-property-operation', api + ' can observe or alter property access and call/construct behavior outside ordinary member-reference tracing.');
         }
-        if (/^Object\\.(?:getOwnPropertyNames|getOwnPropertySymbols|keys|values|entries|getOwnPropertyDescriptors)$/.test(api)) {
+        if (/^Object\\.(?:getOwnPropertyNames|getOwnPropertySymbols|getOwnPropertyDescriptor|getOwnPropertyDescriptors|getPrototypeOf|hasOwn|isExtensible|keys|values|entries)$/.test(api)) {
           addMetaUncertainty(node, 'reflective-property-enumeration', api + ' can discover property names and descriptors dynamically.');
         }
         if (/^(?:Object|Reflect)\\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|preventExtensions|seal|freeze|deleteProperty)$/.test(api)) {
