@@ -167,10 +167,19 @@ jobs:
             --grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
             --workers=2 --max-failures=0 --reporter=line 2>&1 | tee "$rerun_log" || rerun_status=$?
 
-          # Playwright's line reporter omits zero-valued failed/skipped counts,
-          # e.g. "2 passed (4.8s)". Validate the exact concise summary and both
-          # expected test titles instead of requiring a verbose zero-count format.
-          summary=$(grep -E '^[[:space:]]*2 passed([[:space:]]+\\([^)]*\\))?[[:space:]]*
+          # The line reporter emits concise output such as `2 passed (4.8s)`;
+          # it omits zero-valued failed/skipped counts. Validate that summary
+          # and confirm that each expected test title appeared exactly once.
+          summary=$(grep -E '^[[:space:]]*2 passed([[:space:]]|$)' "$rerun_log" | tail -n 1 || true)
+          article_count=$(grep -F -c 'Article verse cues resolve context outside Facebook' "$rerun_log" || true)
+          lifecycle_count=$(grep -F -c 'persistent registration failure keeps current and subsequent same-tab documents independently activatable' "$rerun_log" || true)
+          echo "Independent rerun summary: ${summary:-missing}"
+          echo "Expected test title counts: article=$article_count lifecycle=$lifecycle_count"
+          if [[ "$rerun_status" -ne 0 || -z "$summary" || "$article_count" -ne 1 || "$lifecycle_count" -ne 1 ]]; then
+            echo "::error::Expected both prior failures to pass exactly once; Playwright exit=$rerun_status summary=${summary:-missing} titles=$article_count/$lifecycle_count."
+            exit 1
+          fi
+
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
