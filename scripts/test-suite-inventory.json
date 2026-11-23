@@ -39,7 +39,41 @@
           "environment": "dedicated-performance-runner"
         }
       ],
-      "executionEnvironment": "headless Chromium by default; only native browser UI/activation cases use headed Chromium under Xvfb/X11"
+      "executionEnvironment": "headless Chromium by default; only native browser UI/activation cases use headed Chromium under Xvfb/X11",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
+          "requiredText": "node scripts/compare-full-audit-concurrency.mjs"
+        },
+        {
+          "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+          "requiredText": "current-tab activation falls back when persistent content-script registration fails"
+        },
+        {
+          "file": "tests/browser/site-registration-opt-out-race.spec.js",
+          "requiredText": "master OFF-to-ON recovery repairs registrations"
+        },
+        {
+          "file": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": "BLB_MASTER_TOGGLE_TRACE"
+        },
+        {
+          "file": "extension/background.js",
+          "requiredText": "const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+        },
+        {
+          "file": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
+          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+        },
+        {
+          "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+        }
+      ]
     },
     {
       "id": "selector-contract-tests",
@@ -63,6 +97,22 @@
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
           "requiredText": "audit_file=\"${test_file%.test.js}.js\""
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "AST_CONCURRENCY"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "for audit_file in scripts/ast-*-audit.js"
+        },
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "if [[ ! -f \"$test_file\" ]]; then"
         }
       ],
       "executionEnvironment": "node"

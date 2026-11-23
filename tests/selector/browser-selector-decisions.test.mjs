@@ -1191,8 +1191,10 @@ test("repository-wide full audit remains opt-in and does not run for ordinary PR
     new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
     "utf8"
   );
-  assert.ok(audit.includes("types: [labeled, synchronize]"),
-    "the full audit may react to label/synchronize events but must gate execution");
+  assert.ok(audit.includes("types: [labeled]"),
+    "the full audit must start only on an explicit label event after prerequisite qualification");
+  assert.ok(!audit.includes("types: [labeled, synchronize]"),
+    "ordinary PR synchronization must not launch a full audit before prerequisites are requalified");
   assert.ok(
     audit.includes("if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}"),
     "the repository-wide audit must execute only on manual dispatch or its explicit opt-in label"

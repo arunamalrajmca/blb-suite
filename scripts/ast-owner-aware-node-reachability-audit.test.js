@@ -200,3 +200,205 @@ test('retains class methods consumed through a CommonJS class export', () => {
   ].join('\n'), 'reporter.js');
   assert.deepEqual(result.findings, []);
 });
+
+
+test('discovers package main, module, browser, bin, exports, and nested workspace roots', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'package-entry-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({
+      main: './main.js',
+      module: './module.mjs',
+      browser: './browser.js',
+      bin: { blb: './bin/cli.js' },
+      exports: { '.': { import: './public/index.mjs', require: './public/index.js' }, './feature': './public/feature.js' }
+    }));
+    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'public/index.mjs', 'public/index.js', 'public/feature.js']) write(file);
+    write('packages/tool/package.json', JSON.stringify({ bin: './cli.js', scripts: { run: 'node scripts/run.js' } }));
+    write('packages/tool/cli.js');
+    write('packages/tool/scripts/run.js');
+    const graph = buildModuleGraph(root);
+    const roots = new Set(graph.roots.map(item => item.file));
+    for (const file of ['main.js', 'module.mjs', 'browser.js', 'bin/cli.js', 'public/index.mjs', 'public/index.js', 'public/feature.js',
+      'packages/tool/cli.js', 'packages/tool/scripts/run.js']) assert.ok(roots.has(file), file);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('resolves exact and wildcard package imports maps into local module graph edges', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'package-import-map-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({
+      imports: { '#internal': './scripts/internal.js', '#feature/*': './scripts/features/*.js' },
+      scripts: { run: 'node scripts/main.js' }
+    }));
+    write('scripts/main.js', "require('#internal'); import('#feature/alpha');");
+    write('scripts/internal.js', 'module.exports = true;');
+    write('scripts/features/alpha.js', 'export default true;');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/internal.js'));
+    assert.ok(reachable.has('scripts/features/alpha.js'));
+    assert.ok(graph.edges.some(edge => edge.specifier === '#internal' && edge.to === 'scripts/internal.js'));
+    assert.ok(graph.edges.some(edge => edge.specifier === '#feature/alpha' && edge.to === 'scripts/features/alpha.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('reports missing package and command entrypoints instead of silently dropping them', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'unresolved-package-entrypoints-'));
+  try {
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      main: './missing-main.js',
+      bin: { cli: './missing-bin.js' },
+      exports: { './feature': './missing-feature.js' },
+      scripts: { audit: 'node scripts/missing-audit.js' }
+    }));
+    const graph = buildModuleGraph(root);
+    const unresolved = graph.unresolvedEntrypoints.map(item => item.target || item.file);
+    for (const expected of ['./missing-main.js', './missing-bin.js', './missing-feature.js']) {
+      assert.ok(unresolved.includes(expected), expected);
+    }
+    assert.ok(graph.unresolvedEntrypoints.some(item => item.reason.includes('package-script:audit')));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('links literal child-process script targets launched through node, process.execPath, fork and shell commands', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'static-child-launches-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const cp = require('node:child_process');",
+      "cp.spawn(process.execPath, ['scripts/child.js']);",
+      "cp.fork('./scripts/forked.js');",
+      "cp.exec('node scripts/shell-launched.js');"
+    ].join('\n'));
+    for (const file of ['scripts/child.js', 'scripts/forked.js', 'scripts/shell-launched.js']) write(file);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const file of ['scripts/child.js', 'scripts/forked.js', 'scripts/shell-launched.js']) assert.ok(reachable.has(file), file);
+    assert.equal(graph.edges.filter(edge => edge.kind === 'child-process-static-launch').length, 3);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('links literal worker_threads Worker targets from module-relative URLs and cwd-relative paths', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'worker-thread-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const { Worker } = require('node:worker_threads');",
+      "new Worker(new URL('./module-worker.js', import.meta.url));",
+      "new Worker('scripts/cwd-worker.js');"
+    ].join('\n'));
+    write('scripts/module-worker.js');
+    write('scripts/cwd-worker.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/module-worker.js'));
+    assert.ok(reachable.has('scripts/cwd-worker.js'));
+    assert.equal(graph.edges.filter(edge => edge.kind === 'worker-thread-static-launch').length, 2);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('uses the most specific package import pattern and retains all conditional targets', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conditional-package-imports-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({
+      imports: {
+        '#feature/*': './scripts/generic/*.js',
+        '#feature/special/*': './scripts/special/*.js',
+        '#conditional': { import: './scripts/esm.js', require: './scripts/cjs.js' }
+      },
+      scripts: { run: 'node scripts/main.js' }
+    }));
+    write('scripts/main.js', "require('#feature/special/alpha'); require('#conditional');");
+    write('scripts/special/alpha.js', 'module.exports = true;');
+    write('scripts/generic/special/alpha.js', 'module.exports = false;');
+    write('scripts/esm.js', 'export default true;');
+    write('scripts/cjs.js', 'module.exports = true;');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/special/alpha.js'));
+    assert.ok(!reachable.has('scripts/generic/special/alpha.js'));
+    assert.ok(reachable.has('scripts/esm.js'));
+    assert.ok(reachable.has('scripts/cjs.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('follows local aliases of require and module.require calls', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'require-alias-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const load = require;',
+      "load('./first.js');",
+      'const loadAgain = module.require;',
+      "loadAgain('./second.js');"
+    ].join('\n'));
+    write('scripts/first.js');
+    write('scripts/second.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/first.js'));
+    assert.ok(reachable.has('scripts/second.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('follows module.createRequire and imported createRequire loader factories', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'create-require-roots-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "import { createRequire as makeRequire } from 'node:module';",
+      'const load = makeRequire(import.meta.url);',
+      "load('./esm-loaded.js');",
+      "const { createRequire } = require('node:module');",
+      'const loadAgain = createRequire(import.meta.url);',
+      "loadAgain('./cjs-loaded.js');"
+    ].join('\n'));
+    write('scripts/esm-loaded.js');
+    write('scripts/cjs-loaded.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/esm-loaded.js'));
+    assert.ok(reachable.has('scripts/cjs-loaded.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

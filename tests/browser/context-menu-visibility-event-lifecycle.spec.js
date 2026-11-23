@@ -448,6 +448,10 @@ test('concurrent worker-restart menu initialization creates the persistent item 
     let updateCalls = 0;
     let createCalls = 0;
     try {
+      // Drain any startup/activation initialization already in flight before
+      // replacing the shared lock. Otherwise the test itself can discard a
+      // real pending promise and manufacture a second concurrent create().
+      if (selectionMenuEnsurePromise) await selectionMenuEnsurePromise;
       selectionMenuKnownPresent = false;
       selectionMenuEnsurePromise = null;
       chrome.contextMenus.update = async (_id, details = {}) => {

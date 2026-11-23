@@ -3386,7 +3386,61 @@ function reconcileRuntimeContentScriptRegistrations() {
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
-  if (existing) return existing;
+  if (existing) {
+    // A master OFF->ON transition can unregister a site's persistent scripts
+    // while an earlier document activation is still waiting for its content
+    // script handshake. The master-ON recovery path may then encounter this
+    // in-flight promise and otherwise mistake its earlier registration for a
+    // current one. Once the older activation settles, revalidate the live tab
+    // and repair its persistent registration before reporting success.
+    // The older activation may have failed because its registration attempt
+    // raced a permission or setting transition. Revalidate current eligibility
+    // below, but do not let that stale failure suppress a fresh current-tab
+    // fallback when the live tab is eligible again.
+    await existing.catch(() => false);
+    // A real activation removes its own lock in finally before this promise
+    // settles. Clear the same settled entry defensively as well, so an
+    // externally failed/stale promise cannot cause recursive recovery to
+    // observe itself forever.
+    if (contentScriptInjectionLocks.get(tabId) === existing) {
+      contentScriptInjectionLocks.delete(tabId);
+    }
+    let current;
+    try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+    if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url)) return false;
+    const expectedOriginPattern = originPatternForUrl(current.url);
+    if (!expectedOriginPattern || (current.pendingUrl &&
+        originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
+    if (!(await hasHostAccessForTab(current))) return false;
+    const latestSettings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    if (latestSettings.masterEnabled === false ||
+        !(await shouldInjectContentScriptForTab(current, latestSettings))) return false;
+    try { current = await chrome.tabs.get(tabId); } catch (_) { return false; }
+    if (!isHttpPageUrl(current?.url) || isSensitiveSiteUrl(current.url) ||
+        originPatternForUrl(current.url) !== expectedOriginPattern ||
+        (current.pendingUrl && originPatternForUrl(current.pendingUrl) !== expectedOriginPattern)) return false;
+    if (normalizeSiteHostname(hostnameFromTabUrl(current.url)) === BLB_HOSTNAME) return true;
+    const currentFiles = contentScriptFilesForTab(current, latestSettings);
+    if (!currentFiles.length) return false;
+    const registrationReady = await ensureRuntimeContentScriptRegistered(current, currentFiles);
+    if (registrationReady) return true;
+
+    // The older activation may have failed while its persistent registration
+    // was being updated. If that repair also fails, re-enter the normal
+    // activation path after the old lock has been released. That path performs
+    // a fresh eligibility check and still injects the current document when
+    // Chrome rejects persistent registration.
+    const newerActivation = contentScriptInjectionLocks.get(tabId);
+    if (newerActivation && newerActivation !== existing) {
+      await newerActivation.catch(() => false);
+    }
+    return ensureContentScriptInTab(tabId);
+  }
 
   const operation = (async () => {
     try {

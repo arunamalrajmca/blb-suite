@@ -5,14 +5,17 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [ main ]
-    types: [labeled, synchronize]
+    # Start the expensive full audit only when explicitly requested by
+    # adding its label after all prerequisite checks have passed. A later
+    # synchronize must not launch a full audit against an unqualified head.
+    types: [labeled]
 
 permissions:
   contents: read
   statuses: write
 
 concurrency:
-  group: full-test-audit-${{ github.ref }}
+  group: full-test-audit-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
@@ -74,6 +77,22 @@ jobs:
               node "$audit_file"
             fi
           done
+          for audit_file in scripts/ast-*-audit.js; do
+            [[ -f "$audit_file" ]] || continue
+            test_file="${audit_file%.js}.test.js"
+            if [[ ! -f "$test_file" ]]; then
+              echo "Running analysis without a paired test file: $audit_file"
+              node "$audit_file"
+            fi
+          done
+
+      # Compare the complete AST audit inventory, not only selected browser tests.
+      # The old serial loop remains the reference; bounded parallel execution must
+      # produce identical test outcomes and analysis reports on this same checkout.
+      - name: Verify AST audit serial-parallel equivalence
+        id: ast_concurrency
+        continue-on-error: true
+        run: node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4
 
       - name: Read manifest version
         id: version
@@ -364,6 +383,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INVENTORY: ${{ steps.inventory.outcome }}
           AST: ${{ steps.ast.outcome }}
+          AST_CONCURRENCY: ${{ steps.ast_concurrency.outcome }}
           BUILD: ${{ steps.build.outcome }}
           SELECTOR: ${{ steps.selector.outcome }}
           SCRIPTS: ${{ steps.scripts.outcome }}
@@ -383,6 +403,7 @@ jobs:
             echo "|---|---|"
             echo "| Repository test inventory | $INVENTORY |"
             echo "| AST reachability audit tests and analysis | $AST |"
+            echo "| AST serial-parallel equivalence | $AST_CONCURRENCY |"
             echo "| Build validation | $BUILD |"
             echo "| Selector contract tests | $SELECTOR |"
             echo "| Standalone JavaScript test scripts | $SCRIPTS |"
@@ -397,7 +418,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$INVENTORY" "$AST" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$ISOLATED_BROWSER_FAILURES" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$INVENTORY" "$AST" "$AST_CONCURRENCY" "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$ISOLATED_BROWSER_FAILURES" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
           if [[ "$EVENT_NAME" == "pull_request" ]]; then

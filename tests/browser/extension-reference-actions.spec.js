@@ -713,8 +713,11 @@ test.describe('core user-visible E2E', () => {
     });
 
     await page.locator('#sog-verse-cue').dblclick();
+    // The diagnostic is emitted after asynchronous content-script context
+    // extraction; allow normal four-worker audit contention without hiding a
+    // missing diagnostic or changing the expected result.
     await expect.poll(async () => page.locator('[data-blb-verse-context-diagnostic]').count(), {
-      timeout: 3000, intervals: [100, 200, 300]
+      timeout: 10000, intervals: [100, 200, 300, 500]
     }).toBeGreaterThan(0);
     const diagnosticText = await page.locator('[data-blb-verse-context-diagnostic]').first()
       .getAttribute('data-blb-verse-context-diagnostic');

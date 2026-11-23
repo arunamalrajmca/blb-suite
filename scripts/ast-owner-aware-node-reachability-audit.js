@@ -404,12 +404,7 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
   };
 }
 
-function resolveModuleSpecifier(fromFile, specifier, files) {
-  if (!specifier.startsWith('.')) return { external: true, specifier };
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  if (path.extname(base) === '.json' && fs.existsSync(base)) {
-    return { external: true, dataDependency: true, specifier };
-  }
+function resolveLocalFile(base, files) {
   const candidates = [];
   if (path.extname(base)) candidates.push(base);
   else {
@@ -417,13 +412,122 @@ function resolveModuleSpecifier(fromFile, specifier, files) {
     for (const extension of JS_EXTENSIONS) candidates.push(path.join(base, 'index' + extension));
   }
   const resolved = candidates.find(candidate => files.has(candidate));
-  return resolved ? { file: resolved, external: false } : { unresolved: true, specifier };
+  return resolved ? { file: resolved, external: false } : null;
+}
+function nearestPackage(fromFile) {
+  let directory = path.dirname(fromFile);
+  while (true) {
+    const packagePath = path.join(directory, 'package.json');
+    if (fs.existsSync(packagePath)) {
+      try { return { directory, value: JSON.parse(fs.readFileSync(packagePath, 'utf8')) }; }
+      catch (_) { return { directory, value: {} }; }
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+}
+function collectConditionalTargets(value, output = []) {
+  if (typeof value === 'string') output.push(value);
+  else if (Array.isArray(value)) value.forEach(item => collectConditionalTargets(item, output));
+  else if (value && typeof value === 'object') Object.values(value).forEach(item => collectConditionalTargets(item, output));
+  return output;
+}
+function resolvePackageImport(fromFile, specifier, files) {
+  const pkg = nearestPackage(fromFile);
+  if (!pkg || !pkg.value.imports || typeof pkg.value.imports !== 'object') return null;
+  let target = pkg.value.imports[specifier];
+  let wildcard = null;
+  if (target === undefined) {
+    const matches = Object.entries(pkg.value.imports).map(([key, value]) => {
+      const star = key.indexOf('*');
+      if (star < 0) return null;
+      const prefix = key.slice(0, star), suffix = key.slice(star + 1);
+      if (!specifier.startsWith(prefix) || !specifier.endsWith(suffix) ||
+          specifier.length < prefix.length + suffix.length) return null;
+      return { value, prefix, suffix, specificity: prefix.length + suffix.length };
+    }).filter(Boolean).sort((a, b) => b.specificity - a.specificity);
+    if (matches.length) {
+      const match = matches[0];
+      wildcard = specifier.slice(match.prefix.length, specifier.length - match.suffix.length || undefined);
+      target = match.value;
+    }
+  }
+  if (target === undefined) return { unresolved: true, specifier, packageImport: true };
+  const candidates = collectConditionalTargets(target).map(value =>
+    wildcard === null ? value : value.replace('*', wildcard));
+  const resolvedFiles = [];
+  for (const candidate of candidates) {
+    if (!candidate.startsWith('./')) continue;
+    const resolved = resolveLocalFile(path.resolve(pkg.directory, candidate), files);
+    if (resolved && !resolvedFiles.includes(resolved.file)) resolvedFiles.push(resolved.file);
+  }
+  if (resolvedFiles.length) {
+    return { file: resolvedFiles[0], alternatives: resolvedFiles.slice(1), external: false, packageImport: true };
+  }
+  if (candidates.some(value => !value.startsWith('./'))) {
+    return { external: true, specifier, packageImport: true, targets: candidates };
+  }
+  return { unresolved: true, specifier, packageImport: true, targets: candidates };
+}
+function resolveModuleSpecifier(fromFile, specifier, files) {
+  if (specifier.startsWith('#')) return resolvePackageImport(fromFile, specifier, files) ||
+    { unresolved: true, specifier, packageImport: true };
+  if (!specifier.startsWith('.')) return { external: true, specifier };
+  const base = path.resolve(path.dirname(fromFile), specifier);
+  if (path.extname(base) === '.json' && fs.existsSync(base)) {
+    return { external: true, dataDependency: true, specifier };
+  }
+  return resolveLocalFile(base, files) || { unresolved: true, specifier };
 }
 
-function collectModuleEdges(source, filename, files) {
+function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const parsed = parseSource(source, filename);
   const edges = [];
   const dynamic = [];
+  const requireAliases = new Set();
+  const createRequireAliases = new Set(['createRequire']);
+  walkAst(parsed.ast, node => {
+    if (node.type === 'ImportDeclaration' && ['node:module', 'module'].includes(node.source.value)) {
+      for (const specifier of node.specifiers) {
+        if (specifier.type === 'ImportSpecifier' &&
+            (specifier.imported.name || specifier.imported.value) === 'createRequire') {
+          createRequireAliases.add(specifier.local.name);
+        }
+      }
+    }
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+      if (node.init?.type === 'Identifier' && (node.init.name === 'require' || requireAliases.has(node.init.name))) {
+        requireAliases.add(node.id.name);
+      }
+      if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
+          node.init.object.name === 'module' && node.init.property.name === 'require') requireAliases.add(node.id.name);
+      if (node.init?.type === 'MemberExpression' && node.init.property.name === 'createRequire') {
+        createRequireAliases.add(node.id.name);
+      }
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
+          createRequireAliases.has(node.init.callee.name)) requireAliases.add(node.id.name);
+      if (node.init?.type === 'ObjectExpression' && node.init.properties.some(item =>
+        item.type === 'Property' && (item.key.name || item.key.value) === 'createRequire')) {
+        // Keep object-literal exports of createRequire conservative unless a
+        // later binding explicitly invokes the imported function.
+      }
+    }
+    if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern' &&
+        node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
+        (node.init.callee.name === 'require' || requireAliases.has(node.init.callee.name)) &&
+        node.init.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(node.init.arguments[0].value)) {
+      for (const property of node.id.properties) {
+        if (property.type === 'Property' && (property.key.name || property.key.value) === 'createRequire' &&
+            property.value.type === 'Identifier') createRequireAliases.add(property.value.name);
+      }
+    }
+    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' &&
+        node.right.type === 'CallExpression' && node.right.callee.type === 'Identifier' &&
+        createRequireAliases.has(node.right.callee.name)) requireAliases.add(node.left.name);
+    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' && node.right.type === 'Identifier' &&
+        (node.right.name === 'require' || requireAliases.has(node.right.name))) requireAliases.add(node.left.name);
+  });
   walkAst(parsed.ast, node => {
     let specifier = null;
     let kind = null;
@@ -439,7 +543,7 @@ function collectModuleEdges(source, filename, files) {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-import-nonliteral' });
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
-               node.callee.name === 'require') {
+               (node.callee.name === 'require' || requireAliases.has(node.callee.name))) {
       if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
           typeof node.arguments[0].value === 'string') {
         specifier = node.arguments[0].value;
@@ -458,23 +562,87 @@ function collectModuleEdges(source, filename, files) {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-module-require' });
       }
     }
+    if (node.type === 'NewExpression') {
+      const constructorName = node.callee.type === 'Identifier'
+        ? node.callee.name
+        : node.callee.type === 'MemberExpression'
+          ? staticKey(node.callee.property, node.callee.computed) : null;
+      if (constructorName === 'Worker') {
+        const argument = node.arguments[0];
+        let request = argument?.type === 'Literal' && typeof argument.value === 'string' ? argument.value : null;
+        let baseFile = path.join(root, 'package.json');
+        if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
+          request = argument.arguments[0]?.type === 'Literal' && typeof argument.arguments[0].value === 'string'
+            ? argument.arguments[0].value : null;
+          const base = argument.arguments[1];
+          if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') baseFile = filename;
+        }
+        if (request && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(request)) {
+          const specifier = request.startsWith('.') || request.startsWith('/') ? request : './' + request;
+          const resolution = resolveModuleSpecifier(baseFile, specifier, files);
+          edges.push({ from: filename, specifier: request, kind: 'worker-thread-static-launch', ...resolution });
+        }
+        dynamic.push({
+          file: filename,
+          line: node.loc.start.line,
+          kind: 'worker-thread-launch',
+          staticTarget: request,
+          note: request ? 'Literal Worker target linked; worker options and runtime environment remain dynamic.' :
+            'Worker target is selected dynamically or through a nonliteral URL expression.'
+        });
+      }
+    }
     if (node.type === 'CallExpression') {
       const callName = node.callee.type === 'Identifier'
         ? node.callee.name
         : (node.callee.type === 'MemberExpression'
           ? staticKey(node.callee.property, node.callee.computed) : null);
       if (['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork'].includes(callName)) {
+        let launchedScript = null;
+        const command = node.arguments[0];
+        const commandValue = command?.type === 'Literal' && typeof command.value === 'string' ? command.value : null;
+        if (callName === 'fork') {
+          if (commandValue && /\.(?:c?js|mjs)$/i.test(commandValue)) launchedScript = commandValue;
+        } else if (['node', 'node.exe'].includes(commandValue?.toLowerCase()) ||
+            (command?.type === 'MemberExpression' && command.object.type === 'Identifier' &&
+              command.object.name === 'process' && staticKey(command.property, command.computed) === 'execPath')) {
+          const args = node.arguments[1];
+          if (args?.type === 'ArrayExpression') {
+            for (const item of args.elements) {
+              if (item?.type !== 'Literal' || typeof item.value !== 'string') continue;
+              if (/\.(?:c?js|mjs)$/i.test(item.value) && !item.value.startsWith('-')) {
+                launchedScript = item.value;
+                break;
+              }
+            }
+          }
+        } else if (['exec', 'execSync'].includes(callName) && commandValue) {
+          const match = /(?:^|\s)(?:node|node\.exe)(?:\s+--[^\s]+)*\s+["']?([^"'\s]+\.(?:c?js|mjs))\b/i.exec(commandValue);
+          if (match) launchedScript = match[1];
+        }
+        if (launchedScript) {
+          const request = launchedScript.startsWith('.') || launchedScript.startsWith('/')
+            ? launchedScript : './' + launchedScript;
+          const resolution = resolveModuleSpecifier(path.join(root, 'package.json'), request, files);
+          edges.push({ from: filename, specifier: launchedScript, kind: 'child-process-static-launch', ...resolution });
+        }
         dynamic.push({
           file: filename,
           line: node.loc.start.line,
           kind: 'child-process-launch',
-          note: 'The launched script may be selected through variables, arrays, or path expressions.'
+          staticTarget: launchedScript,
+          note: launchedScript
+            ? 'A literal child script target was linked; runtime arguments and cwd overrides may still alter execution.'
+            : 'The launched script may be selected through variables, arrays, shell text, or path expressions.'
         });
       }
     }
     if (specifier !== null) {
       const resolution = resolveModuleSpecifier(filename, specifier, files);
       edges.push({ from: filename, specifier, kind, ...resolution });
+      for (const alternative of resolution.alternatives || []) {
+        edges.push({ from: filename, specifier, kind, file: alternative, external: false, packageImportAlternative: true });
+      }
     }
   });
   return { edges, dynamic };
@@ -483,24 +651,67 @@ function collectModuleEdges(source, filename, files) {
 function discoverNodeEntrypoints(root, files, sourceByFile) {
   const roots = new Set();
   const reasons = new Map();
+  const unresolvedEntrypoints = [];
   const add = (file, reason) => {
-    if (!files.has(file)) return;
+    if (!files.has(file)) {
+      const record = { file: relative(root, file), reason };
+      if (!unresolvedEntrypoints.some(item => item.file === record.file && item.reason === record.reason)) unresolvedEntrypoints.push(record);
+      return false;
+    }
     roots.add(file);
     if (!reasons.has(file)) reasons.set(file, new Set());
     reasons.get(file).add(reason);
+    return true;
   };
 
-  const packagePath = path.join(root, 'package.json');
-  if (fs.existsSync(packagePath)) {
-    const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-    if (typeof pkg.main === 'string') {
-      const target = resolveModuleSpecifier(path.join(root, 'package.json'), './' + pkg.main, files);
-      if (target.file) add(target.file, 'package.main');
+  // Every package manifest may define executable entrypoints. Treat public
+  // package fields as external-consumer roots, and include workspace manifests.
+  const packageFiles = walkFiles(root, file => path.basename(file) === 'package.json');
+  const addPackageTarget = (packageFile, value, reason, filesSet) => {
+    if (typeof value !== 'string' || !value.startsWith('./')) return;
+    // TypeScript declaration entrypoints are package metadata, not executable
+    // JavaScript modules; keep them outside this JS reachability graph.
+    if (/\.(?:d\.)?[cm]?tsx?$/i.test(value)) return;
+    if (value.includes('*')) {
+      const pattern = new RegExp('^' + value.slice(2).split('*')
+        .map(part => part.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('.*') + '$');
+      let matched = false;
+      for (const file of filesSet) {
+        const relativeFile = path.relative(path.dirname(packageFile), file).split(path.sep).join('/');
+        if (pattern.test(relativeFile)) { add(file, reason); matched = true; }
+      }
+      if (!matched) unresolvedEntrypoints.push({ file: relative(root, packageFile), reason, target: value, kind: 'unmatched-package-entrypoint-pattern' });
+      return;
     }
+    const target = resolveModuleSpecifier(packageFile, value, filesSet);
+    if (target.file) add(target.file, reason);
+    else if (target.unresolved) unresolvedEntrypoints.push({ file: relative(root, packageFile), reason, target: value, kind: 'unresolved-package-entrypoint' });
+  };
+  for (const packageFile of packageFiles) {
+    let pkg;
+    try { pkg = JSON.parse(fs.readFileSync(packageFile, 'utf8')); } catch (_) { continue; }
+    const packageName = relative(root, packageFile);
+    for (const field of ['main', 'module', 'browser', 'types', 'typings', 'unpkg', 'jsdelivr']) {
+      const value = pkg[field];
+      if (typeof value === 'string') addPackageTarget(packageFile, value.startsWith('./') ? value : './' + value, 'package:' + field + ':' + packageName, files);
+      else if (field === 'browser' && value && typeof value === 'object') {
+        for (const replacement of Object.values(value)) addPackageTarget(packageFile, replacement, 'package:browser-map:' + packageName, files);
+      }
+    }
+    const binValues = typeof pkg.bin === 'string' ? [pkg.bin] : Object.values(pkg.bin || {});
+    for (const value of binValues) {
+      if (typeof value === 'string') addPackageTarget(packageFile, value.startsWith('./') ? value : './' + value, 'package:bin:' + packageName, files);
+    }
+    const collectExportTargets = value => {
+      if (typeof value === 'string') addPackageTarget(packageFile, value, 'package:exports:' + packageName, files);
+      else if (Array.isArray(value)) value.forEach(collectExportTargets);
+      else if (value && typeof value === 'object') Object.values(value).forEach(collectExportTargets);
+    };
+    collectExportTargets(pkg.exports);
     for (const [name, command] of Object.entries(pkg.scripts || {})) {
       for (const match of String(command).matchAll(/(?:^|\s)(\.{0,2}\/)?([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-        const candidate = path.resolve(root, match[1] || '', match[2]);
-        add(candidate, 'package-script:' + name);
+        const candidate = path.resolve(path.dirname(packageFile), match[1] || '', match[2]);
+        add(candidate, 'package-script:' + name + ':' + packageName);
       }
     }
   }
@@ -568,7 +779,7 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
       add(file, 'playwright-test-discovery');
     }
   }
-  return { roots: [...roots].sort(), reasons };
+  return { roots: [...roots].sort(), reasons, unresolvedEntrypoints };
 }
 
 function buildModuleGraph(root) {
@@ -581,7 +792,7 @@ function buildModuleGraph(root) {
   const dynamic = [];
   const unresolved = [];
   for (const [file, source] of sourceByFile) {
-    const result = collectModuleEdges(source, file, files);
+    const result = collectModuleEdges(source, file, files, root);
     edges.push(...result.edges);
     dynamic.push(...result.dynamic);
     unresolved.push(...result.edges.filter(edge => edge.unresolved));
@@ -628,6 +839,7 @@ function buildModuleGraph(root) {
     unresolved: unresolved.map(item => ({
       from: relative(root, item.from), specifier: item.specifier, kind: item.kind
     })),
+    unresolvedEntrypoints: entrypoints.unresolvedEntrypoints,
     reachable: [...reachable].map(file => relative(root, file)).sort(),
     candidates
   };
@@ -650,11 +862,15 @@ function run(root = path.resolve(__dirname, '..')) {
   console.log('Node module entrypoints: ' + graph.roots.length);
   console.log('Resolved local module edges: ' + graph.edges.filter(edge => edge.to).length);
   console.log('Unresolved relative module edges: ' + graph.unresolved.length);
+  console.log('Unresolved executable/package entrypoints: ' + graph.unresolvedEntrypoints.length);
   console.log('Dynamic module-loading sites: ' + graph.dynamic.length);
   console.log('Unreachable module candidates: ' + graph.candidates.length);
   for (const item of ownerFindings) {
     console.log(item.file + ':' + item.line + ' ' + item.owner + ' .' + item.name +
       ' [' + item.definition + '] — ' + item.reason);
+  }
+  for (const item of graph.unresolvedEntrypoints) {
+    console.log(item.file + ' [unresolved entrypoint] ' + (item.reason || '') + ' ' + (item.target || item.file));
   }
   for (const item of graph.candidates) {
     console.log(item.file + ' [module candidate] — ' + item.reason);

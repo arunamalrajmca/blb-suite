@@ -381,6 +381,20 @@ test('repeated global master toggles disable and restore exactly one double-clic
   );
   expect(Number.isInteger(tabId)).toBe(true);
 
+  // domcontentloaded does not guarantee that the isolated-world content
+  // script has finished installing its double-click handler. Wait for the
+  // actual handler marker before wrapping add/removeEventListener, otherwise
+  // the instrumentation can race startup and report a false zero baseline.
+  const hasDoubleClickHandler = () => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+    });
+    return result.result;
+  }, tabId);
+  await expect.poll(hasDoubleClickHandler, { timeout:10000 }).toBe(true);
+
   const instrumented = await extensionWorker.evaluate(async id => {
     const [result] = await chrome.scripting.executeScript({
       target:{tabId:id},

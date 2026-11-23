@@ -446,7 +446,11 @@ test('a denied site-feature permission intent expires and cannot activate on a l
 test('current-tab activation falls back when persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
   // Load the tab before enabling the feature so the normal onUpdated path
   // cannot race this test's deliberately failed registration.
-  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.goto('https://example.com/', {waitUntil:'load'});
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+    return tabs[0]?.status === 'complete' && !tabs[0]?.pendingUrl;
+  }), {timeout:15000}).toBe(true);
   await extensionStorage.set({
     masterEnabled:true,
     pageSelectionButtonSites:{'example.com':true},
@@ -455,6 +459,11 @@ test('current-tab activation falls back when persistent content-script registrat
   });
 
   const activated = await extensionWorker.evaluate(async () => {
+    // Drain startup/settings reconciliation before replacing the registration
+    // API. Otherwise an unrelated queued reconciliation can consume the
+    // deliberately failing registration stub and race the activation under test.
+    await reconcileRuntimeContentScriptRegistrations();
+    await runtimeContentScriptReconciliationQueue;
     const tabs = await chrome.tabs.query({url:'https://example.com/*'});
     const tab = tabs[0];
     if (!tab?.id) throw new Error('Expected the example.com test tab to exist');

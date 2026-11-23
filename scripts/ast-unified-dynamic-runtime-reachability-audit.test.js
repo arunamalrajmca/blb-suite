@@ -339,3 +339,147 @@ test('keeps indirect registered-content-script options explicitly uncertain', ()
   ));
 });
 
+
+
+test('tracks dynamic execution boundaries as scoped uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "eval(sourceText);",
+      "const Generated = Function('return function generated() {}')();",
+      "setTimeout('runPlugin()', 10);",
+      "const vm = require('node:vm'); vm.runInNewContext(sourceText, sandbox);"
+    ].join(' '),
+    'scripts/plugin.js': 'module.exports = true;'
+  });
+  const boundaries = result.uncertainty.filter(item =>
+    ['unresolved-dynamic-execution', 'string-timer-execution'].includes(item.kind)
+  );
+  assert.ok(boundaries.some(item => item.executionBoundary === 'direct-eval'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'function-constructor'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'node-vm'));
+  assert.ok(boundaries.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('records framework callback ownership and resolves named and inline callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'chrome.runtime.onMessage.addListener(onMessage);',
+      'document.addEventListener("click", event => event.preventDefault());',
+      'Promise.resolve().then(onMessage);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.some(item => item.callback === 'onMessage' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.callback === '[inline callback]' && item.certainty === 'resolved-inline-callback'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps unresolved callback ownership explicit instead of silently assuming a callback target', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'eventBus.on("message", registry[getCallbackKey()]);'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.registrationApi.includes('eventBus.on')
+  ));
+});
+
+
+test('tracks aliased global eval, reassigned Function constructors, and imported or destructured Node vm execution', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const evaluate = globalThis.eval; evaluate(sourceText);',
+      'let compile; compile = Function; compile(\"return 1\")();',
+      "const { runInNewContext: runVm } = require('node:vm'); runVm(sourceText, sandbox);",
+      "import { Script as VmScript } from 'node:vm'; new VmScript(sourceText);",
+      "window.setTimeout('runGenerated()', 1)"
+    ].join(' ')
+  });
+  const boundaries = result.uncertainty.filter(item =>
+    ['unresolved-dynamic-execution', 'string-timer-execution'].includes(item.kind)
+  );
+  assert.ok(boundaries.some(item => item.executionBoundary === 'aliased-eval'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'function-constructor'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'node-vm'));
+  assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
+});
+
+test('records observer constructors, event-property handlers, and browser API callback ownership', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onResize(entries) { return entries.length; }',
+      'const observer = new ResizeObserver(onResize);',
+      'window.onmessage = event => event.data;',
+      'function onTabs(tabs) { return tabs.length; }',
+      'chrome.tabs.query({}, onTabs);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item => item.expression === 'ResizeObserver' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.expression === 'window.onmessage' && item.certainty === 'resolved-inline-callback'));
+  assert.ok(registrations.some(item => item.expression === 'chrome.tabs.query' && item.certainty === 'resolved-function-binding'));
+});
+
+
+test('resolves delegated event handlers, both Promise handlers, and React hook callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function handleClick(event) { return event.type; }',
+      'function onFulfilled(value) { return value; }',
+      'function onRejected(error) { throw error; }',
+      "jQuery(document).on('click', '.button', handleClick);",
+      'Promise.resolve().then(onFulfilled, onRejected);',
+      'useEffect(() => { initialize(); }, []);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item => item.callback === 'handleClick' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.callback === 'onFulfilled' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.callback === 'onRejected' && item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item => item.certainty === 'resolved-inline-callback'));
+});
+
+
+test('reports Node module compilation and WebAssembly execution as dynamic-code boundaries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "module._compile(sourceText, filename);",
+      "WebAssembly.compile(binaryBytes);",
+      "new WebAssembly.Module(binaryBytes);"
+    ].join(' ')
+  });
+  const boundaries = result.uncertainty.map(item => item.executionBoundary);
+  assert.ok(boundaries.includes('node-module-compile'));
+  assert.ok(boundaries.includes('wasm-module-execution'));
+});
+
+
+test('tracks aliased and destructured string timer execution', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const delay = window.setTimeout; delay(\"runGenerated()\", 1);',
+      'const { setInterval: repeat } = globalThis; repeat(\"runGenerated()\", 1);'
+    ].join(' ')
+  });
+  assert.ok(result.uncertainty.filter(item => item.executionBoundary === 'string-timer').length >= 2);
+});
+
+
+test('detects Node vm execution when required inline rather than bound to a namespace', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "require('vm').runInThisContext(sourceText); new (require('node:vm').Script)(sourceText);"
+  });
+  assert.ok(result.uncertainty.some(item => item.executionBoundary === 'node-vm'));
+});

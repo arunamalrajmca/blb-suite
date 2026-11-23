@@ -408,12 +408,257 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const imported = new Map(), scriptElementBindings = new Set();
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
+    const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
+    const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
+    const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
+    const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
+    const memberPath = node => {
+      if (!node) return '';
+      if (node.type === 'Identifier') return node.name;
+      if (node.type === 'ThisExpression') return 'this';
+      if (node.type === 'MemberExpression') {
+        const key = node.computed ? staticValue(node.property, constants, 0, bindings) :
+          node.property.type === 'Identifier' ? node.property.name : null;
+        return key === null ? '' : memberPath(node.object) + '.' + key;
+      }
+      if (node.type === 'SequenceExpression' && node.expressions.length) return memberPath(node.expressions[node.expressions.length - 1]);
+      return '';
+    };
+    const requireVm = node => node?.type === 'CallExpression' &&
+      node.callee.type === 'Identifier' && node.callee.name === 'require' &&
+      ['vm', 'node:vm'].includes(node.arguments[0]?.value);
+    const callbackRecord = (callback, api, line, expression) => {
+      let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
+      if (callback?.type === 'Identifier') {
+        callbackName = callback.name;
+        let callbackKey = bindings.get(callback);
+        const seenCallbackAliases = new Set();
+        while (callbackKey && aliases.has(callbackKey) && !seenCallbackAliases.has(callbackKey)) {
+          seenCallbackAliases.add(callbackKey);
+          callbackKey = aliases.get(callbackKey);
+        }
+        let resolvedKey = callbackKey;
+        let definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+        // ESLint scope can leave a callback identifier unresolved in unusual
+        // script/global scopes. Keep the fallback local to this source file
+        // and exact function name; never resolve by repository-wide spelling.
+        if (!definition) {
+          const sameFileMatches = [...functionDefs].filter(([key, candidate]) =>
+            candidate.file === file &&
+            (candidate.node.id?.name === callback.name || key.startsWith(file + '::' + callback.name + '@')));
+          if (sameFileMatches.length === 1) {
+            const [key, candidate] = sameFileMatches[0];
+            definition = candidate;
+            resolvedKey = key.slice(file.length + 2);
+          }
+        }
+        if (definition) {
+          callbackTarget = rel(root, definition.file) + '::' + resolvedKey;
+          certainty = 'resolved-function-binding';
+        }
+      } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
+        callbackName = '[inline callback]';
+        callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
+        certainty = 'resolved-inline-callback';
+      }
+      sites.push({
+        file: rel(root, file), line, kind: 'external-callback-registration',
+        expression, callback: callbackName, callbackTarget, certainty,
+        resolved: callbackTarget, affectedRoots: []
+      });
+      if (certainty === 'unresolved-callback-owner') {
+        uncertainty.push({
+          file: rel(root, file), line, kind: 'unresolved-external-callback-owner',
+          certainty, expression, registrationApi: api, affectedRoots: []
+        });
+      }
+    };
     visit(ast, (node, parent) => {
       if (parent) parents.set(node, parent);
+      // Resolve aliases of dynamic-code constructors and Node's vm namespace.
+      if (node.type === 'ImportDeclaration' && ['vm', 'node:vm'].includes(node.source.value)) {
+        for (const specifier of node.specifiers) {
+          const key = bindings.get(specifier.local);
+          if (!key) continue;
+          if (specifier.type === 'ImportNamespaceSpecifier') vmNamespaceBindings.add(key);
+          else if (specifier.type === 'ImportSpecifier') vmMethodBindings.set(key, specifier.imported.name || specifier.imported.value);
+        }
+      }
+      if (node.type === 'VariableDeclarator') {
+        if (node.id.type === 'Identifier') {
+          const target = bindings.get(node.id);
+          if (node.init?.type === 'Identifier') {
+            const source = bindings.get(node.init);
+            if (target && source) {
+              if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
+              if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
+              if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
+            }
+            if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction', 'setTimeout', 'setInterval'].includes(node.init.name)) {
+              dynamicCallableBindings.set(target, node.init.name === 'eval' ? 'eval-alias' :
+                ['setTimeout', 'setInterval'].includes(node.init.name) ? 'string-timer-alias' : 'function-constructor-alias');
+            }
+          }
+          if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
+          if (target && node.init?.type === 'MemberExpression') {
+            const initPath = memberPath(node.init);
+            if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
+            if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
+            if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(initPath)) {
+              dynamicCallableBindings.set(target, 'string-timer-alias');
+            }
+            const sourceObject = node.init.object.type === 'Identifier' ? bindings.get(node.init.object) : null;
+            const sourceMethod = initPath.split('.').pop();
+            if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
+          }
+        } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
+          for (const item of node.id.properties || []) {
+            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
+            const importedName = item.key.name || item.key.value;
+            const target = bindings.get(item.value);
+            if (target && vmMethods.has(importedName)) vmMethodBindings.set(target, importedName);
+          }
+        } else if (node.id.type === 'ObjectPattern' &&
+            node.init?.type === 'Identifier' && ['globalThis', 'window', 'self', 'global'].includes(node.init.name)) {
+          for (const item of node.id.properties || []) {
+            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
+            const importedName = item.key.name || item.key.value;
+            const target = bindings.get(item.value);
+            if (!target) continue;
+            if (importedName === 'eval') dynamicCallableBindings.set(target, 'eval-alias');
+            else if (['Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction'].includes(importedName)) {
+              dynamicCallableBindings.set(target, 'function-constructor-alias');
+            } else if (['setTimeout', 'setInterval'].includes(importedName)) {
+              dynamicCallableBindings.set(target, 'string-timer-alias');
+            }
+          }
+        }
+      }
+      // Track code-generation/evaluation boundaries explicitly. These are
+      // uncertainty sites, never evidence that a target is unused.
+      if (node.type === 'CallExpression' || node.type === 'NewExpression') {
+        const callee = node.callee;
+        const pathName = memberPath(callee);
+        const method = pathName.split('.').pop();
+        const calleeBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
+        const objectBinding = callee.type === 'MemberExpression' && callee.object.type === 'Identifier'
+          ? bindings.get(callee.object) : null;
+        const directEval = pathName === 'eval' || ['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(pathName);
+        const indirectEval = /(?:^|\.)(?:eval)\.(?:call|apply|bind)$/.test(pathName) ||
+          (pathName === 'Reflect.apply' && memberPath(node.arguments[0]) === 'eval');
+        const functionConstructor = ['Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction',
+          'globalThis.Function', 'window.Function', 'self.Function'].includes(pathName) ||
+          (calleeBinding && dynamicCallableBindings.has(calleeBinding) &&
+            dynamicCallableBindings.get(calleeBinding).startsWith('function-constructor'));
+        const vmRequireObject = callee.type === 'MemberExpression' && requireVm(callee.object);
+        const vmExecution = (objectBinding && vmNamespaceBindings.has(objectBinding) && vmMethods.has(method)) ||
+          (calleeBinding && vmMethodBindings.has(calleeBinding) && vmMethods.has(vmMethodBindings.get(calleeBinding))) ||
+          (vmRequireObject && vmMethods.has(method));
+        const moduleCompile = method === '_compile' && /(?:^|\.)_compile$/.test(pathName);
+        const wasmExecution = (pathName.startsWith('WebAssembly.') &&
+          ['compile', 'compileStreaming', 'instantiate', 'instantiateStreaming'].includes(method)) ||
+          (node.type === 'NewExpression' && pathName === 'WebAssembly.Module');
+        const stringTimer = node.arguments[0]?.type === 'Literal' && typeof node.arguments[0].value === 'string' &&
+          ((['setTimeout', 'setInterval'].includes(method) &&
+            (['setTimeout', 'setInterval'].includes(pathName) ||
+              ['window.setTimeout', 'window.setInterval', 'globalThis.setTimeout', 'globalThis.setInterval', 'self.setTimeout', 'self.setInterval'].includes(pathName))) ||
+            (calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'string-timer-alias'));
+        const evalAlias = calleeBinding && dynamicCallableBindings.get(calleeBinding) === 'eval-alias';
+        if (directEval || indirectEval || evalAlias || functionConstructor || vmExecution || moduleCompile || wasmExecution || stringTimer) {
+          const kind = stringTimer ? 'string-timer-execution' : 'unresolved-dynamic-execution';
+          const boundary = directEval ? 'direct-eval' : evalAlias ? 'aliased-eval' : indirectEval ? 'indirect-eval' :
+            functionConstructor ? 'function-constructor' : vmExecution ? 'node-vm' :
+            moduleCompile ? 'node-module-compile' : wasmExecution ? 'wasm-module-execution' : 'string-timer';
+          uncertainty.push({
+            file: rel(root, file), line: node.loc.start.line, kind,
+            certainty: 'unresolved-dynamic-execution',
+            expression: sourceText.slice(node.start, node.end).slice(0, 240),
+            executionBoundary: boundary, affectedRoots: []
+          });
+        }
+      }
+      // Framework/browser APIs and observer constructors own callback invocation.
+      if (node.type === 'CallExpression' || node.type === 'NewExpression') {
+        const callee = node.callee;
+        const pathName = memberPath(callee);
+        const method = pathName.split('.').pop();
+        const callbackApis = new Set([
+          'addListener', 'addEventListener', 'on', 'once', 'subscribe',
+          'then', 'catch', 'finally', 'setTimeout', 'setInterval',
+          'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback',
+          'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback'
+        ]);
+        const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
+        const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
+        const lastArgument = node.arguments[node.arguments.length - 1];
+        const callbackOnlyExtensionMethods = new Set(['getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'captureVisibleTab']);
+        const lastArgumentIsCallable = lastArgument &&
+          ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
+        const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) && lastArgumentIsCallable &&
+          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' ||
+            callbackOnlyExtensionMethods.has(method) || functionDefs.has(file + '::' + bindings.get(lastArgument)));
+        const isCallbackCandidate = argument => argument &&
+          ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
+            'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
+        let callbackIndices = [];
+        if (isObserver) callbackIndices = [0];
+        else if (method === 'addEventListener') callbackIndices = [1];
+        else if (['on', 'once', 'addListener'].includes(method)) {
+          const candidates = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
+          if (candidates.length) callbackIndices = [candidates[candidates.length - 1]];
+        } else if (method === 'then') {
+          callbackIndices = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
+        } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
+        else if (callbackApis.has(method)) callbackIndices = [0];
+        for (const callbackIndex of callbackIndices) {
+          if (callbackIndex < 0 || callbackIndex >= node.arguments.length) continue;
+          const callback = node.arguments[callbackIndex];
+          if (['setTimeout', 'setInterval'].includes(method) && callback.type === 'Literal' && typeof callback.value === 'string') continue;
+          callbackRecord(callback, pathName || method, node.loc.start.line,
+            sourceText.slice(callee.start, callee.end).slice(0, 160));
+        }
+      }
+      // DOM-style and browser event property assignments are callback roots too.
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'MemberExpression') {
+        const eventName = memberPath(node.left).split('.').pop();
+        if (/^on[a-z0-9_]+$/i.test(eventName) &&
+            ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression', 'CallExpression', 'ObjectExpression'].includes(node.right.type)) {
+          callbackRecord(node.right, 'event-property:' + eventName, node.loc.start.line,
+            sourceText.slice(node.left.start, node.left.end).slice(0, 160));
+        }
+      }
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'Identifier' && node.right.type === 'Identifier') {
+        const target = bindings.get(node.left), source = bindings.get(node.right);
+        if (target && source) {
+          aliases.set(target, source);
+          if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
+          if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
+          if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
+        }
+        if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction', 'setTimeout', 'setInterval'].includes(node.right.name)) {
+          dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
+            ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
+        }
+        if (target && node.right.type === 'MemberExpression') {
+          const rightPath = memberPath(node.right);
+          if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(rightPath)) dynamicCallableBindings.set(target, 'eval-alias');
+          else if (['globalThis.Function', 'window.Function', 'self.Function'].includes(rightPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
+          else if (['globalThis.setTimeout', 'window.setTimeout', 'self.setTimeout', 'globalThis.setInterval', 'window.setInterval', 'self.setInterval'].includes(rightPath)) {
+            dynamicCallableBindings.set(target, 'string-timer-alias');
+          }
+        }
+      }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
           node.init && node.init.type === 'Identifier') {
         const target = bindings.get(node.id), source = bindings.get(node.init);
-        if (target && source) aliases.set(target, source);
+        if (target && source) {
+          aliases.set(target, source);
+          if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
+          if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
+          if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
+        }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const key = bindings.get(node.callee); if (key) calledBindings.add(key);
@@ -765,7 +1010,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const loaderUncertainty = uncertainty.filter(site => [
     'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
     'chrome.scripting.registerContentScripts', 'dom-script-src-injection',
-    'dom-script-setAttribute-injection', 'require'
+    'dom-script-setAttribute-injection', 'require',
+    // Generated source may hide additional loaders or references. Keep the
+    // affected root's otherwise-unreached files uncertain rather than dead.
+    'unresolved-dynamic-execution', 'string-timer-execution'
   ].includes(site.kind));
   for (const [entry, seen] of rootReach) {
     const scopedSites = loaderUncertainty.filter(site => seen.has(path.resolve(root, site.file)));

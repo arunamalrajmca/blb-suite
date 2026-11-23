@@ -86,7 +86,7 @@ function auditRepositoryTestInventory() {
   assert.ok(workflow.includes(String.raw`\[[^]]+\] › [^[:space:]]+\.spec\.js:[0-9]+:[0-9]+ ›`), 'isolated test-list entries must preserve project, file location, and full title');
   const auditCoverage = [
     ['all browser test cases are collected with Playwright list output', /npx playwright test --list --reporter=list/],
-    ['full audit reruns when a labeled pull request receives new commits', /types: \[labeled, synchronize\]/],
+    ['full audit starts only on an explicit label event after prerequisite qualification', /types: \[labeled\]/],
     ['all remaining browser test cases run in one Playwright invocation with four workers and complete failure collection', /npx playwright test --test-list .*--workers=4 --max-failures=0/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
     ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
@@ -101,6 +101,8 @@ function auditRepositoryTestInventory() {
   for (const [label, pattern] of auditCoverage) {
     assert.match(workflow, pattern, 'full-test audit must execute ' + label);
   }
+  assert.doesNotMatch(workflow, /types: \[labeled, synchronize\]/,
+    'full-test audit must not restart automatically on every commit before prerequisites are requalified');
   assert.match(workflow, /--max-failures=0/, 'full-test audit must collect all scheduled browser failures in one run');
 
   const testFiles = [

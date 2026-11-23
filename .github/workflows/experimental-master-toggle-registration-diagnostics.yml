@@ -1,0 +1,87 @@
+name: Experimental Master-Toggle Registration Diagnostics
+run-name: Master-Toggle Registration Diagnostics — ${{ github.ref_name }} — Run ${{ github.run_number }}
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}
+  cancel-in-progress: true
+
+jobs:
+  reproduce-registration-recovery:
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-master-toggle-registration-diagnostics') }}
+    name: Reproduce master OFF-to-ON registration recovery with four workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run deterministic stale-activation regression
+        run: |
+          mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
+          set -o pipefail
+          npx playwright test tests/browser/site-registration-opt-out-race.spec.js \
+            --grep "master OFF-to-ON recovery repairs registrations" \
+            --workers=1 --repeat-each=3 --max-failures=1 --reporter=list \
+            --output="${{ runner.temp }}/master-toggle-diagnostics/deterministic-results" \
+            2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/deterministic.log"
+        env:
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+
+      - name: Run repeated OFF-to-ON registration recovery under four-worker contention
+        run: |
+          mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
+          set -o pipefail
+          npx playwright test tests/browser/source-page-button-redirect-separation.spec.js \
+            --grep "Suite master opt-out removes both registered worlds" \
+            --workers=4 --repeat-each=24 --max-failures=1 --reporter=list \
+            --output="${{ runner.temp }}/master-toggle-diagnostics/test-results" \
+            2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/stress.log"
+        env:
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+
+      - name: Stress the persistent-registration failure fallback exposed by the full concurrency comparison
+        run: |
+          mkdir -p "${{ runner.temp }}/master-toggle-diagnostics"
+          set -o pipefail
+          npx playwright test tests/browser/optional-host-permission-lifecycle.spec.js \
+            --grep "current-tab activation falls back when persistent content-script registration fails" \
+            --workers=4 --repeat-each=24 --max-failures=0 --reporter=list \
+            --output="${{ runner.temp }}/master-toggle-diagnostics/fallback-results" \
+            2>&1 | tee "${{ runner.temp }}/master-toggle-diagnostics/fallback-stress.log"
+        env:
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+
+      - name: Upload registration traces and Playwright failure evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: master-toggle-registration-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/master-toggle-diagnostics
+          if-no-files-found: warn
+          retention-days: 30

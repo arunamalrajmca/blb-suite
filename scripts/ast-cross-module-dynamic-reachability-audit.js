@@ -84,7 +84,7 @@ function analyzeCrossModule(root,files){
 
 function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const eslintScope=require('eslint-scope');
-  const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map();
+  const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map(),functionAliases=new Map(),parameterValues=new Map();
   for(const [file,ast] of asts){
     const manager=eslintScope.analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
     for(const scope of manager.scopes){
@@ -121,14 +121,33 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     if(!targetVariable)continue;
     importsForVariable.set(localVariable,{file,target,exportedLocal,imported:item.imported,targetVariable});
   }
+  // Preserve function identity through local aliases and reassignment.
+  // Aliases are binding-based, so shadowed names cannot cross-contaminate.
+  for(const [file,ast] of asts) visit(ast,node=>{
+    if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'){
+      const target=variableForNode.get(node.id),source=variableForNode.get(node.init);
+      if(target&&source)functionAliases.set(target,source);
+    }
+    if(node.type==='AssignmentExpression'&&node.operator==='='&&node.left.type==='Identifier'&&node.right.type==='Identifier'){
+      const target=variableForNode.get(node.left),source=variableForNode.get(node.right);
+      if(target&&source)functionAliases.set(target,source);
+    }
+  });
   const functionForImportedVariable=new Map();
   for(const [variable,info] of importsForVariable){
     const fn=functionForVariable.get(info.targetVariable);
     if(fn)functionForImportedVariable.set(variable,fn);
   }
   const resolveFunction=(file,identifier)=>{
-    const variable=variableForNode.get(identifier);
-    return variable?(functionForVariable.get(variable)||functionForImportedVariable.get(variable)||null):null;
+    let variable=variableForNode.get(identifier);
+    const seen=new Set();
+    while(variable&&!seen.has(variable)){
+      seen.add(variable);
+      const found=functionForVariable.get(variable)||functionForImportedVariable.get(variable);
+      if(found)return found;
+      variable=functionAliases.get(variable)||null;
+    }
+    return null;
   };
   const origins=new Map(),edges=new Map();
   const addEdge=(from,to)=>{
@@ -154,8 +173,13 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       const fn=resolveFunction(file,node.callee);
       if(!fn)return;
       for(let i=0;i<Math.min(fn.params.length,node.arguments.length);i++){
-        const arg=node.arguments[i];
-        if(arg.type==='Identifier')addEdge(variableForNode.get(arg),fn.params[i]);
+        const arg=node.arguments[i], parameter=fn.params[i];
+        if(arg.type==='Identifier')addEdge(variableForNode.get(arg),parameter);
+        const value=literalString(arg,file);
+        if(parameter&&value!==null){
+          if(!parameterValues.has(parameter))parameterValues.set(parameter,new Set());
+          parameterValues.get(parameter).add(value);
+        }
       }
       const assigned=parentNode&&parentNode.type==='VariableDeclarator'&&parentNode.init===node&&parentNode.id.type==='Identifier'?variableForNode.get(parentNode.id):null;
       if(assigned){
@@ -189,7 +213,17 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     const variable=variableForNode.get(node.object);
     const objectOrigins=variable&&origins.get(variable);
     if(!objectOrigins)return;
-    const property=node.computed?(node.property.type==='Literal'&&(typeof node.property.value==='string'||typeof node.property.value==='number')?String(node.property.value):null):(node.property.name||null);
+    let property=node.computed?(node.property.type==='Literal'&&(typeof node.property.value==='string'||typeof node.property.value==='number')?String(node.property.value):null):(node.property.name||null);
+    if(property===null&&node.computed&&node.property.type==='Identifier'){
+      const parameter=variableForNode.get(node.property);
+      const values=parameter&&parameterValues.get(parameter);
+      if(values&&values.size&&values.size<=32){
+        for(const value of values)for(const origin of objectOrigins.values()){
+          propertyReferences.push({from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property:value,line:node.loc.start.line,flow:'interprocedural-parameter-key'});
+        }
+        return;
+      }
+    }
     for(const origin of objectOrigins.values()){
       const entry={from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property,line:node.loc.start.line,flow:'interprocedural'};
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);

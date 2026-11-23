@@ -123,3 +123,29 @@ test('preserves multiple object origins passed to the same helper parameter',()=
   assert.ok(refs.some(x=>x.to==='service-b.js'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves imported helper function identity through local aliases and reassignment',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-function-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; let runner; runner = invoke; const alias = runner; alias(api);");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('propagates literal computed-property keys through function parameters',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-key-parameter-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {}, stop() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target, key) { target[key](); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api, 'start'); invoke(api, 'stop');");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  const refs=r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.to==='service.js');
+  assert.ok(refs.some(x=>x.property==='start'&&x.flow==='interprocedural-parameter-key'));
+  assert.ok(refs.some(x=>x.property==='stop'&&x.flow==='interprocedural-parameter-key'));
+  assert.equal(r.interprocedural.dynamicPropertyReferences.filter(x=>x.from==='helper.js').length,0);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
