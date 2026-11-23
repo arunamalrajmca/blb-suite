@@ -187,7 +187,7 @@ test('resolves statically composed absolute dynamic imports from path.join and _
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-absolute-'));
  try{
   fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
-  fs.writeFileSync(path.join(root,'consumer.js'),"import path from 'node:path';\nimport(path.join(__dirname, 'service.js'));");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import nodePath from 'node:path';\nimport(nodePath.join(__dirname, 'service.js'));");
   const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
   assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
