@@ -523,6 +523,25 @@ test('resolves aliased chrome.scripting loader namespaces and preserves dynamic 
   ));
 });
 
+
+test('resolves destructured and directly aliased chrome.scripting loader methods', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': 'module.exports = true;',
+    'extension/manifest.json': JSON.stringify({ manifest_version: 3, background: { service_worker: 'background.js' } }),
+    'extension/background.js': [
+      'const { executeScript: inject, registerContentScripts: register } = chrome.scripting;',
+      "inject({ target: { tabId: 1 }, files: ['scripts/destructured.js'] });",
+      "const registerAlias = chrome.scripting.registerContentScripts;",
+      "registerAlias([{ id: 'alias', js: [{ file: 'scripts/aliased.js' }] }]);"
+    ].join(' '),
+    'extension/scripts/destructured.js': 'globalThis.destructured = true;',
+    'extension/scripts/aliased.js': 'globalThis.aliased = true;'
+  });
+  assert.ok(edge(result, 'chrome.scripting.executeScript.files', 'extension/background.js', 'extension/scripts/destructured.js'));
+  assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/aliased.js'));
+});
+
 test('does not treat executeScript inline func bodies as unresolved file targets', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
