@@ -401,6 +401,75 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
   }
 
+  // Resolve callback parameters through direct callsites. A wrapper such as
+  // register(handler) { api.addListener(handler); } owns no local function
+  // declaration for handler; its callers provide the actual callback.
+  // Resolve only when all observed callsites agree on one owner.
+  const importedFunctionsByFile = new Map();
+  const functionAliasesByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file);
+    const imported = new Map();
+    const aliases = new Map();
+    visit(ast, node => {
+      if (node.type === 'ImportDeclaration' && node.source.value) {
+        const target = resolveFile(file, node.source.value, fileSet);
+        if (!target) return;
+        for (const spec of node.specifiers || []) {
+          const importedName = spec.imported ? (spec.imported.name || spec.imported.value) : 'default';
+          imported.set(bindings.get(spec.local), { file: target, importedName });
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init && node.init.type === 'Identifier') {
+        const target = bindings.get(node.id), source = bindings.get(node.init);
+        if (target && source) aliases.set(target, source);
+      }
+    });
+    importedFunctionsByFile.set(file, imported);
+    functionAliasesByFile.set(file, aliases);
+  }
+  const resolveFunctionOwner = (file, identifier) => {
+    const bindings = bindingByFile.get(file);
+    let key = bindings && bindings.get(identifier);
+    const aliases = functionAliasesByFile.get(file);
+    const seen = new Set();
+    while (key && aliases && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
+    let definition = key && functionDefs.get(file + '::' + key);
+    if (definition) return { file: definition.file, key, node: definition.node };
+    const imported = key && importedFunctionsByFile.get(file).get(key);
+    if (imported) {
+      const exportedKey = exportsByFile.get(imported.file) && exportsByFile.get(imported.file).get(imported.importedName);
+      definition = exportedKey && functionDefs.get(imported.file + '::' + exportedKey);
+      if (definition) return { file: definition.file, key: exportedKey, node: definition.node };
+    }
+    return null;
+  };
+  const callbackParameterOwners = new Map();
+  for (const [file, ast] of asts) {
+    visit(ast, node => {
+      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
+      const target = resolveFunctionOwner(file, node.callee);
+      if (!target) return;
+      const targetBindings = bindingByFile.get(target.file);
+      for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
+        const parameter = target.node.params[index];
+        if (parameter.type !== 'Identifier') continue;
+        const parameterKey = targetBindings.get(parameter);
+        if (!parameterKey) continue;
+        const argument = node.arguments[index];
+        let owner = null;
+        if (argument.type === 'Identifier') owner = resolveFunctionOwner(file, argument);
+        else if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
+          owner = { file, key: 'function@' + argument.loc.start.line, node: argument };
+        }
+        if (!owner) continue;
+        const mapKey = target.file + '::' + parameterKey;
+        if (!callbackParameterOwners.has(mapKey)) callbackParameterOwners.set(mapKey, new Map());
+        callbackParameterOwners.get(mapKey).set(owner.file + '::' + owner.key, owner);
+      }
+    });
+  }
+
   for (const [file, ast] of asts) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
     const sourceText = fs.readFileSync(file, 'utf8');
@@ -455,6 +524,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (definition) {
           callbackTarget = rel(root, definition.file) + '::' + resolvedKey;
           certainty = 'resolved-function-binding';
+        } else if (callbackKey) {
+          const owners = callbackParameterOwners.get(file + '::' + callbackKey);
+          if (owners && owners.size === 1) {
+            const owner = [...owners.values()][0];
+            callbackTarget = rel(root, owner.file) + '::' + owner.key;
+            certainty = 'resolved-interprocedural-callback-argument';
+          }
         }
       } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
         callbackName = '[inline callback]';
