@@ -187,7 +187,7 @@ test('resolves statically composed absolute dynamic imports from path.join and _
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-absolute-'));
  try{
   fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
-  fs.writeFileSync(path.join(root,'consumer.js'),"import path from 'node:path';\\nimport(path.join(__dirname, 'service.js'));");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import path from 'node:path';\nimport(path.join(__dirname, 'service.js'));");
   const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
   assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
@@ -210,7 +210,7 @@ test('does not treat an unrelated shadowed path object as a Node path module',()
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-shadowed-path-'));
  try{
   fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
-  fs.writeFileSync(path.join(root,'consumer.js'),"const path = { join: (a, b) => a + b };\\nimport(path.join(__dirname, 'service.js'));");
+  fs.writeFileSync(path.join(root,'consumer.js'),"const path = { join: (a, b) => a + b };\nimport(path.join(__dirname, 'service.js'));");
   const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
   assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true),false);
@@ -221,7 +221,7 @@ test('resolves CommonJS node:path bindings for dynamic import expressions',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-cjs-path-'));
  try{
   fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
-  fs.writeFileSync(path.join(root,'consumer.js'),"const path = require('node:path');\\nimport(path.resolve(__dirname, 'service.js'));");
+  fs.writeFileSync(path.join(root,'consumer.js'),"const path = require('node:path');\nimport(path.resolve(__dirname, 'service.js'));");
   const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
   assert.equal(r.unresolved.some(x=>x.file==='consumer.js'),false);
