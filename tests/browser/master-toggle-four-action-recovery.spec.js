@@ -23,7 +23,10 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
     };
   }, originPattern);
 
-  const readFeatureState = () => extensionWorker.evaluate(async tabId => {
+  const readFeatureState = async () => {
+    const tabId = await extensionWorker.evaluate(async url =>
+      (await chrome.tabs.query({url}))[0]?.id ?? null, sourceUrl);
+    return extensionWorker.evaluate(async tabId => {
     const [injected] = await chrome.scripting.executeScript({
       target:{tabId},world:'ISOLATED',
       func:() => ({
@@ -32,9 +35,9 @@ test('master OFF-to-ON recovery preserves all four reference actions and opens t
         doubleClick:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
       })
     });
-    return injected?.result || null;
-  }, await extensionWorker.evaluate(async url =>
-    (await chrome.tabs.query({url}))[0]?.id ?? null, sourceUrl));
+      return injected?.result || null;
+    }, tabId);
+  };
 
   try {
     await extensionStorage.set({
