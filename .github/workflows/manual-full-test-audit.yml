@@ -150,26 +150,27 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
-      # Recheck the two historically failing cases serially before the complete
-      # four-worker audit. Each invocation retains the original test assertions.
+      # Recheck both historically failing cases in one Playwright invocation.
+      # Separate workers retain per-test browser isolation while avoiding a second
+      # Playwright startup. Assert the exact two-test inventory and full success.
       - name: Re-run prior full-audit failures independently
         id: isolated_browser_failures
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          first_status=0
-          npx playwright test tests/browser/extension-reference-actions.spec.js \
-            --grep "Article verse cues resolve context outside Facebook" \
-            --workers=1 --max-failures=0 --reporter=line || first_status=$?
+          rerun_log="$RUNNER_TEMP/blb-prior-audit-failures.log"
+          rerun_status=0
+          npx playwright test \
+            tests/browser/extension-reference-actions.spec.js \
+            tests/browser/service-worker-lifecycle.spec.js \
+            --grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
+            --workers=2 --max-failures=0 --reporter=line 2>&1 | tee "$rerun_log" || rerun_status=$?
 
-          second_status=0
-          npx playwright test tests/browser/service-worker-lifecycle.spec.js \
-            --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
-            --workers=1 --max-failures=0 --reporter=line || second_status=$?
-
-          echo "Independent rerun exit codes: article-cue=$first_status lifecycle=$second_status"
-          if [[ "$first_status" -ne 0 || "$second_status" -ne 0 ]]; then
+          summary=$(grep -E '[0-9]+ passed, [0-9]+ failed, [0-9]+ skipped' "$rerun_log" | tail -n 1 || true)
+          echo "Independent rerun summary: ${summary:-missing}"
+          if [[ "$rerun_status" -ne 0 || "$summary" != *"2 passed, 0 failed, 0 skipped"* ]]; then
+            echo "::error::Expected both prior failures to pass exactly once; Playwright exit=$rerun_status summary=${summary:-missing}."
             exit 1
           fi
 
