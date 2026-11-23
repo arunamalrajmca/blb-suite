@@ -1051,3 +1051,22 @@ test('does not promote aliases copied from locally shadowed Proxy, Reflect, or O
   assert.equal(result.uncertainty.filter(item =>
     ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
 });
+
+test('tracks namespace aliases through qualified globalThis, window, and self references', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const reflection = globalThis.Reflect;',
+      'const objectApi = window.Object;',
+      'const anotherReflection = self.Reflect;',
+      'reflection.get(target, key);',
+      'objectApi.defineProperty(target, key, descriptor);',
+      'anotherReflection.ownKeys(target);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.ok(result.uncertainty.some(item => item.kind === 'reflective-property-operation'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'reflective-property-enumeration'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'prototype-or-descriptor-mutation'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
