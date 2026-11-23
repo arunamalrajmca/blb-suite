@@ -915,3 +915,48 @@ test('does not misclassify shadowed Proxy, Reflect, or Object bindings as global
   assert.equal(result.uncertainty.filter(item =>
     ['proxy-construction', 'reflective-property-operation', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
 });
+
+test('tracks destructured and direct aliases of Reflect and Object methods plus Proxy.revocable', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const { get: read, set: write, ownKeys: keys } = Reflect;',
+      'const define = Object.defineProperty;',
+      'const { getOwnPropertyDescriptors: descriptors } = Object;',
+      'const revokeFactory = Proxy.revocable;',
+      'read(target, runtimeKey);',
+      'write(target, runtimeKey, value);',
+      'keys(target);',
+      'define(target, runtimeKey, descriptor);',
+      'descriptors(target);',
+      'revokeFactory(target, handler);',
+      'const globalRead = globalThis.Reflect.get;',
+      'globalRead(target, runtimeKey);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  const kinds = result.uncertainty.map(item => item.kind);
+  assert.ok(kinds.includes('reflective-property-operation'));
+  assert.ok(kinds.includes('reflective-property-enumeration'));
+  assert.ok(kinds.includes('prototype-or-descriptor-mutation'));
+  assert.ok(kinds.includes('proxy-construction'));
+  assert.ok(result.uncertainty.every(item => item.affectedRoots.includes('scripts/main.js')));
+});
+
+test('does not treat shadowed reflection namespaces as global APIs when destructured', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function ordinary(Reflect, Object) {',
+      '  const { get } = Reflect;',
+      '  const { defineProperty } = Object;',
+      '  get(target, key);',
+      '  defineProperty(target, key, descriptor);',
+      '}',
+      'ordinary(localReflect, localObject);'
+    ].join(' ')
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.equal(result.uncertainty.filter(item =>
+    ['reflective-property-operation', 'reflective-property-enumeration', 'prototype-or-descriptor-mutation'].includes(item.kind)).length, 0);
+});
