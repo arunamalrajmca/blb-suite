@@ -1224,7 +1224,7 @@ test('traces Array.from mapper input and returned callback identity', () => {
     'const callbacks = [cleanup];',
     'const mapped = Array.from(callbacks, callback => callback);',
     'const selected = mapped.at(0);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
@@ -1237,7 +1237,7 @@ test('traces Object.values callback values through an Array.from mapper', () => 
     'const registry = { onCleanup: cleanup };',
     'const mapped = Array.from(Object.values(registry), callback => callback);',
     'const selected = mapped.at(0);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
@@ -1251,7 +1251,7 @@ test('supports a separately declared Array.from mapper callback', () => {
     'function identity(callback) { return callback; }',
     'const mapped = Array.from(callbacks, identity);',
     'const selected = mapped.at(0);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
