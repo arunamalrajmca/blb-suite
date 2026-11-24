@@ -407,3 +407,30 @@ test('recognizes invocation of a callback stored in an object property', () => {
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@3'));
 });
+
+
+test('traces object-property callback values stored in and retrieved from containers', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = { onReady: callback };',
+    'const registry = new Map();',
+    "registry.set('ready', source.onReady);",
+    "const handler = registry.get('ready');"
+  ].join('\n'));
+  const storedValue = result.flowEdges.find(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to.startsWith('container-value@'));
+  assert.ok(storedValue, 'expected callback property to flow into the container value slot');
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === storedValue.to && edge.to === 'handler@5'));
+});
+
+test('traces object-property values returned from helper functions', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'function getHandler() { return registry.onReady; }',
+    'const handler = getHandler();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+});
