@@ -228,8 +228,9 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const getTop=(file,name)=>topLevel.get(file+'::'+name)||null;
   const addFunction=(file,node,variable)=>{
     if(!variable||!node||!['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
-    const params=(node.params||[]).map(param=>param.type==='Identifier'?variableForNode.get(param)||null:null);
-    functionForVariable.set(variable,{file,node,params});
+    const paramNodes=node.params||[];
+    const params=paramNodes.map(param=>param.type==='Identifier'?variableForNode.get(param)||null:null);
+    functionForVariable.set(variable,{file,node,params,paramNodes});
   };
   for(const [file,ast] of asts){
     for(const statement of ast.body){
@@ -280,6 +281,53 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     return null;
   };
   const origins=new Map(),edges=new Map();
+  // Destructuring a parameter or local alias is a property read on the
+  // originating object. Keep the binding identity instead of pooling names.
+  const patternParameterArguments=new Map();
+  const patternKeys=pattern=> {
+    const keys=[];
+    for(const property of pattern?.properties||[]){
+      if(property.type==='RestElement'){keys.push({property:null,dynamic:true});continue;}
+      const key=property.computed
+        ? (property.key.type==='Literal'&&(typeof property.key.value==='string'||typeof property.key.value==='number')?String(property.key.value):null)
+        : (property.key.name||String(property.key.value));
+      keys.push({property:key,dynamic:key===null||property.value?.type==='ObjectPattern'||property.value?.type==='ArrayPattern'});
+    }
+    return keys;
+  };
+  const returnedValues=(fn,active=new Set())=>{
+    if(!fn||active.has(fn.node))return [];
+    const next=new Set(active);next.add(fn.node);
+    const returned=[];
+    const scan=(node,isRoot=false)=>{
+      if(!node||typeof node!=='object'||typeof node.type!=='string')return;
+      if(!isRoot&&['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
+      if(node.type==='ReturnStatement'&&node.argument){
+        if(node.argument.type==='Identifier'){
+          const variable=variableForNode.get(node.argument);if(variable)returned.push({variable,parameterIndex:fn.params.indexOf(variable)});
+        } else if(node.argument.type==='CallExpression'){
+          const nested=resolveFunction(fn.file,node.argument.callee);
+          if(nested){
+            for(const value of returnedValues(nested,next)){
+              if(value.parameterIndex>=0){
+                const argument=node.argument.arguments[value.parameterIndex];
+                if(argument?.type==='Identifier'){
+                  const variable=variableForNode.get(argument);if(variable)returned.push({variable,parameterIndex:-1});
+                }
+              } else if(value.variable)returned.push(value);
+            }
+          }
+        }
+      }
+      for(const [key,value] of Object.entries(node)){
+        if(['loc','start','end','range'].includes(key))continue;
+        if(Array.isArray(value))value.forEach(child=>scan(child));
+        else if(value&&typeof value.type==='string')scan(value);
+      }
+    };
+    scan(fn.node.body,true);
+    return [...new Map(returned.filter(item=>item.variable).map(item=>[item.variable,item])).values()];
+  };
   const addEdge=(from,to)=>{
     if(!from||!to)return;
     if(!edges.has(from))edges.set(from,new Set());
@@ -303,8 +351,13 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       const fn=resolveFunction(file,node.callee);
       if(!fn)return;
       for(let i=0;i<Math.min(fn.params.length,node.arguments.length);i++){
-        const arg=node.arguments[i], parameter=fn.params[i];
+        const arg=node.arguments[i], parameter=fn.params[i], parameterNode=fn.paramNodes[i];
         if(arg.type==='Identifier')addEdge(variableForNode.get(arg),parameter);
+        if(parameterNode?.type==='ObjectPattern'&&arg.type==='Identifier'){
+          if(!patternParameterArguments.has(parameterNode))patternParameterArguments.set(parameterNode,new Set());
+          const argumentVariable=variableForNode.get(arg);
+          if(argumentVariable)patternParameterArguments.get(parameterNode).add(argumentVariable);
+        }
         const value=literalString(arg,file);
         if(parameter&&value!==null){
           if(!parameterValues.has(parameter))parameterValues.set(parameter,new Set());
@@ -313,14 +366,9 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       }
       const assigned=parentNode&&parentNode.type==='VariableDeclarator'&&parentNode.init===node&&parentNode.id.type==='Identifier'?variableForNode.get(parentNode.id):null;
       if(assigned){
-        const returned=new Set();
-        visit(fn.node.body,returnedNode=>{
-          if(returnedNode.type==='ReturnStatement'&&returnedNode.argument&&returnedNode.argument.type==='Identifier'){
-            const variable=variableForNode.get(returnedNode.argument);
-            if(variable)returned.add(variable);
-          }
-        });
-        if(returned.size===1)addEdge([...returned][0],assigned);
+        const returned=returnedValues(fn);
+        if(returned.length===1)addEdge(returned[0].variable,assigned);
+        else if(returned.length>1)for(const item of returned)addEdge(item.variable,assigned);
       }
     });
   }
@@ -338,8 +386,19 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     }
   }
   const propertyReferences=[],dynamicPropertyReferences=[];
+  const addPatternReferences=(file,variable,pattern,line)=>{
+    const objectOrigins=variable&&origins.get(variable);
+    if(!objectOrigins)return;
+    for(const key of patternKeys(pattern))for(const origin of objectOrigins.values()){
+      const entry={from:path.relative(root,file),to:path.relative(root,origin.target),local:'[destructured]',exportedLocal:origin.exportedLocal,property:key.property,line,flow:'interprocedural-destructuring'};
+      if(key.dynamic)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
+    }
+  };
   for(const [file,ast] of asts)visit(ast,node=>{
-    if(node.type!=='MemberExpression'||node.object.type!=='Identifier')return;
+    if(node.type==='VariableDeclarator'&&node.id.type==='ObjectPattern'&&node.init?.type==='Identifier'){
+      addPatternReferences(file,variableForNode.get(node.init),node.id,node.loc.start.line);
+    }
+    if(node.type==='MemberExpression'&&node.object.type==='Identifier'){
     const variable=variableForNode.get(node.object);
     const objectOrigins=variable&&origins.get(variable);
     if(!objectOrigins)return;
@@ -358,7 +417,19 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       const entry={from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property,line:node.loc.start.line,flow:'interprocedural'};
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
     }
+    }
   });
+  // Apply object-pattern parameter reads to every statically observed callsite.
+  for(const [pattern,argumentsSet] of patternParameterArguments){
+    for(const argumentVariable of argumentsSet){
+      const objectOrigins=origins.get(argumentVariable);
+      if(!objectOrigins)continue;
+      for(const key of patternKeys(pattern))for(const origin of objectOrigins.values()){
+        const entry={from:path.relative(root, [...asts].find(([,ast])=>{let found=false;visit(ast,node=>{if(node===pattern)found=true;});return found;})?.[0]||root),to:path.relative(root,origin.target),local:'[parameter-pattern]',exportedLocal:origin.exportedLocal,property:key.property,line:pattern.loc.start.line,flow:'interprocedural-parameter-destructuring'};
+        if(key.dynamic)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
+      }
+    }
+  }
   const dedupe=items=>[...new Map(items.map(item=>[JSON.stringify(item),item])).values()];
   return {propertyReferences:dedupe(propertyReferences),dynamicPropertyReferences:dedupe(dynamicPropertyReferences),objectImports:objectImportCount};
 }
