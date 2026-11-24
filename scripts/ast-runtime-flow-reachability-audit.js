@@ -143,6 +143,8 @@ function analyzeFile(root, file) {
   const propertyReads = [];
   const propertyCopies = [];
   const descriptorRequests = [];
+  const descriptorCollectionRequests = [];
+  const propertyValueCollectionRequests = [];
   const objectAliasParents = new Map();
   const canonicalObject = identity => {
     if (!identity) return identity;
@@ -170,6 +172,19 @@ function analyzeFile(root, file) {
     if (computed && property.type === 'Literal' &&
         ['string', 'number'].includes(typeof property.value)) return String(property.value);
     return null;
+  };
+  const memberPath = member => {
+    const parts = [];
+    let current = member;
+    let dynamic = false;
+    while (current && current.type === 'MemberExpression') {
+      const key = propertyKey(current.property,current.computed);
+      if (key === null) dynamic = true;
+      else parts.unshift(key);
+      current = current.object;
+    }
+    if (!current || current.type !== 'Identifier') return null;
+    return {object:bindingId(current),name:current.name,property:dynamic?null:parts.join('.')};
   };
   const addObjectPropertySlots = (value, object, prefix = [], depth = 0) => {
     if (!value || depth > 10) return;
@@ -603,13 +618,9 @@ function analyzeFile(root, file) {
                 }
                 continue;
               }
-              if (returned.type === 'MemberExpression' && returned.object.type === 'Identifier') {
-                propertyReads.push({
-                  object:bindingId(returned.object),
-                  property:propertyKey(returned.property, returned.computed),
-                  assigned,
-                  node:returned
-                });
+              if (returned.type === 'MemberExpression') {
+                const access = memberPath(returned);
+                if (access) propertyReads.push({...access,assigned,node:returned});
                 continue;
               }
               if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
@@ -626,6 +637,21 @@ function analyzeFile(root, file) {
             }
           }
         }
+      }
+
+      if (node.type === 'CallExpression' && name === 'getOwnPropertyDescriptors' &&
+          receiverName === 'Object') {
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const descriptors = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target && descriptors) descriptorCollectionRequests.push({object:target,descriptors,node});
+      }
+      if (node.type === 'CallExpression' && ['values','entries'].includes(name) &&
+          receiverName === 'Object') {
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const collection = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target && collection) propertyValueCollectionRequests.push({object:target,collection,node});
       }
 
       if (node.type === 'CallExpression' && name === 'getOwnPropertyDescriptor' &&
@@ -721,31 +747,34 @@ function analyzeFile(root, file) {
       }
     }
 
-    if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
-      const object = bindingId(node.object), property = propertyKey(node.property, node.computed);
-      let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
-        ? bindingId(parent.id) : null;
-      if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
-        const schedulerName = calleeName(parent.callee);
-        if (callbackSchedulers.has(schedulerName)) {
-          assigned = 'scheduler@' + parent.loc.start.line;
-          add('callbacks', 'stored-property-callback-registration', node,
-            schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + node.object.name);
-        } else if (containerMethods.has(schedulerName)) {
-          const valueIndex = parent.arguments.indexOf(node);
-          if (schedulerName !== 'set' || valueIndex > 0) {
-            assigned = 'container-value@' + node.loc.start.line + ':' + node.loc.start.column;
+    if (node.type === 'MemberExpression') {
+      const access = memberPath(node);
+      if (access) {
+        const {object,property,name:objectName} = access;
+        let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
+          const schedulerName = calleeName(parent.callee);
+          if (callbackSchedulers.has(schedulerName)) {
+            assigned = 'scheduler@' + parent.loc.start.line;
+            add('callbacks', 'stored-property-callback-registration', node,
+              schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + objectName);
+          } else if (containerMethods.has(schedulerName)) {
+            const valueIndex = parent.arguments.indexOf(node);
+            if (schedulerName !== 'set' || valueIndex > 0) {
+              assigned = 'container-value@' + node.loc.start.line + ':' + node.loc.start.column;
+            }
           }
+        } else if (parent?.type === 'CallExpression' && parent.callee === node) {
+          propertyReads.push({
+            object, property, assigned:'property-read@' + parent.loc.start.line, node
+          });
+          assigned = 'callback-invocation@' + parent.loc.start.line;
+          add('callbacks', 'stored-property-callback-invocation', node,
+            (property || 'dynamic property') + ' invoked from ' + objectName);
         }
-      } else if (parent?.type === 'CallExpression' && parent.callee === node) {
-        propertyReads.push({
-          object, property, assigned:'property-read@' + parent.loc.start.line, node
-        });
-        assigned = 'callback-invocation@' + parent.loc.start.line;
-        add('callbacks', 'stored-property-callback-invocation', node,
-          (property || 'dynamic property') + ' invoked from ' + node.object.name);
+        propertyReads.push({object,property,assigned,node});
       }
-      propertyReads.push({object, property, assigned, node});
     }
 
     if (node.type === 'VariableDeclarator') {
@@ -892,6 +921,28 @@ function analyzeFile(root, file) {
         propertyWrites.push({object:target,property,stored:write.stored});
         copiesChanged = true;
       }
+    }
+  }
+
+  // Object.getOwnPropertyDescriptors returns one descriptor object per
+  // property. Keep source property paths so nested .value reads stay connected.
+  for (const request of descriptorCollectionRequests) {
+    for (const write of [...propertyWrites]) {
+      if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
+      propertyWrites.push({
+        object:request.descriptors,
+        property:write.property === null ? null : write.property + '.value',
+        stored:write.stored
+      });
+    }
+  }
+
+  // Object.values/entries expose stored property values as collection elements.
+  // Dynamic collection indexes intentionally remain conservative.
+  for (const request of propertyValueCollectionRequests) {
+    for (const write of [...propertyWrites]) {
+      if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
+      propertyWrites.push({object:request.collection,property:null,stored:write.stored});
     }
   }
 
