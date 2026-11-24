@@ -51,7 +51,7 @@ function checkpoint(count = 161, overrides = {}) {
   };
 }
 
-test('only the exact five-file audit-harness-and-inventory ancestor change set is compatible', () => {
+test('only approved audit-harness-and-inventory ancestor changes are compatible', () => {
   const runGit = args => {
     if (args[0] === 'merge-base') return { status: 0, stdout: '' };
     if (args[0] === 'diff') return { status: 0, stdout: [...AUDIT_HARNESS_RECOVERY_FILES].sort().join('\n') + '\n' };
@@ -59,6 +59,18 @@ test('only the exact five-file audit-harness-and-inventory ancestor change set i
   };
   assert.equal(AUDIT_HARNESS_RECOVERY_FILES.includes('scripts/test-suite-inventory.json'), true);
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit }), true);
+  const subsetGit = args => args[0] === 'merge-base'
+    ? { status: 0, stdout: '' }
+    : { status: 0, stdout: [
+        '.github/workflows/experimental-full-audit-concurrency-equivalence.yml',
+        'scripts/full-audit-checkpoint-validation.mjs',
+        'scripts/full-audit-checkpoint-validation.test.mjs'
+      ].join('\n') };
+  assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit: subsetGit }), true);
+  const emptyGit = args => args[0] === 'merge-base'
+    ? { status: 0, stdout: '' }
+    : { status: 0, stdout: '' };
+  assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit: emptyGit }), false);
   assert.equal(isAuditHarnessOnlyCompatibleSource('not-a-sha', current, { enabled: true, runGit }), false);
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: false, runGit }), false);
 });
@@ -82,11 +94,11 @@ test('the real git ancestry and diff checks accept the five-file harness change 
     git('add', '.');
     git('commit', '-m', 'baseline');
     const baseline = git('rev-parse', 'HEAD');
-    for (const file of AUDIT_HARNESS_RECOVERY_FILES) {
-      fs.writeFileSync(path.join(directory, file), 'audit harness update\n');
+    for (const file of AUDIT_HARNESS_RECOVERY_FILES.slice(0, 3)) {
+      fs.writeFileSync(path.join(directory, file), 'audit harness update\\n');
     }
     git('add', '.');
-    git('commit', '-m', 'audit harness and inventory only');
+    git('commit', '-m', 'approved audit harness subset only');
     const harnessHead = git('rev-parse', 'HEAD');
     assert.equal(isAuditHarnessOnlyCompatibleSource(baseline, harnessHead, {
       enabled: true, cwd: directory
