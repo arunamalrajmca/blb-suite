@@ -311,3 +311,45 @@ test('connects Reflect.set values to static reads and keeps dynamic writes conse
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'stopped@6'));
 });
+
+
+test('preserves returned aggregate identity so later property reads retain nested callbacks', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'function createEntry() { return { onReady: callback, hooks: [callback] }; }',
+    'const entry = createEntry();',
+    'const handler = entry.onReady;',
+    'const hooks = entry.hooks;'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'hooks@5'));
+});
+
+test('preserves aggregate property identities through direct Map storage and retrieval', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('entry', { onReady: callback });",
+    "const entry = registry.get('entry');",
+    'const handler = entry.onReady;'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'aggregate@3:22' && edge.to === 'entry@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@5'));
+});
+
+test('preserves object aliases stored in containers through retrieval and property reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    'const entry = { onReady: callback };',
+    "registry.set('entry', entry);",
+    "const restored = registry.get('entry');",
+    'const handler = restored.onReady;'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@6'));
+});
