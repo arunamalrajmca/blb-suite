@@ -51,18 +51,19 @@ function checkpoint(count = 161, overrides = {}) {
   };
 }
 
-test('only the exact audit-harness-only ancestor change set is compatible', () => {
+test('only the exact five-file audit-harness-and-inventory ancestor change set is compatible', () => {
   const runGit = args => {
     if (args[0] === 'merge-base') return { status: 0, stdout: '' };
     if (args[0] === 'diff') return { status: 0, stdout: [...AUDIT_HARNESS_RECOVERY_FILES].sort().join('\n') + '\n' };
     throw new Error('unexpected git command');
   };
+  assert.equal(AUDIT_HARNESS_RECOVERY_FILES.includes('scripts/test-suite-inventory.json'), true);
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit }), true);
   assert.equal(isAuditHarnessOnlyCompatibleSource('not-a-sha', current, { enabled: true, runGit }), false);
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: false, runGit }), false);
 });
 
-test('the real git ancestry and diff checks accept only the four-file audit-harness change', () => {
+test('the real git ancestry and diff checks accept the five-file harness change but reject production changes', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-git-compatibility-test-'));
   const git = (...args) => {
     const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
@@ -85,7 +86,7 @@ test('the real git ancestry and diff checks accept only the four-file audit-harn
       fs.writeFileSync(path.join(directory, file), 'audit harness update\n');
     }
     git('add', '.');
-    git('commit', '-m', 'audit harness only');
+    git('commit', '-m', 'audit harness and inventory only');
     const harnessHead = git('rev-parse', 'HEAD');
     assert.equal(isAuditHarnessOnlyCompatibleSource(baseline, harnessHead, {
       enabled: true, cwd: directory
@@ -105,10 +106,10 @@ test('the real git ancestry and diff checks accept only the four-file audit-harn
   }
 });
 
-test('a production or test-inventory change invalidates audit-harness compatibility', () => {
+test('any extra production or Playwright test change invalidates audit-harness compatibility', () => {
   const runGit = args => args[0] === 'merge-base'
     ? { status: 0, stdout: '' }
-    : { status: 0, stdout: [...AUDIT_HARNESS_RECOVERY_FILES, 'extension/content.js'].sort().join('\n') };
+    : { status: 0, stdout: [...AUDIT_HARNESS_RECOVERY_FILES, 'tests/browser/new-regression.spec.js'].sort().join('\n') };
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit }), false);
 });
 
