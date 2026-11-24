@@ -322,11 +322,9 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
           const outputPath = variant === 'baseline' ? baselineOutput : candidateOutput;
           const key = scenario + '|' + sample;
           if (completed[variant].has(key)) {
-            progress++;
             console.log('BLB_PERF_BATCH_REUSE ' + JSON.stringify({ progress, total, scenario, variant, sample, samples }));
             continue;
           }
-          progress++;
           console.log('BLB_PERF_BATCH_SAMPLE ' + JSON.stringify({
             progress, total, scenario, variant, sample, samples
           }));
