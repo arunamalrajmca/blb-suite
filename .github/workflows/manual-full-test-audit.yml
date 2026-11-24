@@ -300,9 +300,9 @@ jobs:
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
-      # complete test list, then execute the complete test list in one Playwright process with four workers.
-      # Using max-failures=0 ensures one failing test cannot
-      # prevent any later test case from executing.
+      # complete test list, then execute it in eight resumable shards of four workers.
+      # Each shard fails fast after one unexpected result; successful shards are retained
+      # so a retry cannot force already-passed shards to execute again.
       - name: Run complete browser test list in resumable four-worker shards
         id: browser
         uses: ./.github/actions/ci-section-checkpoint

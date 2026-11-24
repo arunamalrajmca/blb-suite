@@ -78,7 +78,7 @@
         },
         {
           "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
-          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+          "requiredText": "group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}"
         }
       ]
     },
