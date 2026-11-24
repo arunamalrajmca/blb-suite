@@ -334,5 +334,286 @@
         }
       ]
     }
+  ],
+  "productionModuleCoverage": [
+    {
+      "path": "extension/background.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a real MV3 service-worker termination is recovered by a content-script selection request",
+            "browser restart reconciles persisted host registrations and pending permission intents using the same profile"
+          ]
+        },
+        {
+          "path": "tests/browser/site-registration-opt-out-race.spec.js",
+          "requiredText": [
+            "master OFF-to-ON recovery repairs registrations after an older tab activation finishes"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/content.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Single-word verse cues resolve the same adjacent passage through all four actions"
+          ]
+        },
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": [
+            "every shared-registry page-button host shows the exact button on content pages and excludes homepages"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/regex-patterns.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Double-click generic reference grammar — exhaustive token coverage — OT and NT"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/kjv-corpus-word-index.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/kjv-corpus-lazy-loading.spec.js",
+          "requiredText": [
+            "first corpus-dependent classification loads both datasets and preserves exact verse matching"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/books.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "all 66 canonical book suffixes resolve through all four actions with both separators"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/book-aliases.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "all 66 canonical book suffixes resolve through all four actions with both separators"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/reference-core.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Single-word verse cues resolve the same adjacent passage through all four actions"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/source-page-collector-sites.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": [
+            "every shared-registry page-button host shows the exact button on content pages and excludes homepages"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/source-page-collector.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": [
+            "registered source-page collector remains available regardless of redirect preference"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/blb-page-selection-button.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": [
+            "every shared-registry page-button host shows the exact button on content pages and excludes homepages"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/multiverse-handoff.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a replaced MV3 tab migrates extension-owned destination and MultiVerse state"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/multiverse-tool-view.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load"
+          ]
+        }
+      ],
+      "gap": "Integration assertions are mapped; module-level branch coverage remains unmeasured."
+    },
+    {
+      "path": "extension/kings-bible-collector.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/webster-collector.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/source-bible-redirect.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/multiverse-copy.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/study-reference-capture.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/criteria-search-navigation.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/blb-auto-hyperlinker.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/blb-passive-new-tab-targets.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/blb-draggable-button.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/blb-parse-popup.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    },
+    {
+      "path": "extension/blb-verse-link-navigation.js",
+      "coverageLevel": "indirect-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js"
+        }
+      ],
+      "gap": "Only broad integration coverage is currently mapped; add dedicated module-focused behavior and branch assertions."
+    }
   ]
 }
