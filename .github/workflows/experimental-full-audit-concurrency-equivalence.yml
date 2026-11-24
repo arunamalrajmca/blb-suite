@@ -27,24 +27,18 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
-
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency"
-
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
-
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
-
       - name: Run fail-fast four-worker screening over the complete browser inventory
         id: comparison
         env:
@@ -53,7 +47,6 @@ jobs:
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
-
       - name: Upload complete-inventory screening evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -62,8 +55,7 @@ jobs:
           path: ${{ runner.temp }}/blb-full-audit-concurrency
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Publish comparison result
+      - name: Publish screening result
         if: always()
         env:
           OUTCOME: ${{ steps.comparison.outcome }}
@@ -71,19 +63,17 @@ jobs:
           {
             echo "## Complete-inventory concurrency screening"
             echo
-            echo "Execution: one complete four-worker screening pass with fail-fast enabled. A separate deep-qualification label enables the isolated serial baseline and three full repetitions."
-            echo
+            echo "Execution: one complete four-worker screening pass with fail-fast enabled."
             echo "Screening result: **$OUTCOME**"
             echo
-            echo "This is a preliminary screening run, not a serial-versus-parallel equivalence proof. The artifact contains the complete inventory, screening log, and exact test-identity/failure summary."
+            echo "This preliminary screen is not a serial-versus-parallel equivalence proof."
           } >> "$GITHUB_STEP_SUMMARY"
 
-
-  compare-complete-browser-inventory:
+  deep-serial-baseline:
     if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
-    name: Deep legacy serial and three-repeat concurrency equivalence
+    name: Deep stage 1 — isolated serial baseline
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 240
     steps:
       - name: Checkout selected ref
         uses: actions/checkout@v5
@@ -102,34 +92,150 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
-      - name: Compare complete inventory using isolated serial baseline and three parallel repetitions
-        id: comparison
+      - name: Stage 1 — run isolated serial baseline with per-test checkpoints
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
-          BLB_CONCURRENCY_MODE: full
+          BLB_CONCURRENCY_MODE: stage-serial
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
-      - name: Upload deep comparison evidence
+      - name: Upload serial baseline and checkpoint evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: full-audit-concurrency-deep-${{ github.run_id }}
+          name: full-audit-deep-serial-${{ github.run_id }}
           path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           if-no-files-found: warn
           retention-days: 30
-      - name: Publish deep comparison result
-        if: always()
-        env:
-          OUTCOME: ${{ steps.comparison.outcome }}
-        run: |
-          {
-            echo "## Deep full-audit concurrency equivalence"
-            echo
-            echo "Execution: legacy one-test-per-process serial baseline versus three complete four-worker repetitions."
-            echo
-            echo "Result: **$OUTCOME**"
-            echo
-            echo "The artifact contains the complete inventory, isolated serial logs/results, three parallel logs/results, and exact equivalence summary."
-          } >> "$GITHUB_STEP_SUMMARY"
 
+  deep-parallel-repetition-1:
+    needs: [deep-serial-baseline]
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    name: Deep stage 2 — parallel repetition 1 of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Stage 2 — run and compare parallel repetition 1 (fail fast)
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_REPETITION: '1'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload repetition 1 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-repetition-1-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+
+  deep-parallel-repetition-2:
+    needs: [deep-parallel-repetition-1]
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    name: Deep stage 3 — parallel repetition 2 of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Stage 3 — run and compare parallel repetition 2 (fail fast)
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_REPETITION: '2'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload repetition 2 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-repetition-2-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+
+  deep-parallel-repetition-3:
+    needs: [deep-parallel-repetition-2]
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    name: Deep stage 4 — parallel repetition 3 of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Stage 4 — run and compare parallel repetition 3 (fail fast)
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_REPETITION: '3'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload repetition 3 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-repetition-3-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
