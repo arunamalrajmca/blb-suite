@@ -617,31 +617,281 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     }
   };
 
-  const samples = [];
   const performanceOutputPath = process.env.BLB_PERF_OUTPUT || path.join(repoRoot, 'blb-corpus-ab-results.jsonl');
-  fs.writeFileSync(performanceOutputPath, '');
+  fs.mkdirSync(path.dirname(performanceOutputPath), { recursive: true });
+  const samples = [];
+  const seenSamples = new Set();
+  if (fs.existsSync(performanceOutputPath)) {
+    const lines = fs.readFileSync(performanceOutputPath, 'utf8').split(/\r?\n/).filter(Boolean);
+    for (const [lineIndex, line] of lines.entries()) {
+      let record;
+      try { record = JSON.parse(line); }
+      catch { throw new Error('Malformed corpus A/B checkpoint at line ' + (lineIndex + 1)); }
+      // The final summary record is regenerated after all 30 paired observations.
+      if (!record.sample) continue;
+      if (record.scenario !== 'kjv-short-whitelist-first-use-ab' || record.baselineSha !== baselineSha ||
+          !['baseline', 'candidate'].includes(record.sample.variant) ||
+          !Number.isInteger(record.sample.repetition) || record.sample.repetition < 1 ||
+          record.sample.repetition > 15) {
+        throw new Error('Corpus A/B checkpoint does not match the current baseline and sample inventory.');
+      }
+      const key = record.sample.variant + '|' + record.sample.repetition;
+      if (seenSamples.has(key)) throw new Error('Duplicate corpus A/B checkpoint: ' + key);
+      seenSamples.add(key);
+      samples.push(record.sample);
+    }
+  }
+  // Strip any stale summary line while preserving every validated raw sample.
+  fs.writeFileSync(performanceOutputPath, samples.map(sample => JSON.stringify({
+    scenario:'kjv-short-whitelist-first-use-ab', baselineSha, sample
+  })).join('\n') + (samples.length ? '\n' : ''));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-corpus-ab-'));
+  const baselineRoot = path.join(tempRoot, 'baseline');
+  const candidateRoot = path.join(tempRoot, 'candidate');
+  fs.mkdirSync(baselineRoot, { recursive: true });
+  fs.cpSync(path.join(repoRoot, 'extension'), candidateRoot, { recursive: true });
+
+  // Generate the exact compressed assets used by the production candidate.
+  execFileSync(process.execPath, [
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
+    candidateRoot
+  ], { cwd: repoRoot, stdio: 'pipe' });
+
+  const archive = execFileSync('git', ['archive', baselineSha, 'extension'], {
+    cwd: repoRoot,
+    maxBuffer: 100 * 1024 * 1024
+  });
+  execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+
+  // Build the same ignored gzip sidecars for the current-main baseline; without
+  // them the baseline silently falls back to the slower uncompressed JS assets.
+  execFileSync(process.execPath, [
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
+    path.join(baselineRoot, 'extension')
+  ], { cwd: repoRoot, stdio: 'pipe' });
+
+  const variants = {
+    baseline: path.join(baselineRoot, 'extension'),
+    candidate: candidateRoot
+  };
+
+  const instrument = extensionDir => {
+    const backgroundPath = path.join(extensionDir, 'background.js');
+    let source = fs.readFileSync(backgroundPath, 'utf8');
+    let scripts = [];
+    const legacyMatch = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
+
+    if (legacyMatch) {
+      scripts = [...legacyMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+      if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+      const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
+        + 'const __blbProfilePhases = [];\n'
+        + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
+        + '  const __blbImportStartedAt = performance.now();\n'
+        + '  importScripts(__blbScript);\n'
+        + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
+        + '}\n'
+        + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
+        + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
+      source = source.replace(legacyMatch[0], replacement);
+    } else {
+      const arrayMatch = source.match(/^\uFEFF?\s*const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*(\[[\s\S]*?\]);/);
+      const loopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{\s*importScripts\(scriptFile\);\s*\}\s*catch\s*\(error\)\s*\{[\s\S]*?\n  \}\n\}/);
+      if (!arrayMatch || !loopMatch) throw new Error('Unable to instrument either legacy or per-file service-worker import bootstrap');
+      scripts = [...arrayMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+      if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+      const importCall = '    importScripts(scriptFile);';
+      if (!loopMatch[0].includes(importCall)) throw new Error('Per-file service-worker import loop did not contain its expected import call');
+      source = source.replace(arrayMatch[0], 'const __blbProfileBootstrapAt = performance.now();\nconst __blbProfilePhases = [];\n' + arrayMatch[0]);
+      source = source.replace(importCall, '    const __blbImportStartedAt = performance.now();\n' + importCall + "\n    __blbProfilePhases.push({ phase: 'service-worker-importScript', script: scriptFile, durationMs: performance.now() - __blbImportStartedAt });");
+      const updatedLoopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{[\s\S]*?\n  \}\n\}/);
+      if (!updatedLoopMatch) throw new Error('Unable to locate instrumented per-file import loop');
+      source = source.replace(updatedLoopMatch[0], updatedLoopMatch[0] + '\nglobalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\nglobalThis.__BLB_PROFILE_LOAD__ = { events: [] };');
+    }
+
+    const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
+    const fetchEnd = "  const source = await response.text();";
+    const extractStart = "  const start = source.indexOf(assignment);";
+    const extractEnd = "  const json = source.slice(start + assignment.length, end);";
+    const parseLine = source.split('\n').find(line => line.trim().startsWith('return JSON.parse(allowTrailingObjectComma ? json.replace('));
+    if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !parseLine) throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
+    source = source.replace(fetchStart, "  const __blbFetchStarted = performance.now();\n" + fetchStart);
+    source = source.replace("  if (!response.ok) {", "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-fetch', file: filename, durationMs: performance.now() - __blbFetchStarted });\n  if (!response.ok) {");
+    source = source.replace(fetchEnd, "  const __blbReadStarted = performance.now();\n" + fetchEnd + "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
+    source = source.replace(extractStart, "  const __blbExtractStarted = performance.now();\n" + extractStart);
+    source = source.replace(extractEnd, extractEnd + "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-extract', file: filename, durationMs: performance.now() - __blbExtractStarted });");
+    source = source.replace(parseLine, "  const __blbParseStarted = performance.now();\n  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n  return __blbParsed;");
+    const gzipStart = source.indexOf('async function fetchPackagedGzipJson(filename) {');
+    const gzipEnd = source.indexOf('\nasync function ensureKjvVerseCorpusLoaded()', gzipStart);
+    if (gzipStart >= 0 && gzipEnd > gzipStart) {
+      let gzipLoader = source.slice(gzipStart, gzipEnd);
+      const gzipFetchCall = 'const response = await fetch(chrome.runtime.getURL(filename));';
+      const gzipDecodeCall = "const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));";
+      const gzipJsonReturn = 'return await new Response(decompressed).json();';
+      if (!gzipLoader.includes(gzipFetchCall) || !gzipLoader.includes(gzipDecodeCall) || !gzipLoader.includes(gzipJsonReturn)) {
+        throw new Error('Unable to instrument gzip fetch/decompress/parse phases');
+      }
+      gzipLoader = gzipLoader.replace(gzipFetchCall, 'const __blbGzipFetchStarted = performance.now();\n    ' + gzipFetchCall + "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });");
+      gzipLoader = gzipLoader.replace(gzipDecodeCall, 'const __blbGzipDecodeStarted = performance.now();\n    ' + gzipDecodeCall);
+      gzipLoader = gzipLoader.replace(gzipJsonReturn, 'const __blbDecompressedText = await new Response(decompressed).text();\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: \'packaged-gzip-decompress-read\', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\n    const __blbJsonParseStarted = performance.now();\n    const __blbDecoded = JSON.parse(__blbDecompressedText);\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: \'packaged-gzip-json-parse\', file: filename, durationMs: performance.now() - __blbJsonParseStarted });\n    return __blbDecoded;');
+      source = source.slice(0, gzipStart) + gzipLoader + source.slice(gzipEnd);
+    }
+    const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
+    source = source.replace(fromEntries, "      const __blbIndexBuildStarted = performance.now();\n" + fromEntries + "\n      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-verse-index-build', durationMs: performance.now() - __blbIndexBuildStarted });");
+    const corpusValidationStart = "      if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {";
+    source = source.replace(corpusValidationStart, "      const __blbCorpusValidationStarted = performance.now();\n" + corpusValidationStart);
+    const wordIndexValidationStart = "      if (!wordVerseIndex || typeof wordVerseIndex !== 'object'";
+    source = source.replace(wordIndexValidationStart, "      const __blbWordIndexValidationStarted = performance.now();\n" + wordIndexValidationStart);
+    const verseAssignment = "      self.KJV_CORPUS_VERSES = verseEntries;";
+    source = source.replace(verseAssignment, "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'corpus-data-validation', durationMs: performance.now() - __blbCorpusValidationStarted });\n" + verseAssignment);
+    const wordIndexAssignment = "      self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;";
+    source = source.replace(wordIndexAssignment, "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-index-validation', durationMs: performance.now() - __blbWordIndexValidationStarted });\n" + wordIndexAssignment);
+    const rangeCall = "    const corpusRange = findKjvVerseRangeForSelection(source);";
+    source = source.replace(rangeCall, "    const __blbRangeStarted = performance.now();\n" + rangeCall + "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
+    const shortPhraseCall = "if (findExactKjvPhraseInLoadedCorpus(shortPhraseWords)) {";
+    if (source.includes(shortPhraseCall)) source = source.replace(shortPhraseCall, "const __blbShortPhraseStarted = performance.now();\nconst __blbShortPhraseMatch = findExactKjvPhraseInLoadedCorpus(shortPhraseWords);\nglobalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'short-whitelist-exact-verification', durationMs: performance.now() - __blbShortPhraseStarted });\nif (__blbShortPhraseMatch) {");
+    const criteriaExtractionCall = "passageQuery = extractKjvPassageSearchQuery(remainingText, excludedVerseTexts);";
+    if (source.includes(criteriaExtractionCall)) source = source.replace(criteriaExtractionCall, "const __blbCriteriaExtractionStarted = performance.now();\n" + criteriaExtractionCall + "\nglobalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'criteria-passage-extraction', durationMs: performance.now() - __blbCriteriaExtractionStarted });");
+    fs.writeFileSync(backgroundPath, source);
+  };
+  instrument(variants.baseline);
+  instrument(variants.candidate);
+
+  const measureColdRun = async (extensionDir, variant, repetition) => {
+    const context = await chromium.launchPersistentContext('', {
+      channel: 'chromium',
+      headless: true,
+      args: [
+        '--headless=new',
+        '--disable-extensions-except=' + extensionDir,
+        '--load-extension=' + extensionDir,
+        '--no-first-run',
+        '--no-default-browser-check'
+      ]
+    });
+    try {
+      let [worker] = context.serviceWorkers();
+      if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+      await worker.evaluate(async () => {
+        const deadline = performance.now() + 10000;
+        while (!globalThis.__BLB_PROFILE_STARTUP__ && performance.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        if (!globalThis.__BLB_PROFILE_STARTUP__) {
+          throw new Error('Service-worker startup instrumentation was not initialized before measurement');
+        }
+      });
+      return await worker.evaluate(async ({ variant, repetition }) => {
+        const startup = globalThis.__BLB_PROFILE_STARTUP__;
+        if (!startup || !Array.isArray(startup.phases)) {
+          throw new Error('Service-worker startup timing instrumentation was not initialized');
+        }
+        const startupToFirstEvaluationMs = performance.now() - startup.bootstrapAt;
+        const importPhases = startup.phases.filter(phase => phase.phase === 'service-worker-importScript');
+        const importScriptsMs = importPhases.reduce((sum, phase) => sum + phase.durationMs, 0);
+        const corpusLoadedAtStartup = typeof KJV_CORPUS_VERSES !== 'undefined'
+          && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
+
+        const referenceStartedAt = performance.now();
+        const reference = await classifySelectionForBlb('John 3:16');
+        const referenceOnlyMs = performance.now() - referenceStartedAt;
+
+        const wordStartedAt = performance.now();
+        const word = await classifySelectionForBlb('grace');
+        const singleWordMs = performance.now() - wordStartedAt;
+        const corpusStillLoadedAfterFastPaths = typeof KJV_CORPUS_VERSES !== 'undefined'
+          && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
+
+        const firstPhraseStartedAt = performance.now();
+        const phrase = await classifySelectionForBlb('God is love');
+        const firstPhraseUseMs = performance.now() - firstPhraseStartedAt;
+        const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const afterFirstPhrase = {
+          versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+        };
+
+        const deferredStartedAt = performance.now();
+        const passage = await classifySelectionForBlb('For God so loved the world');
+        const deferredWordIndexUseMs = performance.now() - deferredStartedAt;
+        const deferredUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const afterDeferredUse = {
+          versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+        };
+
+        const warmStartedAt = performance.now();
+        const warmPassage = await classifySelectionForBlb('For God so loved the world');
+        const warmCorpusUseMs = performance.now() - warmStartedAt;
+        const warmUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+
+        return {
+          variant,
+          repetition,
+          startupToFirstEvaluationMs,
+          importScriptsMs,
+          importedScripts: importPhases.map(phase => ({
+            script: phase.script,
+            durationMs: phase.durationMs
+          })),
+          corpusLoadedAtStartup,
+          corpusStillLoadedAfterFastPaths,
+          afterFirstPhrase,
+          afterDeferredUse,
+          referenceType: reference.type,
+          wordType: word.type,
+          passageType: passage.type,
+          warmPassageType: warmPassage.type,
+          phraseType: phrase.type,
+          phraseQuery: phrase.kjvPassageQuery || phrase.text,
+          passageRef: passage.directRef ? {
+            book: passage.directRef.book,
+            chapter: passage.directRef.chapter,
+            from: passage.directRef.from,
+            to: passage.directRef.to
+          } : null,
+          referenceOnlyMs,
+          singleWordMs,
+          firstCorpusUseMs: firstPhraseUseMs,
+          firstUseProfileEvents,
+          firstPhraseUseMs,
+          deferredWordIndexUseMs,
+          deferredUseProfileEvents,
+          warmCorpusUseMs,
+          warmUseProfileEvents
+        };
+      }, { variant, repetition });
+    } finally {
+      await context.close();
+    }
+  };
+
   try {
     for (let repetition = 1; repetition <= 15; repetition++) {
-      const order = repetition % 2 === 1
-        ? ['baseline', 'candidate']
-        : ['candidate', 'baseline'];
+      const order = repetition % 2 === 1 ? ['baseline', 'candidate'] : ['candidate', 'baseline'];
       for (const variant of order) {
+        const key = variant + '|' + repetition;
+        if (seenSamples.has(key)) {
+          console.log('BLB_CORPUS_AB_REUSE ' + key);
+          continue;
+        }
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
-        // Persist every raw observation immediately so later failures do not
-        // leave the downloadable workflow artifact empty.
+        seenSamples.add(key);
         fs.appendFileSync(performanceOutputPath, JSON.stringify({
-          scenario:'kjv-short-whitelist-first-use-ab',
-          baselineSha,
-          sample
-        }) + '\\n');
+          scenario:'kjv-short-whitelist-first-use-ab', baselineSha, sample
+        }) + '\n');
         console.log('BLB_CORPUS_AB_SAMPLE ' + JSON.stringify(sample));
       }
+    }
+    if (samples.length !== 30 || seenSamples.size !== 30) {
+      throw new Error('Corpus A/B checkpoint is incomplete: ' + samples.length + '/30 observations.');
     }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
-
   const median = values => {
     const sorted = [...values].sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)];
