@@ -417,6 +417,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       const entry={from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property,line:node.loc.start.line,flow:'interprocedural'};
       if(property===null)dynamicPropertyReferences.push(entry);else propertyReferences.push(entry);
     }
+    }
   });
   // Apply object-pattern parameter reads to every statically observed callsite.
   for(const [pattern,argumentsSet] of patternParameterArguments){
