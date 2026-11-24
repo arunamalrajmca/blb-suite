@@ -516,6 +516,28 @@ function analyzeFile(root, file) {
       if (node.type === 'CallExpression' && ['assign', 'defineProperty', 'defineProperties'].includes(name) &&
           receiverName === 'Object') {
         add('mutation', 'object-mutation-api', node, 'Object.' + name);
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const addDescriptorValues = (property, descriptor) => {
+          if (!target || !property || !descriptor || descriptor.type !== 'ObjectExpression') return;
+          const slot = propertySlot(target, property);
+          for (const entry of descriptor.properties) {
+            if (entry.type !== 'Property') continue;
+            const descriptorKey = propertyKey(entry.key, entry.computed);
+            if (!['value', 'get', 'set'].includes(descriptorKey)) continue;
+            const before = flowEdges.length;
+            addContainedReferences(entry.value, slot, 'property-descriptor-store', entry);
+            for (const edge of flowEdges.slice(before)) propertyWrites.push({object:target,property,stored:edge.from});
+          }
+        };
+        if (name === 'defineProperty') {
+          addDescriptorValues(literalKey(node.arguments[1]), node.arguments[2]);
+        } else if (name === 'defineProperties' && node.arguments[1]?.type === 'ObjectExpression') {
+          for (const descriptor of node.arguments[1].properties) {
+            if (descriptor.type === 'Property') {
+              addDescriptorValues(propertyKey(descriptor.key, descriptor.computed), descriptor.value);
+            }
+          }
+        }
       }
 
       if (node.type === 'CallExpression' &&
@@ -542,6 +564,13 @@ function analyzeFile(root, file) {
         const value = node.arguments[2] && node.arguments[2].type === 'Identifier'
           ? bindingId(node.arguments[2]) : null;
         addEdge(value, target, 'reflective-mutation', node, 'Reflect.set');
+        const property = literalKey(node.arguments[1]);
+        if (target) {
+          const slot = propertySlot(target, property === null ? '[dynamic]' : property);
+          const before = flowEdges.length;
+          addContainedReferences(node.arguments[2], slot, 'reflective-property-store', node);
+          for (const edge of flowEdges.slice(before)) propertyWrites.push({object:target,property,stored:edge.from});
+        }
       }
     }
 
@@ -697,7 +726,7 @@ function analyzeFile(root, file) {
     const readObject = canonicalObject(read.object);
     const matches = propertyWrites.filter(write =>
       canonicalObject(write.object) === readObject &&
-      (read.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+      (read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
     for (const write of matches) {
       addEdge(write.stored, destination, 'property-value-read', read.node,
