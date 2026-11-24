@@ -715,3 +715,51 @@ test('traces callback values through splice results and array fill writes', () =
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'callback@1' && edge.to === 'fromFill@7'));
 });
+
+test('traces callback values through array for-of iteration', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const handlers = [callback];',
+    'for (const handler of handlers) { handler(); }'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+});
+
+test('traces Map values through iterator next objects and direct next value reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('onReady', callback);",
+    'const iterator = registry.values();',
+    'const step = iterator.next();',
+    'const selected = step.value;',
+    'const direct = iterator.next().value;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'selected@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'direct@7'));
+});
+
+test('traces callback values through Object.entries for-of destructuring', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'for (const [key, handler] of Object.entries(registry)) { handler(); }'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+});
+
+test('traces Map entry values through stored iterators and destructured for-of loops', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('onReady', callback);",
+    'const iterator = registry.entries();',
+    'for (const [key, handler] of iterator) { handler(); }'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'handler@5'));
+});
