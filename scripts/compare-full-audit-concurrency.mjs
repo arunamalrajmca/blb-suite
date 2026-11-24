@@ -122,7 +122,7 @@ try {
     let serial = fs.existsSync(serialResultsPath) ? JSON.parse(fs.readFileSync(serialResultsPath, 'utf8')) : [];
     let serialErrors = fs.existsSync(serialErrorsPath) ? JSON.parse(fs.readFileSync(serialErrorsPath, 'utf8')) : [];
     const serialKeys = new Set();
-    const restoredBaselineValid = priorInventoryMatches && serial.length === scheduled.length &&
+    const restoredCheckpointValid = priorInventoryMatches && serial.length <= scheduled.length &&
       serialErrors.length === 0 && serial.every((record, index) => {
         const test = record.tests?.[0];
         if (record.inventoryEntry !== scheduled[index] || record.exitCode !== 0 ||
@@ -131,7 +131,7 @@ try {
         serialKeys.add(test.key);
         return true;
       });
-    if (serial.length > scheduled.length || serialErrors.length > 0 || (serial.length > 0 && !restoredBaselineValid)) {
+    if (serial.length > scheduled.length || serialErrors.length > 0 || (serial.length > 0 && !restoredCheckpointValid)) {
       serial = [];
       serialErrors = [];
       fs.rmSync(serialResultsPath, { force: true });
@@ -192,7 +192,7 @@ try {
     });
     console.log('Serial stage batch: ' + JSON.stringify({
       batchComplete, complete, completed: serial.length, scheduled: scheduled.length,
-      batchStart, batchEnd, anomalies: serialErrors.length, reusedCompleteBaseline: restoredBaselineValid
+      batchStart, batchEnd, anomalies: serialErrors.length, reusedSerialCheckpoint: restoredCheckpointValid
     }));
     if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'complete=' + String(complete) + '\n');
     if (!batchComplete) process.exitCode = 1;
