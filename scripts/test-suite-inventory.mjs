@@ -113,7 +113,7 @@ const runtimeModules = new Set(fs.readdirSync(extensionDirectory, { withFileType
   .filter(entry => entry.isFile() && entry.name.endsWith('.js'))
   .map(entry => 'extension/' + entry.name));
 const backgroundSource = readRepoFile('extension/background.js');
-const startupImportMatch = backgroundSource.match(/const BLB_BACKGROUND_STARTUP_IMPORTS\\s*=\\s*(\\[[\\s\\S]*?\\]);/);
+const startupImportMatch = backgroundSource.match(/const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*(\[[\s\S]*?\]);/);
 if (!startupImportMatch) fail('Background startup import inventory could not be read.');
 const workerStartupImports = startupImportMatch ? JSON.parse(startupImportMatch[1]).map(file => 'extension/' + file) : [];
 const mappedModules = new Map();
