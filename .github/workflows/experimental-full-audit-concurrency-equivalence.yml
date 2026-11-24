@@ -35,6 +35,17 @@ jobs:
           fetch-depth: 1
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency"
+      - name: Fetch prior serial checkpoint commits for strict compatibility verification
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        env:
+          RECOVERY_ROOT: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery
+        run: |
+          while IFS= read -r inventory; do
+            source_sha="$(node -e "const i=require(process.argv[1]); process.stdout.write(i.sourceCommit || '')" "$inventory")"
+            if [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]]; then
+              git fetch --no-tags --depth=1 origin "$source_sha"
+            fi
+          done < <(find "$RECOVERY_ROOT" -name inventory.json -type f -print)
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
@@ -92,7 +103,9 @@ jobs:
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep" "${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery"
       - name: Configure serial checkpoint recovery directory
-        run: echo "BLB_CONCURRENCY_SERIAL_RECOVERY_DIR=${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery" >> "$GITHUB_ENV"
+        run: |
+          echo "BLB_CONCURRENCY_SERIAL_RECOVERY_DIR=${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery" >> "$GITHUB_ENV"
+          echo "BLB_CONCURRENCY_ALLOW_WORKFLOW_ONLY_RECOVERY=true" >> "$GITHUB_ENV"
       - name: Restore a prior complete serial baseline when requested
         if: ${{ github.event.inputs.reuse_run_id != '' }}
         uses: actions/download-artifact@v6
