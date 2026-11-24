@@ -810,3 +810,32 @@ test('traces yielded callback values nested inside generator return wrappers', (
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'function-return-callback'));
 });
+
+
+test('traces callback values returned by object-literal methods when called directly', () => {
+  const result = audit([
+    'const api = { make() { return () => start(); } };',
+    'const callback = api.make();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback' &&
+    edge.to === 'callback@2'));
+});
+
+test('traces object-method factory returns when nested inside another wrapper', () => {
+  const result = audit([
+    'const api = { make: function () { return () => start(); } };',
+    'const wrapped = { handler: api.make() };'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'object-wrap-factory-return-callback' &&
+    edge.to.includes('wrapped@2')));
+});
+
+test('keeps same-named object methods on different objects separate', () => {
+  const result = audit([
+    'const first = { make() { return () => firstWork(); } };',
+    'const second = { make() { return () => secondWork(); } };',
+    'const wrapped = { handler: first.make() };'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' && edge.kind === 'object-wrap-factory-return-callback'));
+  assert.ok(!result.flowEdges.some(edge => edge.from === 'function@2' && edge.kind === 'object-wrap-factory-return-callback'));
+});
