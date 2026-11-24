@@ -89,7 +89,22 @@ try {
   }
   if (scheduled.length + delegated.length !== entries.length) throw new Error('Browser inventory accounting mismatch.');
   fs.writeFileSync(listPath, scheduled.join('\n') + '\n');
-  writeJson(path.join(reportRoot, 'inventory.json'), {
+  const sourceCommit = process.env.BLB_CONCURRENCY_SOURCE_SHA || process.env.GITHUB_SHA || 'unknown';
+  const scheduledDigest = crypto.createHash('sha256').update(JSON.stringify(scheduled)).digest('hex');
+  const inventoryPath = path.join(reportRoot, 'inventory.json');
+  const priorInventory = fs.existsSync(inventoryPath) ? JSON.parse(fs.readFileSync(inventoryPath, 'utf8')) : null;
+  const priorInventoryMatches = priorInventory?.sourceCommit === sourceCommit &&
+    priorInventory?.scheduledDigest === scheduledDigest && priorInventory?.scheduled === scheduled.length;
+  if (priorInventory && !priorInventoryMatches) {
+    for (const name of ['serial-results.json', 'serial-errors.json', 'serial-checkpoint.json',
+      'serial-stage-summary.json', 'scheduled-test-list.txt',
+      ...[1, 2, 3].flatMap(round => ['parallel-round-' + round + '-summary.json', 'parallel-round-' + round + '-results.json'])]) {
+      fs.rmSync(path.join(reportRoot, name), { force: true });
+    }
+    console.log('Discarded prior concurrency evidence because its source commit or exact inventory fingerprint differs.');
+  }
+  writeJson(inventoryPath, {
+    sourceCommit, scheduledDigest,
     discovered: entries.length, delegated: delegated.length, scheduled: scheduled.length,
     delegatedTests: delegated, scheduledTests: scheduled
   });
