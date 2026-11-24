@@ -34,6 +34,7 @@ on:
       - 'playwright.config.ts'
       - '.github/workflows/manual-full-test-audit.yml'
       - '.github/workflows/browser-e2e-performance.yml'
+      - '.github/actions/ci-section-checkpoint/action.yml'
   workflow_dispatch:
 
 concurrency:
@@ -127,59 +128,87 @@ jobs:
           unzip -t "$ZIP"
           sha256sum "$ZIP" | tee "$ZIP.sha256"
         
-      - name: Benchmark baseline and candidate (interleaved)
-       
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-          BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
-          BLB_CANDIDATE_EXTENSION_PATH: ${{ github.workspace }}/extension
-          BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-performance.jsonl
-          BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-performance.jsonl
-          BLB_PERF_SAMPLES: 11
-          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
-        run: |
-          : > "$BLB_BASELINE_OUTPUT"
-          : > "$BLB_CANDIDATE_OUTPUT"
-          if [[ "$BLB_PERF_TARGET" == "kjv-range-resolver" ]]; then
-            # Preserve the specialized resolver benchmark's existing execution
-            # path; its comparison protocol is separate from the general suite.
-            SCENARIOS="range-resolver selection fresh reuse"
-            scenario_count=$(wc -w <<< "$SCENARIOS")
-            total_samples=$((scenario_count * BLB_PERF_SAMPLES * 2))
-            progress=0
-            run_perf_sample() {
-              local variant="$1"
-              local extension_path="$2"
-              local output_path="$3"
-              progress=$((progress + 1))
-              printf '\n[%d/%d] scenario=%s variant=%s sample=%d/%d\n' \
-                "$progress" "$total_samples" "$scenario" "$variant" "$sample" "$BLB_PERF_SAMPLES"
-              BLB_PERF_AGGREGATE_PROGRESS=1 \
-                BLB_EXTENSION_PATH="$extension_path" \
-                BLB_PERF_OUTPUT="$output_path" \
-                BLB_PERF_SCENARIO="$scenario" \
-                BLB_PERF_VARIANT="$variant" \
-                npx playwright test tests/browser/performance.spec.js --workers=1
-            }
-            for scenario in $SCENARIOS; do
-              for ((sample = 1; sample <= BLB_PERF_SAMPLES; sample++)); do
-                if (( sample % 2 == 1 )); then
-                  run_perf_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
-                  run_perf_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
-                else
-                  run_perf_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
-                  run_perf_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+      - name: Benchmark baseline and candidate (interleaved, resumable)
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: interleaved-performance-benchmark
+          cache-prefix: blb-ci-v1-performance-interleaved-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
+            export BLB_BASELINE_EXTENSION_PATH="$RUNNER_TEMP/blb-baseline/extension"
+            export BLB_CANDIDATE_EXTENSION_PATH="$GITHUB_WORKSPACE/extension"
+            export BLB_BASELINE_OUTPUT="$BLB_CI_CHECKPOINT_DIR/baseline-performance.jsonl"
+            export BLB_CANDIDATE_OUTPUT="$BLB_CI_CHECKPOINT_DIR/candidate-performance.jsonl"
+            export BLB_PERF_SAMPLES=11
+            export BLB_PERF_TARGET="${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}"
+            mkdir -p "$BLB_CI_CHECKPOINT_DIR"
+            touch "$BLB_BASELINE_OUTPUT" "$BLB_CANDIDATE_OUTPUT"
+            if [[ "$BLB_PERF_TARGET" == "kjv-range-resolver" ]]; then
+              SCENARIOS="range-resolver selection fresh reuse"
+              scenario_count=$(wc -w <<< "$SCENARIOS")
+              total_samples=$((scenario_count * BLB_PERF_SAMPLES * 2))
+              progress=0
+              sample_exists() {
+                local output_path="$1"
+                local scenario_name="$2"
+                local sample_number="$3"
+                local variant_name="$4"
+                node - "$output_path" "$scenario_name" "$sample_number" "$variant_name" <<'NODE'
+            const fs = require('fs');
+            const [file, scenario, sample, variant] = process.argv.slice(2);
+            if (!fs.existsSync(file)) process.exit(1);
+            const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean);
+            const records = lines.map((line, index) => {
+              try { return JSON.parse(line); }
+              catch { throw new Error('Malformed performance checkpoint at line ' + (index + 1)); }
+            });
+            const matches = records.filter(record => record.scenario === scenario &&
+              String(record.sample) === sample && record.variant === variant);
+            if (matches.length > 1) throw new Error('Duplicate performance checkpoint record');
+            process.exit(matches.length === 1 ? 0 : 1);
+            NODE
+              }
+              run_perf_sample() {
+                local variant="$1"
+                local extension_path="$2"
+                local output_path="$3"
+                progress=$((progress + 1))
+                printf '\n[%d/%d] scenario=%s variant=%s sample=%d/%d\n' \
+                  "$progress" "$total_samples" "$scenario" "$variant" "$sample" "$BLB_PERF_SAMPLES"
+                local existing_status=0
+                sample_exists "$output_path" "$scenario" "$sample" "$variant" || existing_status=$?
+                if [[ "$existing_status" -eq 0 ]]; then
+                  echo "Reusing passed performance sample: $scenario $variant $sample/$BLB_PERF_SAMPLES"
+                  return
                 fi
+                if [[ "$existing_status" -ne 1 ]]; then
+                  echo "::error::Performance sample checkpoint is malformed."
+                  return "$existing_status"
+                fi
+                BLB_PERF_AGGREGATE_PROGRESS=1 \
+                  BLB_EXTENSION_PATH="$extension_path" \
+                  BLB_PERF_OUTPUT="$output_path" \
+                  BLB_PERF_SCENARIO="$scenario" \
+                  BLB_PERF_VARIANT="$variant" \
+                  BLB_PERF_SAMPLE="$sample" \
+                  npx playwright test tests/browser/performance.spec.js --workers=1
+              }
+              for scenario in $SCENARIOS; do
+                for ((sample = 1; sample <= BLB_PERF_SAMPLES; sample++)); do
+                  if (( sample % 2 == 1 )); then
+                    run_perf_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+                    run_perf_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+                  else
+                    run_perf_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+                    run_perf_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+                  fi
+                done
               done
-            done
-          else
-            # One Playwright process orchestrates all 110 samples. Each sample
-            # still launches a fresh persistent Chromium context with a fresh
-            # temporary profile and the appropriate baseline/candidate build.
-            # This removes repeated Node/Playwright startup without sharing
-            # browser state or changing sample order/count.
-            npx playwright test tests/browser/performance-batch.spec.js --workers=1
-          fi
+            else
+              npx playwright test tests/browser/performance-batch.spec.js --workers=1
+            fi
+
 
       - name: Run the original single-case Show on BLB performance benchmark
         if: ${{ !startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver') }}
