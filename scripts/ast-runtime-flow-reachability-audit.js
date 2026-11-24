@@ -564,12 +564,13 @@ function analyzeFile(root, file) {
           const storedFunction = value.type === 'Identifier'
             ? functionVariables.get(variableForNode.get(value)) : null;
           const isStoredCallback = isFunction(value) || !!storedFunction;
-          const stored = value.type === 'Identifier'
-            ? (storedFunction ? 'function@' + storedFunction.loc.start.line : bindingId(value))
-            : isFunction(value) ? 'function@' + value.loc.start.line
-              : value.type === 'MemberExpression'
-                ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
+          const stored = value.type === 'Identifier' ? bindingId(value) :
+            isFunction(value) ? 'function@' + value.loc.start.line :
+            value.type === 'MemberExpression'
+              ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
           if (stored) {
+            if (storedFunction) addEdge('function@' + storedFunction.loc.start.line, stored,
+              'function-variable-identity', node, name);
             addEdge(stored, container, isStoredCallback ? 'container-store-callback' : 'container-store', node, name);
             containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
