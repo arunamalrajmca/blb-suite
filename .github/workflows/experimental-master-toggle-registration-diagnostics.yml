@@ -46,6 +46,7 @@ jobs:
         with:
           section: deterministic-stale-activation
           always-run: 'true'
+          source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           cache-prefix: blb-ci-v1-registration-diagnostics-deterministic-stale-activation-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/site-registration-opt-out-race.spec.js', 'tests/browser/source-page-button-redirect-separation.spec.js', 'tests/browser/optional-host-permission-lifecycle.spec.js', 'scripts/run-checkpointed-playwright-repeats.mjs', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/experimental-master-toggle-registration-diagnostics.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/site-registration-opt-out-race.spec.js', 'tests/browser/source-page-button-redirect-separation.spec.js', 'tests/browser/optional-host-permission-lifecycle.spec.js', 'scripts/run-checkpointed-playwright-repeats.mjs', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/experimental-master-toggle-registration-diagnostics.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: node scripts/run-checkpointed-playwright-repeats.mjs 'tests/browser/site-registration-opt-out-race.spec.js' 'master OFF-to-ON recovery repairs registrations' 3 1 1 1
@@ -54,6 +55,7 @@ jobs:
         with:
           section: four-worker-registration-contention
           always-run: 'true'
+          source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           cache-prefix: blb-ci-v1-registration-diagnostics-four-worker-registration-contention-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/site-registration-opt-out-race.spec.js', 'tests/browser/source-page-button-redirect-separation.spec.js', 'tests/browser/optional-host-permission-lifecycle.spec.js', 'scripts/run-checkpointed-playwright-repeats.mjs', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/experimental-master-toggle-registration-diagnostics.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/site-registration-opt-out-race.spec.js', 'tests/browser/source-page-button-redirect-separation.spec.js', 'tests/browser/optional-host-permission-lifecycle.spec.js', 'scripts/run-checkpointed-playwright-repeats.mjs', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/experimental-master-toggle-registration-diagnostics.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: node scripts/run-checkpointed-playwright-repeats.mjs 'tests/browser/source-page-button-redirect-separation.spec.js' 'Suite master opt-out removes both registered worlds' 24 4 4 1
@@ -62,6 +64,7 @@ jobs:
         with:
           section: persistent-registration-fallback
           always-run: 'true'
+          source-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           cache-prefix: blb-ci-v1-registration-diagnostics-persistent-registration-fallback-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/site-registration-opt-out-race.spec.js', 'tests/browser/source-page-button-redirect-separation.spec.js', 'tests/browser/optional-host-permission-lifecycle.spec.js', 'scripts/run-checkpointed-playwright-repeats.mjs', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/experimental-master-toggle-registration-diagnostics.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/site-registration-opt-out-race.spec.js', 'tests/browser/source-page-button-redirect-separation.spec.js', 'tests/browser/optional-host-permission-lifecycle.spec.js', 'scripts/run-checkpointed-playwright-repeats.mjs', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/experimental-master-toggle-registration-diagnostics.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: node scripts/run-checkpointed-playwright-repeats.mjs 'tests/browser/optional-host-permission-lifecycle.spec.js' 'current-tab activation falls back when persistent content-script registration fails' 24 4 4 1
