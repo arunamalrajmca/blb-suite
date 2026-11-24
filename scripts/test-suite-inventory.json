@@ -215,6 +215,23 @@
           "requiredText": "BLB_CI_CHECKPOINT_FINGERPRINT"
         }
       ]
+    },
+    {
+      "id": "checkpointed-playwright-repeat-runner-tests",
+      "pattern": "scripts/run-checkpointed-playwright-repeats.test.mjs",
+      "owner": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+      "requiredText": "node --test scripts/run-checkpointed-playwright-repeats.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+          "requiredText": "node scripts/run-checkpointed-playwright-repeats.mjs"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "always-run"
+        }
+      ]
     }
   ],
   "manualOnly": [
