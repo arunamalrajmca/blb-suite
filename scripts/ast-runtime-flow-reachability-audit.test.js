@@ -166,7 +166,7 @@ test('connects object property assignments to later reads without conflating dis
     'registry.onStop = stopped;',
     'const handler = registry.onReady;',
     'registry.onReady();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@2' && edge.to === 'handler@6'));
   assert.ok(!result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
@@ -181,7 +181,7 @@ test('tracks callback values in nested object and array literal properties throu
     'const wrapper = { hooks: [callback], nested: { ready: callback } };',
     'const hooks = wrapper.hooks;',
     'const nested = wrapper.nested;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'hooks@3'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
@@ -196,7 +196,7 @@ test('keeps dynamic object-property reads conservative across stored properties'
     'registry.first = first;',
     'registry.second = second;',
     'const selected = registry[key];'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@2' && edge.to === 'selected@6'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
