@@ -1118,7 +1118,9 @@ test("four-worker lifecycle contention stress schedules four independent browser
     "tests/browser/extension-lifecycle.spec.js"
   ]) assert.ok(block.includes(spec), "concurrency stress must include " + spec);
   assert.match(block, /for round in 1 2/);
-  assert.match(block, /--workers=4 --max-failures=0 --reporter=line/);
+  assert.match(block, /round-\$round\.complete/);
+  assert.match(block, /Reusing passed four-worker lifecycle contention round/);
+  assert.match(block, /--workers=4 --max-failures=1 --reporter=line/);
 });
 
 test("performance batching retains interleaved paired samples with a fresh Chromium profile per sample", () => {
@@ -1133,7 +1135,12 @@ test("performance batching retains interleaved paired samples with a fresh Chrom
   assert.ok(workflow.includes("tests/browser/performance-batch.spec.js --workers=1"));
   assert.ok(workflow.includes("contains(github.event.pull_request.labels.*.name, 'ci-run-performance')"),
     "the ci-run-performance label must run the measured interleaved benchmark");
-  assert.ok(workflow.includes("BLB_PERF_SAMPLES: 11"));
+  assert.ok(workflow.includes("export BLB_PERF_SAMPLES=11"));
+  assert.ok(workflow.includes('BLB_PERF_SAMPLE="$sample"'));
+  assert.ok(workflow.includes("sample_exists"));
+  assert.ok(workflow.includes("Reusing passed performance sample"));
+  assert.ok(batch.includes("record.sample"));
+  assert.ok(batch.includes("record.variant"));
   assert.ok(batch.includes("const samples = Number(process.env.BLB_PERF_SAMPLES || 11)"));
   assert.ok(batch.includes("const total = scenarios.length * samples * 2"));
   assert.ok(batch.includes("sample % 2 === 1 ? ['baseline', 'candidate'] : ['candidate', 'baseline']"));
@@ -1148,12 +1155,20 @@ test("full audit compares legacy per-test process isolation with four-worker sch
     new URL("../../.github/workflows/manual-full-test-audit.yml", import.meta.url),
     "utf8"
   );
+  const runner = readFileSync(
+    new URL("../../scripts/run-checkpointed-playwright-audit.mjs", import.meta.url),
+    "utf8"
+  );
   assert.ok(audit.includes('npx playwright test --test-list "$current_test" --max-failures=1'),
     "legacy compatibility cases must run one test per Playwright process");
-  assert.ok(audit.includes('npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0'),
+  assert.ok(audit.includes('npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=1'),
     "the same compatibility cases must also run together with four workers");
-  assert.ok(audit.includes('npx playwright test --test-list "$test_list" --workers=4 --max-failures=0'),
-    "the complete browser inventory must still run with four workers after comparison");
+  assert.ok(audit.includes('node scripts/run-checkpointed-playwright-audit.mjs "$test_list"'),
+    "the complete browser inventory must use the resumable shard runner after comparison");
+  assert.ok(runner.includes("shardCount = 8") && runner.includes("workers = 4"),
+    "the complete browser inventory must use eight four-worker shards");
+  assert.ok(runner.includes("'--max-failures=1'"),
+    "each browser shard must fail fast after its first unexpected result");
   for (const title of [
     "a real MV3 service-worker termination is recovered by the Alt+B command message",
     "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them",
@@ -1220,15 +1235,20 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "utf8"
   );
 
+  const priorFailureSectionStart = audit.indexOf("Re-run prior full-audit failures independently");
+  const priorFailureCommandStart = audit.indexOf("npx playwright test", priorFailureSectionStart);
+  const priorFailureCommandEnd = audit.indexOf("--grep", priorFailureCommandStart);
+  const priorFailureCommand = audit.slice(priorFailureCommandStart, priorFailureCommandEnd);
   assert.ok(
-    audit.includes("npx playwright test \\\n            tests/browser/extension-reference-actions.spec.js \\\n            tests/browser/service-worker-lifecycle.spec.js"),
+    priorFailureCommand.includes("tests/browser/extension-reference-actions.spec.js") &&
+    priorFailureCommand.includes("tests/browser/service-worker-lifecycle.spec.js"),
     "both prior failures must run in one Playwright invocation"
   );
   assert.ok(
     audit.includes('--grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable"'),
     "the combined rerun must select exactly the two historical failures"
   );
-  assert.ok(audit.includes("--workers=2 --max-failures=0 --reporter=line"),
+  assert.ok(audit.includes("--workers=2 --max-failures=1 --reporter=line"),
     "the combined rerun must preserve isolated workers and execute both cases after a failure");
   assert.ok(
     audit.includes("rerun_status=0") &&
@@ -1236,6 +1256,12 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "the audit must fail unless both expected tests pass exactly once"
   );
 
+  assert.ok(
+    audit.includes('export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"') &&
+    audit.includes('touch "$BLB_PERF_OUTPUT"') &&
+    !audit.includes(': > "$BLB_PERF_OUTPUT"'),
+    "full-audit corpus A/B samples must survive browser-shard retries without truncation"
+  );
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
     "native Chromium _self prerender activation initializes the activated document without tab replacement",
@@ -1264,3 +1290,12 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.ok(performance.includes("'ci-full-test-audit'"),
     "the opt-in full-audit label must run the delegated performance benchmark");
 });
+test("registration diagnostics cancel older runs for the same PR without cancelling sibling workflows", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/experimental-master-toggle-registration-diagnostics.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(workflow.includes("group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}"));
+  assert.ok(workflow.includes("cancel-in-progress: true"));
+});
+

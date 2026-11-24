@@ -78,7 +78,19 @@
         },
         {
           "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
-          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+          "requiredText": "group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}"
+        },
+        {
+          "file": ".github/workflows/browser-e2e-reference.yml",
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
+        },
+        {
+          "file": ".github/workflows/browser-e2e-groups.yml",
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
+        },
+        {
+          "file": ".github/workflows/browser-e2e-focused-regressions.yml",
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
         }
       ]
     },
@@ -177,6 +189,61 @@
       "owner": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
       "requiredText": "node --test scripts/full-audit-checkpoint-validation.test.mjs",
       "executionEnvironment": "node"
+    },
+    {
+      "id": "ci-section-checkpoint-tests",
+      "pattern": "scripts/ci-section-checkpoint.test.mjs",
+      "owner": ".github/workflows/browser-tests.yml",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "actions/cache/restore@v5"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "actions/cache/save@v5"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "ci-section-checkpoint"
+        }
+      ]
+    },
+    {
+      "id": "checkpointed-browser-audit-runner-tests",
+      "pattern": "scripts/run-checkpointed-playwright-audit.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "node scripts/run-checkpointed-playwright-audit.mjs \"$test_list\""
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "BLB_CI_CHECKPOINT_FINGERPRINT"
+        }
+      ]
+    },
+    {
+      "id": "checkpointed-playwright-repeat-runner-tests",
+      "pattern": "scripts/run-checkpointed-playwright-repeats.test.mjs",
+      "owner": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+      "requiredText": "node --test scripts/run-checkpointed-playwright-repeats.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
+          "requiredText": "node scripts/run-checkpointed-playwright-repeats.mjs"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "always_run"
+        }
+      ]
     }
   ],
   "manualOnly": [
@@ -197,5 +264,812 @@
       "reason": "PowerShell wrapper for the deterministic regression suite; the underlying Node regression groups are executed by the full audit."
     }
   ],
-  "manualVerification": "PRE-MERGE-CHECKLIST.md remains the source of required manual Brave/Chrome verification for native context menus, browser-specific permissions, and protected PDF behavior."
+  "manualVerification": "PRE-MERGE-CHECKLIST.md remains the source of required manual Brave/Chrome verification for native context menus, browser-specific permissions, and protected PDF behavior.",
+  "productionCoverage": [
+    {
+      "id": "mv3-worker-lifecycle-and-recovery",
+      "productionFiles": [
+        "extension/background.js",
+        "extension/manifest.json"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a real MV3 service-worker termination is recovered by a content-script selection request",
+            "a terminated worker reconciles stale host registrations and expires pending intents on its next real activation",
+            "browser restart reconciles persisted host registrations and pending permission intents using the same profile",
+            "selection runtime messages survive repeated transient No SW dispatch failures"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reference-resolution-and-four-user-actions",
+      "productionFiles": [
+        "extension/content.js",
+        "extension/reference-core.js",
+        "extension/books.js"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Single-word verse cues resolve the same adjacent passage through all four actions",
+            "all 66 canonical book suffixes resolve through all four actions with both separators",
+            "Double-click generic reference grammar — exhaustive token coverage — OT and NT",
+            "Same-chapter ranges — all 66 books through "
+          ]
+        }
+      ]
+    },
+    {
+      "id": "site-registration-and-source-page-activation",
+      "productionFiles": [
+        "extension/background.js",
+        "extension/content.js",
+        "extension/manifest.json"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/site-registration-opt-out-race.spec.js",
+          "requiredText": [
+            "rapid site opt-out waits for an older registration reconciliation before unregistering",
+            "master OFF-to-ON recovery repairs registrations after an older tab activation finishes",
+            "a failed in-flight activation does not suppress a fresh eligible current-tab fallback"
+          ]
+        },
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": [
+            "every shared-registry page-button host shows the exact button on content pages and excludes homepages",
+            "registered source-page collector remains available regardless of redirect preference",
+            "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multiverse-tab-state-and-handoff",
+      "productionFiles": [
+        "extension/background.js",
+        "extension/content.js"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a replaced MV3 tab migrates extension-owned destination and MultiVerse state",
+            "closing multiple MultiVerse tabs concurrently removes every persisted tab record",
+            "a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load"
+          ]
+        }
+      ]
+    }
+  ],
+  "productionModuleCoverage": [
+    {
+      "path": "extension/background.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a real MV3 service-worker termination is recovered by a content-script selection request",
+            "browser restart reconciles persisted host registrations and pending permission intents using the same profile"
+          ]
+        },
+        {
+          "path": "tests/browser/site-registration-opt-out-race.spec.js",
+          "requiredText": [
+            "master OFF-to-ON recovery repairs registrations after an older tab activation finishes"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/content.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Single-word verse cues resolve the same adjacent passage through all four actions"
+          ]
+        },
+        {
+          "path": "tests/browser/source-page-collector-behavior.spec.js",
+          "requiredText": [
+            "source-page collector parses, canonicalizes, and deduplicates linked Bible references"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/regex-patterns.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/shared-regex-patterns.spec.js",
+          "requiredText": [
+            "shared regex catalog exposes stable BLB constants and independent regex instances"
+          ]
+        },
+        {
+          "path": "tests/browser/shared-regex-patterns.spec.js",
+          "requiredText": [
+            "reference parser expands abbreviated book context in semicolon lists"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-corpus-word-index.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/kjv-corpus-lazy-loading.spec.js",
+          "requiredText": [
+            "first corpus-dependent classification loads both datasets and preserves exact verse matching"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/books.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "all 66 canonical book suffixes resolve through all four actions with both separators"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/book-aliases.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "all 66 canonical book suffixes resolve through all four actions with both separators"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/reference-core.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Single-word verse cues resolve the same adjacent passage through all four actions"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/source-page-collector-sites.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-collector-behavior.spec.js",
+          "requiredText": [
+            "DailyVerses shows its BLB references button only on non-homepage pages"
+          ]
+        },
+        {
+          "path": "tests/browser/source-page-collector-behavior.spec.js",
+          "requiredText": [
+            "ChurchofJesusChrist shows its BLB references button on scripture-study pages, not the homepage"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kings-bible-collector.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/kings-bible-collector-behavior.spec.js",
+          "requiredText": [
+            "Concordance fetches numbered pages and deduplicates references across pages"
+          ]
+        },
+        {
+          "path": "tests/browser/kings-bible-collector-behavior.spec.js",
+          "requiredText": [
+            "Concordance pagination respects the 20-page safety cap"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/webster-collector.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/webster-collector-behavior.spec.js",
+          "requiredText": [
+            "extracts valid Bible links and deduplicates equivalent BLB destinations"
+          ]
+        },
+        {
+          "path": "tests/browser/webster-collector-behavior.spec.js",
+          "requiredText": [
+            "renders the collector button and opens collected references in MultiVerse"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/source-page-collector.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-collector-behavior.spec.js",
+          "requiredText": [
+            "source-page collector parses, canonicalizes, and deduplicates linked Bible references"
+          ]
+        },
+        {
+          "path": "tests/browser/source-page-collector-behavior.spec.js",
+          "requiredText": [
+            "source-page collector reports an empty-reference page without sending a MultiVerse request"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/source-bible-redirect.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/blb-non-kjv-redirect.spec.js",
+          "requiredText": [
+            "converts other translation prefixes such as NASB20 and ESV"
+          ]
+        },
+        {
+          "path": "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
+          "requiredText": [
+            "BibleRef range link falls back to its original destination when runtime messaging rejects"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/multiverse-copy.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+          "requiredText": [
+            "recognizes compact numbered-book abbreviations and preserves existing formats"
+          ]
+        },
+        {
+          "path": "tests/browser/multiverse-tool-view.spec.js",
+          "requiredText": [
+            "MultiVerse clipboard enhancement resumes on the same page after the master switch is re-enabled"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/study-reference-capture.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/study-reference-capture.spec.js",
+          "requiredText": [
+            "active Study Topic captures the current KJV passage and deduplicates repeated navigation"
+          ]
+        },
+        {
+          "path": "tests/browser/study-reference-capture.spec.js",
+          "requiredText": [
+            "Study capture retries a dropped runtime message and persists the passage"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/criteria-search-navigation.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/criteria-search-navigation.spec.js",
+          "requiredText": [
+            "enabled Criteria Search opens ordinary KJV verse results in a new tab but leaves unrelated links native"
+          ]
+        },
+        {
+          "path": "tests/browser/criteria-search-navigation.spec.js",
+          "requiredText": [
+            "Criteria Search navigation resumes on the same page after the global master switch is re-enabled"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/blb-auto-hyperlinker.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/blb-auto-hyperlinker.spec.js",
+          "requiredText": [
+            "BLB copy formats selected Bible references as linked HTML and preserves plain text"
+          ]
+        },
+        {
+          "path": "tests/browser/blb-auto-hyperlinker.spec.js",
+          "requiredText": [
+            "BLB copy leaves native clipboard HTML unchanged when the global master switch is OFF"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/blb-passive-new-tab-targets.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/blb-passive-new-tab-targets.spec.js",
+          "requiredText": [
+            "enabled Suite marks initial and dynamically added KJV verse links as new-tab targets only"
+          ]
+        },
+        {
+          "path": "tests/browser/blb-passive-new-tab-targets.spec.js",
+          "requiredText": [
+            "global Suite OFF leaves KJV verse links without passive new-tab targets"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/blb-draggable-button.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/blb-draggable-button.spec.js",
+          "requiredText": [
+            "Show on BLB button can be dragged, restored, clamped, and reset independently"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/blb-parse-popup.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/blb-parse-popup.spec.js",
+          "requiredText": "parse-popup reinjection owns one click handler and cleanup releases its markers"
+        },
+        {
+          "path": "tests/browser/blb-parse-popup.spec.js",
+          "requiredText": "parse-popup click routing opens canonical BLB and lexicon criteria destinations while respecting disabled and modified activations"
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/blb-verse-link-navigation.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/blb-verse-link-navigation.spec.js",
+          "requiredText": [
+            "enabled Suite targets bVerse links and routes ordinary nowrap links through the background"
+          ]
+        },
+        {
+          "path": "tests/browser/blb-verse-link-navigation.spec.js",
+          "requiredText": [
+            "global Suite OFF leaves bVerse targets and ordinary nowrap navigation unchanged"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/blb-page-selection-button.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/source-page-collector-behavior.spec.js",
+          "requiredText": [
+            "source-page collector recreates its button after the page replaces its body"
+          ]
+        },
+        {
+          "path": "tests/browser/blb-draggable-button.spec.js",
+          "requiredText": [
+            "Show on BLB button can be dragged, restored, clamped, and reset independently"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/multiverse-handoff.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/multiverse-handoff.spec.js",
+          "requiredText": [
+            "MultiVerse handoff retries pending-reference consumption before retrieving results"
+          ]
+        },
+        {
+          "path": "tests/browser/multiverse-handoff.spec.js",
+          "requiredText": [
+            "MultiVerse handoff cleanup cancels pending asynchronous retrieval after reinjection"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/multiverse-tool-view.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/multiverse-tool-view.spec.js",
+          "requiredText": [
+            "direct MultiVerse visits default to Tool View even when Suite features are disabled"
+          ]
+        },
+        {
+          "path": "tests/browser/multiverse-tool-view.spec.js",
+          "requiredText": [
+            "Suite-created MultiVerse URLs also default to Tool View"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/Tutorial.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/tutorial-page-behavior.spec.js",
+          "requiredText": [
+            "user guide Run command control routes its example through the extension handler"
+          ]
+        },
+        {
+          "path": "tests/browser/tutorial-page-behavior.spec.js",
+          "requiredText": [
+            "user guide Copy button writes the command input without the b prefix"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/case-sensitive-routing.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/case-sensitive-routing-behavior.spec.js",
+          "requiredText": [
+            "routes queries containing a generated case-sensitive word and leaves ordinary words alone"
+          ]
+        },
+        {
+          "path": "tests/browser/case-sensitive-routing-behavior.spec.js",
+          "requiredText": [
+            "background loads the generated routing set on demand before using it"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/case-sensitive-search-core.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/case-sensitive-routing-behavior.spec.js",
+          "requiredText": [
+            "parses quoted cs searches without losing the requested capitalization"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-case-sensitive-words.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/case-sensitive-routing-behavior.spec.js",
+          "requiredText": [
+            "loads the generated word set and preserves lowercase identities"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-corpus-case-verse-index.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/case-sensitive-routing-behavior.spec.js",
+          "requiredText": [
+            "MV3 worker routes a real exact-case KJV word to its single matching verse"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-corpus-original-case.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/case-sensitive-routing-behavior.spec.js",
+          "requiredText": [
+            "loads the generated word set and preserves lowercase identities"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-corpus-phrase-index.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/kjv-corpus-lazy-loading.spec.js",
+          "requiredText": [
+            "non-whitelist short phrases retain indexed corpus verification"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-corpus-verses.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/kjv-corpus-lazy-loading.spec.js",
+          "requiredText": [
+            "first corpus-dependent classification loads both datasets and preserves exact verse matching"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/kjv-corpus-word-verse-index.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/kjv-corpus-lazy-loading.spec.js",
+          "requiredText": [
+            "concurrent loads are deduplicated and a failed load can be retried"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/multiverse-reference-helpers.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/multiverse-contiguous-range-routing.spec.js",
+          "requiredText": [
+            "MultiVerse redirects adjacent same-chapter ranges to the normal chapter range view"
+          ]
+        },
+        {
+          "path": "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+          "requiredText": [
+            "MultiVerse batches disjoint chapter ranges without gaps and stays under 200 verses"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/multiverse-post.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/multiverse-post-failure-regressions.spec.js",
+          "requiredText": [
+            "MultiVerse post handoff retries one dropped message channel and submits exactly once"
+          ]
+        },
+        {
+          "path": "tests/browser/multiverse-post-failure-regressions.spec.js",
+          "requiredText": [
+            "the real service-worker MultiVerse queue assigns simultaneous requests distinct FIFO slots"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/omnibox-search-helpers.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/omnibox-command-routing.spec.js",
+          "requiredText": [
+            "dict opens only a single ASCII word and safely falls back for invalid input"
+          ]
+        },
+        {
+          "path": "tests/browser/omnibox-dictionary-routing.spec.js",
+          "requiredText": [
+            "the registered omnibox handler routes a single-word dict prefix to Webster"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/popup.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/popup-master-toggle-regression.spec.js",
+          "requiredText": [
+            "popup master toggle persists across reload and preserves per-site feature preferences"
+          ]
+        },
+        {
+          "path": "tests/browser/study-session-popup-ui-regression.spec.js",
+          "requiredText": [
+            "Study Sessions popup starts recording, saves a note, and stops without losing history"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/redirect-bibleref-ranges.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
+          "requiredText": [
+            "BibleRef range link falls back to its original destination when runtime messaging rejects"
+          ]
+        },
+        {
+          "path": "tests/browser/redirect-toggle-isolation.spec.js",
+          "requiredText": [
+            "BibleRef range redirect falls back to the original link when runtime messaging rejects"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/redirect-christianity-main-world.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/redirect-hostnames.spec.js",
+          "requiredText": [
+            "Christianity.com chapter page opens BLB KJV in a new tab without replacing source"
+          ]
+        },
+        {
+          "path": "tests/browser/redirect-hostnames.spec.js",
+          "requiredText": [
+            "Christianity.com passage guard leaves ordinary, foreign, modified, and download clicks alone"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/redirect-scripttagger.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/scripttagger-global-injection.spec.js",
+          "requiredText": [
+            "minimal ScriptTagger handler redirects only when master and global redirect are enabled"
+          ]
+        },
+        {
+          "path": "tests/browser/scripttagger-global-injection.spec.js",
+          "requiredText": [
+            "ScriptTagger destination tabs are rediscovered after an MV3 service-worker restart"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/selection-text-helpers.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/e2e-core-user-actions.spec.js",
+          "requiredText": [
+            "Alt+B command path opens an exact selected Bible reference"
+          ]
+        },
+        {
+          "path": "tests/browser/e2e-core-user-actions.spec.js",
+          "requiredText": [
+            "Double-Click resolves contextual chapter numbers and unique KJV words directly"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/study-session-export.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/study-backup-restore.spec.js",
+          "requiredText": [
+            "exports a valid Study-only backup without leaking extension settings"
+          ]
+        },
+        {
+          "path": "tests/browser/study-backup-restore.spec.js",
+          "requiredText": [
+            "restores only the backup Study keys and preserves extension settings"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    },
+    {
+      "path": "extension/study-session-normalization.js",
+      "coverageLevel": "direct-integration",
+      "testFiles": [
+        {
+          "path": "tests/browser/study-session-concurrency.spec.js",
+          "requiredText": [
+            "Study read-side normalization waits for queued mutations and rechecks the latest snapshot"
+          ]
+        },
+        {
+          "path": "tests/browser/study-session-concurrency.spec.js",
+          "requiredText": [
+            "concurrent Study notes and capture operations do not overwrite one another"
+          ]
+        }
+      ],
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
+    }
+  ]
 }

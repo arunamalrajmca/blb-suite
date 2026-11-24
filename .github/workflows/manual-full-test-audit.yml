@@ -57,43 +57,59 @@ jobs:
 
       - name: Install pinned AST audit dependencies
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
+      - name: Test reusable CI checkpoint and browser shard recovery
+        run: |
+          node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs
 
       - name: Verify repository-wide test inventory and ownership
         id: inventory
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: node scripts/test-suite-inventory.mjs
-
+        with:
+          section: inventory
+          cache_prefix: blb-ci-v1-full-audit-inventory-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: node scripts/test-suite-inventory.mjs
       - name: Run every AST reachability audit test and analysis
         id: ast
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: |
-          set -euo pipefail
-          for test_file in scripts/ast-*-audit.test.js; do
-            echo "Running AST audit regression tests: $test_file"
-            node --test "$test_file"
-            audit_file="${test_file%.test.js}.js"
-            if [[ -f "$audit_file" ]]; then
-              echo "Running AST reachability analysis: $audit_file"
-              node "$audit_file"
-            fi
-          done
-          for audit_file in scripts/ast-*-audit.js; do
-            [[ -f "$audit_file" ]] || continue
-            test_file="${audit_file%.js}.test.js"
-            if [[ ! -f "$test_file" ]]; then
-              echo "Running analysis without a paired test file: $audit_file"
-              node "$audit_file"
-            fi
-          done
-
-      # Compare the complete AST audit inventory, not only selected browser tests.
-      # The old serial loop remains the reference; bounded parallel execution must
-      # produce identical test outcomes and analysis reports on this same checkout.
+        with:
+          section: ast-audits
+          cache_prefix: blb-ci-v1-full-audit-ast-audits-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            for test_file in scripts/ast-*-audit.test.js; do
+              echo "Running AST audit regression tests: $test_file"
+              node --test "$test_file"
+              audit_file="${test_file%.test.js}.js"
+              if [[ -f "$audit_file" ]]; then
+                echo "Running AST reachability analysis: $audit_file"
+                node "$audit_file"
+              fi
+            done
+            for audit_file in scripts/ast-*-audit.js; do
+              [[ -f "$audit_file" ]] || continue
+              test_file="${audit_file%.js}.test.js"
+              if [[ ! -f "$test_file" ]]; then
+                echo "Running analysis without a paired test file: $audit_file"
+                node "$audit_file"
+              fi
+            done
+            
+                  # Compare the complete AST audit inventory, not only selected browser tests.
+                  # The old serial loop remains the reference; bounded parallel execution must
+                  # produce identical test outcomes and analysis reports on this same checkout.
       - name: Verify AST audit serial-parallel equivalence
         id: ast_concurrency
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4
-
+        with:
+          section: ast-concurrency
+          cache_prefix: blb-ci-v1-full-audit-ast-concurrency-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4
       - name: Read manifest version
         id: version
         shell: bash
@@ -109,31 +125,42 @@ jobs:
 
       - name: Validate extension build and module contracts
         id: build
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: node scripts/validate-build.js
-
+        with:
+          section: build-validation
+          cache_prefix: blb-ci-v1-full-audit-build-validation-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: node scripts/validate-build.js
       - name: Run browser selector decision tests
         id: selector
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: node --test tests/selector/*.test.mjs
-
+        with:
+          section: selector-tests
+          cache_prefix: blb-ci-v1-full-audit-selector-tests-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: node --test tests/selector/*.test.mjs
       - name: Run standalone JavaScript test scripts
         id: scripts
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          # validate-build.js already executes the scripts in this manifest.
-          node -e "for (const test of require('./scripts/validation-test-manifest.json')) console.log('scripts/' + test.script)" > "$RUNNER_TEMP/blb-build-validation-tests.txt"
-          for test_file in scripts/test-*.js; do
-            if grep -Fxq "$test_file" "$RUNNER_TEMP/blb-build-validation-tests.txt"; then
-              echo "Already executed by build validation: $test_file"
-              continue
-            fi
-            echo "Running $test_file"
-            node "$test_file"
-          done
-
+        with:
+          section: standalone-scripts
+          cache_prefix: blb-ci-v1-full-audit-standalone-scripts-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            # validate-build.js already executes the scripts in this manifest.
+            node -e "for (const test of require('./scripts/validation-test-manifest.json')) console.log('scripts/' + test.script)" > "$RUNNER_TEMP/blb-build-validation-tests.txt"
+            for test_file in scripts/test-*.js; do
+              if grep -Fxq "$test_file" "$RUNNER_TEMP/blb-build-validation-tests.txt"; then
+                echo "Already executed by build validation: $test_file"
+                continue
+              fi
+              echo "Running $test_file"
+              node "$test_file"
+            done
       - name: Set up Python and install test dependency
         uses: actions/setup-python@v6
         with:
@@ -144,9 +171,13 @@ jobs:
 
       - name: Run every Python unittest
         id: python
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
-
+        with:
+          section: python-unittests
+          cache_prefix: blb-ci-v1-full-audit-python-unittests-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
@@ -155,70 +186,83 @@ jobs:
       # Playwright startup. Assert the exact two-test inventory and full success.
       - name: Re-run prior full-audit failures independently
         id: isolated_browser_failures
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          rerun_log="$RUNNER_TEMP/blb-prior-audit-failures.log"
-          rerun_status=0
-          npx playwright test \
-            tests/browser/extension-reference-actions.spec.js \
-            tests/browser/service-worker-lifecycle.spec.js \
-            --grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
-            --workers=2 --max-failures=0 --reporter=line 2>&1 | tee "$rerun_log" || rerun_status=$?
-
-          # The line reporter emits concise output such as `2 passed (4.8s)`;
-          # it omits zero-valued failed/skipped counts. Validate that summary
-          # and confirm that each expected test title appeared exactly once.
-          summary=$(grep -E '^[[:space:]]*2 passed([[:space:]]|$)' "$rerun_log" | tail -n 1 || true)
-          article_count=$(grep -F -c 'Article verse cues resolve context outside Facebook' "$rerun_log" || true)
-          lifecycle_count=$(grep -F -c 'persistent registration failure keeps current and subsequent same-tab documents independently activatable' "$rerun_log" || true)
-          echo "Independent rerun summary: ${summary:-missing}"
-          echo "Expected test title counts: article=$article_count lifecycle=$lifecycle_count"
-          if [[ "$rerun_status" -ne 0 || -z "$summary" || "$article_count" -ne 1 || "$lifecycle_count" -ne 1 ]]; then
-            echo "::error::Expected both prior failures to pass exactly once; Playwright exit=$rerun_status summary=${summary:-missing} titles=$article_count/$lifecycle_count."
-            exit 1
-          fi
-
+        with:
+          section: isolated-browser-regressions
+          cache_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            rerun_log="$RUNNER_TEMP/blb-prior-audit-failures.log"
+            rerun_status=0
+            npx playwright test \
+              tests/browser/extension-reference-actions.spec.js \
+              tests/browser/service-worker-lifecycle.spec.js \
+              --grep "Article verse cues resolve context outside Facebook|persistent registration failure keeps current and subsequent same-tab documents independently activatable" \
+              --workers=2 --max-failures=1 --reporter=line 2>&1 | tee "$rerun_log" || rerun_status=$?
+            
+            # The line reporter emits concise output such as `2 passed (4.8s)`;
+            # it omits zero-valued failed/skipped counts. Validate that summary
+            # and confirm that each expected test title appeared exactly once.
+            summary=$(grep -E '^[[:space:]]*2 passed([[:space:]]|$)' "$rerun_log" | tail -n 1 || true)
+            article_count=$(grep -F -c 'Article verse cues resolve context outside Facebook' "$rerun_log" || true)
+            lifecycle_count=$(grep -F -c 'persistent registration failure keeps current and subsequent same-tab documents independently activatable' "$rerun_log" || true)
+            echo "Independent rerun summary: ${summary:-missing}"
+            echo "Expected test title counts: article=$article_count lifecycle=$lifecycle_count"
+            if [[ "$rerun_status" -ne 0 || -z "$summary" || "$article_count" -ne 1 || "$lifecycle_count" -ne 1 ]]; then
+              echo "::error::Expected both prior failures to pass exactly once; Playwright exit=$rerun_status summary=${summary:-missing} titles=$article_count/$lifecycle_count."
+              exit 1
+            fi
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
 
       - name: Run KJV corpus and search-index integrity tests
         id: corpus
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
-
+        with:
+          section: kjv-corpus-integrity
+          cache_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
       - name: Run package regression group
         id: package
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=package
-
+        with:
+          section: package-regression
+          cache_prefix: blb-ci-v1-full-audit-package-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Run resolver regression group
         id: resolver
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=resolver
-
+        with:
+          section: resolver-regression
+          cache_prefix: blb-ci-v1-full-audit-resolver-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=resolver
       - name: Run selection regression group
         id: selection
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=selection
-
+        with:
+          section: selection-regression
+          cache_prefix: blb-ci-v1-full-audit-selection-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=selection
       - name: Run features regression group
         id: features
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension --group=features
-
-      # The job is sequential: defer the expensive browser matrix until all
-      # other audit sections have completed successfully.
+        with:
+          section: features-regression
+          cache_prefix: blb-ci-v1-full-audit-features-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=features
       - name: Gate full browser audit on all other suites
         id: browser_gate
         shell: bash
@@ -256,166 +300,172 @@ jobs:
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
-      # complete test list, then execute the complete test list in one Playwright process with four workers.
-      # Using max-failures=0 ensures one failing test cannot
-      # prevent any later test case from executing.
-      - name: Run complete browser test list in one Playwright process
+      # complete test list, then execute it in eight resumable shards of four workers.
+      # Each shard fails fast after one unexpected result; successful shards are retained
+      # so a retry cannot force already-passed shards to execute again.
+      - name: Run complete browser test list in resumable four-worker shards
         id: browser
-        if: ${{ steps.browser_gate.outcome == 'success' }}
+        uses: ./.github/actions/ci-section-checkpoint
         continue-on-error: true
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-          BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
-          NO_COLOR: '1'
-          FORCE_COLOR: '0'
-        shell: bash
-        run: |
-          : > "$BLB_PERF_OUTPUT"
-          list_output="$RUNNER_TEMP/blb-playwright-list.txt"
-          test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
-          if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
-            cat "$list_output"
-            exit 1
-          fi
-          cat "$list_output"
-          # --test-list expects the complete entry emitted by --list, including
-          # project, spec location, suite path, and test title. A bare file:line:column
-          # is not a test-list entry and silently selects zero tests.
-          sed -nE 's/^[[:space:]]*(\[[^]]+\] › [^[:space:]]+\.spec\.js:[0-9]+:[0-9]+ › .*)$/\1/p' "$list_output" > "$test_list"
-          expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
-          listed_specs=$(sed -nE 's/^[[:space:]]*\[[^]]+\] › ([^[:space:]]+\.spec\.js):[0-9]+:[0-9]+ › .*/\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
-          echo "Browser spec files expected before delegation: $expected_specs"
-          echo "Browser spec files represented before delegation: $listed_specs"
-          if [[ "$listed_specs" -ne "$expected_specs" ]]; then
-            echo "Playwright's test list does not cover every browser spec file."
-            exit 1
-          fi
-
-          # Physical Alt+B, both native prerender activation cases, and the
-          # performance benchmark are delegated to their dedicated X11/benchmark workflows.
-          alt_count=$(grep -F -c "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" || true)
-          prerender_self_count=$(grep -F -c "› native Chromium _self prerender activation initializes the activated document without tab replacement" "$test_list" || true)
-          prerender_blank_count=$(grep -F -c "› native Chromium _blank prerender activation initializes the activated document without tab replacement" "$test_list" || true)
-          performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
-          performance_batch_count=$(grep -F -c "› Interleaved baseline/candidate performance batch preserves isolated samples" "$test_list" || true)
-          if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 || "$performance_batch_count" -ne 1 ]]; then
-            echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, original performance, and batched performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count/$performance_batch_count."
-            exit 1
-          fi
-          discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
-          awk '
-            index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
-            index($0, "› native Chromium _self prerender activation initializes the activated document without tab replacement") == 0 &&
-            index($0, "› native Chromium _blank prerender activation initializes the activated document without tab replacement") == 0 &&
-            index($0, "› Show on BLB performance benchmark") == 0 &&
-            index($0, "› Interleaved baseline/candidate performance batch preserves isolated samples") == 0
-          ' "$test_list" > "$test_list.filtered"
-          mv "$test_list.filtered" "$test_list"
-          discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
-          delegated=$((discovered_before_delegation - discovered_after_delegation))
-          if [[ "$delegated" -ne 5 ]]; then
-            echo "::error::Expected to delegate exactly 5 tests to dedicated workflows, found $delegated."
-            exit 1
-          fi
-          total=$discovered_after_delegation
-          echo "Delegated tests: $delegated (Alt+B + two prerender cases + original and batched performance benchmark cases)."
-          echo "Browser test cases discovered after delegation: $total"
-          if [[ "$total" -eq 0 ]]; then
-            echo "No headless browser tests remain after delegation."
-            exit 1
-          fi
-
-          # Compare the historical one-process-per-test serial mode with the new
-          # one-process/four-worker mode on the same lifecycle-sensitive cases.
-          # The complete browser matrix still runs afterward without exclusions.
-          compatibility_list="$RUNNER_TEMP/blb-playwright-concurrency-compatibility.txt"
-          : > "$compatibility_list"
-          compatibility_titles=(
-            "a real MV3 service-worker termination is recovered by the Alt+B command message"
-            "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
-            "repeated global master toggles disable and restore exactly one double-click listener"
-            "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
-          )
-          compatibility_status=0
-          for title in "${compatibility_titles[@]}"; do
-            matches=$(grep -F "› $title" "$test_list" || true)
-            match_count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')
-            if [[ "$match_count" -ne 1 ]]; then
-              echo "::error::Expected one concurrency compatibility test for '$title', found $match_count."
-              compatibility_status=1
-              continue
+        with:
+          section: browser-matrix
+          always_run: 'true'
+          cache_prefix: blb-ci-v1-full-audit-browser-matrix-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
+            export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"
+            export NO_COLOR=1 FORCE_COLOR=0
+            mkdir -p "$(dirname "$BLB_PERF_OUTPUT")"
+            touch "$BLB_PERF_OUTPUT"
+            list_output="$RUNNER_TEMP/blb-playwright-list.txt"
+            test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
+            if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
+              cat "$list_output"
+              exit 1
             fi
-            printf '%s\n' "$matches" >> "$compatibility_list"
-          done
-
-          compatibility_count=$(wc -l < "$compatibility_list" | tr -d ' ')
-          if [[ "$compatibility_count" -ne 4 ]]; then
-            echo "::error::Expected exactly four concurrency compatibility tests, found $compatibility_count."
-            compatibility_status=1
-          else
-            echo "Comparing legacy isolated and four-worker scheduling for $compatibility_count lifecycle-sensitive tests."
-            legacy_status=0
-            serial_index=0
-            current_test="$RUNNER_TEMP/blb-concurrency-current-test.txt"
-            current_log="$RUNNER_TEMP/blb-concurrency-legacy.log"
-            while IFS= read -r test_id; do
-              serial_index=$((serial_index + 1))
-              echo "Legacy serial process [$serial_index/4]: $test_id"
-              printf '%s\n' "$test_id" > "$current_test"
-              command_status=0
-              npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
-              cat "$current_log"
-              summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
-              if [[ "$command_status" -ne 0 || "$summary" != *"1/1 completed"* || "$summary" != *"1 passed, 0 failed, 0 skipped"* ]]; then
-                echo "::error::Legacy isolated execution failed or did not complete exactly one test: $test_id"
-                legacy_status=1
-                break
+            cat "$list_output"
+            # --test-list expects the complete entry emitted by --list, including
+            # project, spec location, suite path, and test title. A bare file:line:column
+            # is not a test-list entry and silently selects zero tests.
+            sed -nE 's/^[[:space:]]*(\[[^]]+\] › [^[:space:]]+\.spec\.js:[0-9]+:[0-9]+ › .*)$/\1/p' "$list_output" > "$test_list"
+            expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
+            listed_specs=$(sed -nE 's/^[[:space:]]*\[[^]]+\] › ([^[:space:]]+\.spec\.js):[0-9]+:[0-9]+ › .*/\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
+            echo "Browser spec files expected before delegation: $expected_specs"
+            echo "Browser spec files represented before delegation: $listed_specs"
+            if [[ "$listed_specs" -ne "$expected_specs" ]]; then
+              echo "Playwright's test list does not cover every browser spec file."
+              exit 1
+            fi
+            
+            # Physical Alt+B, both native prerender activation cases, and the
+            # performance benchmark are delegated to their dedicated X11/benchmark workflows.
+            alt_count=$(grep -F -c "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut" "$test_list" || true)
+            prerender_self_count=$(grep -F -c "› native Chromium _self prerender activation initializes the activated document without tab replacement" "$test_list" || true)
+            prerender_blank_count=$(grep -F -c "› native Chromium _blank prerender activation initializes the activated document without tab replacement" "$test_list" || true)
+            performance_count=$(grep -F -c "› Show on BLB performance benchmark" "$test_list" || true)
+            performance_batch_count=$(grep -F -c "› Interleaved baseline/candidate performance batch preserves isolated samples" "$test_list" || true)
+            if [[ "$alt_count" -ne 1 || "$prerender_self_count" -ne 1 || "$prerender_blank_count" -ne 1 || "$performance_count" -ne 1 || "$performance_batch_count" -ne 1 ]]; then
+              echo "::error::Expected one each of Alt+B, _self prerender, _blank prerender, original performance, and batched performance; found $alt_count/$prerender_self_count/$prerender_blank_count/$performance_count/$performance_batch_count."
+              exit 1
+            fi
+            discovered_before_delegation=$(wc -l < "$test_list" | tr -d ' ')
+            awk '
+              index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
+              index($0, "› native Chromium _self prerender activation initializes the activated document without tab replacement") == 0 &&
+              index($0, "› native Chromium _blank prerender activation initializes the activated document without tab replacement") == 0 &&
+              index($0, "› Show on BLB performance benchmark") == 0 &&
+              index($0, "› Interleaved baseline/candidate performance batch preserves isolated samples") == 0
+            ' "$test_list" > "$test_list.filtered"
+            mv "$test_list.filtered" "$test_list"
+            discovered_after_delegation=$(wc -l < "$test_list" | tr -d ' ')
+            delegated=$((discovered_before_delegation - discovered_after_delegation))
+            if [[ "$delegated" -ne 5 ]]; then
+              echo "::error::Expected to delegate exactly 5 tests to dedicated workflows, found $delegated."
+              exit 1
+            fi
+            total=$discovered_after_delegation
+            echo "Delegated tests: $delegated (Alt+B + two prerender cases + original and batched performance benchmark cases)."
+            echo "Browser test cases discovered after delegation: $total"
+            if [[ "$total" -eq 0 ]]; then
+              echo "No headless browser tests remain after delegation."
+              exit 1
+            fi
+            
+            # Compare the historical one-process-per-test serial mode with the new
+            # one-process/four-worker mode on the same lifecycle-sensitive cases.
+            # The complete browser matrix still runs afterward without exclusions.
+            compatibility_list="$RUNNER_TEMP/blb-playwright-concurrency-compatibility.txt"
+            : > "$compatibility_list"
+            compatibility_titles=(
+              "a real MV3 service-worker termination is recovered by the Alt+B command message"
+              "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+              "repeated global master toggles disable and restore exactly one double-click listener"
+              "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+            )
+            compatibility_status=0
+            for title in "${compatibility_titles[@]}"; do
+              matches=$(grep -F "› $title" "$test_list" || true)
+              match_count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ')
+              if [[ "$match_count" -ne 1 ]]; then
+                echo "::error::Expected one concurrency compatibility test for '$title', found $match_count."
+                compatibility_status=1
+                continue
               fi
-            done < "$compatibility_list"
-
-            parallel_status=0
-            parallel_log="$RUNNER_TEMP/blb-concurrency-parallel.log"
-            for parallel_round in 1 2 3; do
-              echo "Four-worker compatibility repetition [$parallel_round/3]."
-              round_status=0
-              npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=0 > "$parallel_log" 2>&1 || round_status=$?
-              cat "$parallel_log"
-              parallel_summary=$(grep 'Test summary:' "$parallel_log" | tail -n 1 || true)
-              if [[ "$round_status" -ne 0 || "$parallel_summary" != *"4/4 completed"* || "$parallel_summary" != *"4 passed, 0 failed, 0 skipped"* ]]; then
-                echo "::error::Four-worker compatibility repetition [$parallel_round/3] did not complete all four tests successfully."
-                parallel_status=1
-              fi
+              printf '%s\n' "$matches" >> "$compatibility_list"
             done
-            if [[ "$legacy_status" -ne 0 || "$parallel_status" -ne 0 ]]; then
+            
+            compatibility_count=$(wc -l < "$compatibility_list" | tr -d ' ')
+            if [[ "$compatibility_count" -ne 4 ]]; then
+              echo "::error::Expected exactly four concurrency compatibility tests, found $compatibility_count."
               compatibility_status=1
             else
-              echo "Concurrency compatibility passed: 4/4 in legacy serial mode and 12/12 across three four-worker repetitions."
+              echo "Comparing legacy isolated and four-worker scheduling for $compatibility_count lifecycle-sensitive tests."
+              legacy_status=0
+              serial_index=0
+              current_test="$RUNNER_TEMP/blb-concurrency-current-test.txt"
+              current_log="$RUNNER_TEMP/blb-concurrency-legacy.log"
+              while IFS= read -r test_id; do
+                serial_index=$((serial_index + 1))
+                echo "Legacy serial process [$serial_index/4]: $test_id"
+                printf '%s\n' "$test_id" > "$current_test"
+                command_status=0
+                npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
+                cat "$current_log"
+                summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
+                if [[ "$command_status" -ne 0 || "$summary" != *"1/1 completed"* || "$summary" != *"1 passed, 0 failed, 0 skipped"* ]]; then
+                  echo "::error::Legacy isolated execution failed or did not complete exactly one test: $test_id"
+                  legacy_status=1
+                  break
+                fi
+              done < "$compatibility_list"
+            
+              parallel_status=0
+              parallel_log="$RUNNER_TEMP/blb-concurrency-parallel.log"
+              for parallel_round in 1 2 3; do
+                echo "Four-worker compatibility repetition [$parallel_round/3]."
+                round_status=0
+                npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=1 > "$parallel_log" 2>&1 || round_status=$?
+                cat "$parallel_log"
+                parallel_summary=$(grep 'Test summary:' "$parallel_log" | tail -n 1 || true)
+                if [[ "$round_status" -ne 0 || "$parallel_summary" != *"4/4 completed"* || "$parallel_summary" != *"4 passed, 0 failed, 0 skipped"* ]]; then
+                  echo "::error::Four-worker compatibility repetition [$parallel_round/3] did not complete all four tests successfully."
+                  parallel_status=1
+                fi
+              done
+              if [[ "$legacy_status" -ne 0 || "$parallel_status" -ne 0 ]]; then
+                compatibility_status=1
+              else
+                echo "Concurrency compatibility passed: 4/4 in legacy serial mode and 12/12 across three four-worker repetitions."
+              fi
             fi
-          fi
-
-          # The prior known failures were rerun independently in the serial step above.
-          # The focused-regressions workflow is suppressed when the full-audit label
-          # is present, so this invocation owns every remaining browser test.
-          # This avoids one Node/Playwright startup per browser test while keeping every
-          # test case eligible to run even when another case fails.
-          echo "Running all $total browser test cases with four isolated workers."
-          browser_status=0
-          npx playwright test --test-list "$test_list" --workers=4 --max-failures=0 || browser_status=$?
-          if [[ "$compatibility_status" -ne 0 ]]; then
-            echo "Legacy-versus-parallel concurrency compatibility check failed."
-            browser_status=1
-          fi
-          if [[ "$browser_status" -ne 0 ]]; then
-            echo "Browser audit completed with one or more failures; all scheduled tests were allowed to finish."
-            exit "$browser_status"
-          fi
+            
+            # The prior known failures were rerun independently in the serial step above.
+            # The focused-regressions workflow is suppressed when the full-audit label
+            # is present, so this invocation owns every remaining browser test.
+            # This avoids one Node/Playwright startup per browser test while keeping every
+            # test case eligible to run even when another case fails.
+            if [[ "$compatibility_status" -ne 0 ]]; then
+              echo "Legacy-versus-parallel concurrency compatibility check failed."
+              exit 1
+            fi
+            echo "Running all $total browser test cases in eight resumable shards, each with four workers."
+            node scripts/run-checkpointed-playwright-audit.mjs "$test_list"
+      - name: Upload reusable browser-audit checkpoint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-full-audit-checkpoints-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Upload corpus A/B measurements
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: blb-corpus-ab-full-audit
-          path: ${{ runner.temp }}/blb-performance.jsonl
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           if-no-files-found: warn
           retention-days: 14
 

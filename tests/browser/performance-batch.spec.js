@@ -4,7 +4,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const scenarios = ['paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse'];
+const allScenarios = ['paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse'];
+const requestedScenarios = (process.env.BLB_PERF_SCENARIOS || '').trim();
+const scenarios = requestedScenarios ? requestedScenarios.split(/\\s+/) : allScenarios;
+if (!scenarios.length || scenarios.some(scenario => !allScenarios.includes(scenario)) ||
+    new Set(scenarios).size !== scenarios.length) {
+  throw new Error('BLB_PERF_SCENARIOS must contain unique supported scenario names');
+}
 const samples = Number(process.env.BLB_PERF_SAMPLES || 11);
 const baselineSource = path.resolve(process.env.BLB_BASELINE_EXTENSION_PATH || '');
 const candidateSource = path.resolve(process.env.BLB_CANDIDATE_EXTENSION_PATH || '');
@@ -283,9 +289,34 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
   try {
     prepareExtension(baselineSource, baselineExtension);
     prepareExtension(candidateSource, candidateExtension);
-    fs.writeFileSync(baselineOutput, '');
-    fs.writeFileSync(candidateOutput, '');
-
+    fs.mkdirSync(path.dirname(baselineOutput), { recursive: true });
+    fs.mkdirSync(path.dirname(candidateOutput), { recursive: true });
+    for (const output of [baselineOutput, candidateOutput]) {
+      if (!fs.existsSync(output)) fs.writeFileSync(output, '');
+    }
+    const readCompleted = (output, variant) => {
+      const completed = new Map();
+      const raw = fs.readFileSync(output, 'utf8');
+      for (const [lineIndex, line] of raw.split(/\r?\n/).entries()) {
+        if (!line.trim()) continue;
+        let record;
+        try { record = JSON.parse(line); }
+        catch { throw new Error('Malformed ' + variant + ' performance checkpoint at line ' + (lineIndex + 1)); }
+        if (!scenarios.includes(record.scenario) || !Number.isInteger(record.sample) ||
+            record.sample < 1 || record.sample > samples || record.variant !== variant ||
+            !Number.isFinite(record.handoffMs) || record.handoffMs <= 0) {
+          throw new Error('Invalid ' + variant + ' performance checkpoint record at line ' + (lineIndex + 1));
+        }
+        const key = record.scenario + '|' + record.sample;
+        if (completed.has(key)) throw new Error('Duplicate ' + variant + ' performance checkpoint: ' + key);
+        completed.set(key, record);
+      }
+      return completed;
+    };
+    const completed = {
+      baseline: readCompleted(baselineOutput, 'baseline'),
+      candidate: readCompleted(candidateOutput, 'candidate')
+    };
     const total = scenarios.length * samples * 2;
     let progress = 0;
     for (const scenario of scenarios) {
@@ -295,6 +326,11 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
           progress++;
           const extensionPath = variant === 'baseline' ? baselineExtension : candidateExtension;
           const outputPath = variant === 'baseline' ? baselineOutput : candidateOutput;
+          const key = scenario + '|' + sample;
+          if (completed[variant].has(key)) {
+            console.log('BLB_PERF_BATCH_REUSE ' + JSON.stringify({ progress, total, scenario, variant, sample, samples }));
+            continue;
+          }
           console.log('BLB_PERF_BATCH_SAMPLE ' + JSON.stringify({
             progress, total, scenario, variant, sample, samples
           }));
@@ -309,6 +345,7 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
               '--no-default-browser-check'
             ]
           });
+          let result;
           try {
             let [worker] = context.serviceWorkers();
             if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 15000 });
@@ -326,18 +363,26 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
             }));
             const extensionId = worker.url().split('/')[2];
             const page = context.pages()[0] || await context.newPage();
-            const result = await runScenario(expect, scenario, page, context, worker, extensionId);
-            fs.appendFileSync(outputPath, JSON.stringify({ scenario, handoffMs: result.handoffMs,
-              ...(result.firstTabMs == null ? {} : { firstTabMs: result.firstTabMs }),
-              ...(result.secondTabMs == null ? {} : { secondTabMs: result.secondTabMs }) }) + '\n');
-            console.log('BLB performance sample: ' + scenario + ' ' + result.handoffMs + ' ms');
+            result = await runScenario(expect, scenario, page, context, worker, extensionId);
           } finally {
             await context.close();
           }
+          const record = { scenario, sample, variant, handoffMs: result.handoffMs,
+            ...(result.firstTabMs == null ? {} : { firstTabMs: result.firstTabMs }),
+            ...(result.secondTabMs == null ? {} : { secondTabMs: result.secondTabMs }) };
+          fs.appendFileSync(outputPath, JSON.stringify(record) + '\n');
+          completed[variant].set(key, record);
+          console.log('BLB performance sample: ' + scenario + ' ' + result.handoffMs + ' ms');
         }
       }
     }
-    console.log('Completed ' + progress + '/' + total + ' isolated browser samples.');
+    for (const scenario of scenarios) {
+      for (const variant of ['baseline', 'candidate']) {
+        const count = [...completed[variant].keys()].filter(key => key.startsWith(scenario + '|')).length;
+        if (count !== samples) throw new Error('Incomplete ' + variant + ' samples for ' + scenario + ': ' + count + '/' + samples);
+      }
+    }
+    console.log('Completed or reused ' + progress + '/' + total + ' isolated browser samples.');
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }

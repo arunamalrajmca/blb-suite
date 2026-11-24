@@ -83,11 +83,93 @@ function walk(directory) {
 walk(root);
 for (const candidate of candidates.sort()) if (!classified.has(candidate) && !manualOnly.has(candidate)) fail('Unclassified test-looking file: ' + candidate);
 for (const item of manifest.manualOnly) if (!fs.existsSync(path.join(root,item.path))) fail('Declared manual-only harness is missing: ' + item.path);
+const productionCoverage = manifest.productionCoverage || [];
+const productionAreaIds = new Set();
+for (const area of productionCoverage) {
+  if (!area.id || productionAreaIds.has(area.id)) fail('Production coverage area has a missing or duplicate id: ' + area.id);
+  productionAreaIds.add(area.id);
+  if (!Array.isArray(area.productionFiles) || !area.productionFiles.length) fail('Production coverage area has no source modules: ' + area.id);
+  if (!Array.isArray(area.testFiles) || !area.testFiles.length) fail('Production coverage area has no regression evidence: ' + area.id);
+  for (const sourceFile of area.productionFiles || []) {
+    if (!fs.existsSync(path.join(root, sourceFile))) fail('Production coverage source module is missing: ' + area.id + ' -> ' + sourceFile);
+  }
+  for (const evidence of area.testFiles || []) {
+    const testFile = evidence.path;
+    if (!testFile || !classified.has(testFile)) fail('Production coverage evidence is not owned by an automated suite: ' + area.id + ' -> ' + testFile);
+    const testContent = readRepoFile(testFile);
+    for (const requiredText of evidence.requiredText || []) {
+      if (!testContent.includes(requiredText)) fail('Production coverage evidence no longer matches its regression test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
+    }
+  }
+}
+const productionModuleCoverage = manifest.productionModuleCoverage || [];
+const extensionManifest = JSON.parse(readRepoFile('extension/manifest.json'));
+const manifestModules = new Set([
+  ...(extensionManifest.background?.service_worker ? ['extension/' + extensionManifest.background.service_worker] : []),
+  ...(extensionManifest.content_scripts || []).flatMap(group => (group.js || []).map(file => 'extension/' + file))
+]);
+const extensionDirectory = path.join(root, 'extension');
+const runtimeModules = new Set(fs.readdirSync(extensionDirectory, { withFileTypes:true })
+  .filter(entry => entry.isFile() && entry.name.endsWith('.js'))
+  .map(entry => 'extension/' + entry.name));
+const backgroundSource = readRepoFile('extension/background.js');
+const startupImportMatch = backgroundSource.match(/const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*(\[[\s\S]*?\]);/);
+if (!startupImportMatch) fail('Background startup import inventory could not be read.');
+const workerStartupImports = startupImportMatch ? JSON.parse(startupImportMatch[1]).map(file => 'extension/' + file) : [];
+const mappedModules = new Map();
+for (const module of productionModuleCoverage) {
+  if (!module.path || mappedModules.has(module.path)) fail('Production module coverage has a missing or duplicate path: ' + module.path);
+  mappedModules.set(module.path, module);
+  if (!runtimeModules.has(module.path)) fail('Production module coverage entry is not an extension JavaScript module: ' + module.path);
+  if (!fs.existsSync(path.join(root, module.path))) fail('Production module is missing: ' + module.path);
+  if (!['direct-integration','partial-integration','indirect-integration','unmapped'].includes(module.coverageLevel)) {
+    fail('Production module has an invalid coverage level: ' + module.path);
+  }
+  if (module.coverageLevel !== 'direct-integration' && (!module.gap || !module.gap.trim())) {
+    fail('Production module gap must be explicit: ' + module.path);
+  }
+  if (module.coverageLevel === 'direct-integration' && (!Array.isArray(module.testFiles) || !module.testFiles.length)) {
+    fail('Directly mapped production module has no test evidence: ' + module.path);
+  }
+  for (const evidence of module.testFiles || []) {
+    if (!evidence.path || !classified.has(evidence.path)) {
+      fail('Production module evidence is not owned by an automated test suite: ' + module.path + ' -> ' + evidence.path);
+      continue;
+    }
+    const testContent = readRepoFile(evidence.path);
+    for (const requiredText of evidence.requiredText || []) {
+      if (!testContent.includes(requiredText)) fail('Production module evidence no longer matches its regression assertion: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
+    }
+    if (module.coverageLevel === 'direct-integration' && !(evidence.requiredText || []).length) {
+      fail('Direct integration evidence must identify its exact regression assertion: ' + module.path + ' -> ' + evidence.path);
+    }
+  }
+}
+for (const modulePath of manifestModules) {
+  if (!mappedModules.has(modulePath)) fail('Manifest-loaded production module has no coverage disposition: ' + modulePath);
+}
+for (const modulePath of workerStartupImports) {
+  if (!runtimeModules.has(modulePath)) fail('Background startup import is missing from the extension bundle: ' + modulePath);
+  if (!mappedModules.has(modulePath)) fail('Background startup import has no production coverage disposition: ' + modulePath);
+}
+for (const modulePath of runtimeModules) {
+  if (!mappedModules.has(modulePath)) fail('Extension JavaScript module has no coverage disposition: ' + modulePath);
+}
+for (const modulePath of mappedModules.keys()) {
+  if (!runtimeModules.has(modulePath)) fail('Coverage registry contains a module outside the extension JavaScript inventory: ' + modulePath);
+}
+const directModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'direct-integration').length;
+const partialModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'partial-integration').length;
+const indirectModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'indirect-integration').length;
+const unmappedModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'unmapped').length;
 const total = counts.reduce((sum,item)=>sum+item.count,0);
 console.log('Repository test inventory');
 for (const suite of counts) console.log('  '+suite.id+': '+suite.count+' file(s)');
 console.log('  Automated inventory total: '+total+' file(s)');
 console.log('  Explicit manual-only harnesses: '+manifest.manualOnly.length);
 console.log('  Test-looking files discovered: '+candidates.length);
+console.log('  Manifest-loaded production modules: '+manifestModules.size);
+console.log('  All extension JavaScript modules: '+runtimeModules.size+' ('+directModuleCount+' direct integration, '+partialModuleCount+' partial integration, '+indirectModuleCount+' indirect integration, '+unmappedModuleCount+' unmapped)');
+console.log('  Background startup imports verified: '+workerStartupImports.length);
 if (errors.length) { for (const error of errors) console.error('FAIL: '+error); process.exitCode=1; }
 else console.log('PASS: every discovered test file has an explicit execution owner.');

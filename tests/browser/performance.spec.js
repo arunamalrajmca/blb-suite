@@ -147,7 +147,7 @@ async function sendSelectionMessageFromActivePage(extensionWorker, page, message
 async function writeSample(scenario, handoffMs, extra = {}) {
   const output = process.env.BLB_PERF_OUTPUT;
   if (!output) throw new Error('BLB_PERF_OUTPUT is required');
-  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs, ...extra }) + '\n');
+  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs, ...(process.env.BLB_PERF_SAMPLE ? { sample:Number(process.env.BLB_PERF_SAMPLE) } : {}), ...(process.env.BLB_PERF_VARIANT ? { variant:process.env.BLB_PERF_VARIANT } : {}), ...extra }) + '\n');
   const detail = extra.firstTabMs != null || extra.secondTabMs != null
     ? ` firstTab=${extra.firstTabMs}ms secondTab=${extra.secondTabMs}ms`
     : '';

@@ -1,8 +1,24 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 
-function readSamples(path) {
-  return fs.readFileSync(path, 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+function readSamples(path, expectedVariant) {
+  const records = fs.readFileSync(path, 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  if (records.some(record => Number.isInteger(record.sample) || record.variant != null)) {
+    const seen = new Set();
+    for (const record of records) {
+      if (!Number.isInteger(record.sample) || record.sample < 1 || record.sample > 11 ||
+          record.variant !== expectedVariant) {
+        throw new Error('Invalid resumable performance sample identity in ' + path);
+      }
+      const key = record.scenario + '|' + record.sample;
+      if (seen.has(key)) throw new Error('Duplicate resumable performance sample: ' + key);
+      seen.add(key);
+    }
+    records.sort((left, right) =>
+      String(left.scenario).localeCompare(String(right.scenario)) || left.sample - right.sample
+    );
+  }
+  return records;
 }
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -10,22 +26,30 @@ function median(values) {
 }
 const target = process.env.BLB_PERF_TARGET || '';
 const isRangeTarget = target === 'kjv-range-resolver';
+const freshOnly = process.env.BLB_PERF_FRESH_ONLY === '1';
 
 function summarize(samples) {
   const byScenario = {};
-  const requiredScenarios = isRangeTarget
-    ? ['range-resolver', 'selection', 'fresh', 'reuse']
-    : ['selection', 'fresh', 'reuse', 'paragraph-two-tab', 'paragraph-classify'];
+  const requiredScenarios = freshOnly
+    ? ['fresh']
+    : isRangeTarget
+      ? ['range-resolver', 'selection', 'fresh', 'reuse']
+      : ['selection', 'fresh', 'reuse', 'paragraph-two-tab', 'paragraph-classify'];
   for (const scenario of requiredScenarios) {
-    const values = samples.filter(s => s.scenario === scenario).map(s => s.handoffMs);
-    if (!values.length) throw new Error(`Missing ${scenario} samples`);
+    const scenarioRecords = samples.filter(s => s.scenario === scenario);
+    const values = scenarioRecords.map(s => s.handoffMs);
+    if (values.length !== 11) throw new Error(`Expected exactly 11 ${scenario} samples, found ${values.length}`);
+    if (scenarioRecords.every(record => Number.isInteger(record.sample)) &&
+        new Set(scenarioRecords.map(record => record.sample)).size !== 11) {
+      throw new Error(`Duplicate or missing ${scenario} sample identities`);
+    }
     byScenario[scenario] = { median: median(values), count: values.length };
   }
   return byScenario;
 }
 
-const baselineSamples = readSamples(process.argv[2]);
-const candidateSamples = readSamples(process.argv[3]);
+const baselineSamples = readSamples(process.argv[2], 'baseline');
+const candidateSamples = readSamples(process.argv[3], 'candidate');
 const baseline = summarize(baselineSamples);
 const candidate = summarize(candidateSamples);
 
@@ -63,14 +87,32 @@ const minRangeResolverImprovement = Number(process.env.BLB_PERF_MIN_RANGE_RESOLV
 console.log(`Performance target: ${isRangeTarget ? 'KJV contiguous verse-range resolver' : 'general extension envelope'}`);
 console.log('| Scenario | main baseline | candidate | Improvement |');
 console.log('|---|---:|---:|---:|');
-const displayScenarios = isRangeTarget
-  ? [['KJV range resolver', 'range-resolver'], ['Selection → BLB handoff', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse']]
-  : [['Selection → BLB handoff', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse'], ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab'], ['Paragraph classification only', 'paragraph-classify']];
+const displayScenarios = freshOnly
+  ? [['Fresh-tab handoff', 'fresh']]
+  : isRangeTarget
+    ? [['KJV range resolver', 'range-resolver'], ['Selection → BLB handoff', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse']]
+    : [['Selection → BLB handoff', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse'], ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab'], ['Paragraph classification only', 'paragraph-classify']];
 for (const [name, key] of displayScenarios) {
   const before = baseline[key].median;
   const after = candidate[key].median;
   const improvement = before > 0 ? (before - after) / before : 0;
   console.log(`| ${name} | ${before} ms | ${after} ms | ${(improvement * 100).toFixed(1)}% |`);
+}
+
+if (freshOnly) {
+  const baselineMedian = baseline.fresh.median;
+  const candidateMedian = candidate.fresh.median;
+  const improvement = baselineMedian > 0 ? (baselineMedian - candidateMedian) / baselineMedian : 0;
+  console.log('Independent fresh-tab qualification (11 baseline + 11 candidate samples)');
+  console.log('Maximum permitted fresh-tab regression: ' + (maxFreshRegression * 100).toFixed(1) + '%');
+  console.log('Fresh-tab median comparison: ' + baselineMedian + ' ms baseline; ' +
+    candidateMedian + ' ms candidate; ' + (improvement * 100).toFixed(1) + '% improvement');
+  if (improvement < -maxFreshRegression) {
+    console.error('PERFORMANCE GATE FAILED: independent fresh-tab measurements exceed the 10% regression limit.');
+    process.exit(1);
+  }
+  console.log('PERFORMANCE GATE PASSED: independent fresh-tab measurements remain within the 10% regression limit.');
+  process.exit(0);
 }
 
 const selectionImprovement = pairedMedianImprovement('selection');

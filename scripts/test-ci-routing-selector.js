@@ -87,7 +87,7 @@ function auditRepositoryTestInventory() {
   const auditCoverage = [
     ['all browser test cases are collected with Playwright list output', /npx playwright test --list --reporter=list/],
     ['full audit starts only on an explicit label event after prerequisite qualification', /types: \[labeled\]/],
-    ['all remaining browser test cases run in one Playwright invocation with four workers and complete failure collection', /npx playwright test --test-list .*--workers=4 --max-failures=0/],
+    ['all remaining browser test cases run through the resumable browser shard runner', /node scripts\/run-checkpointed-playwright-audit\.mjs "\$test_list"/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
     ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
     ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],
@@ -103,7 +103,23 @@ function auditRepositoryTestInventory() {
   }
   assert.doesNotMatch(workflow, /types: \[labeled, synchronize\]/,
     'full-test audit must not restart automatically on every commit before prerequisites are requalified');
-  assert.match(workflow, /--max-failures=0/, 'full-test audit must collect all scheduled browser failures in one run');
+  const browserAuditRunner = fs.readFileSync(path.join(root, 'scripts/run-checkpointed-playwright-audit.mjs'), 'utf8');
+  assert.match(browserAuditRunner, /shardCount = 8/, 'full-test audit must use eight resumable shards');
+  assert.match(browserAuditRunner, /workers = 4/, 'each full-audit shard must retain four workers');
+  assert.match(browserAuditRunner, /--max-failures=1/, 'each full-audit shard must fail fast after one failure');
+  assert.match(workflow, /export BLB_PERF_OUTPUT="\$BLB_CI_CHECKPOINT_DIR\/blb-performance\.jsonl"/);
+  assert.match(workflow, /touch "\$BLB_PERF_OUTPUT"/);
+  assert.doesNotMatch(workflow, /: > "\$BLB_PERF_OUTPUT"/,
+    'full-audit corpus A/B samples must not be truncated on retry');
+  for (const file of [
+    '.github/workflows/browser-e2e-reference.yml',
+    '.github/workflows/browser-e2e-groups.yml',
+    '.github/workflows/browser-e2e-focused-regressions.yml'
+  ]) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.match(source, /uses: \.\/\.github\/actions\/ci-section-checkpoint/,
+      file + ' must checkpoint independent browser-test sections');
+  }
 
   const testFiles = [
     ...browserSpecs,

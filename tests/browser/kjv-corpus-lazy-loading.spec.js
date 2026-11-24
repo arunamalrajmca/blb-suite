@@ -617,31 +617,72 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     }
   };
 
-  const samples = [];
   const performanceOutputPath = process.env.BLB_PERF_OUTPUT || path.join(repoRoot, 'blb-corpus-ab-results.jsonl');
-  fs.writeFileSync(performanceOutputPath, '');
+  fs.mkdirSync(path.dirname(performanceOutputPath), { recursive: true });
+  const samples = [];
+  const seenSamples = new Set();
+  let staleBaselineCheckpoint = false;
+  if (fs.existsSync(performanceOutputPath)) {
+    const lines = fs.readFileSync(performanceOutputPath, 'utf8').split(/\r?\n/).filter(Boolean);
+    for (const [lineIndex, line] of lines.entries()) {
+      let record;
+      try { record = JSON.parse(line); }
+      catch { throw new Error('Malformed corpus A/B checkpoint at line ' + (lineIndex + 1)); }
+      // The final summary record is regenerated after all 30 paired observations.
+      if (!record.sample) continue;
+      if (record.scenario !== 'kjv-short-whitelist-first-use-ab' ||
+          !['baseline', 'candidate'].includes(record.sample.variant) ||
+          !Number.isInteger(record.sample.repetition) || record.sample.repetition < 1 ||
+          record.sample.repetition > 15) {
+        throw new Error('Corpus A/B checkpoint has an invalid sample identity.');
+      }
+      if (record.baselineSha !== baselineSha) {
+        staleBaselineCheckpoint = true;
+        continue;
+      }
+      const key = record.sample.variant + '|' + record.sample.repetition;
+      if (seenSamples.has(key)) throw new Error('Duplicate corpus A/B checkpoint: ' + key);
+      seenSamples.add(key);
+      samples.push(record.sample);
+    }
+  }
+  if (staleBaselineCheckpoint) {
+    samples.length = 0;
+    seenSamples.clear();
+  }
+  // Strip any stale summary line while preserving every validated raw sample.
+  fs.writeFileSync(performanceOutputPath, samples.map(sample => JSON.stringify({
+    scenario:'kjv-short-whitelist-first-use-ab', baselineSha, sample
+  })).join('\n') + (samples.length ? '\n' : ''));
   try {
     for (let repetition = 1; repetition <= 15; repetition++) {
       const order = repetition % 2 === 1
         ? ['baseline', 'candidate']
         : ['candidate', 'baseline'];
       for (const variant of order) {
+        const key = variant + '|' + repetition;
+        if (seenSamples.has(key)) {
+          console.log('BLB_CORPUS_AB_REUSE ' + key);
+          continue;
+        }
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
-        // Persist every raw observation immediately so later failures do not
-        // leave the downloadable workflow artifact empty.
+        seenSamples.add(key);
+        // Save each completed baseline/candidate observation immediately.
         fs.appendFileSync(performanceOutputPath, JSON.stringify({
           scenario:'kjv-short-whitelist-first-use-ab',
           baselineSha,
           sample
-        }) + '\\n');
+        }) + '\n');
         console.log('BLB_CORPUS_AB_SAMPLE ' + JSON.stringify(sample));
       }
+    }
+    if (samples.length !== 30 || seenSamples.size !== 30) {
+      throw new Error('Corpus A/B checkpoint is incomplete: ' + samples.length + '/30 observations.');
     }
   } finally {
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
-
   const median = values => {
     const sorted = [...values].sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)];

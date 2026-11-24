@@ -8,6 +8,7 @@ on:
       - 'extension/**'
       - '.github/workflows/browser-e2e-reference.yml'
       - '.github/workflows/browser-e2e-groups.yml'
+      - '.github/actions/**'
       - '!extension/icons/**'
       - '!extension/store-assets/**'
       - '!extension/THIRD-PARTY-NOTICES.txt'
@@ -226,7 +227,7 @@ jobs:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension-reference-actions.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension-reference-actions.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
@@ -252,7 +253,13 @@ jobs:
       - name: Run both verse-context regressions in one Playwright invocation
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/extension-reference-actions.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: reference-verse-context
+          cache_prefix: blb-ci-v1-reference-reference-verse-context-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            npx playwright test tests/browser/extension-reference-actions.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
       - name: Upload generic verse-context diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
@@ -278,17 +285,20 @@ jobs:
         include: ${{ fromJSON(needs.change-detection.outputs.reference_matrix) }}
     steps:
       - name: Checkout
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - name: Setup Node
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Cache Playwright browsers
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         id: playwright-cache
         uses: actions/cache@v5
         with:
@@ -297,7 +307,8 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/cache@v5
         with:
           path: ~/.npm
@@ -305,63 +316,72 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        if: ${{ matrix.group != 'source-page-button-redirect-refresh' && (matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
+        # actionlint: disable=expression
+        if: ${{ matrix.group != 'source-page-button-redirect-refresh' && (matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); const hosts=['https://example.com/*','https://www.gotquestions.org/*','https://www.christianity.com/*','https://www.crosswalk.com/*','https://www.enduringword.com/*']; m.host_permissions=[...(m.host_permissions||[]),...hosts]; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),...hosts]; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run Browser E2E — ${{ matrix.group }}
-        if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
+        # actionlint: disable=expression
+        if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension-reference-actions.spec.js' }}"
-          MATRIX_GREP="${{ matrix.grep }}"
-          read -r -a specs <<< "$TEST_FILES"
-          total="${#specs[@]}"
-          if (( total == 0 )); then
-            echo "::error::Reference matrix group selected no spec files."
-            exit 1
-          fi
-          runnable_specs=()
-          for index in "${!specs[@]}"; do
-            spec="${specs[$index]}"
-            if [[ "$spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
-              echo "Delegated to the single-owner native X11 workflow: $spec"
-              continue
-            fi
-            if [[ ! -f "$spec" ]]; then
-              echo "::error::Selected Playwright spec does not exist: $spec"
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: reference-matrix-${{ matrix.group }}
+          cache_prefix: blb-ci-v1-reference-reference-matrix-${{ matrix.group }}-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            TEST_FILES="${{ matrix['files'] && join(matrix['files'], ' ') || matrix['file'] || 'tests/browser/extension-reference-actions.spec.js' }}"
+            MATRIX_GREP="${{ matrix.grep }}"
+            read -r -a specs <<< "$TEST_FILES"
+            total="${#specs[@]}"
+            if (( total == 0 )); then
+              echo "::error::Reference matrix group selected no spec files."
               exit 1
             fi
-            printf '[%s/%s] Validating %s\n' "$((index + 1))" "$total" "$spec"
-            node --check "$spec"
-            runnable_specs+=("$spec")
-          done
-          if (( ${#runnable_specs[@]} == 0 )); then
-            echo "::error::Reference matrix group has no runnable browser specs after native-test delegation."
-            exit 1
-          fi
-          discovery_log="$(mktemp)"
-          npx playwright test --config=playwright.config.js --list --reporter=list "${runnable_specs[@]}" 2>&1 | tee "$discovery_log"
-          if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
-            echo "::error::Playwright discovered no tests in the reference matrix group."
-            exit 1
-          fi
-          if [[ "$MATRIX_GREP" == ".*" ]]; then
-            npx playwright test --config=playwright.config.js "${runnable_specs[@]}"
-          else
-            npx playwright test --config=playwright.config.js "${runnable_specs[@]}" --grep "$MATRIX_GREP"
-          fi
+            runnable_specs=()
+            for index in "${!specs[@]}"; do
+              spec="${specs[$index]}"
+              if [[ "$spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
+                echo "Delegated to the single-owner native X11 workflow: $spec"
+                continue
+              fi
+              if [[ ! -f "$spec" ]]; then
+                echo "::error::Selected Playwright spec does not exist: $spec"
+                exit 1
+              fi
+              printf '[%s/%s] Validating %s\n' "$((index + 1))" "$total" "$spec"
+              node --check "$spec"
+              runnable_specs+=("$spec")
+            done
+            if (( ${#runnable_specs[@]} == 0 )); then
+              echo "::error::Reference matrix group has no runnable browser specs after native-test delegation."
+              exit 1
+            fi
+            discovery_log="$(mktemp)"
+            npx playwright test --config=playwright.config.js --list --reporter=list "${runnable_specs[@]}" 2>&1 | tee "$discovery_log"
+            if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
+              echo "::error::Playwright discovered no tests in the reference matrix group."
+              exit 1
+            fi
+            if [[ "$MATRIX_GREP" == ".*" ]]; then
+              npx playwright test --config=playwright.config.js "${runnable_specs[@]}"
+            else
+              npx playwright test --config=playwright.config.js "${runnable_specs[@]}" --grep "$MATRIX_GREP"
+            fi
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
@@ -425,11 +445,15 @@ jobs:
       - name: Run Browser E2E — FEATURES
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'Running feature coverage from %s\n' "${{ matrix.spec }}"
-          npx playwright test "${{ matrix.spec }}" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: reference-features-${{ strategy.job-index }}
+          cache_prefix: blb-ci-v1-reference-reference-features-${{ strategy.job-index }}-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            printf 'Running feature coverage from %s\n' "${{ matrix.spec }}"
+            npx playwright test "${{ matrix.spec }}" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
       - name: Upload Playwright diagnostics — FEATURES
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
@@ -641,36 +665,40 @@ jobs:
       - name: Run only changed focused behavior tests
         env:
           FOCUSED_SPECS: ${{ needs.change-detection.outputs.focused_specs }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          IFS=',' read -r -a selected_specs <<< "$FOCUSED_SPECS"
-          specs=()
-          for selected_spec in "${selected_specs[@]}"; do
-            if [[ "$selected_spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
-              echo "Delegated to the single-owner native X11 workflow: $selected_spec"
-            else
-              specs+=("$selected_spec")
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: reference-focused-behavior
+          cache_prefix: blb-ci-v1-reference-reference-focused-behavior-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            IFS=',' read -r -a selected_specs <<< "$FOCUSED_SPECS"
+            specs=()
+            for selected_spec in "${selected_specs[@]}"; do
+              if [[ "$selected_spec" == "tests/browser/native-prerender-activation.spec.js" ]]; then
+                echo "Delegated to the single-owner native X11 workflow: $selected_spec"
+              else
+                specs+=("$selected_spec")
+              fi
+            done
+            total="${#specs[@]}"
+            if (( total == 0 )); then
+              echo "::error::No focused behavior specs remain after native-test delegation."
+              exit 1
             fi
-          done
-          total="${#specs[@]}"
-          if (( total == 0 )); then
-            echo "::error::No focused behavior specs remain after native-test delegation."
-            exit 1
-          fi
-          for index in "${!specs[@]}"; do
-            spec="${specs[$index]}"
-            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Validating %s\n' "$((index + 1))" "$total" "$spec"
-            node --check "$spec"
-          done
-          discovery_log="$(mktemp)"
-          npx playwright test --config=playwright.config.js --list "${specs[@]}" 2>&1 | tee "$discovery_log"
-          if ! grep -Eq 'Running [1-9][0-9]* tests?' "$discovery_log"; then
-            echo "::error::Playwright discovered no tests in the selected focused behavior specs."
-            exit 1
-          fi
-          npx playwright test --config=playwright.config.js "${specs[@]}"
+            for index in "${!specs[@]}"; do
+              spec="${specs[$index]}"
+              [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+              printf '[%s/%s] Validating %s\n' "$((index + 1))" "$total" "$spec"
+              node --check "$spec"
+            done
+            discovery_log="$(mktemp)"
+            npx playwright test --config=playwright.config.js --list "${specs[@]}" 2>&1 | tee "$discovery_log"
+            if ! grep -Eq 'Running [1-9][0-9]* tests?' "$discovery_log"; then
+              echo "::error::Playwright discovered no tests in the selected focused behavior specs."
+              exit 1
+            fi
+            npx playwright test --config=playwright.config.js "${specs[@]}"
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6

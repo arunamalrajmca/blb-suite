@@ -16,6 +16,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/test-suite-inventory.json'
+      - 'scripts/ci-section-checkpoint.mjs'
+      - '.github/actions/ci-section-checkpoint/action.yml'
   push:
     branches: [ main ]
     paths:
@@ -33,7 +35,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: native-browser-shortcut-${{ github.event.pull_request.number || github.ref }}-${{ github.run_id }}
+  group: native-browser-shortcut-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -94,11 +96,17 @@ jobs:
       - name: Run all native browser regressions in one X11 session
         env:
           BLB_HEADFUL_EXTENSION_TESTS: '1'
-        run: >-
-          xvfb-run -a --server-args='-screen 0 1280x900x24'
-          npx playwright test
-          tests/browser/service-worker-shortcut-headed.spec.js
-          tests/browser/native-prerender-activation.spec.js
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: native-x11-regressions
+          cache_prefix: blb-ci-v1-native-x11-${{ github.sha }}-${{ hashFiles('extension/background.js', 'extension/manifest.json', 'tests/browser/fixtures.js', 'tests/browser/service-worker-shortcut-headed.spec.js', 'tests/browser/native-prerender-activation.spec.js', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-native-shortcut.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/background.js', 'extension/manifest.json', 'tests/browser/fixtures.js', 'tests/browser/service-worker-shortcut-headed.spec.js', 'tests/browser/native-prerender-activation.spec.js', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-native-shortcut.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            BLB_HEADFUL_EXTENSION_TESTS=1
+            xvfb-run -a --server-args='-screen 0 1280x900x24'
+            npx playwright test
+            tests/browser/service-worker-shortcut-headed.spec.js
+            tests/browser/native-prerender-activation.spec.js
       - name: Upload native shortcut diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
