@@ -529,7 +529,7 @@ test('traces deeply nested object-property values through a complete member path
     'const callback = () => start();',
     'const registry = { nested: { handlers: { onReady: callback } } };',
     'const handler = registry.nested.handlers.onReady;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@3'));
 });
@@ -540,7 +540,7 @@ test('traces nested descriptor values returned by Object.getOwnPropertyDescripto
     'const registry = { nested: { onReady: callback } };',
     'const descriptors = Object.getOwnPropertyDescriptors(registry);',
     'const handler = descriptors.nested.value.onReady;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
 });
@@ -553,7 +553,7 @@ test('traces callback values through Object.values and Object.entries collection
     'const valueHandler = values[0];',
     'const entries = Object.entries(registry);',
     'const entryHandler = entries[0][1];'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'valueHandler@4'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
