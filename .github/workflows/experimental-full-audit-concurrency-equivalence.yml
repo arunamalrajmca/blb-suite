@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   screen-complete-browser-inventory:
-    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_run_id == '') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'ci-full-audit-concurrency-equivalence' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_run_id == '' }}
     name: Fail-fast complete-inventory browser screening
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -79,7 +79,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   deep-serial-baseline:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Deep stage 1 — isolated serial baseline
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -109,7 +109,7 @@ jobs:
           REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          if node -e "const fs=require('fs'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); const i=JSON.parse(fs.readFileSync(p+'/inventory.json','utf8')); process.exit(s.complete===true && i.sourceCommit===process.env.SOURCE_SHA?0:1)" "$REPORT_DIR" 2>/dev/null; then
+          if node -e "const fs=require('fs'),crypto=require('crypto'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); const i=JSON.parse(fs.readFileSync(p+'/inventory.json','utf8')); const r=JSON.parse(fs.readFileSync(p+'/serial-results.json','utf8')); const e=JSON.parse(fs.readFileSync(p+'/serial-errors.json','utf8')); const list=i.scheduledTests; const digest=Array.isArray(list)?crypto.createHash('sha256').update(JSON.stringify(list)).digest('hex'):''; const seen=new Set(); const records=Array.isArray(r)&&Array.isArray(list)&&r.length===list.length&&r.every((x,n)=>{const t=x.tests?.[0]; if(x.inventoryEntry!==list[n]||x.exitCode!==0||x.parseError||x.tests?.length!==1||!t?.key||!t.status||seen.has(t.key)) return false; seen.add(t.key); return true;}); process.exit(s.complete===true&&i.sourceCommit===process.env.SOURCE_SHA&&Array.isArray(list)&&i.scheduled===list.length&&i.scheduledDigest===digest&&s.scheduledTestCount===list.length&&s.serialProcessCount===list.length&&records&&Array.isArray(e)&&e.length===0?0:1)" "$REPORT_DIR" 2>/dev/null; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
@@ -255,7 +255,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 2 — next 100 isolated tests
         id: serial_batch_2
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_2.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -274,7 +274,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 3 — next 100 isolated tests
         id: serial_batch_3
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_3.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -293,7 +293,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 4 — next 100 isolated tests
         id: serial_batch_4
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_4.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -312,7 +312,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 5 — next 100 isolated tests
         id: serial_batch_5
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_5.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -331,7 +331,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 6 — next 100 isolated tests
         id: serial_batch_6
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_6.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -350,7 +350,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 7 — next 100 isolated tests
         id: serial_batch_7
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_7.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -369,7 +369,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 8 — next 100 isolated tests
         id: serial_batch_8
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_8.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -388,7 +388,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 9 — next 100 isolated tests
         id: serial_batch_9
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_9.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -407,7 +407,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 10 — next 100 isolated tests
         id: serial_batch_10
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_10.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -426,7 +426,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 11 — next 100 isolated tests
         id: serial_batch_11
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_11.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -476,7 +476,7 @@ jobs:
 
   deep-parallel-repetition-1:
     needs: [deep-serial-baseline]
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Deep stage 2 — parallel repetition 1 of 3
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -532,7 +532,7 @@ jobs:
 
   deep-parallel-repetition-2:
     needs: [deep-parallel-repetition-1]
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Deep stage 3 — parallel repetition 2 of 3
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -588,7 +588,7 @@ jobs:
 
   deep-parallel-repetition-3:
     needs: [deep-parallel-repetition-2]
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Deep stage 4 — parallel repetition 3 of 3
     runs-on: ubuntu-latest
     timeout-minutes: 120
