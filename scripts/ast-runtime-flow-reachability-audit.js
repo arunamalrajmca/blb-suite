@@ -387,6 +387,7 @@ function analyzeFile(root, file) {
     return method.static ? 'class-static@' + name : 'class-instance@' + name;
   };
   const returnedValues = fn => {
+    if (fn && fn.body && fn.body.type !== 'BlockStatement') return [fn.body];
     const returned = [];
     const scan = (node, isRoot = false) => {
       if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
@@ -940,6 +941,43 @@ function analyzeFile(root, file) {
               }
               addContainedReferences(returned, assigned, 'function-return', node);
             }
+          }
+        }
+      }
+
+      if (node.type === 'CallExpression' && receiverName === 'Promise' &&
+          ['resolve', 'reject'].includes(name)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (assigned) {
+          for (const argument of node.arguments) {
+            addContainedReferences(argument, assigned, 'promise-settlement-value', node);
+          }
+        }
+      }
+      if (node.type === 'CallExpression' && receiverName === 'Promise' &&
+          ['all', 'allSettled', 'race', 'any'].includes(name)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (assigned && node.arguments[0]) {
+          addContainedReferences(node.arguments[0], assigned, 'promise-aggregate-value', node);
+        }
+      }
+      if (node.type === 'CallExpression' && ['then', 'catch'].includes(name) && receiverName &&
+          !['Object', 'Reflect', 'Promise'].includes(receiverName)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        const callbackArgument = node.arguments[0];
+        const callback = isFunction(callbackArgument) ? callbackArgument :
+          callbackArgument?.type === 'Identifier' ? resolveFunctionValue(callbackArgument) : null;
+        if (assigned && callback) {
+          const firstParameter = callback.params?.[0];
+          if (receiver?.type === 'Identifier' && firstParameter?.type === 'Identifier') {
+            addEdge(bindingId(receiver), bindingId(firstParameter),
+              'promise-chain-value-parameter', node, name);
+          }
+          for (const returned of returnedValues(callback)) {
+            addContainedReferences(returned, assigned, 'promise-chain-return', node);
           }
         }
       }
