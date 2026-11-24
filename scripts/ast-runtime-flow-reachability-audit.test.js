@@ -156,3 +156,49 @@ test('tracks nested aggregate values stored in containers through subsequent rea
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'service@2' && edge.to === 'entry@5'));
 });
+
+test('connects object property assignments to later reads without conflating distinct static keys', () => {
+  const result = audit([
+    'const registry = {};',
+    'const ready = () => start();',
+    'const stopped = () => stop();',
+    'registry.onReady = ready;',
+    'registry.onStop = stopped;',
+    'const handler = registry.onReady;',
+    'registry.onReady();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@2' && edge.to === 'handler@6'));
+  assert.ok(!result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@3' && edge.to === 'handler@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@2' && edge.to === 'property-read@7'));
+});
+
+test('tracks callback values in nested object and array literal properties through property reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const wrapper = { hooks: [callback], nested: { ready: callback } };',
+    'const hooks = wrapper.hooks;',
+    'const nested = wrapper.nested;'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'hooks@3'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'nested@4'));
+});
+
+test('keeps dynamic object-property reads conservative across stored properties', () => {
+  const result = audit([
+    'const registry = {};',
+    'const first = () => start();',
+    'const second = () => stop();',
+    'registry.first = first;',
+    'registry.second = second;',
+    'const selected = registry[key];'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@2' && edge.to === 'selected@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@3' && edge.to === 'selected@6'));
+});
