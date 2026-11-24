@@ -10,8 +10,8 @@ on:
         type: string
   pull_request:
     branches: [ main ]
-    # The opt-in label starts the audit; later recovery runs are manual dispatches so PR updates cannot restart the expensive baseline.
-    types: [labeled]
+    # Label events start the deep audit; synchronize events run only the focused lifecycle-race regression.
+    types: [labeled, synchronize]
 
 permissions:
   actions: read
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   screen-complete-browser-inventory:
-    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_run_id == '') || (contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') && (github.event.action != 'labeled' || github.event.label.name == 'ci-full-audit-concurrency-equivalence')) }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_run_id == '') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'ci-full-audit-concurrency-equivalence' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence')) }}
     name: Fail-fast complete-inventory browser screening
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -79,7 +79,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   deep-serial-baseline:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
     name: Deep stage 1 — isolated serial baseline
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -476,7 +476,7 @@ jobs:
 
   deep-parallel-repetition-1:
     needs: [deep-serial-baseline]
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
     name: Deep stage 2 — parallel repetition 1 of 3
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -532,7 +532,7 @@ jobs:
 
   deep-parallel-repetition-2:
     needs: [deep-parallel-repetition-1]
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
     name: Deep stage 3 — parallel repetition 2 of 3
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -588,7 +588,7 @@ jobs:
 
   deep-parallel-repetition-3:
     needs: [deep-parallel-repetition-2]
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.action == 'labeled' && contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence-deep')) }}
     name: Deep stage 4 — parallel repetition 3 of 3
     runs-on: ubuntu-latest
     timeout-minutes: 120
