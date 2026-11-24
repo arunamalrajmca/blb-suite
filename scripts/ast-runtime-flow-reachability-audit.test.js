@@ -107,3 +107,52 @@ test('builds explicit directed edges for aliases, wrappers, calls, returns, cont
     'prototype-inheritance', 'closure-capture'
   ]) assert.ok(kinds.has(kind), 'expected flow edge: ' + kind);
 });
+
+test('propagates returned closures and nested object/array wrapper identities to call results', () => {
+  const result = audit([
+    'const service = {};',
+    'const callback = () => service.run();',
+    'function makeCallback() { return callback; }',
+    'function makeNested() { return { hooks: [callback], state: { service } }; }',
+    'const fromClosure = makeCallback();',
+    'const fromWrapper = makeNested();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback' &&
+    edge.from === 'function@2' && edge.to === 'fromClosure@5'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback' &&
+    edge.from === 'function@2' && edge.to === 'fromWrapper@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return' &&
+    edge.from === 'service@1' && edge.to === 'fromWrapper@6'));
+});
+
+test('connects container values to reads by matching static keys and conservatively handles dynamic keys', () => {
+  const result = audit([
+    'const registry = new Map();',
+    'const ready = () => start();',
+    'const stopped = () => stop();',
+    "registry.set('ready', ready);",
+    "registry.set('stopped', stopped);",
+    "const handler = registry.get('ready');",
+    'const dynamicHandler = registry.get(key);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'ready@2' && edge.to === 'handler@6'));
+  assert.ok(!result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'stopped@3' && edge.to === 'handler@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'stopped@3' && edge.to === 'dynamicHandler@7'));
+});
+
+test('tracks nested aggregate values stored in containers through subsequent reads', () => {
+  const result = audit([
+    'const registry = new Map();',
+    'const service = {};',
+    'const callback = () => service.run();',
+    "registry.set('entry', { callbacks: [callback], service });",
+    "const entry = registry.get('entry');"
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@3' && edge.to === 'entry@5'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'service@2' && edge.to === 'entry@5'));
+});
