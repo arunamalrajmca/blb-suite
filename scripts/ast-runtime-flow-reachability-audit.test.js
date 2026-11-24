@@ -977,7 +977,7 @@ test('traces callback settlement values through Promise.resolve and identity the
   assert.ok(result.flowEdges.some(edge => edge.from === 'promise@2' &&
     edge.to === 'value@3' && edge.kind === 'promise-chain-value-parameter'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'value@3' &&
-    edge.to === 'chained@3' && edge.kind === 'promise-chain-return-value'));
+    edge.to === 'chained@3' && edge.kind === 'promise-chain-return'));
 });
 
 test('traces callback factory returns through Promise.then and catch callbacks', () => {
