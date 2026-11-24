@@ -256,3 +256,27 @@ test('propagates property values through Object.assign into existing and newly a
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'second@7'));
 });
+
+test('connects object property values to renamed and shorthand destructured bindings', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback, onStop: callback };',
+    'const { onReady: handler, onStop } = registry;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'onStop@3'));
+});
+
+test('traces nested object and array property destructuring to their source values', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { hooks: [callback], nested: { ready: callback } };',
+    'const { hooks: [arrayHandler], nested: { ready: nestedHandler } } = registry;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'arrayHandler@3'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'nestedHandler@3'));
+});
