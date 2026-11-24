@@ -1148,7 +1148,7 @@ function analyzeFile(root, file) {
     }
     for (const write of propertyWrites.slice()) {
       if (canonicalObject(write.object) !== canonicalObject(request.iterator.container)) continue;
-      if (!read.includeObjectValues && write.property !== null && !/^\d+$/.test(write.property)) continue;
+      if (write.property !== null && !/^\d+$/.test(write.property)) continue;
       propertyWrites.push({object:request.assigned,property:'value',stored:write.stored});
     }
   }
