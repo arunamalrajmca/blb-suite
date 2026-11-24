@@ -571,3 +571,36 @@ test('traces nested values through the top-level descriptor value boundary', () 
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
 });
+
+test('traces callback values through Object.fromEntries(Object.entries(source))', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'const restored = Object.fromEntries(Object.entries(registry));',
+    'const handler = restored.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+});
+
+test('traces callback values through separately stored Object.entries collections', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'const entries = Object.entries(registry);',
+    'const restored = Object.fromEntries(entries);',
+    'const handler = restored.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@5'));
+});
+
+test('traces callback values through literal Object.fromEntries pairs', () => {
+  const result = audit([
+    'const callback = () => start();',
+    "const restored = Object.fromEntries([['onReady', callback]]);",
+    'const handler = restored.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+});
