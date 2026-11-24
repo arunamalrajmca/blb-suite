@@ -1001,3 +1001,30 @@ test('traces callback values retained by Promise aggregate combinators', () => {
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'aggregate@2' && edge.kind === 'promise-aggregate-value-callback'));
 });
+
+
+test('traces callback identity through WeakRef construction and deref', () => {
+  const result = audit([
+    'const callback = () => work();',
+    'const weak = new WeakRef(callback);',
+    'const selected = weak.deref();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'weak@2' && edge.kind === 'weakref-store-callback'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'selected@3' && edge.kind === 'weakref-deref-callback'));
+});
+
+test('preserves WeakRef value identity through a local alias and object property reads', () => {
+  const result = audit([
+    'const api = { run() { work(); } };',
+    'const weak = new WeakRef(api);',
+    'const alias = weak;',
+    'const selected = alias.deref();',
+    'selected.run();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'weakref-deref' &&
+    edge.to === 'selected@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'object-method-call' ||
+    edge.kind === 'interprocedural'));
+});
