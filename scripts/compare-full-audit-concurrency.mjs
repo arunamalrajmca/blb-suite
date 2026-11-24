@@ -231,12 +231,27 @@ try {
       try {
         const priorSummary = JSON.parse(fs.readFileSync(reusableSummaryPath, 'utf8'));
         const priorResults = JSON.parse(fs.readFileSync(reusableResultsPath, 'utf8'));
+        const priorByKey = new Map();
+        let duplicatePriorIdentity = false;
+        for (const test of priorResults.tests || []) {
+          if (priorByKey.has(test.key)) duplicatePriorIdentity = true;
+          priorByKey.set(test.key, test);
+        }
+        const priorEquivalent = !duplicatePriorIdentity && priorByKey.size === serialByKey.size &&
+          [...serialByKey].every(([key, serialTest]) => {
+            const parallelTest = priorByKey.get(key);
+            return parallelTest && serialTest.status === parallelTest.status &&
+              serialTest.overallStatus === parallelTest.overallStatus &&
+              serialTest.expectedStatus === parallelTest.expectedStatus &&
+              serialTest.retryCount === parallelTest.retryCount;
+          });
         reused = priorSummary.complete === true && priorSummary.repetition === repetition &&
+          priorSummary.sourceCommit === sourceCommit && priorSummary.scheduledDigest === scheduledDigest &&
           priorSummary.scheduledTestCount === stageScheduled.length &&
           priorSummary.observedTestCount === stageScheduled.length &&
           priorResults.repetition === repetition && priorResults.exitCode === 0 &&
           !priorResults.parseError && Array.isArray(priorResults.tests) &&
-          priorResults.tests.length === stageScheduled.length;
+          priorResults.tests.length === stageScheduled.length && priorEquivalent;
       } catch { reused = false; }
     }
     if (reused) {
@@ -278,7 +293,8 @@ try {
       const complete = result.status === 0 && !parseError && tests.length === stageScheduled.length &&
         missing.length === 0 && extra.length === 0 && duplicates.length === 0 && mismatches.length === 0;
       const summary = {
-        repetition, scheduledTestCount: stageScheduled.length, observedTestCount: tests.length,
+        sourceCommit, scheduledDigest, repetition,
+        scheduledTestCount: stageScheduled.length, observedTestCount: tests.length,
         exitCode: result.status, timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'),
         parseError, missing, extra, duplicates, statusMismatches: mismatches, complete
       };
