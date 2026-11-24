@@ -29,6 +29,7 @@ on:
       - '!scripts/test-*.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/test-suite-inventory.json'
       - 'playwright.config.js'
       - 'playwright.config.ts'
       - '.github/workflows/manual-full-test-audit.yml'
@@ -42,7 +43,7 @@ concurrency:
 jobs:
   performance:
     name: Measured performance qualification
-    # The full audit delegates performance.spec.js to this measured benchmark.
+    # The full audit delegates both performance specs to this measured benchmark.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
