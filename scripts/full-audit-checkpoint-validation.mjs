@@ -40,7 +40,7 @@ export function isSuccessfulSerialTestRecord(record, expectedInventoryEntry, see
   const approvedDedicatedSkip =
     test?.key === APPROVED_DEDICATED_PERFORMANCE_SKIP_KEY &&
     test.status === 'skipped' && test.overallStatus === 'skipped' &&
-    test.expectedStatus === 'passed' && test.retryCount === 0 &&
+    test.expectedStatus === 'skipped' && test.retryCount === 0 &&
     Array.isArray(test.errors) && test.errors.length === 0;
   if (record?.inventoryEntry !== expectedInventoryEntry || record?.exitCode !== 0 ||
       record?.parseError || record?.tests?.length !== 1 || !test?.key ||
