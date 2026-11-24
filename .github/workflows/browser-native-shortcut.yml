@@ -67,6 +67,8 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
+      - name: Verify delegated browser test ownership inventory
+        run: node scripts/test-suite-inventory.mjs
       - name: Install Chromium when the exact Playwright browser cache is unavailable
         if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
