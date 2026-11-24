@@ -227,8 +227,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/blb-test-build"
           cp "$RUNNER_TEMP"/../blb-ci-checkpoints/interleaved-performance-benchmark/baseline-performance.jsonl "$RUNNER_TEMP/baseline-performance.jsonl"
           cp "$RUNNER_TEMP"/../blb-ci-checkpoints/interleaved-performance-benchmark/candidate-performance.jsonl "$RUNNER_TEMP/candidate-performance.jsonl"
-          if [[ -f "$RUNNER_TEMP/../blb-ci-checkpoints/original-show-on-blb-benchmark/original-performance-smoke.jsonl" ]]; then
-            cp "$RUNNER_TEMP/../blb-ci-checkpoints/original-show-on-blb-benchmark/original-performance-smoke.jsonl" "$RUNNER_TEMP/original-performance-smoke.jsonl"
+          if [[ -f "$RUNNER_TEMP/blb-ci-checkpoints/original-show-on-blb-benchmark/original-performance-smoke.jsonl" ]]; then
+            cp "$RUNNER_TEMP/blb-ci-checkpoints/original-show-on-blb-benchmark/original-performance-smoke.jsonl" "$RUNNER_TEMP/original-performance-smoke.jsonl"
           fi
 
       - name: Require measured performance qualification
