@@ -94,6 +94,8 @@ jobs:
             echo "Xvfb and xdotool are already installed; skipping apt installation."
           fi
       - name: Run all native browser regressions in one X11 session
+        env:
+          BLB_HEADFUL_EXTENSION_TESTS: '1'
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: native-x11-regressions
