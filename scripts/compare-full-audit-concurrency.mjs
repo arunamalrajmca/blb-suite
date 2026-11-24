@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { isAuditHarnessOnlyCompatibleSource, isSuccessfulSerialTestRecord, readAndValidateSerialCheckpoint } from './full-audit-checkpoint-validation.mjs';
 
 const require = createRequire(import.meta.url);
 const root = process.cwd();
@@ -66,34 +67,6 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 }
 
-function isAuditHarnessOnlyCompatibleSource(candidateSha, currentSha) {
-  if (!/^[a-f0-9]{40}$/.test(candidateSha || '') ||
-      !/^[a-f0-9]{40}$/.test(currentSha || '') ||
-      process.env.BLB_CONCURRENCY_ALLOW_AUDIT_HARNESS_ONLY_RECOVERY !== 'true') return false;
-  const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', candidateSha, currentSha], {
-    cwd: root, encoding: 'utf8'
-  });
-  if (ancestor.status !== 0) return false;
-  const changed = spawnSync('git', ['diff', '--name-only', candidateSha, currentSha], {
-    cwd: root, encoding: 'utf8'
-  });
-  if (changed.status !== 0) return false;
-  const files = (changed.stdout || '').split(/\r?\n/).filter(Boolean).sort();
-  const allowed = [
-    '.github/workflows/experimental-full-audit-concurrency-equivalence.yml',
-    'scripts/compare-full-audit-concurrency.mjs'
-  ];
-  if (files.length !== allowed.length || files.some((file, index) => file !== allowed[index])) return false;
-  const numstat = spawnSync('git', ['diff', '--numstat', candidateSha, currentSha], {
-    cwd: root, encoding: 'utf8'
-  });
-  if (numstat.status !== 0) return false;
-  const scriptChange = (numstat.stdout || '').split(/\r?\n/).find(line =>
-    line.endsWith('\tscripts/compare-full-audit-concurrency.mjs')
-  );
-  return scriptChange === '51\t2\tscripts/compare-full-audit-concurrency.mjs';
-}
-
 try {
   console.log('[1/5] Discovering the complete Playwright browser inventory.');
   const listing = run(['--list', '--reporter=list'], { timeout: 180_000 });
@@ -128,34 +101,10 @@ try {
   // Invalid, stale, duplicated, failed, or non-contiguous evidence is ignored.
   const serialRecoveryRoot = process.env.BLB_CONCURRENCY_SERIAL_RECOVERY_DIR;
   if (process.env.BLB_CONCURRENCY_MODE === 'stage-serial' && serialRecoveryRoot && fs.existsSync(serialRecoveryRoot)) {
-    const validateSerialCheckpoint = directory => {
-      try {
-        const candidateInventory = JSON.parse(fs.readFileSync(path.join(directory, 'inventory.json'), 'utf8'));
-        const candidateSerial = JSON.parse(fs.readFileSync(path.join(directory, 'serial-results.json'), 'utf8'));
-        const candidateErrors = JSON.parse(fs.readFileSync(path.join(directory, 'serial-errors.json'), 'utf8'));
-        const sameSource = candidateInventory.sourceCommit === sourceCommit;
-        const workflowOnlyCompatible = !sameSource &&
-          isAuditHarnessOnlyCompatibleSource(candidateInventory.sourceCommit, sourceCommit);
-        if ((!sameSource && !workflowOnlyCompatible) ||
-            candidateInventory.scheduledDigest !== scheduledDigest ||
-            candidateInventory.scheduled !== scheduled.length ||
-            !Array.isArray(candidateInventory.scheduledTests) ||
-            candidateInventory.scheduledTests.length !== scheduled.length ||
-            candidateInventory.scheduledTests.some((entry, index) => entry !== scheduled[index]) ||
-            !Array.isArray(candidateSerial) || !Array.isArray(candidateErrors) ||
-            candidateSerial.length > scheduled.length || candidateErrors.length !== 0) return null;
-        const keys = new Set();
-        for (let index = 0; index < candidateSerial.length; index++) {
-          const record = candidateSerial[index];
-          const test = record.tests?.[0];
-          if (record.inventoryEntry !== scheduled[index] || record.exitCode !== 0 ||
-              record.parseError || record.tests?.length !== 1 || !test?.key || !test.status ||
-              keys.has(test.key)) return null;
-          keys.add(test.key);
-        }
-        return { directory, count: candidateSerial.length };
-      } catch { return null; }
-    };
+    const validateSerialCheckpoint = directory => readAndValidateSerialCheckpoint({
+      directory, sourceCommit, scheduled, scheduledDigest,
+      isCompatibleSource: isAuditHarnessOnlyCompatibleSource
+    });
     const recoveryCandidates = fs.readdirSync(serialRecoveryRoot, { withFileTypes: true })
       .filter(entry => entry.isDirectory())
       .map(entry => path.join(serialRecoveryRoot, entry.name))
@@ -227,14 +176,9 @@ try {
     let serialErrors = fs.existsSync(serialErrorsPath) ? JSON.parse(fs.readFileSync(serialErrorsPath, 'utf8')) : [];
     const serialKeys = new Set();
     const restoredCheckpointValid = priorInventoryMatches && serial.length <= scheduled.length &&
-      serialErrors.length === 0 && serial.every((record, index) => {
-        const test = record.tests?.[0];
-        if (record.inventoryEntry !== scheduled[index] || record.exitCode !== 0 ||
-            record.parseError || record.tests?.length !== 1 || !test?.key || !test.status ||
-            serialKeys.has(test.key)) return false;
-        serialKeys.add(test.key);
-        return true;
-      });
+      serialErrors.length === 0 && serial.every((record, index) =>
+        isSuccessfulSerialTestRecord(record, scheduled[index], serialKeys)
+      );
     if (serial.length > scheduled.length || serialErrors.length > 0 || (serial.length > 0 && !restoredCheckpointValid)) {
       serial = [];
       serialErrors = [];
@@ -267,7 +211,8 @@ try {
         timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'), tests, parseError
       };
       serial.push(record);
-      const bad = result.status !== 0 || tests.length !== 1 || !tests[0].status || parseError;
+      const bad = result.status !== 0 || parseError ||
+        !isSuccessfulSerialTestRecord(record, scheduled[index], new Set(serialKeys));
       if (bad) serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
         signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
       writeJson(serialCheckpointPath, {
@@ -320,13 +265,13 @@ try {
       throw new Error('Serial baseline artifact is incomplete or does not match the current source commit and exact inventory fingerprint.');
     }
     const serialByKey = new Map();
-    for (const record of serial) {
-      if (record.exitCode !== 0 || record.parseError || record.tests?.length !== 1) {
-        throw new Error('Serial baseline contains a failed or malformed test record.');
+    const serialStageKeys = new Set();
+    for (let index = 0; index < serial.length; index++) {
+      const record = serial[index];
+      if (!isSuccessfulSerialTestRecord(record, stageScheduled[index], serialStageKeys)) {
+        throw new Error('Serial baseline contains a failed, skipped, duplicated, or malformed test record at inventory position ' + (index + 1) + '.');
       }
-      const test = record.tests[0];
-      if (serialByKey.has(test.key)) throw new Error('Serial baseline contains duplicate test identity: ' + test.key);
-      serialByKey.set(test.key, test);
+      serialByKey.set(record.tests[0].key, record.tests[0]);
     }
     const reusableSummaryPath = path.join(reportRoot, 'parallel-round-' + repetition + '-summary.json');
     const reusableResultsPath = path.join(reportRoot, 'parallel-round-' + repetition + '-results.json');
