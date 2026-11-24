@@ -70,7 +70,7 @@ export function isCompatibleShardManifest(candidate, expected) {
         shard.tests.length === base.shards[index].tests.length &&
         shard.tests.every((entry, testIndex) => entry === base.shards[index].tests[testIndex]) &&
         ['pending', 'failed', 'passed'].includes(shard.status) &&
-        (shard.status !== 'passed' || shard.exitCode === 0)
+        (shard.status !== 'passed' || (shard.exitCode === 0 && shard.reportValid === true))
       );
   } catch {
     return false;
@@ -122,7 +122,8 @@ function runShard(entries, index, directory, workers) {
   const reportPath = path.join(process.cwd(), 'test-results/results.json');
   fs.rmSync(reportPath, { force: true });
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  const args = [cli, 'test', '--test-list', listPath, '--workers=' + workers, '--max-failures=0'];
+  const outputDirectory = path.join(directory, 'browser-shard-' + String(index).padStart(2, '0') + '-results');
+  const args = [cli, 'test', '--test-list', listPath, '--workers=' + workers, '--max-failures=0', '--output=' + outputDirectory];
   const result = spawnSync(process.execPath, args, {
     cwd: process.cwd(),
     encoding: 'utf8',
@@ -171,7 +172,7 @@ export function runCheckpointedBrowserAudit({
   if (manifest === fresh) writeManifest(directory, manifest);
   let failures = 0;
   for (const shard of manifest.shards) {
-    if (shard.status === 'passed' && shard.exitCode === 0) {
+    if (shard.status === 'passed' && shard.exitCode === 0 && shard.reportValid === true) {
       console.log('Reusing passed browser shard [' + shard.index + '/' + shardCount + '] (' + shard.tests.length + ' tests).');
       continue;
     }
