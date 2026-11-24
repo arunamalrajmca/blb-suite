@@ -163,7 +163,7 @@ test('the exact dedicated KJV corpus performance test may be skipped, but no oth
     inventoryEntry: entry, exitCode: 0, parseError: null,
     tests: [{
       key, status: 'skipped', overallStatus: 'skipped',
-      expectedStatus: 'passed', retryCount: 0, errors: []
+      expectedStatus: 'skipped', retryCount: 0, errors: []
     }]
   };
   assert.equal(isSuccessfulSerialTestRecord(approved, entry), true);
