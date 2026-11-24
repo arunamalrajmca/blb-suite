@@ -224,53 +224,74 @@ try {
       if (serialByKey.has(test.key)) throw new Error('Serial baseline contains duplicate test identity: ' + test.key);
       serialByKey.set(test.key, test);
     }
-    console.log('[1/2] Running complete four-worker repetition ' + repetition + '/3 (fail fast).');
-    const listPathForStage = path.join(reportRoot, 'scheduled-test-list.txt');
-    const result = run(['--test-list', listPathForStage, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
-    fs.writeFileSync(path.join(reportRoot, 'parallel-round-' + repetition + '.log'),
-      (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
-    let tests = [];
-    let parseError = null;
-    try { tests = collectTests(parseJsonReport(result.stdout || '', 'parallel repetition ' + repetition)); }
-    catch (error) { parseError = error.message; }
-    const parallelByKey = new Map();
-    const duplicates = [];
-    for (const test of tests) {
-      if (parallelByKey.has(test.key)) duplicates.push(test.key);
-      parallelByKey.set(test.key, test);
+    const reusableSummaryPath = path.join(reportRoot, 'parallel-round-' + repetition + '-summary.json');
+    const reusableResultsPath = path.join(reportRoot, 'parallel-round-' + repetition + '-results.json');
+    let reused = false;
+    if (priorInventoryMatches && fs.existsSync(reusableSummaryPath) && fs.existsSync(reusableResultsPath)) {
+      try {
+        const priorSummary = JSON.parse(fs.readFileSync(reusableSummaryPath, 'utf8'));
+        const priorResults = JSON.parse(fs.readFileSync(reusableResultsPath, 'utf8'));
+        reused = priorSummary.complete === true && priorSummary.repetition === repetition &&
+          priorSummary.scheduledTestCount === stageScheduled.length &&
+          priorSummary.observedTestCount === stageScheduled.length &&
+          priorResults.repetition === repetition && priorResults.exitCode === 0 &&
+          !priorResults.parseError && Array.isArray(priorResults.tests) &&
+          priorResults.tests.length === stageScheduled.length;
+      } catch { reused = false; }
     }
-    const missing = [...serialByKey.keys()].filter(key => !parallelByKey.has(key));
-    const extra = [...parallelByKey.keys()].filter(key => !serialByKey.has(key));
-    const mismatches = [];
-    for (const [key, serialTest] of serialByKey) {
-      const parallelTest = parallelByKey.get(key);
-      if (parallelTest && (serialTest.status !== parallelTest.status ||
-          serialTest.overallStatus !== parallelTest.overallStatus ||
-          serialTest.expectedStatus !== parallelTest.expectedStatus ||
-          serialTest.retryCount !== parallelTest.retryCount)) {
-        mismatches.push({ key, serial: {
-          status: serialTest.status, overallStatus: serialTest.overallStatus,
-          expectedStatus: serialTest.expectedStatus, retryCount: serialTest.retryCount
-        }, parallel: {
-          status: parallelTest.status, overallStatus: parallelTest.overallStatus,
-          expectedStatus: parallelTest.expectedStatus, retryCount: parallelTest.retryCount
-        }});
+    if (reused) {
+      console.log('Reusing verified parallel repetition ' + repetition + '/3 from a matching source commit and inventory; no browser tests rerun.');
+    } else {
+      console.log('[1/2] Running complete four-worker repetition ' + repetition + '/3 (fail fast).');
+      const listPathForStage = path.join(reportRoot, 'scheduled-test-list.txt');
+      const result = run(['--test-list', listPathForStage, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
+      fs.writeFileSync(path.join(reportRoot, 'parallel-round-' + repetition + '.log'),
+        (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+      let tests = [];
+      let parseError = null;
+      try { tests = collectTests(parseJsonReport(result.stdout || '', 'parallel repetition ' + repetition)); }
+      catch (error) { parseError = error.message; }
+      const parallelByKey = new Map();
+      const duplicates = [];
+      for (const test of tests) {
+        if (parallelByKey.has(test.key)) duplicates.push(test.key);
+        parallelByKey.set(test.key, test);
       }
+      const missing = [...serialByKey.keys()].filter(key => !parallelByKey.has(key));
+      const extra = [...parallelByKey.keys()].filter(key => !serialByKey.has(key));
+      const mismatches = [];
+      for (const [key, serialTest] of serialByKey) {
+        const parallelTest = parallelByKey.get(key);
+        if (parallelTest && (serialTest.status !== parallelTest.status ||
+            serialTest.overallStatus !== parallelTest.overallStatus ||
+            serialTest.expectedStatus !== parallelTest.expectedStatus ||
+            serialTest.retryCount !== parallelTest.retryCount)) {
+          mismatches.push({ key, serial: {
+            status: serialTest.status, overallStatus: serialTest.overallStatus,
+            expectedStatus: serialTest.expectedStatus, retryCount: serialTest.retryCount
+          }, parallel: {
+            status: parallelTest.status, overallStatus: parallelTest.overallStatus,
+            expectedStatus: parallelTest.expectedStatus, retryCount: parallelTest.retryCount
+          }});
+        }
+      }
+      const complete = result.status === 0 && !parseError && tests.length === stageScheduled.length &&
+        missing.length === 0 && extra.length === 0 && duplicates.length === 0 && mismatches.length === 0;
+      const summary = {
+        repetition, scheduledTestCount: stageScheduled.length, observedTestCount: tests.length,
+        exitCode: result.status, timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'),
+        parseError, missing, extra, duplicates, statusMismatches: mismatches, complete
+      };
+      writeJson(path.join(reportRoot, 'parallel-round-' + repetition + '-results.json'), { repetition, exitCode: result.status, tests, parseError });
+      writeJson(path.join(reportRoot, 'parallel-round-' + repetition + '-summary.json'), summary);
+      console.log('Parallel stage ' + repetition + '/3: ' + JSON.stringify({
+        complete, observed: tests.length, expected: stageScheduled.length, missing: missing.length,
+        extra: extra.length, duplicates: duplicates.length, mismatches: mismatches.length, exitCode: result.status
+      }));
+      if (!complete) process.exitCode = 1;
+  
     }
-    const complete = result.status === 0 && !parseError && tests.length === stageScheduled.length &&
-      missing.length === 0 && extra.length === 0 && duplicates.length === 0 && mismatches.length === 0;
-    const summary = {
-      repetition, scheduledTestCount: stageScheduled.length, observedTestCount: tests.length,
-      exitCode: result.status, timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'),
-      parseError, missing, extra, duplicates, statusMismatches: mismatches, complete
-    };
-    writeJson(path.join(reportRoot, 'parallel-round-' + repetition + '-results.json'), { repetition, exitCode: result.status, tests, parseError });
-    writeJson(path.join(reportRoot, 'parallel-round-' + repetition + '-summary.json'), summary);
-    console.log('Parallel stage ' + repetition + '/3: ' + JSON.stringify({
-      complete, observed: tests.length, expected: stageScheduled.length, missing: missing.length,
-      extra: extra.length, duplicates: duplicates.length, mismatches: mismatches.length, exitCode: result.status
-    }));
-    if (!complete) process.exitCode = 1;
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'reused=' + String(reused) + '\n');
   } else if (mode === 'screen') {
     console.log('[2/2] Running one complete four-worker screening pass (fail fast).');
     const result = run(['--test-list', listPath, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
