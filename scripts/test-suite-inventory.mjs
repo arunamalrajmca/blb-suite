@@ -83,6 +83,25 @@ function walk(directory) {
 walk(root);
 for (const candidate of candidates.sort()) if (!classified.has(candidate) && !manualOnly.has(candidate)) fail('Unclassified test-looking file: ' + candidate);
 for (const item of manifest.manualOnly) if (!fs.existsSync(path.join(root,item.path))) fail('Declared manual-only harness is missing: ' + item.path);
+const productionCoverage = manifest.productionCoverage || [];
+const productionAreaIds = new Set();
+for (const area of productionCoverage) {
+  if (!area.id || productionAreaIds.has(area.id)) fail('Production coverage area has a missing or duplicate id: ' + area.id);
+  productionAreaIds.add(area.id);
+  if (!Array.isArray(area.productionFiles) || !area.productionFiles.length) fail('Production coverage area has no source modules: ' + area.id);
+  if (!Array.isArray(area.testFiles) || !area.testFiles.length) fail('Production coverage area has no regression evidence: ' + area.id);
+  for (const sourceFile of area.productionFiles || []) {
+    if (!fs.existsSync(path.join(root, sourceFile))) fail('Production coverage source module is missing: ' + area.id + ' -> ' + sourceFile);
+  }
+  for (const evidence of area.testFiles || []) {
+    const testFile = evidence.path;
+    if (!testFile || !classified.has(testFile)) fail('Production coverage evidence is not owned by an automated suite: ' + area.id + ' -> ' + testFile);
+    const testContent = readRepoFile(testFile);
+    for (const requiredText of evidence.requiredText || []) {
+      if (!testContent.includes(requiredText)) fail('Production coverage evidence no longer matches its regression test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
+    }
+  }
+}
 const total = counts.reduce((sum,item)=>sum+item.count,0);
 console.log('Repository test inventory');
 for (const suite of counts) console.log('  '+suite.id+': '+suite.count+' file(s)');
