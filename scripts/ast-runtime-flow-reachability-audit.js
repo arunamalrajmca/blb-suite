@@ -610,8 +610,23 @@ function analyzeFile(root, file) {
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice', 'fill']);
   const containerReadMethods = new Set(['get', 'pop', 'shift', 'at', 'find', 'findLast', 'splice']);
   const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
+  const weakRefSources = new Map();
 
   visit(ast, (node, parent, ancestors) => {
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+        node.init?.type === 'Identifier') {
+      const source = weakRefSources.get(bindingId(node.init));
+      if (source) weakRefSources.set(bindingId(node.id), source);
+    }
+    if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
+        node.callee.name === 'WeakRef' && node.arguments[0]) {
+      const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+        ? bindingId(parent.id) : null;
+      if (assigned) {
+        weakRefSources.set(assigned, node.arguments[0]);
+        addContainedReferences(node.arguments[0], assigned, 'weakref-store', node);
+      }
+    }
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
       const declaration = [...ancestors].reverse().find(item =>
         item.type === 'VariableDeclarator' && item.id.type === 'Identifier');
@@ -779,6 +794,17 @@ function analyzeFile(root, file) {
           }
         }
       }
+      if (node.type === 'CallExpression' && name === 'deref' &&
+          receiver?.type === 'Identifier') {
+        const source = weakRefSources.get(bindingId(receiver));
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (source && assigned) {
+          addContainedReferences(source, assigned, 'weakref-deref', node);
+          if (source.type === 'Identifier') linkObjectAlias(assigned, bindingId(source));
+        }
+      }
+
       if (node.type === 'CallExpression' && containerReadMethods.has(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
