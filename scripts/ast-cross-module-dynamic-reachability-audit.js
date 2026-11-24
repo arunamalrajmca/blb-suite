@@ -228,8 +228,9 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const getTop=(file,name)=>topLevel.get(file+'::'+name)||null;
   const addFunction=(file,node,variable)=>{
     if(!variable||!node||!['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
-    const params=(node.params||[]).map(param=>param.type==='Identifier'?variableForNode.get(param)||null:null);
-    functionForVariable.set(variable,{file,node,params});
+    const paramNodes=node.params||[];
+    const params=paramNodes.map(param=>param.type==='Identifier'?variableForNode.get(param)||null:null);
+    functionForVariable.set(variable,{file,node,params,paramNodes});
   };
   for(const [file,ast] of asts){
     for(const statement of ast.body){
@@ -350,12 +351,12 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       const fn=resolveFunction(file,node.callee);
       if(!fn)return;
       for(let i=0;i<Math.min(fn.params.length,node.arguments.length);i++){
-        const arg=node.arguments[i], parameter=fn.params[i];
+        const arg=node.arguments[i], parameter=fn.params[i], parameterNode=fn.paramNodes[i];
         if(arg.type==='Identifier')addEdge(variableForNode.get(arg),parameter);
-        if(parameter?.type==='ObjectPattern'&&arg.type==='Identifier'){
-          if(!patternParameterArguments.has(parameter))patternParameterArguments.set(parameter,new Set());
+        if(parameterNode?.type==='ObjectPattern'&&arg.type==='Identifier'){
+          if(!patternParameterArguments.has(parameterNode))patternParameterArguments.set(parameterNode,new Set());
           const argumentVariable=variableForNode.get(arg);
-          if(argumentVariable)patternParameterArguments.get(parameter).add(argumentVariable);
+          if(argumentVariable)patternParameterArguments.get(parameterNode).add(argumentVariable);
         }
         const value=literalString(arg,file);
         if(parameter&&parameter.type==='Identifier'&&value!==null){
