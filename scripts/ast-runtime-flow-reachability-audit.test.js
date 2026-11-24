@@ -770,7 +770,7 @@ test('traces callbacks returned by nested factories inside object and array wrap
     'function makeHandler() { return () => start(); }',
     'const wrapped = { handler: makeHandler() };',
     'const handlers = [makeHandler()];'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'object-wrap-factory-return-callback'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
@@ -782,7 +782,7 @@ test('traces async factory callback values through await inside object wrappers'
     'const callback = () => start();',
     'async function makeHandler() { return callback; }',
     'const wrapped = { handler: await makeHandler() };'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'object-wrap-factory-return-callback'));
 });
@@ -793,7 +793,7 @@ test('traces callback values through Promise.resolve before container storage an
     'const registry = [];',
     'registry.push(Promise.resolve(callback));',
     'const selected = registry.pop();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'container-store-expression-transparent-call-callback'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
@@ -806,7 +806,7 @@ test('traces yielded callback values nested inside generator return wrappers', (
     'const callback = () => start();',
     'function* makeHandler() { return { handler: (yield callback) }; }',
     'const wrapped = makeHandler();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'function-return-aggregate-callback'));
 });
