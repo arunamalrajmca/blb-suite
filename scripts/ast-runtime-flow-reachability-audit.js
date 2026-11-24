@@ -139,6 +139,56 @@ function analyzeFile(root, file) {
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
   const containerWrites = [];
   const containerReads = [];
+  const propertyWrites = [];
+  const propertyReads = [];
+  const propertySlot = (object, property) => object + '::property::' + property;
+  const propertyKey = property => {
+    if (!property) return null;
+    if (!property.computed && property.type === 'Identifier') return property.name;
+    if (property.computed && property.type === 'Literal' &&
+        ['string', 'number'].includes(typeof property.value)) return String(property.value);
+    return null;
+  };
+  const addObjectPropertySlots = (value, object, prefix = [], depth = 0) => {
+    if (!value || depth > 10) return;
+    if (value.type === 'ObjectExpression') {
+      for (const property of value.properties) {
+        if (property.type === 'SpreadElement') {
+          const key = prefix.join('.');
+          if (key) {
+            const slot = propertySlot(object, key);
+            const before = flowEdges.length;
+            addContainedReferences(property.argument, slot, 'property-store-spread', property);
+            for (const edge of flowEdges.slice(before)) propertyWrites.push({object, property:key, stored:edge.from});
+          }
+          continue;
+        }
+        if (property.type !== 'Property') continue;
+        const key = propertyKey(property.key);
+        if (key === null) continue;
+        const fullPath = [...prefix, key];
+        const slot = propertySlot(object, fullPath.join('.'));
+        const before = flowEdges.length;
+        addContainedReferences(property.value, slot, 'property-store', property);
+        for (const edge of flowEdges.slice(before)) propertyWrites.push({object, property:fullPath.join('.'), stored:edge.from});
+        if (property.value.type === 'ObjectExpression' || property.value.type === 'ArrayExpression') {
+          addObjectPropertySlots(property.value, object, fullPath, depth + 1);
+        }
+      }
+    } else if (value.type === 'ArrayExpression') {
+      value.elements.forEach((element, index) => {
+        if (!element) return;
+        const fullPath = [...prefix, String(index)];
+        const slot = propertySlot(object, fullPath.join('.'));
+        const before = flowEdges.length;
+        addContainedReferences(element, slot, 'property-store', value);
+        for (const edge of flowEdges.slice(before)) propertyWrites.push({object, property:fullPath.join('.'), stored:edge.from});
+        if (element.type === 'ObjectExpression' || element.type === 'ArrayExpression') {
+          addObjectPropertySlots(element, object, fullPath, depth + 1);
+        }
+      });
+    }
+  };
   const literalKey = node => node && node.type === 'Literal' &&
     ['string', 'number'].includes(typeof node.value) ? String(node.value) : null;
   // Follow only value-bearing syntax. Function bodies are deliberately opaque:
@@ -426,12 +476,23 @@ function analyzeFile(root, file) {
       }
     }
 
+    if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
+      const object = bindingId(node.object), property = propertyKey(node.property);
+      propertyReads.push({
+        object, property,
+        assigned: parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null,
+        node
+      });
+    }
+
     if (node.type === 'VariableDeclarator') {
       if (node.init && ['ObjectExpression', 'ArrayExpression'].includes(node.init.type)) {
         add('object-wrapping', 'aggregate-wrapper', node,
           node.init.type + ' may retain nested function/object identities');
         const container = bindingId(node.id);
         addContainedReferences(node.init, container, 'object-wrap', node);
+        addObjectPropertySlots(node.init, container);
         if (node.init.type === 'ArrayExpression') {
           for (const element of node.init.elements) {
             if (element && isFunction(element)) add('callbacks', 'callback-stored-in-array', element, 'array element');
@@ -463,6 +524,15 @@ function analyzeFile(root, file) {
 
     if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
       add('mutation', 'member-assignment', node, propertyName(node.left) || 'computed property');
+      if (node.left.object.type === 'Identifier') {
+        const object = bindingId(node.left.object), property = propertyKey(node.left.property);
+        if (property !== null) {
+          const slot = propertySlot(object, property);
+          const before = flowEdges.length;
+          addContainedReferences(node.right, slot, 'property-store', node);
+          for (const edge of flowEdges.slice(before)) propertyWrites.push({object, property, stored:edge.from});
+        }
+      }
       if (node.left.object.type === 'Identifier' && node.right.type === 'Identifier') {
         addEdge(bindingId(node.right), bindingId(node.left.object), 'mutation-store', node,
           propertyName(node.left) || 'computed property');
@@ -520,6 +590,19 @@ function analyzeFile(root, file) {
       add('prototype-mutation', 'class-extends', node, 'class inheritance');
     }
   });
+
+  // Resolve static object-property writes to subsequent property reads.
+  // Unknown computed reads conservatively retain every stored value on the object.
+  for (const read of propertyReads) {
+    const matches = propertyWrites.filter(write =>
+      write.object === read.object &&
+      (read.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+    const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
+    for (const write of matches) {
+      addEdge(write.stored, destination, 'property-value-read', read.node,
+        read.property === null ? 'dynamic property read' : 'property=' + read.property);
+    }
+  }
 
   // Resolve container reads against all statically observed writes. A
   // literal Map key narrows the edge; unknown keys conservatively include every
