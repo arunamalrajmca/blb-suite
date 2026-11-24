@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -123,7 +124,7 @@ function runShard(entries, index, directory, workers) {
     cwd: process.cwd(),
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    timeout: 60 * 60 * 1000,
+    timeout: 25 * 60 * 1000,
     env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }
   });
   const log = (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || '');
@@ -189,7 +190,7 @@ export function runCheckpointedBrowserAudit({
   return manifest;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   try {
     const testListPath = process.argv[2];
     if (!testListPath) throw new Error('Usage: node scripts/run-checkpointed-playwright-audit.mjs <filtered-test-list>');
