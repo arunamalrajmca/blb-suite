@@ -604,3 +604,31 @@ test('traces callback values through literal Object.fromEntries pairs', () => {
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@3'));
 });
+
+
+test('traces callbacks retrieved from array containers with pop and shift', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const stack = [];',
+    'stack.push(callback);',
+    'const popped = stack.pop();',
+    'const queue = [];',
+    'queue.push(callback);',
+    'const shifted = queue.shift();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'popped@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'shifted@7'));
+});
+
+test('traces callbacks retrieved from array containers with at and a literal index', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const handlers = [];',
+    'handlers.push(callback);',
+    'const selected = handlers.at(0);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'selected@4'));
+});
