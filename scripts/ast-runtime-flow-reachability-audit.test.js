@@ -873,3 +873,39 @@ test('keeps class method factory identities separate across different classes', 
   assert.ok(!result.flowEdges.some(edge => edge.from === 'function@2' &&
     edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
 });
+
+
+test('traces this and super factory calls through inherited instance and static class methods', () => {
+  const result = audit([
+    'class BaseFactory {',
+    '  make() { return () => baseWork(); }',
+    '  static makeStatic() { return () => baseStatic(); }',
+    '}',
+    'class ChildFactory extends BaseFactory {',
+    '  create() { return { handler: this.make() }; }',
+    '  static createStatic() { return { handler: this.makeStatic() }; }',
+    '  createViaSuper() { return super.make(); }',
+    '}',
+    'const instance = new ChildFactory();',
+    'const wrapper = instance.create();',
+    'const staticWrapper = ChildFactory.createStatic();',
+    'const viaSuper = instance.createViaSuper();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'function-return-factory-return-callback' && edge.to.includes('wrapper@11')));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
+    edge.kind === 'function-return-factory-return-callback' && edge.to.includes('staticWrapper@12')));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'function-return-factory-return-callback' && edge.to === 'viaSuper@13'));
+});
+
+test('resolves inherited class method factories directly on derived instances', () => {
+  const result = audit([
+    'class BaseFactory { make() { return () => work(); } }',
+    'class ChildFactory extends BaseFactory {}',
+    'const instance = new ChildFactory();',
+    'const callback = instance.make();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
+});
