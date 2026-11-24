@@ -11,14 +11,14 @@
         {
           "testTitle": "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "xvfb-run -a",
+          "requiredText": "tests/browser/service-worker-shortcut-headed.spec.js",
           "testFile": "tests/browser/service-worker-shortcut-headed.spec.js",
           "environment": "x11-headed-chromium"
         },
         {
           "testTitle": "native Chromium _self prerender activation initializes the activated document without tab replacement",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "xvfb-run -a",
+          "requiredText": "tests/browser/native-prerender-activation.spec.js",
           "testFile": "tests/browser/native-prerender-activation.spec.js",
           "environment": "x11-headed-chromium",
           "testTitlePattern": "native Chromium .* prerender activation initializes the activated document without tab replacement"
@@ -26,7 +26,7 @@
         {
           "testTitle": "native Chromium _blank prerender activation initializes the activated document without tab replacement",
           "workflow": ".github/workflows/browser-native-shortcut.yml",
-          "requiredText": "xvfb-run -a",
+          "requiredText": "tests/browser/native-prerender-activation.spec.js",
           "testFile": "tests/browser/native-prerender-activation.spec.js",
           "environment": "x11-headed-chromium",
           "testTitlePattern": "native Chromium .* prerender activation initializes the activated document without tab replacement"
@@ -36,6 +36,13 @@
           "workflow": ".github/workflows/browser-e2e-performance.yml",
           "requiredText": "tests/browser/performance.spec.js",
           "testFile": "tests/browser/performance.spec.js",
+          "environment": "dedicated-performance-runner"
+        },
+        {
+          "testTitle": "Interleaved baseline/candidate performance batch preserves isolated samples",
+          "workflow": ".github/workflows/browser-e2e-performance.yml",
+          "requiredText": "tests/browser/performance-batch.spec.js",
+          "testFile": "tests/browser/performance-batch.spec.js",
           "environment": "dedicated-performance-runner"
         }
       ],
