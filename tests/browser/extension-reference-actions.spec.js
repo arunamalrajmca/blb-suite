@@ -684,6 +684,17 @@ test.describe('core user-visible E2E', () => {
       waitUntil: 'domcontentloaded'
     });
     await page.waitForLoadState('load').catch(() => {});
+    // The article host is covered by a runtime-registered content script, not
+    // a manifest match. The background activates the committed document from
+    // tabs.onUpdated('complete'); page load alone does not mean that async
+    // registration/injection and the content-script bootstrap have finished.
+    // Wait for the real document-level handler before dispatching the gesture,
+    // otherwise worker contention can make the test double-click a page that
+    // does not yet have the extension listener installed.
+    await expect.poll(() => page.evaluate(() =>
+      window.__blbSuiteContentScriptLoadedV2 === true &&
+      typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+    ), { timeout: 20000, intervals: [100, 200, 300, 500] }).toBe(true);
     // Ensure the actual article content is present before marking its real cue.
     const article = page.locator('.available-content, .body.markup, .post-body, .dt-post-body').first();
     await expect(article, 'Supply of Grace article body must render').toBeVisible({ timeout: 20000 });
