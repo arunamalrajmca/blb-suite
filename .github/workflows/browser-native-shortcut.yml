@@ -16,6 +16,8 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'scripts/test-suite-inventory.json'
+      - 'scripts/ci-section-checkpoint.mjs'
+      - '.github/actions/ci-section-checkpoint/action.yml'
   push:
     branches: [ main ]
     paths:
