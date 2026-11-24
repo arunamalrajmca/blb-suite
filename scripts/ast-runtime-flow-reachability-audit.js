@@ -524,6 +524,9 @@ function analyzeFile(root, file) {
               if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
                 const identity = 'aggregate@' + returned.loc.start.line + ':' + returned.loc.start.column;
                 addEdge(identity, assigned, 'function-return-aggregate', node, node.callee.name);
+                // Keep the legacy direct edges as well as property-level slots:
+                // callers may retain the wrapper itself or access a nested value.
+                addContainedReferences(returned, assigned, 'function-return', node);
                 addContainedReferences(returned, identity, 'function-return', node);
                 addObjectPropertySlots(returned, identity);
                 linkObjectAlias(assigned, identity);
@@ -766,6 +769,20 @@ function analyzeFile(root, file) {
       addEdge(write.stored, read.assigned, 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
       if (write.objectValue && read.assigned) linkObjectAlias(read.assigned, write.stored);
+    }
+  }
+
+  // Container reads establish aliases after the first property-read pass.
+  // Resolve property reads again now that retrieved object identities are known.
+  for (const read of propertyReads) {
+    const readObject = canonicalObject(read.object);
+    const matches = propertyWrites.filter(write =>
+      canonicalObject(write.object) === readObject &&
+      (read.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+    const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
+    for (const write of matches) {
+      addEdge(write.stored, destination, 'property-value-read', read.node,
+        read.property === null ? 'dynamic property read' : 'property=' + read.property);
     }
   }
 
