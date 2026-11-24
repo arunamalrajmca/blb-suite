@@ -91,7 +91,7 @@ function isAuditHarnessOnlyCompatibleSource(candidateSha, currentSha) {
   const scriptChange = (numstat.stdout || '').split(/\r?\n/).find(line =>
     line.endsWith('\tscripts/compare-full-audit-concurrency.mjs')
   );
-  return scriptChange === '40\t2\tscripts/compare-full-audit-concurrency.mjs';
+  return scriptChange === '51\t2\tscripts/compare-full-audit-concurrency.mjs';
 }
 
 try {
