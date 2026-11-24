@@ -852,7 +852,7 @@ test('traces callback factories returned by class instance and static methods', 
     'const callback = alias.create();',
     'const staticCallback = HandlerFactory.createStatic();',
     'const wrapped = { handler: instance.create() };'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
     edge.kind === 'function-return-callback' && edge.to === 'callback@7'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
@@ -867,7 +867,7 @@ test('keeps class method factory identities separate across different classes', 
     'class SecondFactory { make() { return () => secondWork(); } }',
     'const instance = new FirstFactory();',
     'const callback = instance.make();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
   assert.ok(!result.flowEdges.some(edge => edge.from === 'function@2' &&
