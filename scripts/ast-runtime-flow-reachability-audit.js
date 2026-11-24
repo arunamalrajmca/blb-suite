@@ -536,12 +536,12 @@ function analyzeFile(root, file) {
     if (call.callee.type === 'MemberExpression') {
       const property = propertyKey(call.callee.property, call.callee.computed);
       if (property === null) return null;
-      if (property === 'call' || property === 'apply') {
-        return resolveFunctionValue(call.callee.object);
-      }
       const receiverNode = call.callee.object;
       if (receiverNode.type === 'Identifier' && receiverNode.name === 'Reflect' &&
           property === 'apply') return resolveFunctionValue(call.arguments[0]);
+      if (property === 'call' || property === 'apply') {
+        return resolveFunctionValue(receiverNode);
+      }
       if (receiverNode.type === 'Identifier') {
         const receiver = bindingId(receiverNode);
         const methods = objectMethodFunctions.get(receiver + '::' + property) || [];
