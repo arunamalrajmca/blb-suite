@@ -319,6 +319,43 @@ function analyzeFile(root, file) {
     }
     if (value.type === 'MemberExpression' && value.object.type === 'Identifier') {
       addEdge(bindingId(value.object), destination, kind + '-member-value', origin || value, propertyName(value) || 'computed member');
+      return;
+    }
+    // Preserve values hidden behind expression wrappers. Await/yield do not
+    // change the identity of the value they carry.
+    if (['AwaitExpression', 'YieldExpression', 'ChainExpression', 'SpreadElement'].includes(value.type)) {
+      addContainedReferences(value.argument || value.expression, destination, kind, origin || value, depth + 1);
+      return;
+    }
+    // Promise.resolve/reject and Object.freeze/seal/preventExtensions are
+    // transparent value wrappers for reachability purposes.
+    if (value.type === 'CallExpression' && value.callee.type === 'MemberExpression' &&
+        value.callee.object.type === 'Identifier') {
+      const owner = value.callee.object.name;
+      const method = propertyName(value.callee);
+      if ((owner === 'Promise' && ['resolve', 'reject'].includes(method)) ||
+          (owner === 'Object' && ['freeze', 'seal', 'preventExtensions'].includes(method))) {
+        for (const argument of value.arguments) {
+          addContainedReferences(argument, destination, kind + '-transparent-call', origin || value, depth + 1);
+        }
+        return;
+      }
+    }
+    // A factory call nested inside an object/array/container wrapper can
+    // return the callback or aggregate being retained. Follow its explicit
+    // return expressions, while the depth bound prevents recursive factories
+    // from causing unbounded analysis.
+    if (value.type === 'CallExpression' && value.callee.type === 'Identifier') {
+      const calledVariable = variableForNode.get(value.callee);
+      const named = functionDeclarationsByName.get(value.callee.name) || [];
+      const called = (calledVariable && functionVariables.get(calledVariable)) ||
+        (named.length === 1 ? named[0] : null);
+      if (called) {
+        for (const returned of returnedValues(called)) {
+          addContainedReferences(returned, destination, kind + '-factory-return', origin || value, depth + 1);
+        }
+      }
+      return;
     }
   };
   const prototypeSource = node => {
@@ -589,6 +626,11 @@ function analyzeFile(root, file) {
             addEdge(identity, container, 'container-store-aggregate', node, name);
             addContainedReferences(value, identity, 'container-store', node);
             addObjectPropertySlots(value, identity);
+            containerWrites.push({container, key, stored:identity, node, objectValue:true});
+          } else if (value.type === 'CallExpression' || value.type === 'AwaitExpression' ||
+                     value.type === 'YieldExpression' || value.type === 'ChainExpression') {
+            const identity = 'container-expression@' + value.loc.start.line + ':' + value.loc.start.column;
+            addContainedReferences(value, identity, 'container-store-expression', node);
             containerWrites.push({container, key, stored:identity, node, objectValue:true});
           }
         }
