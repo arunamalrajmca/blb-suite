@@ -255,7 +255,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 2 — next 100 isolated tests
         id: serial_batch_2
-        if: ${{ success() && steps.serial_batch_2.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -274,7 +274,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 3 — next 100 isolated tests
         id: serial_batch_3
-        if: ${{ success() && steps.serial_batch_3.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_2.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -293,7 +293,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 4 — next 100 isolated tests
         id: serial_batch_4
-        if: ${{ success() && steps.serial_batch_4.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_3.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -312,7 +312,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 5 — next 100 isolated tests
         id: serial_batch_5
-        if: ${{ success() && steps.serial_batch_5.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_4.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -331,7 +331,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 6 — next 100 isolated tests
         id: serial_batch_6
-        if: ${{ success() && steps.serial_batch_6.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_5.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -350,7 +350,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 7 — next 100 isolated tests
         id: serial_batch_7
-        if: ${{ success() && steps.serial_batch_7.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_6.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -369,7 +369,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 8 — next 100 isolated tests
         id: serial_batch_8
-        if: ${{ success() && steps.serial_batch_8.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_7.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -388,7 +388,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 9 — next 100 isolated tests
         id: serial_batch_9
-        if: ${{ success() && steps.serial_batch_9.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_8.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -407,7 +407,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 10 — next 100 isolated tests
         id: serial_batch_10
-        if: ${{ success() && steps.serial_batch_10.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_9.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -426,7 +426,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 11 — next 100 isolated tests
         id: serial_batch_11
-        if: ${{ success() && steps.serial_batch_11.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_10.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
@@ -445,7 +445,7 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 12 — next 100 isolated tests
         id: serial_batch_12
-        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        if: ${{ success() && steps.serial_batch_11.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
