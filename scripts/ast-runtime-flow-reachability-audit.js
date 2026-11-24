@@ -541,7 +541,9 @@ function analyzeFile(root, file) {
         const key = name === 'set' ? literalKey(node.arguments[0]) : null;
         for (const value of values) {
           const stored = value.type === 'Identifier' ? bindingId(value) :
-            isFunction(value) ? 'function@' + value.loc.start.line : null;
+            isFunction(value) ? 'function@' + value.loc.start.line :
+            value.type === 'MemberExpression'
+              ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
           if (stored) {
             addEdge(stored, container, isFunction(value) ? 'container-store-callback' : 'container-store', node, name);
             containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier'});
@@ -594,6 +596,15 @@ function analyzeFile(root, file) {
                   addEdge(returnedBinding, assigned, 'function-return', node, node.callee.name);
                   linkObjectAlias(assigned, returnedBinding);
                 }
+                continue;
+              }
+              if (returned.type === 'MemberExpression' && returned.object.type === 'Identifier') {
+                propertyReads.push({
+                  object:bindingId(returned.object),
+                  property:propertyKey(returned.property, returned.computed),
+                  assigned,
+                  node:returned
+                });
                 continue;
               }
               if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
@@ -706,6 +717,11 @@ function analyzeFile(root, file) {
           assigned = 'scheduler@' + parent.loc.start.line;
           add('callbacks', 'stored-property-callback-registration', node,
             schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + node.object.name);
+        } else if (containerMethods.has(schedulerName)) {
+          const valueIndex = parent.arguments.indexOf(node);
+          if (schedulerName !== 'set' || valueIndex > 0) {
+            assigned = 'container-value@' + node.loc.start.line + ':' + node.loc.start.column;
+          }
         }
       } else if (parent?.type === 'CallExpression' && parent.callee === node) {
         propertyReads.push({
