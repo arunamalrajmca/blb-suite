@@ -63,11 +63,11 @@
         },
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
-          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+          "requiredText": "group: full-test-audit-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}"
         },
         {
           "file": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
-          "requiredText": "github.event.label.name || github.event.action || 'dispatch'"
+          "requiredText": "group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}"
         },
         {
           "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",

@@ -1770,7 +1770,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
     const messageRoot = initialNode?.closest?.(
       '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '[itemprop="articleBody"], .dt-post-body, .body.markup, .available-content, .post-content, ' +
       '.entry-content, .article-body, .article-content, .content-body'
     ) || initialNode?.closest?.('article, main, [role="main"]');
     // Resolve a numbered-book suffix from its exact live Range before the
@@ -3901,7 +3901,7 @@ function handleDoubleClickBlb(event) {
           const cueRoot = contextualTarget instanceof Element
             ? contextualTarget.closest(
               '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-              '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+              '[itemprop="articleBody"], .dt-post-body, .body.markup, .available-content, .post-content, ' +
               '.entry-content, .article-body, .article-content, .content-body'
             )
             : null;
@@ -3975,7 +3975,7 @@ function handleDoubleClickBlb(event) {
         const getVerseDiagnosticRoot = () => contextualTarget instanceof Element
           ? contextualTarget.closest(
             '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-            '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+            '[itemprop="articleBody"], .dt-post-body, .body.markup, .available-content, .post-content, ' +
             '.entry-content, .article-body, .article-content, .content-body'
           )
           : null;

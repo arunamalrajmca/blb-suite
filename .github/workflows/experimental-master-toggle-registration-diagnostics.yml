@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   reproduce-registration-recovery:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-master-toggle-registration-diagnostics') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'ci-master-toggle-registration-diagnostics') && (github.event.action != 'labeled' || github.event.label.name == 'ci-master-toggle-registration-diagnostics')) }}
     name: Reproduce master OFF-to-ON registration recovery with four workers
     runs-on: ubuntu-latest
     timeout-minutes: 90
