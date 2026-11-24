@@ -72,80 +72,120 @@ jobs:
 
       - name: Run persistent-registration failure regression
         if: ${{ matrix.scenario == 'registration' }}
-        run: >-
-          npx playwright test tests/browser/service-worker-lifecycle.spec.js
-          --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-registration
+          cache_prefix: blb-ci-v1-reference-focused-registration-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/service-worker-lifecycle.spec.js
+            --grep "persistent registration failure keeps current and subsequent same-tab documents independently activatable"
+            --workers=1 --reporter=line
       - name: Rerun context-menu activation synchronization test in isolation
         if: ${{ matrix.scenario == 'context-menu' }}
-        run: >-
-          npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js
-          --grep "tab activation and active-tab navigation synchronize the global web/PDF selection menus"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-context-menu
+          cache_prefix: blb-ci-v1-reference-focused-context-menu-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js
+            --grep "tab activation and active-tab navigation synchronize the global web/PDF selection menus"
+            --workers=1 --reporter=line
       - name: Rerun content-bundle reinjection test in isolation
         if: ${{ matrix.scenario == 'reinjection' }}
-        run: >-
-          npx playwright test tests/browser/extension-lifecycle.spec.js
-          --grep "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-reinjection
+          cache_prefix: blb-ci-v1-reference-focused-reinjection-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/extension-lifecycle.spec.js
+            --grep "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+            --workers=1 --reporter=line
       - name: Rerun closed-tab activation test in isolation
         if: ${{ matrix.scenario == 'closed-tab' }}
-        run: >-
-          npx playwright test tests/browser/service-worker-lifecycle.spec.js
-          --grep "a tab closed during asynchronous eligibility checks is not injected during startup recovery"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-closed-tab
+          cache_prefix: blb-ci-v1-reference-focused-closed-tab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/service-worker-lifecycle.spec.js
+            --grep "a tab closed during asynchronous eligibility checks is not injected during startup recovery"
+            --workers=1 --reporter=line
       - name: Rerun same-task BLB verse-link navigation test in isolation
         if: ${{ matrix.scenario == 'blb-link-click' }}
-        run: >-
-          npx playwright test tests/browser/blb-verse-link-navigation.spec.js
-          --grep "a BLB verse link clicked in the same task as insertion opens a new tab"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-blb-link
+          cache_prefix: blb-ci-v1-reference-focused-blb-link-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/blb-verse-link-navigation.spec.js
+            --grep "a BLB verse link clicked in the same task as insertion opens a new tab"
+            --workers=1 --reporter=line
       - name: Rerun repeated master-toggle listener lifecycle test in isolation
         if: ${{ matrix.scenario == 'master-toggle-listener' }}
-        run: >-
-          npx playwright test tests/browser/content-feature-refresh-races.spec.js
-          --grep "repeated global master toggles disable and restore exactly one double-click listener"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-master-toggle
+          cache_prefix: blb-ci-v1-reference-focused-master-toggle-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/content-feature-refresh-races.spec.js
+            --grep "repeated global master toggles disable and restore exactly one double-click listener"
+            --workers=1 --reporter=line
       - name: Rerun real MV3 service-worker termination test in isolation
         if: ${{ matrix.scenario == 'worker-termination' }}
-        run: >-
-          npx playwright test tests/browser/service-worker-lifecycle.spec.js
-          --grep "a real MV3 service-worker termination is recovered by the Alt\\+B command message"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-worker-termination
+          cache_prefix: blb-ci-v1-reference-focused-worker-termination-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/service-worker-lifecycle.spec.js
+            --grep "a real MV3 service-worker termination is recovered by the Alt\\+B command message"
+            --workers=1 --reporter=line
       - name: Rerun guarded source-host registration lifecycle test in isolation
         if: ${{ matrix.scenario == 'guarded-registration' }}
-        run: >-
-          npx playwright test tests/browser/source-page-button-redirect-separation.spec.js
-          --grep "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
-          --workers=1 --reporter=line
-
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-guarded-registration
+          cache_prefix: blb-ci-v1-reference-focused-guarded-registration-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: >-
+            npx playwright test tests/browser/source-page-button-redirect-separation.spec.js
+            --grep "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+            --workers=1 --reporter=line
       - name: Stress four independent lifecycle specs across all four Playwright workers
         if: ${{ matrix.scenario == 'concurrency-stress' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test_files=(
-            tests/browser/service-worker-lifecycle.spec.js
-            tests/browser/source-page-button-redirect-separation.spec.js
-            tests/browser/content-feature-refresh-races.spec.js
-            tests/browser/extension-lifecycle.spec.js
-          )
-          grep_pattern='(a real MV3 service-worker termination is recovered by the Alt\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them|repeated global master toggles disable and restore exactly one double-click listener|reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging)'
-          # Keep the same eight executions and four-worker contention, but run
-          # two complete rounds. This prevents duplicate copies of the same
-          # destructive registration/worker lifecycle test from racing each
-          # other in separate Chromium instances during one round.
-          for round in 1 2; do
-            printf '[round %s/2] four-worker lifecycle contention stress\n' "$round"
-            npx playwright test "${test_files[@]}" --grep "$grep_pattern" --workers=4 --max-failures=0 --reporter=line
-          done
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-concurrency-stress
+          cache_prefix: blb-ci-v1-reference-focused-concurrency-stress-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          always_run: 'true'
+          run: |
+            set -euo pipefail
+            mkdir -p "$BLB_CI_CHECKPOINT_DIR"
+            test_files=(
+              tests/browser/service-worker-lifecycle.spec.js
+              tests/browser/source-page-button-redirect-separation.spec.js
+              tests/browser/content-feature-refresh-races.spec.js
+              tests/browser/extension-lifecycle.spec.js
+            )
+            grep_pattern='(a real MV3 service-worker termination is recovered by the Alt\+B command message|Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them|repeated global master toggles disable and restore exactly one double-click listener|reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging)'
+            for round in 1 2; do
+              marker="$BLB_CI_CHECKPOINT_DIR/round-$round.complete"
+              if [[ -f "$marker" ]]; then
+                printf '[round %s/2] Reusing passed four-worker lifecycle contention round\n' "$round"
+                continue
+              fi
+              printf '[round %s/2] four-worker lifecycle contention stress\n' "$round"
+              npx playwright test "${test_files[@]}" --grep "$grep_pattern" --workers=4 --max-failures=1 --reporter=line
+              touch "$marker"
+            done
       - name: Prepare exact PR-base performance baseline
         if: ${{ matrix.scenario == 'performance' }}
         env:
@@ -169,50 +209,69 @@ jobs:
           BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-selection.jsonl
           BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-selection.jsonl
           BLB_PERF_SAMPLES: 11
-        shell: bash
-        run: |
-          set -euo pipefail
-          : > "$BLB_BASELINE_OUTPUT"
-          : > "$BLB_CANDIDATE_OUTPUT"
-          progress=0
-          for ((sample=1; sample<=BLB_PERF_SAMPLES; sample++)); do
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: focused-selection-performance
+          cache_prefix: blb-ci-v1-reference-focused-selection-performance-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          always_run: 'true'
+          run: |
+            set -euo pipefail
+            mkdir -p "$BLB_CI_CHECKPOINT_DIR"
+            export BLB_BASELINE_OUTPUT="$BLB_CI_CHECKPOINT_DIR/baseline-selection.jsonl"
+            export BLB_CANDIDATE_OUTPUT="$BLB_CI_CHECKPOINT_DIR/candidate-selection.jsonl"
+            touch "$BLB_BASELINE_OUTPUT" "$BLB_CANDIDATE_OUTPUT"
+            progress=0
+            sample_exists() {
+              local output="$1" sample="$2" variant="$3"
+              grep -Fq "\"sample\":$sample,\"variant\":\"$variant\"" "$output"
+            }
             run_sample() {
               local variant="$1" extension="$2" output="$3"
               progress=$((progress+1))
-              printf '[%s/22] selection %s sample %s/11\n' "$progress" "$variant" "$sample"
-              BLB_EXTENSION_PATH="$extension" BLB_PERF_OUTPUT="$output" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1 --reporter=line
+              if sample_exists "$output" "$sample" "$variant"; then
+                printf '[%s/22] Reusing passed selection %s sample %s/11\n' "$progress" "$variant" "$sample"
+                return 0
+              fi
+              printf '[%s/22] Running selection %s sample %s/11\n' "$progress" "$variant" "$sample"
+              BLB_EXTENSION_PATH="$extension" BLB_PERF_OUTPUT="$output" BLB_PERF_SCENARIO=selection BLB_PERF_SAMPLE="$sample" BLB_PERF_VARIANT="$variant" npx playwright test tests/browser/performance.spec.js --workers=1 --max-failures=1 --reporter=line
             }
-            if (( sample % 2 == 1 )); then
-              run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
-              run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
-            else
-              run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
-              run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
-            fi
-          done
-          node <<'NODE'
-          const fs=require('fs');
-          const read=p=>fs.readFileSync(p,'utf8').trim().split(/\r?\n/).filter(Boolean).map(x=>JSON.parse(x).handoffMs);
-          const median=a=>[...a].sort((x,y)=>x-y)[Math.floor(a.length/2)];
-          const b=read(process.env.BLB_BASELINE_OUTPUT), c=read(process.env.BLB_CANDIDATE_OUTPUT);
-          if(b.length!==11 || c.length!==11) throw new Error('Expected 11 baseline and 11 candidate samples');
-          const bm=median(b), cm=median(c), regression=(cm-bm)/bm;
-          const paired=median(b.map((v,i)=>(c[i]-v)/v));
-          console.log('Baseline selection samples (ms): '+b.join(', '));
-          console.log('Candidate selection samples (ms): '+c.join(', '));
-          console.log(`Median: baseline ${bm} ms; candidate ${cm} ms; regression ${(regression*100).toFixed(1)}%`);
-          console.log(`Paired median regression: ${(paired*100).toFixed(1)}%`);
-          if(regression>0.10) throw new Error('Selection handoff regression exceeds the unchanged 10% limit');
-          console.log('Focused selection performance gate passed.');
-          NODE
-
+            for ((sample=1; sample<=11; sample++)); do
+              if (( sample % 2 == 1 )); then
+                run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+                run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+              else
+                run_sample candidate "$BLB_CANDIDATE_EXTENSION_PATH" "$BLB_CANDIDATE_OUTPUT"
+                run_sample baseline "$BLB_BASELINE_EXTENSION_PATH" "$BLB_BASELINE_OUTPUT"
+              fi
+            done
+            node <<'NODE'
+            const fs=require('node:fs');
+            const read=(file,variant)=>fs.readFileSync(file,'utf8').trim().split(/\r?\n/).filter(Boolean)
+              .map(line=>JSON.parse(line)).filter(record=>record.scenario==='selection' && record.variant===variant)
+              .sort((a,b)=>a.sample-b.sample);
+            const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
+            const baseline=read(process.env.BLB_BASELINE_OUTPUT,'baseline');
+            const candidate=read(process.env.BLB_CANDIDATE_OUTPUT,'candidate');
+            if(baseline.length!==11 || candidate.length!==11) throw new Error('Expected 11 baseline and 11 candidate samples');
+            if(new Set(baseline.map(record=>record.sample)).size!==11 || new Set(candidate.map(record=>record.sample)).size!==11) throw new Error('Duplicate selection performance samples detected');
+            const b=baseline.map(record=>record.handoffMs), c=candidate.map(record=>record.handoffMs);
+            const bm=median(b), cm=median(c), regression=(cm-bm)/bm;
+            const paired=median(b.map((value,index)=>(c[index]-value)/value));
+            console.log('Baseline selection samples (ms): '+b.join(', '));
+            console.log('Candidate selection samples (ms): '+c.join(', '));
+            console.log(`Median: baseline ${bm} ms; candidate ${cm} ms; regression ${(regression*100).toFixed(1)}%`);
+            console.log(`Paired median regression: ${(paired*100).toFixed(1)}%`);
+            if(regression>0.10) throw new Error('Selection handoff regression exceeds the unchanged 10% limit');
+            console.log('Focused selection performance gate passed.');
+            NODE
       - name: Upload focused selection measurements
         if: ${{ always() && matrix.scenario == 'performance' }}
         uses: actions/upload-artifact@v6
         with:
           name: focused-selection-performance
           path: |
-            ${{ runner.temp }}/baseline-selection.jsonl
-            ${{ runner.temp }}/candidate-selection.jsonl
+            ${{ runner.temp }}/blb-ci-checkpoints/focused-selection-performance/baseline-selection.jsonl
+            ${{ runner.temp }}/blb-ci-checkpoints/focused-selection-performance/candidate-selection.jsonl
           if-no-files-found: ignore
           retention-days: 14

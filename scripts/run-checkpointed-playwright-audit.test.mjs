@@ -45,9 +45,13 @@ test('only passed shards are reused; failed and pending shards execute again', (
   const checkpoint = path.join(directory, 'checkpoints');
   fs.writeFileSync(list, entries.join('\n') + '\n');
   const calls = [];
+  const attempts = new Map();
   const executeShard = (tests, index) => {
     calls.push(index);
-    return { passed: index !== 2, exitCode: index === 2 ? 1 : 0, validReport: true };
+    const attempt = (attempts.get(index) || 0) + 1;
+    attempts.set(index, attempt);
+    const passed = index !== 2 || attempt > 1;
+    return { passed, exitCode: passed ? 0 : 1, validReport: true };
   };
   const args = { testListPath: list, directory: checkpoint, sourceSha, fingerprint, shardCount: 4, executeShard };
   try {

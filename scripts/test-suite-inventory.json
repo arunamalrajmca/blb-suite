@@ -79,6 +79,18 @@
         {
           "file": ".github/workflows/experimental-master-toggle-registration-diagnostics.yml",
           "requiredText": "group: master-toggle-registration-diagnostics-${{ github.event.pull_request.number || github.ref }}"
+        },
+        {
+          "file": ".github/workflows/browser-e2e-reference.yml",
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
+        },
+        {
+          "file": ".github/workflows/browser-e2e-groups.yml",
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
+        },
+        {
+          "file": ".github/workflows/browser-e2e-focused-regressions.yml",
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
         }
       ]
     },
@@ -651,16 +663,18 @@
     },
     {
       "path": "extension/blb-parse-popup.js",
-      "coverageLevel": "partial-integration",
+      "coverageLevel": "direct-integration",
       "testFiles": [
         {
           "path": "tests/browser/blb-parse-popup.spec.js",
-          "requiredText": [
-            "parse-popup reinjection owns one click handler and cleanup releases its markers"
-          ]
+          "requiredText": "parse-popup reinjection owns one click handler and cleanup releases its markers"
+        },
+        {
+          "path": "tests/browser/blb-parse-popup.spec.js",
+          "requiredText": "parse-popup click routing opens canonical BLB and lexicon criteria destinations while respecting disabled and modified activations"
         }
       ],
-      "gap": "Current direct test proves reinjection ownership and cleanup only; parsing, event dispatch, and error-path behavior need focused assertions."
+      "gap": "Direct integration behavior is mapped; finer branch-level coverage is not yet measured."
     },
     {
       "path": "extension/blb-verse-link-navigation.js",

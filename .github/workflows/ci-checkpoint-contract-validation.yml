@@ -11,6 +11,9 @@ on:
       - '.github/workflows/browser-native-shortcut.yml'
       - '.github/workflows/browser-e2e-performance.yml'
       - '.github/workflows/experimental-master-toggle-registration-diagnostics.yml'
+      - '.github/workflows/browser-e2e-reference.yml'
+      - '.github/workflows/browser-e2e-groups.yml'
+      - '.github/workflows/browser-e2e-focused-regressions.yml'
       - 'scripts/ci-section-checkpoint.*'
       - 'scripts/run-checkpointed-playwright-*.mjs'
       - 'scripts/test-suite-inventory.*'
@@ -48,7 +51,7 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Validate workflow and composite-action YAML
         run: |
-          actionlint -ignore 'SC2129|SC2235' .github/workflows/ci-checkpoint-contract-validation.yml .github/workflows/browser-tests.yml .github/workflows/manual-full-test-audit.yml .github/workflows/browser-native-shortcut.yml .github/workflows/browser-e2e-performance.yml .github/workflows/experimental-master-toggle-registration-diagnostics.yml
+          actionlint -ignore 'SC2129|SC2235' .github/workflows/ci-checkpoint-contract-validation.yml .github/workflows/browser-tests.yml .github/workflows/manual-full-test-audit.yml .github/workflows/browser-native-shortcut.yml .github/workflows/browser-e2e-performance.yml .github/workflows/experimental-master-toggle-registration-diagnostics.yml .github/workflows/browser-e2e-reference.yml .github/workflows/browser-e2e-groups.yml .github/workflows/browser-e2e-focused-regressions.yml
           ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file) }' .github/actions/ci-section-checkpoint/action.yml .github/workflows/browser-tests.yml .github/workflows/manual-full-test-audit.yml .github/workflows/browser-native-shortcut.yml .github/workflows/browser-e2e-performance.yml .github/workflows/experimental-master-toggle-registration-diagnostics.yml
       - name: Validate complete test ownership and production-module coverage
         run: node scripts/test-suite-inventory.mjs
