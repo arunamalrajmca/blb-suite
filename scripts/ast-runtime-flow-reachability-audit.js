@@ -311,6 +311,26 @@ function analyzeFile(root, file) {
     }
     return null;
   };
+  const classContext = ancestors => {
+    let methodIndex = -1, method = null, classNode = null;
+    for (let index = ancestors.length - 1; index >= 0; index--) {
+      const candidate = ancestors[index];
+      if (methodIndex < 0 && candidate.type === 'MethodDefinition') {
+        methodIndex = index; method = candidate;
+      }
+      if (candidate.type === 'ClassDeclaration' || candidate.type === 'ClassExpression') {
+        classNode = candidate; break;
+      }
+    }
+    if (!method || !classNode) return null;
+    const nestedFunctions = ancestors.slice(methodIndex + 1).filter(isFunction);
+    if (nestedFunctions.some(fn => fn.type !== 'ArrowFunctionExpression')) return null;
+    const declaration = [...ancestors].reverse().find(node =>
+      node.type === 'VariableDeclarator' && node.id.type === 'Identifier');
+    const name = classNode.id?.name || declaration?.id.name;
+    if (!name) return null;
+    return method.static ? 'class-static@' + name : 'class-instance@' + name;
+  };
   const returnedValues = fn => {
     const returned = [];
     const scan = (node, isRoot = false) => {
@@ -388,11 +408,47 @@ function analyzeFile(root, file) {
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice']);
 
   visit(ast, (node, parent, ancestors) => {
+    if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
+      const declaration = [...ancestors].reverse().find(item =>
+        item.type === 'VariableDeclarator' && item.id.type === 'Identifier');
+      const className = node.id?.name || declaration?.id.name;
+      if (className) {
+        const staticIdentity = 'class-static@' + className;
+        if (node.id) linkObjectAlias(bindingId(node.id), staticIdentity);
+        if (node.superClass?.type === 'Identifier') {
+          propertyCopies.push({target:'class-instance@' + className,source:'class-instance@' + node.superClass.name,prefix:''});
+          propertyCopies.push({target:staticIdentity,source:'class-static@' + node.superClass.name,prefix:''});
+        }
+        for (const element of node.body.body) {
+          const identity = element.static ? staticIdentity : 'class-instance@' + className;
+          if (element.type === 'MethodDefinition') {
+            const property = propertyKey(element.key, element.computed);
+            const stored = 'function@' + element.value.loc.start.line;
+            propertyWrites.push({object:identity,property,stored});
+            addEdge(stored, propertySlot(identity, property === null ? '[dynamic]' : property),
+              'class-method-store', element, className + '.' + (property || '[computed]'));
+          } else if (element.type === 'PropertyDefinition' && element.value) {
+            const property = propertyKey(element.key, element.computed);
+            const slot = propertySlot(identity, property === null ? '[dynamic]' : property);
+            const before = flowEdges.length;
+            addContainedReferences(element.value, slot, 'class-field-store', element);
+            for (const edge of flowEdges.slice(before)) propertyWrites.push({object:identity,property,stored:edge.from});
+          }
+        }
+      }
+    }
+
     if (node.type === 'CallExpression' || node.type === 'NewExpression') {
       const name = calleeName(node.callee);
       const receiver = node.callee && node.callee.type === 'MemberExpression'
         ? node.callee.object : null;
       const receiverName = receiver && receiver.type === 'Identifier' ? receiver.name : null;
+      if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
+          parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+        const target = bindingId(parent.id), source = 'class-instance@' + node.callee.name;
+        propertyCopies.push({target,source,prefix:''});
+        addEdge(source,target,'class-instance-construction',node,node.callee.name);
+      }
 
       // Callback values are treated as first-class reachability edges, not as
       // ordinary arguments whose target must be synchronously called.
@@ -617,6 +673,29 @@ function analyzeFile(root, file) {
       }
     }
 
+    if (node.type === 'MemberExpression' && node.object.type === 'ThisExpression') {
+      const object = classContext(ancestors);
+      if (object) {
+        const property = propertyKey(node.property, node.computed);
+        let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
+          const schedulerName = calleeName(parent.callee);
+          if (callbackSchedulers.has(schedulerName)) {
+            assigned = 'scheduler@' + parent.loc.start.line;
+            add('callbacks','stored-property-callback-registration',node,
+              schedulerName + ' receives ' + (property || 'dynamic property') + ' from this');
+          }
+        } else if (parent?.type === 'CallExpression' && parent.callee === node) {
+          propertyReads.push({object,property,assigned:'property-read@' + parent.loc.start.line,node});
+          assigned = 'callback-invocation@' + parent.loc.start.line;
+          add('callbacks','stored-property-callback-invocation',node,
+            (property || 'dynamic property') + ' invoked from this');
+        }
+        propertyReads.push({object,property,assigned,node});
+      }
+    }
+
     if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
       const object = bindingId(node.object), property = propertyKey(node.property, node.computed);
       let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
@@ -684,6 +763,17 @@ function analyzeFile(root, file) {
 
     if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' && node.right.type === 'Identifier') {
       linkObjectAlias(bindingId(node.left), bindingId(node.right));
+    }
+
+    if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
+        node.left.object.type === 'ThisExpression') {
+      const object = classContext(ancestors), property = propertyKey(node.left.property,node.left.computed);
+      if (object) {
+        const slot = propertySlot(object,property === null ? '[dynamic]' : property);
+        const before = flowEdges.length;
+        addContainedReferences(node.right,slot,'class-property-store',node);
+        for (const edge of flowEdges.slice(before)) propertyWrites.push({object,property,stored:edge.from});
+      }
     }
 
     if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
