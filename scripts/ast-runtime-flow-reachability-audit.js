@@ -300,6 +300,17 @@ function analyzeFile(root, file) {
       addEdge(bindingId(value.object), destination, kind + '-member-value', origin || value, propertyName(value) || 'computed member');
     }
   };
+  const prototypeSource = node => {
+    if (!node) return null;
+    if (node.type === 'Identifier') return bindingId(node);
+    if (node.type === 'ObjectExpression' || node.type === 'ArrayExpression') {
+      const synthetic = 'prototype-literal@' + node.loc.start.line;
+      addContainedReferences(node, synthetic, 'prototype-wrap', node);
+      addObjectPropertySlots(node, synthetic);
+      return synthetic;
+    }
+    return null;
+  };
   const returnedValues = fn => {
     const returned = [];
     const scan = (node, isRoot = false) => {
@@ -427,15 +438,23 @@ function analyzeFile(root, file) {
       if (node.type === 'CallExpression' && name === 'setPrototypeOf') {
         if (receiverName === 'Object' || receiverName === 'Reflect') {
           add('prototype-mutation', 'prototype-set', node, receiverName + '.setPrototypeOf');
-          if (node.arguments[0] && node.arguments[0].type === 'Identifier' &&
-              node.arguments[1] && node.arguments[1].type === 'Identifier') {
-            addEdge(bindingId(node.arguments[1]), bindingId(node.arguments[0]),
-              'prototype-inheritance', node, receiverName + '.setPrototypeOf');
+          const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+          const source = prototypeSource(node.arguments[1]);
+          if (target && source) {
+            addEdge(source, target, 'prototype-inheritance', node, receiverName + '.setPrototypeOf');
+            propertyCopies.push({target,source,prefix:''});
           }
         }
       }
       if (node.type === 'CallExpression' && name === 'create' && receiverName === 'Object') {
         add('prototype-mutation', 'prototype-derived-object', node, 'Object.create prototype inheritance');
+        const target = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        const source = prototypeSource(node.arguments[0]);
+        if (target && source) {
+          addEdge(source, target, 'prototype-derived-property-source', node, 'Object.create');
+          propertyCopies.push({target,source,prefix:''});
+        }
       }
       if (node.type === 'CallExpression' && name === 'getPrototypeOf' &&
           (receiverName === 'Object' || receiverName === 'Reflect')) {
