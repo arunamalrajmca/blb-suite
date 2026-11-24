@@ -161,7 +161,7 @@ try {
     const inventory = JSON.parse(fs.readFileSync(inventoryPath, 'utf8'));
     const serial = JSON.parse(fs.readFileSync(serialPath, 'utf8'));
     const stageScheduled = fs.readFileSync(scheduledPath, 'utf8').split(/\\r?\\n/).filter(Boolean);
-    if (serial.length !== stageScheduled.length || inventory.scheduled !== stageScheduled.length) {
+    if (JSON.stringify(stageScheduled) !== JSON.stringify(scheduled)) {\n      throw new Error('Downloaded serial baseline inventory does not exactly match the current checked-out test inventory.');\n    }\n    if (serial.length !== stageScheduled.length || inventory.scheduled !== stageScheduled.length) {
       throw new Error('Serial baseline artifact is incomplete or does not match its inventory.');
     }
     const serialByKey = new Map();
