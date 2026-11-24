@@ -359,7 +359,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
           if(argumentVariable)patternParameterArguments.get(parameterNode).add(argumentVariable);
         }
         const value=literalString(arg,file);
-        if(parameter&&parameter.type==='Identifier'&&value!==null){
+        if(parameter&&value!==null){
           if(!parameterValues.has(parameter))parameterValues.set(parameter,new Set());
           parameterValues.get(parameter).add(value);
         }
