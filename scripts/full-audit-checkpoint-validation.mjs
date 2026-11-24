@@ -6,7 +6,8 @@ export const AUDIT_HARNESS_RECOVERY_FILES = Object.freeze([
   '.github/workflows/experimental-full-audit-concurrency-equivalence.yml',
   'scripts/compare-full-audit-concurrency.mjs',
   'scripts/full-audit-checkpoint-validation.mjs',
-  'scripts/full-audit-checkpoint-validation.test.mjs'
+  'scripts/full-audit-checkpoint-validation.test.mjs',
+  'scripts/test-suite-inventory.json'
 ]);
 
 export function isAuditHarnessOnlyCompatibleSource(candidateSha, currentSha, options = {}) {
