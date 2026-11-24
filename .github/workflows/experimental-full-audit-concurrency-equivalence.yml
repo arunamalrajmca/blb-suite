@@ -37,6 +37,8 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
       - name: Run fail-fast four-worker screening over the complete browser inventory
@@ -90,6 +92,8 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
       - name: Stage 1 — run isolated serial baseline with per-test checkpoints
@@ -135,6 +139,8 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Stage 2 — run and compare parallel repetition 1 (fail fast)
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -179,6 +185,8 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Stage 3 — run and compare parallel repetition 2 (fail fast)
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -223,6 +231,8 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Stage 4 — run and compare parallel repetition 3 (fail fast)
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
