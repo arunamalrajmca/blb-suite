@@ -10,8 +10,8 @@ on:
         type: string
   pull_request:
     branches: [ main ]
-    # Label events start the deep audit; synchronize events run only the focused lifecycle-race regression.
-    types: [labeled, synchronize]
+    # PR updates run only the focused lifecycle-race regression. Full audits are manual dispatches only.
+    types: [synchronize]
 
 permissions:
   actions: read
