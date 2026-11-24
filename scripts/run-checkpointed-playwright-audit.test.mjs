@@ -34,6 +34,9 @@ test('shard manifests are bound to exact source, fingerprint, inventory, order, 
   malformed.shards[0].status = 'passed';
   malformed.shards[0].exitCode = 1;
   assert.equal(isCompatibleShardManifest(malformed, expected), false);
+  malformed.shards[0].exitCode = 0;
+  malformed.shards[0].reportValid = false;
+  assert.equal(isCompatibleShardManifest(malformed, expected), false);
 });
 
 test('only passed shards are reused; failed and pending shards execute again', () => {
