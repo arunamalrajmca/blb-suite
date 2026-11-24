@@ -611,6 +611,7 @@ function analyzeFile(root, file) {
   const containerReadMethods = new Set(['get', 'pop', 'shift', 'at', 'find', 'findLast', 'splice']);
   const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
   const weakRefSources = new Map();
+  const finalizationRegistryCallbacks = new Map();
 
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
@@ -625,6 +626,17 @@ function analyzeFile(root, file) {
       if (assigned) {
         weakRefSources.set(assigned, node.arguments[0]);
         addContainedReferences(node.arguments[0], assigned, 'weakref-store', node);
+      }
+    }
+    if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
+        node.callee.name === 'FinalizationRegistry' && node.arguments[0]) {
+      const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+        ? bindingId(parent.id) : null;
+      if (assigned) {
+        const callback = isFunction(node.arguments[0]) ? node.arguments[0] :
+          node.arguments[0].type === 'Identifier' ? resolveFunctionValue(node.arguments[0]) : null;
+        if (callback) finalizationRegistryCallbacks.set(assigned, callback);
+        addContainedReferences(node.arguments[0], assigned, 'finalization-registry-callback', node);
       }
     }
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
@@ -794,6 +806,28 @@ function analyzeFile(root, file) {
           }
         }
       }
+      if (node.type === 'CallExpression' && name === 'register' &&
+          receiver?.type === 'Identifier') {
+        const callback = finalizationRegistryCallbacks.get(bindingId(receiver));
+        const holdings = node.arguments[1];
+        const parameter = callback?.params?.[0];
+        if (callback && holdings && parameter?.type === 'Identifier') {
+          if (holdings.type === 'Identifier') {
+            const holdingsFunction = functionVariables.get(variableForNode.get(holdings));
+            if (holdingsFunction) {
+              addEdge('function@' + holdingsFunction.loc.start.line, bindingId(parameter),
+                'finalization-holdings-callback', node);
+            } else {
+              addEdge(bindingId(holdings), bindingId(parameter),
+                'finalization-holdings-value', node);
+            }
+          } else {
+            addContainedReferences(holdings, bindingId(parameter),
+              'finalization-holdings', node);
+          }
+        }
+      }
+
       if (node.type === 'CallExpression' && name === 'deref' &&
           receiver?.type === 'Identifier') {
         const source = weakRefSources.get(bindingId(receiver));
