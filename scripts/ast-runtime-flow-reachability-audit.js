@@ -634,27 +634,29 @@ function analyzeFile(root, file) {
         if (assigned && callback) {
           const returns = callback.body.type === 'BlockStatement'
             ? returnedValues(callback) : [callback.body];
-          for (const returned of returns) {
+          const returnedItems = name === 'flatMap' && returned.type === 'ArrayExpression'
+            ? returned.elements.filter(Boolean) : [returned];
+          for (const returnedItem of returnedItems) {
             let stored = null, objectValue = false;
-            if (returned.type === 'Identifier') {
-              const returnedFunction = functionVariables.get(variableForNode.get(returned));
-              stored = bindingId(returned);
+            if (returnedItem.type === 'Identifier') {
+              const returnedFunction = functionVariables.get(variableForNode.get(returnedItem));
+              stored = bindingId(returnedItem);
               if (returnedFunction) {
                 addEdge('function@' + returnedFunction.loc.start.line, stored,
                   'function-variable-identity', node, name);
               } else objectValue = true;
-            } else if (isFunction(returned)) {
-              stored = 'function@' + returned.loc.start.line;
-            } else if (returned.type === 'MemberExpression') {
-              const reference = memberReference(returned);
+            } else if (isFunction(returnedItem)) {
+              stored = 'function@' + returnedItem.loc.start.line;
+            } else if (returnedItem.type === 'MemberExpression') {
+              const reference = memberReference(returnedItem);
               if (reference) {
-                stored = 'array-transform-value@' + returned.loc.start.line + ':' + returned.loc.start.column;
-                propertyReads.push({object:reference.object,property:reference.property,assigned:stored,node:returned});
+                stored = 'array-transform-value@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
+                propertyReads.push({object:reference.object,property:reference.property,assigned:stored,node:returnedItem});
               }
-            } else if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
-              stored = 'array-transform-aggregate@' + returned.loc.start.line + ':' + returned.loc.start.column;
-              addContainedReferences(returned, stored, 'array-transform-return', node);
-              addObjectPropertySlots(returned, stored);
+            } else if (['ObjectExpression', 'ArrayExpression'].includes(returnedItem.type)) {
+              stored = 'array-transform-aggregate@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
+              addContainedReferences(returnedItem, stored, 'array-transform-return', node);
+              addObjectPropertySlots(returnedItem, stored);
               objectValue = true;
             }
             if (stored) {
@@ -1110,7 +1112,7 @@ function analyzeFile(root, file) {
         if (canonicalObject(write.object) !== source) continue;
         if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
         copied.push({
-          container:target,key:write.property,stored:write.stored,node:copy.node,
+          container:target,key:null,stored:write.stored,node:copy.node,
           objectValue:!String(write.stored).startsWith('function@')
         });
       }
