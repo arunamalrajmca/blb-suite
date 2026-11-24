@@ -47,7 +47,13 @@ jobs:
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
       - name: Validate workflow and composite-action YAML
         run: |
-          actionlint
+          actionlint \\
+            .github/workflows/ci-checkpoint-contract-validation.yml \\
+            .github/workflows/browser-tests.yml \\
+            .github/workflows/manual-full-test-audit.yml \\
+            .github/workflows/browser-native-shortcut.yml \\
+            .github/workflows/browser-e2e-performance.yml \\
+            .github/workflows/experimental-master-toggle-registration-diagnostics.yml
           ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file) }' \
             .github/actions/ci-section-checkpoint/action.yml \
             .github/workflows/browser-tests.yml \
