@@ -936,3 +936,31 @@ test('traces bound object-method and class-method callback values', () => {
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
     edge.to === 'classBound@5' && edge.kind === 'bound-function-result'));
 });
+
+
+test('traces callback return values through Function.prototype.call and apply', () => {
+  const result = audit([
+    'function identity(next) { return next; }',
+    'const callback = () => work();',
+    'const fromCall = identity.call(null, callback);',
+    'const fromApply = identity.apply(null, [callback]);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'function-callback-parameter' && edge.to === 'next@1'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'next@1' &&
+    edge.kind === 'function-return' && edge.to === 'fromCall@3'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'next@1' &&
+    edge.kind === 'function-return' && edge.to === 'fromApply@4'));
+});
+
+test('traces callback return values through Reflect.apply', () => {
+  const result = audit([
+    'function identity(next) { return next; }',
+    'const callback = () => work();',
+    'const selected = Reflect.apply(identity, null, [callback]);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'function-callback-parameter' && edge.to === 'next@1'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'next@1' &&
+    edge.kind === 'function-return' && edge.to === 'selected@3'));
+});
