@@ -229,7 +229,7 @@
         },
         {
           "file": ".github/actions/ci-section-checkpoint/action.yml",
-          "requiredText": "always-run"
+          "requiredText": "always_run"
         }
       ]
     }
