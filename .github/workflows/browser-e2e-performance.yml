@@ -45,7 +45,7 @@ jobs:
   performance:
     name: Measured performance qualification
     # The full audit delegates both performance specs to this measured benchmark.
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') || contains(github.event.pull_request.labels.*.name, 'ci-independent-fresh-performance') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -129,6 +129,8 @@ jobs:
           sha256sum "$ZIP" | tee "$ZIP.sha256"
         
       - name: Benchmark baseline and candidate (interleaved, resumable)
+        env:
+          BLB_PERF_SCENARIOS: ${{ contains(github.event.pull_request.labels.*.name, 'ci-independent-fresh-performance') && 'fresh' || '' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: interleaved-performance-benchmark
@@ -251,6 +253,7 @@ jobs:
             export BLB_PERF_MAX_FRESH_REGRESSION=0.10
             export BLB_PERF_MIN_RANGE_RESOLVER_IMPROVEMENT=0.50
             export BLB_PERF_TARGET=${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
+            export BLB_PERF_FRESH_ONLY=${{ contains(github.event.pull_request.labels.*.name, 'ci-independent-fresh-performance') && '1' || '0' }}
             node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
       - name: Upload resumable performance sample checkpoints
         if: always()
