@@ -971,7 +971,7 @@ test('traces callback settlement values through Promise.resolve and identity the
     'const callback = () => work();',
     'const promise = Promise.resolve(callback);',
     'const chained = promise.then(value => value);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'promise@2' && edge.kind === 'promise-settlement-value-callback'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'promise@2' &&
@@ -986,7 +986,7 @@ test('traces callback factory returns through Promise.then and catch callbacks',
     'const promise = Promise.resolve(null);',
     'const chained = promise.then(() => callback);',
     'const recovered = promise.catch(() => callback);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'chained@3' && edge.kind === 'promise-chain-return-callback'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
@@ -997,7 +997,7 @@ test('traces callback values retained by Promise aggregate combinators', () => {
   const result = audit([
     'const callback = () => work();',
     'const aggregate = Promise.all([callback]);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'aggregate@2' && edge.kind === 'promise-aggregate-value-callback'));
 });
