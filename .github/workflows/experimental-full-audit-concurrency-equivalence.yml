@@ -641,3 +641,41 @@ jobs:
           path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           if-no-files-found: warn
           retention-days: 30
+
+  validate-retired-content-bundle-listener-race:
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
+    name: Focused retired content-bundle listener race regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout updated PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run the exact lifecycle race regression without relaxing assertions
+        run: >-
+          npx playwright test tests/browser/extension-lifecycle.spec.js
+          --project=extension-chromium
+          --workers=1
+          --max-failures=1
+          --grep="a delayed settings callback from the replaced content bundle cannot reclaim the Double-click listener"
+          --reporter=list
+      - name: Preserve focused regression diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: focused-retired-content-bundle-listener-race-${{ github.run_id }}
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 30
