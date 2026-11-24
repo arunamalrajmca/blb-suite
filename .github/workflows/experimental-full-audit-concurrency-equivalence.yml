@@ -97,6 +97,7 @@ jobs:
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
       - name: Serial baseline batch 1 — next 100 isolated tests
+        id: serial_batch_1
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -106,7 +107,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 1
-        if: always()
+        if: always() && steps.serial_batch_1.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-1-${{ github.run_id }}
@@ -114,6 +115,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 2 — next 100 isolated tests
+        id: serial_batch_2
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -123,7 +125,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 2
-        if: always()
+        if: always() && steps.serial_batch_2.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-2-${{ github.run_id }}
@@ -131,6 +133,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 3 — next 100 isolated tests
+        id: serial_batch_3
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -140,7 +143,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 3
-        if: always()
+        if: always() && steps.serial_batch_3.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-3-${{ github.run_id }}
@@ -148,6 +151,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 4 — next 100 isolated tests
+        id: serial_batch_4
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -157,7 +161,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 4
-        if: always()
+        if: always() && steps.serial_batch_4.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-4-${{ github.run_id }}
@@ -165,6 +169,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 5 — next 100 isolated tests
+        id: serial_batch_5
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -174,7 +179,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 5
-        if: always()
+        if: always() && steps.serial_batch_5.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-5-${{ github.run_id }}
@@ -182,6 +187,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 6 — next 100 isolated tests
+        id: serial_batch_6
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -191,7 +197,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 6
-        if: always()
+        if: always() && steps.serial_batch_6.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-6-${{ github.run_id }}
@@ -199,6 +205,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 7 — next 100 isolated tests
+        id: serial_batch_7
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -208,7 +215,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 7
-        if: always()
+        if: always() && steps.serial_batch_7.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-7-${{ github.run_id }}
@@ -216,6 +223,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 8 — next 100 isolated tests
+        id: serial_batch_8
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -225,7 +233,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 8
-        if: always()
+        if: always() && steps.serial_batch_8.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-8-${{ github.run_id }}
@@ -233,6 +241,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 9 — next 100 isolated tests
+        id: serial_batch_9
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -242,7 +251,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 9
-        if: always()
+        if: always() && steps.serial_batch_9.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-9-${{ github.run_id }}
@@ -250,6 +259,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 10 — next 100 isolated tests
+        id: serial_batch_10
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -259,7 +269,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 10
-        if: always()
+        if: always() && steps.serial_batch_10.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-10-${{ github.run_id }}
@@ -267,6 +277,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 11 — next 100 isolated tests
+        id: serial_batch_11
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -276,7 +287,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 11
-        if: always()
+        if: always() && steps.serial_batch_11.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-11-${{ github.run_id }}
@@ -284,6 +295,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Serial baseline batch 12 — next 100 isolated tests
+        id: serial_batch_12
         if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
@@ -293,7 +305,7 @@ jobs:
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
       - name: Preserve serial checkpoint batch 12
-        if: always()
+        if: always() && steps.serial_batch_12.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-batch-12-${{ github.run_id }}
