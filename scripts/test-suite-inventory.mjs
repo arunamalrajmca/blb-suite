@@ -152,6 +152,7 @@ console.log('Repository test inventory');
 for (const suite of counts) console.log('  '+suite.id+': '+suite.count+' file(s)');
 console.log('  Automated inventory total: '+total+' file(s)');
 console.log('  Explicit manual-only harnesses: '+manifest.manualOnly.length);
-console.log('  Test-looking files discovered: '+candidates.length);\nconsole.log('  Manifest-loaded production modules: '+manifestModules.size+' ('+directModuleCount+' direct integration, '+partialModuleCount+' partial integration, '+indirectModuleCount+' indirect integration, '+unmappedModuleCount+' unmapped)');
+console.log('  Test-looking files discovered: '+candidates.length);
+console.log('  Manifest-loaded production modules: '+manifestModules.size+' ('+directModuleCount+' direct integration, '+partialModuleCount+' partial integration, '+indirectModuleCount+' indirect integration, '+unmappedModuleCount+' unmapped)');
 if (errors.length) { for (const error of errors) console.error('FAIL: '+error); process.exitCode=1; }
 else console.log('PASS: every discovered test file has an explicit execution owner.');
