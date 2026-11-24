@@ -537,6 +537,11 @@ function analyzeFile(root, file) {
       const property = propertyKey(call.callee.property, call.callee.computed);
       if (property === null) return null;
       const receiverNode = call.callee.object;
+      if (receiverNode.type === 'Identifier' && receiverNode.name === 'Reflect' &&
+          property === 'apply') return resolveFunctionValue(call.arguments[0]);
+      if (property === 'call' || property === 'apply') {
+        return resolveFunctionValue(receiverNode);
+      }
       if (receiverNode.type === 'Identifier') {
         const receiver = bindingId(receiverNode);
         const methods = objectMethodFunctions.get(receiver + '::' + property) || [];
@@ -869,14 +874,34 @@ function analyzeFile(root, file) {
       if (node.type === 'CallExpression') {
         const calledFunction = resolveCalledFunction(node);
         if (calledFunction) {
-          for (let index = 0; index < Math.min(node.arguments.length, calledFunction.params.length); index++) {
-            const argument = node.arguments[index];
+          let actualArguments = node.arguments;
+          const callProperty = node.callee.type === 'MemberExpression'
+            ? propertyKey(node.callee.property, node.callee.computed) : null;
+          if (callProperty === 'call') actualArguments = node.arguments.slice(1);
+          else if (receiverName === 'Reflect' && name === 'apply') {
+            const argumentArray = node.arguments[2];
+            actualArguments = argumentArray?.type === 'ArrayExpression'
+              ? argumentArray.elements.filter(Boolean) : [];
+          } else if (callProperty === 'apply') {
+            const argumentArray = node.arguments[1];
+            actualArguments = argumentArray?.type === 'ArrayExpression'
+              ? argumentArray.elements.filter(Boolean) : [];
+          }
+          for (let index = 0; index < Math.min(actualArguments.length, calledFunction.params.length); index++) {
+            const argument = actualArguments[index];
             const parameter = calledFunction.params[index];
             if (argument.type === 'Identifier' && parameter.type === 'Identifier') {
-              addEdge(bindingId(argument), bindingId(parameter), 'function-argument', node, node.callee.name);
+              const argumentFunction = functionVariables.get(variableForNode.get(argument));
+              if (argumentFunction) {
+                addEdge('function@' + argumentFunction.loc.start.line, bindingId(parameter),
+                  'function-callback-parameter', node, node.callee.name || calleeName(node.callee));
+              } else {
+                addEdge(bindingId(argument), bindingId(parameter), 'function-argument', node,
+                  node.callee.name || calleeName(node.callee));
+              }
             } else if (isFunction(argument) && parameter.type === 'Identifier') {
               addEdge('function@' + argument.loc.start.line, bindingId(parameter),
-                'function-callback-parameter', node, node.callee.name);
+                'function-callback-parameter', node, node.callee.name || calleeName(node.callee));
             }
           }
           const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
