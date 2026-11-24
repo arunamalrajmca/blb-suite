@@ -4,7 +4,7 @@ inputs:
   section:
     description: Stable unique section identifier within the workflow.
     required: true
-  cache-prefix:
+  cache_prefix:
     description: Fingerprint-scoped cache prefix; include the workflow and all relevant source/test inputs.
     required: true
   fingerprint:
@@ -13,10 +13,10 @@ inputs:
   run:
     description: Shell command to execute when no compatible completed checkpoint exists.
     required: true
-  source-sha:
+  source_sha:
     description: Exact checked-out source commit; defaults to the workflow SHA.
     required: false
-  always-run:
+  always_run:
     description: Execute the section runner even after restoring a complete marker so it can validate and reuse internal partial checkpoints.
     required: false
     default: 'false'
@@ -51,15 +51,15 @@ runs:
       continue-on-error: true
       with:
         path: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
-        key: ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
-          ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
+          ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
     - name: Validate the restored completion marker
       id: check
       shell: bash
       env:
         SECTION: ${{ inputs.section }}
-        SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
+        SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
       run: |
         set -euo pipefail
@@ -67,22 +67,22 @@ runs:
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
           "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" >> "$GITHUB_OUTPUT"
     - name: Remove completion marker before validating resumable internal state
-      if: ${{ inputs.always-run == 'true' && steps.check.outputs.complete == 'true' }}
+      if: ${{ inputs.always_run == 'true' && steps.check.outputs.complete == 'true' }}
       shell: bash
       env:
         SECTION: ${{ inputs.section }}
       run: rm -f "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION/complete.json"
     - name: Execute section when no compatible pass exists or internal recovery is enabled
       id: execute
-      if: ${{ steps.check.outputs.complete != 'true' || inputs.always-run == 'true' }}
+      if: ${{ steps.check.outputs.complete != 'true' || inputs.always_run == 'true' }}
       shell: bash
       env:
         BLB_CI_CHECKPOINT_DIR: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
-        BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
+        BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         BLB_CI_CHECKPOINT_FINGERPRINT: ${{ inputs.fingerprint }}
       run: ${{ inputs.run }}
     - name: Record successful section completion
-      if: ${{ success() && (steps.check.outputs.complete != 'true' || inputs.always-run == 'true') }}
+      if: ${{ success() && (steps.check.outputs.complete != 'true' || inputs.always_run == 'true') }}
       shell: bash
       env:
         SECTION: ${{ inputs.section }}
@@ -94,9 +94,9 @@ runs:
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
           "$SECTION" "$SOURCE_SHA" "$FINGERPRINT"
     - name: Preserve completed or partial checkpoint after this attempt
-      if: ${{ always() && (steps.check.outputs.complete != 'true' || inputs.always-run == 'true') }}
+      if: ${{ always() && (steps.check.outputs.complete != 'true' || inputs.always_run == 'true') }}
       uses: actions/cache/save@v5
       continue-on-error: true
       with:
         path: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
-        key: ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
