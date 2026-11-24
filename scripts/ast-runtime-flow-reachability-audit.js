@@ -142,6 +142,7 @@ function analyzeFile(root, file) {
   const propertyWrites = [];
   const propertyReads = [];
   const propertyCopies = [];
+  const descriptorRequests = [];
   const objectAliasParents = new Map();
   const canonicalObject = identity => {
     if (!identity) return identity;
@@ -540,6 +541,10 @@ function analyzeFile(root, file) {
       }
       if (node.type === 'CallExpression' && name === 'get' && receiverName === 'Reflect') {
         add('reflection', 'reflective-property-read', node, 'Reflect.get target/key');
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target) propertyReads.push({object:target,property:literalKey(node.arguments[1]),assigned,node});
       }
       if (node.type === 'CallExpression' && name === 'set' && receiverName === 'Reflect') {
         add('mutation', 'reflective-property-write', node, 'Reflect.set target/key/value');
@@ -638,6 +643,15 @@ function analyzeFile(root, file) {
             }
           }
         }
+      }
+
+      if (node.type === 'CallExpression' && name === 'getOwnPropertyDescriptor' &&
+          receiverName === 'Object') {
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const property = literalKey(node.arguments[1]);
+        const descriptor = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target && descriptor) descriptorRequests.push({object:target,property,descriptor,node});
       }
 
       if (node.type === 'CallExpression' && ['assign', 'defineProperty', 'defineProperties'].includes(name) &&
@@ -898,6 +912,15 @@ function analyzeFile(root, file) {
         propertyWrites.push({object:target,property,stored:write.stored});
         copiesChanged = true;
       }
+    }
+  }
+
+  // A descriptor exposes the original stored value through descriptor.value.
+  for (const request of descriptorRequests) {
+    for (const write of [...propertyWrites]) {
+      if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
+      if (request.property !== null && write.property !== null && write.property !== request.property) continue;
+      propertyWrites.push({object:request.descriptor,property:'value',stored:write.stored});
     }
   }
 
