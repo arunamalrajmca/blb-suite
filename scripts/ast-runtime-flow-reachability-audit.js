@@ -891,10 +891,17 @@ function analyzeFile(root, file) {
             const argument = actualArguments[index];
             const parameter = calledFunction.params[index];
             if (argument.type === 'Identifier' && parameter.type === 'Identifier') {
-              addEdge(bindingId(argument), bindingId(parameter), 'function-argument', node, node.callee.name);
+              const argumentFunction = functionVariables.get(variableForNode.get(argument));
+              if (argumentFunction) {
+                addEdge('function@' + argumentFunction.loc.start.line, bindingId(parameter),
+                  'function-callback-parameter', node, node.callee.name || calleeName(node.callee));
+              } else {
+                addEdge(bindingId(argument), bindingId(parameter), 'function-argument', node,
+                  node.callee.name || calleeName(node.callee));
+              }
             } else if (isFunction(argument) && parameter.type === 'Identifier') {
               addEdge('function@' + argument.loc.start.line, bindingId(parameter),
-                'function-callback-parameter', node, node.callee.name);
+                'function-callback-parameter', node, node.callee.name || calleeName(node.callee));
             }
           }
           const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
