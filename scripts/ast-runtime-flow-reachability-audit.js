@@ -139,6 +139,7 @@ function analyzeFile(root, file) {
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
   const containerWrites = [];
   const containerReads = [];
+  const containerCopies = [];
   const propertyWrites = [];
   const propertyReads = [];
   const propertyCopies = [];
@@ -425,6 +426,7 @@ function analyzeFile(root, file) {
   ]);
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice']);
   const containerReadMethods = new Set(['get', 'pop', 'shift', 'at']);
+  const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
 
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
@@ -597,6 +599,74 @@ function analyzeFile(root, file) {
           key:name === 'get' || name === 'at' ? literalKey(node.arguments[0]) : null,
           assigned,node
         });
+      }
+      if (node.type === 'CallExpression' && containerCopyMethods.has(name) && receiverName &&
+          !['Object', 'Reflect'].includes(receiverName)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (assigned) containerCopies.push({source:bindingId(receiver),target:assigned,node});
+      }
+      if (node.type === 'CallExpression' && name === 'concat' && receiverName &&
+          !['Object', 'Reflect'].includes(receiverName)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (assigned) {
+          containerCopies.push({source:bindingId(receiver),target:assigned,node});
+          for (const argument of node.arguments) {
+            if (argument.type === 'Identifier') {
+              containerCopies.push({source:bindingId(argument),target:assigned,node});
+            } else if (argument.type === 'ArrayExpression') {
+              const source = 'array-concat-literal@' + argument.loc.start.line + ':' + argument.loc.start.column;
+              addObjectPropertySlots(argument, source);
+              containerCopies.push({source,target:assigned,node});
+            }
+          }
+        }
+      }
+      if (node.type === 'CallExpression' && ['map', 'flatMap'].includes(name) && receiverName &&
+          !['Object', 'Reflect'].includes(receiverName)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        const callbackArgument = node.arguments[0];
+        const callback = isFunction(callbackArgument) ? callbackArgument :
+          callbackArgument?.type === 'Identifier'
+            ? functionVariables.get(variableForNode.get(callbackArgument)) : null;
+        if (assigned && callback) {
+          const returns = callback.body.type === 'BlockStatement'
+            ? returnedValues(callback) : [callback.body];
+          for (const returned of returns) {
+            const returnedItems = name === 'flatMap' && returned.type === 'ArrayExpression'
+              ? returned.elements.filter(Boolean) : [returned];
+            for (const returnedItem of returnedItems) {
+              let stored = null, objectValue = false;
+              if (returnedItem.type === 'Identifier') {
+                const returnedFunction = functionVariables.get(variableForNode.get(returnedItem));
+                stored = bindingId(returnedItem);
+                if (returnedFunction) {
+                  addEdge('function@' + returnedFunction.loc.start.line, stored,
+                    'function-variable-identity', node, name);
+                } else objectValue = true;
+              } else if (isFunction(returnedItem)) {
+                stored = 'function@' + returnedItem.loc.start.line;
+              } else if (returnedItem.type === 'MemberExpression') {
+                const reference = memberReference(returnedItem);
+                if (reference) {
+                  stored = 'array-transform-value@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
+                  propertyReads.push({object:reference.object,property:reference.property,assigned:stored,node:returnedItem});
+                }
+              } else if (['ObjectExpression', 'ArrayExpression'].includes(returnedItem.type)) {
+                stored = 'array-transform-aggregate@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
+                addContainedReferences(returnedItem, stored, 'array-transform-return', node);
+                addObjectPropertySlots(returnedItem, stored);
+                objectValue = true;
+              }
+              if (stored) {
+                addEdge(stored, assigned, 'array-transform-result', node, name);
+                containerWrites.push({container:assigned,key:null,stored,node,objectValue});
+              }
+            }
+          }
+        }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const calledVariable = variableForNode.get(node.callee);
@@ -1025,9 +1095,42 @@ function analyzeFile(root, file) {
     }
   }
 
+  // Copy array-container contents through slice/filter/concat and modern
+  // copy-by-change methods. Include literal-array property slots as well as
+  // values recorded by push/unshift so chained copies remain connected.
+  let containerCopiesChanged = true;
+  let containerCopyPasses = 0;
+  while (containerCopiesChanged && containerCopyPasses++ <= containerCopies.length + 1) {
+    containerCopiesChanged = false;
+    for (const copy of containerCopies) {
+      const source = canonicalObject(copy.source), target = canonicalObject(copy.target);
+      const copied = [];
+      for (const write of containerWrites) {
+        if (canonicalObject(write.container) === source) copied.push({
+          ...write, container:target, key:null, node:copy.node
+        });
+      }
+      for (const write of propertyWrites) {
+        if (canonicalObject(write.object) !== source) continue;
+        if (write.property !== null && !/^\d+$/.test(write.property)) continue;
+        copied.push({
+          container:target,key:null,stored:write.stored,node:copy.node,
+          objectValue:!String(write.stored).startsWith('function@')
+        });
+      }
+      for (const write of copied) {
+        if (containerWrites.some(existing =>
+          canonicalObject(existing.container) === target &&
+          existing.key === write.key && existing.stored === write.stored)) continue;
+        containerWrites.push(write);
+        containerCopiesChanged = true;
+      }
+    }
+  }
+
   // Resolve container reads against all statically observed writes. A
-  // literal Map key narrows the edge; unknown keys conservatively include every
-  // stored value so a dynamic lookup cannot hide a live callback/object.
+  // literal Map/array index narrows known keys; unknown positions conservatively
+  // retain every stored value so dynamic access cannot hide a live callback/object.
   for (const read of containerReads) {
     for (const write of containerWrites) {
       if (write.container !== read.container) continue;
