@@ -909,3 +909,30 @@ test('resolves inherited class method factories directly on derived instances', 
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
 });
+
+
+test('traces bound callback identity and retains it through object wrappers', () => {
+  const result = audit([
+    'const callback = () => work();',
+    'const bound = callback.bind(null);',
+    'const wrapper = { handler: bound };'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'bound@2' && edge.kind === 'bound-function-result'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to.includes('wrapper@3') && edge.kind === 'object-wrap-callback'));
+});
+
+test('traces bound object-method and class-method callback values', () => {
+  const result = audit([
+    'const api = { handler() { work(); } };',
+    'const objectBound = api.handler.bind(api);',
+    'class Factory { handler() { work(); } }',
+    'const instance = new Factory();',
+    'const classBound = instance.handler.bind(instance);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'objectBound@2' && edge.kind === 'bound-function-result'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
+    edge.to === 'classBound@5' && edge.kind === 'bound-function-result'));
+});
