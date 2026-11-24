@@ -147,7 +147,9 @@ function analyzeFile(root, file) {
   const addContainedReferences = (value, destination, kind, origin, depth = 0) => {
     if (!value || depth > 12) return;
     if (value.type === 'Identifier') {
-      addEdge(bindingId(value), destination, kind, origin || value, value.name);
+      const fn = functionVariables.get(variableForNode.get(value));
+      if (fn) addEdge('function@' + fn.loc.start.line, destination, kind + '-callback', origin || value, value.name);
+      else addEdge(bindingId(value), destination, kind, origin || value, value.name);
       return;
     }
     if (isFunction(value)) {
