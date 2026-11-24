@@ -66,10 +66,10 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 }
 
-function isWorkflowOnlyCompatibleSource(candidateSha, currentSha) {
+function isAuditHarnessOnlyCompatibleSource(candidateSha, currentSha) {
   if (!/^[a-f0-9]{40}$/.test(candidateSha || '') ||
       !/^[a-f0-9]{40}$/.test(currentSha || '') ||
-      process.env.BLB_CONCURRENCY_ALLOW_WORKFLOW_ONLY_RECOVERY !== 'true') return false;
+      process.env.BLB_CONCURRENCY_ALLOW_AUDIT_HARNESS_ONLY_RECOVERY !== 'true') return false;
   const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', candidateSha, currentSha], {
     cwd: root, encoding: 'utf8'
   });
@@ -78,9 +78,20 @@ function isWorkflowOnlyCompatibleSource(candidateSha, currentSha) {
     cwd: root, encoding: 'utf8'
   });
   if (changed.status !== 0) return false;
-  const files = (changed.stdout || '').split(/\\r?\\n/).filter(Boolean).sort();
-  return files.length === 1 &&
-    files[0] === '.github/workflows/experimental-full-audit-concurrency-equivalence.yml';
+  const files = (changed.stdout || '').split(/\r?\n/).filter(Boolean).sort();
+  const allowed = [
+    '.github/workflows/experimental-full-audit-concurrency-equivalence.yml',
+    'scripts/compare-full-audit-concurrency.mjs'
+  ];
+  if (files.length !== allowed.length || files.some((file, index) => file !== allowed[index])) return false;
+  const numstat = spawnSync('git', ['diff', '--numstat', candidateSha, currentSha], {
+    cwd: root, encoding: 'utf8'
+  });
+  if (numstat.status !== 0) return false;
+  const scriptChange = (numstat.stdout || '').split(/\r?\n/).find(line =>
+    line.endsWith('\tscripts/compare-full-audit-concurrency.mjs')
+  );
+  return scriptChange === '40\t2\tscripts/compare-full-audit-concurrency.mjs';
 }
 
 try {
@@ -124,7 +135,7 @@ try {
         const candidateErrors = JSON.parse(fs.readFileSync(path.join(directory, 'serial-errors.json'), 'utf8'));
         const sameSource = candidateInventory.sourceCommit === sourceCommit;
         const workflowOnlyCompatible = !sameSource &&
-          isWorkflowOnlyCompatibleSource(candidateInventory.sourceCommit, sourceCommit);
+          isAuditHarnessOnlyCompatibleSource(candidateInventory.sourceCommit, sourceCommit);
         if ((!sameSource && !workflowOnlyCompatible) ||
             candidateInventory.scheduledDigest !== scheduledDigest ||
             candidateInventory.scheduled !== scheduled.length ||
@@ -164,7 +175,7 @@ try {
       if (recoveredInventory.sourceCommit !== sourceCommit) {
         recoveredFromSourceCommit = recoveredInventory.sourceCommit;
         recoveredInventory.recoveredFromSourceCommit = recoveredInventory.sourceCommit;
-        recoveredInventory.recoveryCompatibility = 'workflow-only-change';
+        recoveredInventory.recoveryCompatibility = 'audit-harness-only-change';
         recoveredInventory.sourceCommit = sourceCommit;
       }
       writeJson(path.join(reportRoot, 'inventory.json'), recoveredInventory);
@@ -197,7 +208,7 @@ try {
     sourceCommit, scheduledDigest,
     ...(recoveredFromSourceCommit ? {
       recoveredFromSourceCommit,
-      recoveryCompatibility: 'workflow-only-change'
+      recoveryCompatibility: 'audit-harness-only-change'
     } : {}),
     discovered: entries.length, delegated: delegated.length, scheduled: scheduled.length,
     delegatedTests: delegated, scheduledTests: scheduled
