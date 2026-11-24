@@ -632,3 +632,55 @@ test('traces callbacks retrieved from array containers with at and a literal ind
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'callback@1' && edge.to === 'selected@4'));
 });
+
+test('traces callback values through slice and filter array copies', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = [callback];',
+    'const sliced = source.slice();',
+    'const filtered = source.filter(() => true);',
+    'const fromSlice = sliced.at(0);',
+    'const fromFilter = filtered.at(0);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'fromSlice@5'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'fromFilter@6'));
+});
+
+test('traces callback values through concat of array containers', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const first = [callback];',
+    'const second = [callback];',
+    'const combined = first.concat(second);',
+    'const selected = combined.at(1);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@5'));
+});
+
+test('traces callback values returned by array map transformations', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = [callback];',
+    'const handlers = source.map(() => callback);',
+    'const selected = handlers.at(0);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'selected@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-variable-identity' &&
+    edge.from === 'function@1' && edge.to === 'callback@1'));
+});
+
+test('preserves nested callback properties through flatMap aggregate results', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = [0];',
+    'const handlers = source.flatMap(() => [{ onReady: callback }]);',
+    'const selected = handlers.at(0);',
+    'const handler = selected.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@5'));
+});
