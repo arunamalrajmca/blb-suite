@@ -799,3 +799,14 @@ test('traces callback values through Promise.resolve before container storage an
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.to === 'selected@4'));
 });
+
+
+test('traces yielded callback values nested inside generator return wrappers', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'function* makeHandler() { return { handler: (yield callback) }; }',
+    'const wrapped = makeHandler();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'function-return-aggregate-callback'));
+});
