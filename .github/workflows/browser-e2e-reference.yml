@@ -8,6 +8,7 @@ on:
       - 'extension/**'
       - '.github/workflows/browser-e2e-reference.yml'
       - '.github/workflows/browser-e2e-groups.yml'
+      - '.github/actions/**'
       - '!extension/icons/**'
       - '!extension/store-assets/**'
       - '!extension/THIRD-PARTY-NOTICES.txt'
@@ -257,7 +258,8 @@ jobs:
           section: reference-verse-context
           cache_prefix: blb-ci-v1-reference-reference-verse-context-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test tests/browser/extension-reference-actions.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
+          run: |
+            npx playwright test tests/browser/extension-reference-actions.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
       - name: Upload generic verse-context diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6

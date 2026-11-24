@@ -81,7 +81,8 @@ jobs:
           section: reference-core-user-actions-${{ matrix.group }}
           cache_prefix: blb-ci-v1-reference-reference-core-user-actions-${{ matrix.group }}-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "${{ matrix.grep }}"
+          run: |
+            npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "${{ matrix.grep }}"
  toggle-permission-lifecycle:
     if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_specs, 'tests/browser/popup-master-toggle-regression.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-master-toggle-regression.spec.js') || contains(inputs.changed_specs, 'tests/browser/redirect-toggle-isolation.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/redirect-toggle-isolation.spec.js') || contains(inputs.changed_specs, 'tests/browser/optional-host-permission-lifecycle.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/optional-host-permission-lifecycle.spec.js')) }}
     name: BROWSER E2E — TOGGLE/PERMISSION — ${{ matrix.spec }}
@@ -128,7 +129,8 @@ jobs:
           section: reference-toggle-permission-${{ strategy.job-index }}
           cache_prefix: blb-ci-v1-reference-reference-toggle-permission-${{ strategy.job-index }}-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test "${{ matrix.spec }}" --max-failures=1
+          run: |
+            npx playwright test "${{ matrix.spec }}" --max-failures=1
  core-group-a:
     # Skip the runner entirely when the selector says this group is irrelevant.
     if: ${{ inputs.group_a_required == 'true' }}
@@ -180,7 +182,8 @@ jobs:
           section: reference-group-a-context-menu
           cache_prefix: blb-ci-v1-reference-reference-group-a-context-menu-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js --max-failures=1
+          run: |
+            npx playwright test tests/browser/context-menu-visibility-event-lifecycle.spec.js --max-failures=1
       - name: Run replacement-tab lifecycle race regressions
         if: ${{ !cancelled() && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/replaced-tab-lifecycle-races.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/replaced-tab-lifecycle-races.spec.js')) }}
         uses: ./.github/actions/ci-section-checkpoint
@@ -188,7 +191,8 @@ jobs:
           section: reference-group-a-replacement-tab
           cache_prefix: blb-ci-v1-reference-reference-group-a-replacement-tab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test tests/browser/replaced-tab-lifecycle-races.spec.js --max-failures=1
+          run: |
+            npx playwright test tests/browser/replaced-tab-lifecycle-races.spec.js --max-failures=1
       - name: Run MultiVerse tab reuse and 22-batch persistence regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) }}
         uses: ./.github/actions/ci-section-checkpoint
@@ -196,7 +200,8 @@ jobs:
           section: reference-group-a-multiverse-tab
           cache_prefix: blb-ci-v1-reference-reference-group-a-multiverse-tab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
+          run: |
+            npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
       - name: Run selected Group A behavior regressions in one Playwright process
         if: ${{ !cancelled() }}
         env:
@@ -261,7 +266,8 @@ jobs:
           section: reference-group-a-source-context
           cache_prefix: blb-ci-v1-reference-reference-group-a-source-context-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: npx playwright test tests/browser/extension-lifecycle.spec.js --grep 'source-page collector initializes on|Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
+          run: |
+            npx playwright test tests/browser/extension-lifecycle.spec.js --grep 'source-page collector initializes on|Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
       - name: Run changed browser specs without a dedicated workflow step
         if: ${{ !cancelled() && (inputs.unmapped_specs != '') }}
         env:

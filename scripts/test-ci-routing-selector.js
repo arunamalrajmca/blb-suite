@@ -87,7 +87,7 @@ function auditRepositoryTestInventory() {
   const auditCoverage = [
     ['all browser test cases are collected with Playwright list output', /npx playwright test --list --reporter=list/],
     ['full audit starts only on an explicit label event after prerequisite qualification', /types: \[labeled\]/],
-    ['all remaining browser test cases run through the resumable browser shard runner', /node scripts\\/run-checkpointed-playwright-audit\\.mjs \"\\$test_list\"/],
+    ['all remaining browser test cases run through the resumable browser shard runner', /node scripts\/run-checkpointed-playwright-audit\.mjs "\$test_list"/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
     ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
     ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],
@@ -107,9 +107,9 @@ function auditRepositoryTestInventory() {
   assert.match(browserAuditRunner, /shardCount = 8/, 'full-test audit must use eight resumable shards');
   assert.match(browserAuditRunner, /workers = 4/, 'each full-audit shard must retain four workers');
   assert.match(browserAuditRunner, /--max-failures=1/, 'each full-audit shard must fail fast after one failure');
-  assert.match(workflow, /export BLB_PERF_OUTPUT="\\$BLB_CI_CHECKPOINT_DIR\\/blb-performance\\.jsonl"/);
-  assert.match(workflow, /touch "\\$BLB_PERF_OUTPUT"/);
-  assert.doesNotMatch(workflow, /: > "\\$BLB_PERF_OUTPUT"/,
+  assert.match(workflow, /export BLB_PERF_OUTPUT="\$BLB_CI_CHECKPOINT_DIR\/blb-performance\.jsonl"/);
+  assert.match(workflow, /touch "\$BLB_PERF_OUTPUT"/);
+  assert.doesNotMatch(workflow, /: > "\$BLB_PERF_OUTPUT"/,
     'full-audit corpus A/B samples must not be truncated on retry');
   for (const file of [
     '.github/workflows/browser-e2e-reference.yml',
