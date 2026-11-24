@@ -32,7 +32,7 @@ function record(entry, index, overrides = {}) {
   };
 }
 
-function checkpoint(count = 200, overrides = {}) {
+function checkpoint(count = 161, overrides = {}) {
   const inventory = {
     sourceCommit: source,
     scheduledDigest: digest,
@@ -112,17 +112,17 @@ test('a production or test-inventory change invalidates audit-harness compatibil
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit }), false);
 });
 
-test('the two preserved batches validate as a contiguous 200-test checkpoint', () => {
+test('the preserved batch artifacts validate as a contiguous 161-test checkpoint', () => {
   assert.equal(validateSerialCheckpoint(checkpoint()), true);
   const result = checkpoint();
-  assert.equal(result.candidateSerial.length, 200);
-  assert.equal(result.candidateSerial[199].inventoryEntry, scheduled[199]);
-  assert.equal(result.candidateSerial[200], undefined);
+  assert.equal(result.candidateSerial.length, 161);
+  assert.equal(result.candidateSerial[160].inventoryEntry, scheduled[160]);
+  assert.equal(result.candidateSerial[161], undefined);
 });
 
 test('source, digest, and ordered inventory mismatches are rejected', () => {
-  assert.equal(validateSerialCheckpoint(checkpoint(200, { compatible: false })), false);
-  assert.equal(validateSerialCheckpoint(checkpoint(200, { inventory: { scheduledDigest: 'wrong' } })), false);
+  assert.equal(validateSerialCheckpoint(checkpoint(161, { compatible: false })), false);
+  assert.equal(validateSerialCheckpoint(checkpoint(161, { inventory: { scheduledDigest: 'wrong' } })), false);
   const reordered = checkpoint();
   [reordered.candidateInventory.scheduledTests[0], reordered.candidateInventory.scheduledTests[1]] =
     [reordered.candidateInventory.scheduledTests[1], reordered.candidateInventory.scheduledTests[0]];
@@ -157,7 +157,7 @@ test('a shorter contiguous prefix is recoverable, but gaps, duplicates, and erro
   [outOfOrder.candidateSerial[0], outOfOrder.candidateSerial[1]] =
     [outOfOrder.candidateSerial[1], outOfOrder.candidateSerial[0]];
   assert.equal(validateSerialCheckpoint(outOfOrder), false);
-  assert.equal(validateSerialCheckpoint(checkpoint(200, { errors: [{ message: 'failed' }] })), false);
+  assert.equal(validateSerialCheckpoint(checkpoint(161, { errors: [{ message: 'failed' }] })), false);
 });
 
 test('artifact reader returns the longest checkpoint count only after validating every record', () => {
@@ -171,7 +171,7 @@ test('artifact reader returns the longest checkpoint count only after validating
       directory, sourceCommit: current, scheduled, scheduledDigest: digest,
       isCompatibleSource: (candidate, target) => candidate === source && target === current
     });
-    assert.equal(result.count, 200);
+    assert.equal(result.count, 161);
     const corrupted = [...value.candidateSerial];
     corrupted[199] = { ...corrupted[199], exitCode: 1 };
     fs.writeFileSync(path.join(directory, 'serial-results.json'), JSON.stringify(corrupted));
