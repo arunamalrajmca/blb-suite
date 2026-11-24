@@ -131,7 +131,7 @@ try {
         serialKeys.add(test.key);
         return true;
       });
-    if (serial.length > scheduled.length || (serial.length > 0 && !restoredBaselineValid)) {
+    if (serial.length > scheduled.length || serialErrors.length > 0 || (serial.length > 0 && !restoredBaselineValid)) {
       serial = [];
       serialErrors = [];
       fs.rmSync(serialResultsPath, { force: true });
