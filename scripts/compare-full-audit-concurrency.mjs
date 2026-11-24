@@ -66,6 +66,23 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 }
 
+function isWorkflowOnlyCompatibleSource(candidateSha, currentSha) {
+  if (!/^[a-f0-9]{40}$/.test(candidateSha || '') ||
+      !/^[a-f0-9]{40}$/.test(currentSha || '') ||
+      process.env.BLB_CONCURRENCY_ALLOW_WORKFLOW_ONLY_RECOVERY !== 'true') return false;
+  const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', candidateSha, currentSha], {
+    cwd: root, encoding: 'utf8'
+  });
+  if (ancestor.status !== 0) return false;
+  const changed = spawnSync('git', ['diff', '--name-only', candidateSha, currentSha], {
+    cwd: root, encoding: 'utf8'
+  });
+  if (changed.status !== 0) return false;
+  const files = (changed.stdout || '').split(/\\r?\\n/).filter(Boolean).sort();
+  return files.length === 1 &&
+    files[0] === '.github/workflows/experimental-full-audit-concurrency-equivalence.yml';
+}
+
 try {
   console.log('[1/5] Discovering the complete Playwright browser inventory.');
   const listing = run(['--list', '--reporter=list'], { timeout: 180_000 });
@@ -92,6 +109,7 @@ try {
   fs.writeFileSync(listPath, scheduled.join('\n') + '\n');
   const sourceCommit = process.env.BLB_CONCURRENCY_SOURCE_SHA || process.env.GITHUB_SHA || 'unknown';
   const scheduledDigest = crypto.createHash('sha256').update(JSON.stringify(scheduled)).digest('hex');
+  let recoveredFromSourceCommit = null;
 
   // Recover the longest valid contiguous serial checkpoint from independently
   // downloaded batch artifacts. Every candidate is bound to the exact source
@@ -104,9 +122,15 @@ try {
         const candidateInventory = JSON.parse(fs.readFileSync(path.join(directory, 'inventory.json'), 'utf8'));
         const candidateSerial = JSON.parse(fs.readFileSync(path.join(directory, 'serial-results.json'), 'utf8'));
         const candidateErrors = JSON.parse(fs.readFileSync(path.join(directory, 'serial-errors.json'), 'utf8'));
-        if (candidateInventory.sourceCommit !== sourceCommit ||
+        const sameSource = candidateInventory.sourceCommit === sourceCommit;
+        const workflowOnlyCompatible = !sameSource &&
+          isWorkflowOnlyCompatibleSource(candidateInventory.sourceCommit, sourceCommit);
+        if ((!sameSource && !workflowOnlyCompatible) ||
             candidateInventory.scheduledDigest !== scheduledDigest ||
             candidateInventory.scheduled !== scheduled.length ||
+            !Array.isArray(candidateInventory.scheduledTests) ||
+            candidateInventory.scheduledTests.length !== scheduled.length ||
+            candidateInventory.scheduledTests.some((entry, index) => entry !== scheduled[index]) ||
             !Array.isArray(candidateSerial) || !Array.isArray(candidateErrors) ||
             candidateSerial.length > scheduled.length || candidateErrors.length !== 0) return null;
         const keys = new Set();
@@ -129,11 +153,21 @@ try {
       .sort((left, right) => right.count - left.count);
     const bestCheckpoint = recoveryCandidates[0];
     if (bestCheckpoint && bestCheckpoint.count > 0) {
-      for (const name of ['inventory.json', 'serial-results.json', 'serial-errors.json',
+      for (const name of ['serial-results.json', 'serial-errors.json',
         'serial-checkpoint.json', 'serial-stage-summary.json', 'scheduled-test-list.txt']) {
         const source = path.join(bestCheckpoint.directory, name);
         if (fs.existsSync(source)) fs.copyFileSync(source, path.join(reportRoot, name));
       }
+      const recoveredInventory = JSON.parse(fs.readFileSync(
+        path.join(bestCheckpoint.directory, 'inventory.json'), 'utf8'
+      ));
+      if (recoveredInventory.sourceCommit !== sourceCommit) {
+        recoveredFromSourceCommit = recoveredInventory.sourceCommit;
+        recoveredInventory.recoveredFromSourceCommit = recoveredInventory.sourceCommit;
+        recoveredInventory.recoveryCompatibility = 'workflow-only-change';
+        recoveredInventory.sourceCommit = sourceCommit;
+      }
+      writeJson(path.join(reportRoot, 'inventory.json'), recoveredInventory);
       for (let index = 1; index <= bestCheckpoint.count; index++) {
         const name = 'serial-' + String(index).padStart(4, '0') + '.log';
         const source = path.join(bestCheckpoint.directory, name);
@@ -161,6 +195,10 @@ try {
   }
   writeJson(inventoryPath, {
     sourceCommit, scheduledDigest,
+    ...(recoveredFromSourceCommit ? {
+      recoveredFromSourceCommit,
+      recoveryCompatibility: 'workflow-only-change'
+    } : {}),
     discovered: entries.length, delegated: delegated.length, scheduled: scheduled.length,
     delegatedTests: delegated, scheduledTests: scheduled
   });
