@@ -424,8 +424,8 @@ function analyzeFile(root, file) {
     'emit', 'dispatch', 'dispatchEvent', 'sendMessage', 'postMessage',
     'notify', 'publish', 'invoke', 'execute', 'callHandler', 'handleEvent'
   ]);
-  const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice']);
-  const containerReadMethods = new Set(['get', 'pop', 'shift', 'at']);
+  const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice', 'fill']);
+  const containerReadMethods = new Set(['get', 'pop', 'shift', 'at', 'find', 'findLast', 'splice']);
   const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
 
   visit(ast, (node, parent, ancestors) => {
@@ -562,7 +562,9 @@ function analyzeFile(root, file) {
           receiverName && !['Object', 'Reflect', 'Array'].includes(receiverName)) {
         add('container-storage', 'container-write', node, receiverName + '.' + name);
         const container = bindingId(receiver);
-        const values = name === 'set' ? node.arguments.slice(1, 2) : node.arguments;
+        const values = name === 'set' ? node.arguments.slice(1, 2) :
+          name === 'splice' ? node.arguments.slice(2) :
+          name === 'fill' ? node.arguments.slice(0, 1) : node.arguments;
         const key = name === 'set' ? literalKey(node.arguments[0]) : null;
         for (const value of values) {
           const storedFunction = value.type === 'Identifier'
@@ -1138,6 +1140,24 @@ function analyzeFile(root, file) {
       addEdge(write.stored, read.assigned, 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
       if (write.objectValue && read.assigned) linkObjectAlias(read.assigned, write.stored);
+      if (read.node.callee?.property?.name === 'splice' && read.assigned) {
+        containerWrites.push({container:read.assigned,key:null,stored:write.stored,node:read.node,objectValue:write.objectValue});
+      }
+    }
+    // Array literals are represented as property writes until copied or read.
+    // Treat their numeric slots as container elements for find/findLast/at/etc.
+    for (const write of propertyWrites) {
+      if (canonicalObject(write.object) !== canonicalObject(read.container)) continue;
+      if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
+      if (read.key !== null && write.property !== null && read.key !== write.property) continue;
+      addEdge(write.stored, read.assigned, 'container-value-read', read.node,
+        read.key === null ? 'dynamic container key' : 'key=' + read.key);
+      if (read.node.callee?.property?.name === 'splice' && read.assigned) {
+        containerWrites.push({
+          container:read.assigned,key:null,stored:write.stored,node:read.node,
+          objectValue:!String(write.stored).startsWith('function@')
+        });
+      }
     }
   }
 
