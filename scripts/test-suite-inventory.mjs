@@ -108,11 +108,19 @@ const manifestModules = new Set([
   ...(extensionManifest.background?.service_worker ? ['extension/' + extensionManifest.background.service_worker] : []),
   ...(extensionManifest.content_scripts || []).flatMap(group => (group.js || []).map(file => 'extension/' + file))
 ]);
+const extensionDirectory = path.join(root, 'extension');
+const runtimeModules = new Set(fs.readdirSync(extensionDirectory, { withFileTypes:true })
+  .filter(entry => entry.isFile() && entry.name.endsWith('.js'))
+  .map(entry => 'extension/' + entry.name));
+const backgroundSource = readRepoFile('extension/background.js');
+const startupImportMatch = backgroundSource.match(/const BLB_BACKGROUND_STARTUP_IMPORTS\\s*=\\s*(\\[[\\s\\S]*?\\]);/);
+if (!startupImportMatch) fail('Background startup import inventory could not be read.');
+const workerStartupImports = startupImportMatch ? JSON.parse(startupImportMatch[1]).map(file => 'extension/' + file) : [];
 const mappedModules = new Map();
 for (const module of productionModuleCoverage) {
   if (!module.path || mappedModules.has(module.path)) fail('Production module coverage has a missing or duplicate path: ' + module.path);
   mappedModules.set(module.path, module);
-  if (!manifestModules.has(module.path)) fail('Production module coverage entry is not loaded by the extension manifest: ' + module.path);
+  if (!runtimeModules.has(module.path)) fail('Production module coverage entry is not an extension JavaScript module: ' + module.path);
   if (!fs.existsSync(path.join(root, module.path))) fail('Production module is missing: ' + module.path);
   if (!['direct-integration','partial-integration','indirect-integration','unmapped'].includes(module.coverageLevel)) {
     fail('Production module has an invalid coverage level: ' + module.path);
@@ -140,8 +148,15 @@ for (const module of productionModuleCoverage) {
 for (const modulePath of manifestModules) {
   if (!mappedModules.has(modulePath)) fail('Manifest-loaded production module has no coverage disposition: ' + modulePath);
 }
+for (const modulePath of workerStartupImports) {
+  if (!runtimeModules.has(modulePath)) fail('Background startup import is missing from the extension bundle: ' + modulePath);
+  if (!mappedModules.has(modulePath)) fail('Background startup import has no production coverage disposition: ' + modulePath);
+}
+for (const modulePath of runtimeModules) {
+  if (!mappedModules.has(modulePath)) fail('Extension JavaScript module has no coverage disposition: ' + modulePath);
+}
 for (const modulePath of mappedModules.keys()) {
-  if (!manifestModules.has(modulePath)) fail('Coverage registry contains a module outside the manifest-loaded inventory: ' + modulePath);
+  if (!runtimeModules.has(modulePath)) fail('Coverage registry contains a module outside the extension JavaScript inventory: ' + modulePath);
 }
 const directModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'direct-integration').length;
 const partialModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'partial-integration').length;
@@ -153,6 +168,6 @@ for (const suite of counts) console.log('  '+suite.id+': '+suite.count+' file(s)
 console.log('  Automated inventory total: '+total+' file(s)');
 console.log('  Explicit manual-only harnesses: '+manifest.manualOnly.length);
 console.log('  Test-looking files discovered: '+candidates.length);
-console.log('  Manifest-loaded production modules: '+manifestModules.size+' ('+directModuleCount+' direct integration, '+partialModuleCount+' partial integration, '+indirectModuleCount+' indirect integration, '+unmappedModuleCount+' unmapped)');
+console.log('  Manifest-loaded production modules: '+manifestModules.size);\nconsole.log('  All extension JavaScript modules: '+runtimeModules.size+' ('+directModuleCount+' direct integration, '+partialModuleCount+' partial integration, '+indirectModuleCount+' indirect integration, '+unmappedModuleCount+' unmapped)');\nconsole.log('  Background startup imports verified: '+workerStartupImports.length);
 if (errors.length) { for (const error of errors) console.error('FAIL: '+error); process.exitCode=1; }
 else console.log('PASS: every discovered test file has an explicit execution owner.');
