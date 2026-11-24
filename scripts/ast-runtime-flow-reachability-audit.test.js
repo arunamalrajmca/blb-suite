@@ -808,5 +808,5 @@ test('traces yielded callback values nested inside generator return wrappers', (
     'const wrapped = makeHandler();'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.kind === 'function-return-aggregate-callback'));
+    edge.kind === 'function-return-callback'));
 });
