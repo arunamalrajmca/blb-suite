@@ -140,6 +140,8 @@ function analyzeFile(root, file) {
   const containerWrites = [];
   const containerReads = [];
   const containerCopies = [];
+  const iteratorSources = new Map();
+  const iteratorNextRequests = [];
   const propertyWrites = [];
   const propertyReads = [];
   const propertyCopies = [];
@@ -602,6 +604,20 @@ function analyzeFile(root, file) {
           assigned,node
         });
       }
+      if (node.type === 'CallExpression' && ['values', 'entries'].includes(name) &&
+          receiverName && !['Object', 'Reflect'].includes(receiverName)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (assigned) iteratorSources.set(assigned, {
+          container:bindingId(receiver), entries:name === 'entries'
+        });
+      }
+      if (node.type === 'CallExpression' && name === 'next' && receiverName) {
+        const iterator = iteratorSources.get(bindingId(receiver));
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (iterator && assigned) iteratorNextRequests.push({iterator,assigned,node});
+      }
       if (node.type === 'CallExpression' && containerCopyMethods.has(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
@@ -960,6 +976,45 @@ function analyzeFile(root, file) {
       add('custom-runtime-dispatch', 'dynamic-member-lookup', node,
         (node.object.type === 'Identifier' ? node.object.name : node.object.type) + '[dynamic]');
     }
+    if (node.type === 'MemberExpression' && node.property.type === 'Identifier' &&
+        node.property.name === 'value' && node.object.type === 'CallExpression' &&
+        node.object.callee.type === 'MemberExpression' &&
+        propertyKey(node.object.callee.property, node.object.callee.computed) === 'next' &&
+        node.object.callee.object.type === 'Identifier') {
+      const iterator = iteratorSources.get(bindingId(node.object.callee.object));
+      const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+        ? bindingId(parent.id) : null;
+      if (iterator && assigned) containerReads.push({
+        container:iterator.container,key:null,assigned,node,includeObjectValues:false
+      });
+    }
+    if (node.type === 'ForOfStatement') {
+      const right = node.right;
+      let source = null, includeObjectValues = false, entries = false;
+      if (right.type === 'Identifier') {
+        const iterator = iteratorSources.get(bindingId(right));
+        if (iterator) { source = iterator.container; entries = iterator.entries; }
+        else source = bindingId(right);
+      } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
+        const method = propertyKey(right.callee.property, right.callee.computed);
+        const receiverNode = right.callee.object;
+        if (receiverNode.type === 'Identifier') {
+          if (receiverNode.name === 'Object' && ['values', 'entries'].includes(method) &&
+              right.arguments[0]?.type === 'Identifier') {
+            source = bindingId(right.arguments[0]); includeObjectValues = true; entries = method === 'entries';
+          } else if (['values', 'entries'].includes(method)) {
+            source = bindingId(receiverNode); entries = method === 'entries';
+          }
+        }
+      }
+      let targetNode = node.left;
+      if (targetNode.type === 'VariableDeclaration') targetNode = targetNode.declarations[0]?.id;
+      if (entries && targetNode?.type === 'ArrayPattern') targetNode = targetNode.elements[1];
+      const target = targetNode?.type === 'Identifier' ? bindingId(targetNode) : null;
+      if (source && target) containerReads.push({
+        container:source,key:null,assigned:target,node,includeObjectValues
+      });
+    }
     if (node.type === 'ForInStatement' || node.type === 'ForOfStatement') {
       add('reflection', 'enumerated-object-keys', node, node.type);
     }
@@ -1083,6 +1138,21 @@ function analyzeFile(root, file) {
     }
   }
 
+  // Iterator.next() returns an object whose value property holds the
+  // next container value. Project those values into the step object's property.
+  for (const request of iteratorNextRequests) {
+    for (const write of containerWrites) {
+      if (write.container === request.iterator.container) {
+        propertyWrites.push({object:request.assigned,property:'value',stored:write.stored});
+      }
+    }
+    for (const write of propertyWrites.slice()) {
+      if (canonicalObject(write.object) !== canonicalObject(request.iterator.container)) continue;
+      if (write.property !== null && !/^\d+$/.test(write.property)) continue;
+      propertyWrites.push({object:request.assigned,property:'value',stored:write.stored});
+    }
+  }
+
   // Resolve static object-property writes to subsequent property reads.
   // Unknown computed reads conservatively retain every stored value on the object.
   for (const read of propertyReads) {
@@ -1144,11 +1214,11 @@ function analyzeFile(root, file) {
         containerWrites.push({container:read.assigned,key:null,stored:write.stored,node:read.node,objectValue:write.objectValue});
       }
     }
-    // Array literals are represented as property writes until copied or read.
-    // Treat their numeric slots as container elements for find/findLast/at/etc.
+    // Array/object values are represented as property writes until copied or read.
+    // Numeric slots model arrays; Object.values/entries for-of loops consume all own values.
     for (const write of propertyWrites) {
       if (canonicalObject(write.object) !== canonicalObject(read.container)) continue;
-      if (write.property !== null && !/^\d+$/.test(write.property)) continue;
+      if (!read.includeObjectValues && write.property !== null && !/^\d+$/.test(write.property)) continue;
       if (read.key !== null && write.property !== null && read.key !== write.property) continue;
       addEdge(write.stored, read.assigned, 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
