@@ -561,13 +561,17 @@ function analyzeFile(root, file) {
         const values = name === 'set' ? node.arguments.slice(1, 2) : node.arguments;
         const key = name === 'set' ? literalKey(node.arguments[0]) : null;
         for (const value of values) {
-          const stored = value.type === 'Identifier' ? bindingId(value) :
-            isFunction(value) ? 'function@' + value.loc.start.line :
-            value.type === 'MemberExpression'
-              ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
+          const storedFunction = value.type === 'Identifier'
+            ? functionVariables.get(variableForNode.get(value)) : null;
+          const isStoredCallback = isFunction(value) || !!storedFunction;
+          const stored = value.type === 'Identifier'
+            ? (storedFunction ? 'function@' + storedFunction.loc.start.line : bindingId(value))
+            : isFunction(value) ? 'function@' + value.loc.start.line
+              : value.type === 'MemberExpression'
+                ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
           if (stored) {
-            addEdge(stored, container, isFunction(value) ? 'container-store-callback' : 'container-store', node, name);
-            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier'});
+            addEdge(stored, container, isStoredCallback ? 'container-store-callback' : 'container-store', node, name);
+            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
             const identity = 'aggregate@' + value.loc.start.line + ':' + value.loc.start.column;
             const before = flowEdges.length;
