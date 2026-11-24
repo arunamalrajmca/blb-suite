@@ -182,6 +182,7 @@ try {
     if (serial.length > scheduled.length || serialErrors.length > 0 || (serial.length > 0 && !restoredCheckpointValid)) {
       serial = [];
       serialErrors = [];
+      serialKeys.clear();
       fs.rmSync(serialResultsPath, { force: true });
       fs.rmSync(serialErrorsPath, { force: true });
       fs.rmSync(path.join(reportRoot, 'serial-checkpoint.json'), { force: true });
@@ -211,8 +212,9 @@ try {
         timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'), tests, parseError
       };
       serial.push(record);
-      const bad = result.status !== 0 || parseError ||
-        !isSuccessfulSerialTestRecord(record, scheduled[index], new Set(serialKeys));
+      const recordValid = isSuccessfulSerialTestRecord(record, scheduled[index], serialKeys);
+      const bad = result.status !== 0 || parseError || !recordValid;
+      if (recordValid) serialKeys.add(tests[0].key);
       if (bad) serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
         signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
       writeJson(serialCheckpointPath, {
