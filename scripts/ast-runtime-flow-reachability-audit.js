@@ -605,6 +605,9 @@ function analyzeFile(root, file) {
             schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + node.object.name);
         }
       } else if (parent?.type === 'CallExpression' && parent.callee === node) {
+        propertyReads.push({
+          object,property,assigned:'property-read@' + parent.loc.start.line,node
+        });
         assigned = 'callback-invocation@' + parent.loc.start.line;
         add('callbacks', 'stored-property-callback-invocation', node,
           (property || 'dynamic property') + ' invoked from ' + node.object.name);
