@@ -13,6 +13,10 @@ inputs:
   run:
     description: Shell command to execute when no compatible completed checkpoint exists.
     required: true
+  always-run:
+    description: Execute the section runner even after restoring a complete marker so it can validate and reuse internal partial checkpoints.
+    required: false
+    default: 'false'
 outputs:
   reused:
     description: True when a compatible completed section checkpoint was restored.
@@ -52,9 +56,15 @@ runs:
         node scripts/ci-section-checkpoint.mjs check \
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
           "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" >> "$GITHUB_OUTPUT"
-    - name: Execute section when no compatible pass exists
+    - name: Remove completion marker before validating resumable internal state
+      if: ${{ inputs.always-run == 'true' && steps.check.outputs.complete == 'true' }}
+      shell: bash
+      env:
+        SECTION: ${{ inputs.section }}
+      run: rm -f "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION/complete.json"
+    - name: Execute section when no compatible pass exists or internal recovery is enabled
       id: execute
-      if: ${{ steps.check.outputs.complete != 'true' }}
+      if: ${{ steps.check.outputs.complete != 'true' || inputs.always-run == 'true' }}
       shell: bash
       env:
         BLB_CI_CHECKPOINT_DIR: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
@@ -62,7 +72,7 @@ runs:
         BLB_CI_CHECKPOINT_FINGERPRINT: ${{ inputs.fingerprint }}
       run: ${{ inputs.run }}
     - name: Record successful section completion
-      if: ${{ success() && steps.check.outputs.complete != 'true' }}
+      if: ${{ success() && (steps.check.outputs.complete != 'true' || inputs.always-run == 'true') }}
       shell: bash
       env:
         SECTION: ${{ inputs.section }}
@@ -74,7 +84,7 @@ runs:
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
           "$SECTION" "$SOURCE_SHA" "$FINGERPRINT"
     - name: Preserve completed or partial checkpoint after this attempt
-      if: ${{ always() && steps.check.outputs.complete != 'true' }}
+      if: ${{ always() && (steps.check.outputs.complete != 'true' || inputs.always-run == 'true') }}
       uses: actions/cache/save@v5
       continue-on-error: true
       with:
