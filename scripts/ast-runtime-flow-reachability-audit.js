@@ -170,6 +170,23 @@ function analyzeFile(root, file) {
         ['string', 'number'].includes(typeof property.value)) return String(property.value);
     return null;
   };
+  const memberReference = node => {
+    if (!node || node.type !== 'MemberExpression') return null;
+    const parts = [];
+    let current = node, dynamic = false;
+    while (current && current.type === 'MemberExpression') {
+      const key = propertyKey(current.property, current.computed);
+      if (key === null) dynamic = true;
+      else parts.unshift(key);
+      current = current.object;
+    }
+    if (!current || current.type !== 'Identifier') return null;
+    return {
+      object:bindingId(current),
+      name:current.name,
+      property:dynamic ? null : parts.join('.')
+    };
+  };
   const addObjectPropertySlots = (value, object, prefix = [], depth = 0) => {
     if (!value || depth > 10) return;
     if (value.type === 'ObjectExpression') {
@@ -598,14 +615,14 @@ function analyzeFile(root, file) {
                 }
                 continue;
               }
-              if (returned.type === 'MemberExpression' && returned.object.type === 'Identifier') {
-                propertyReads.push({
-                  object:bindingId(returned.object),
-                  property:propertyKey(returned.property, returned.computed),
-                  assigned,
-                  node:returned
-                });
-                continue;
+              if (returned.type === 'MemberExpression') {
+                const reference = memberReference(returned);
+                if (reference) {
+                  propertyReads.push({
+                    object:reference.object, property:reference.property, assigned, node:returned
+                  });
+                  continue;
+                }
               }
               if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
                 const identity = 'aggregate@' + returned.loc.start.line + ':' + returned.loc.start.column;
@@ -707,31 +724,34 @@ function analyzeFile(root, file) {
       }
     }
 
-    if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
-      const object = bindingId(node.object), property = propertyKey(node.property, node.computed);
-      let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
-        ? bindingId(parent.id) : null;
-      if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
-        const schedulerName = calleeName(parent.callee);
-        if (callbackSchedulers.has(schedulerName)) {
-          assigned = 'scheduler@' + parent.loc.start.line;
-          add('callbacks', 'stored-property-callback-registration', node,
-            schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + node.object.name);
-        } else if (containerMethods.has(schedulerName)) {
-          const valueIndex = parent.arguments.indexOf(node);
-          if (schedulerName !== 'set' || valueIndex > 0) {
-            assigned = 'container-value@' + node.loc.start.line + ':' + node.loc.start.column;
+    if (node.type === 'MemberExpression' && parent?.type !== 'MemberExpression') {
+      const reference = memberReference(node);
+      if (reference) {
+        const {object, property, name:objectName} = reference;
+        let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
+          const schedulerName = calleeName(parent.callee);
+          if (callbackSchedulers.has(schedulerName)) {
+            assigned = 'scheduler@' + parent.loc.start.line;
+            add('callbacks', 'stored-property-callback-registration', node,
+              schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + objectName);
+          } else if (containerMethods.has(schedulerName)) {
+            const valueIndex = parent.arguments.indexOf(node);
+            if (schedulerName !== 'set' || valueIndex > 0) {
+              assigned = 'container-value@' + node.loc.start.line + ':' + node.loc.start.column;
+            }
           }
+        } else if (parent?.type === 'CallExpression' && parent.callee === node) {
+          propertyReads.push({
+            object, property, assigned:'property-read@' + parent.loc.start.line, node
+          });
+          assigned = 'callback-invocation@' + parent.loc.start.line;
+          add('callbacks', 'stored-property-callback-invocation', node,
+            (property || 'dynamic property') + ' invoked from ' + objectName);
         }
-      } else if (parent?.type === 'CallExpression' && parent.callee === node) {
-        propertyReads.push({
-          object, property, assigned:'property-read@' + parent.loc.start.line, node
-        });
-        assigned = 'callback-invocation@' + parent.loc.start.line;
-        add('callbacks', 'stored-property-callback-invocation', node,
-          (property || 'dynamic property') + ' invoked from ' + node.object.name);
+        propertyReads.push({object, property, assigned, node});
       }
-      propertyReads.push({object, property, assigned, node});
     }
 
     if (node.type === 'VariableDeclarator') {
