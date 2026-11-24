@@ -141,6 +141,7 @@ function analyzeFile(root, file) {
   const containerReads = [];
   const propertyWrites = [];
   const propertyReads = [];
+  const propertyCopies = [];
   const objectAliasParents = new Map();
   const canonicalObject = identity => {
     if (!identity) return identity;
@@ -174,12 +175,19 @@ function analyzeFile(root, file) {
     if (value.type === 'ObjectExpression') {
       for (const property of value.properties) {
         if (property.type === 'SpreadElement') {
-          const key = prefix.join('.');
-          if (key) {
-            const slot = propertySlot(object, key);
-            const before = flowEdges.length;
-            addContainedReferences(property.argument, slot, 'property-store-spread', property);
-            for (const edge of flowEdges.slice(before)) propertyWrites.push({object, property:key, stored:edge.from});
+          if (property.argument.type === 'Identifier') {
+            propertyCopies.push({
+              target: object, source: bindingId(property.argument), prefix: prefix.join('.')
+            });
+            addEdge(bindingId(property.argument), object, 'object-spread-copy', property, 'spread source');
+          } else {
+            const key = prefix.join('.');
+            if (key) {
+              const slot = propertySlot(object, key);
+              const before = flowEdges.length;
+              addContainedReferences(property.argument, slot, 'property-store-spread', property);
+              for (const edge of flowEdges.slice(before)) propertyWrites.push({object, property:key, stored:edge.from});
+            }
           }
           continue;
         }
@@ -481,10 +489,14 @@ function analyzeFile(root, file) {
       }
       if (node.type === 'CallExpression' && name === 'assign' && receiverName === 'Object') {
         const target = node.arguments[0] && node.arguments[0].type === 'Identifier'
-          ? bindingId(node.arguments[0]) : null;
+          ? bindingId(node.arguments[0])
+          : parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+            ? bindingId(parent.id) : null;
         for (const source of node.arguments.slice(1)) {
-          if (source.type === 'Identifier') addEdge(bindingId(source), target,
-            'object-assign-merge', node, 'Object.assign');
+          if (source.type === 'Identifier') {
+            addEdge(bindingId(source), target, 'object-assign-merge', node, 'Object.assign');
+            if (target) propertyCopies.push({target, source:bindingId(source), prefix:''});
+          }
         }
       }
       if (node.type === 'CallExpression' && name === 'set' && receiverName === 'Reflect') {
@@ -615,6 +627,26 @@ function analyzeFile(root, file) {
       add('prototype-mutation', 'class-extends', node, 'class inheritance');
     }
   });
+
+  // Propagate known property contents through object spread and Object.assign.
+  // Iterate to a fixed point so chained copies retain their original values.
+  let copiesChanged = true;
+  let copyPasses = 0;
+  while (copiesChanged && copyPasses++ <= propertyCopies.length + 1) {
+    copiesChanged = false;
+    for (const copy of propertyCopies) {
+      const source = canonicalObject(copy.source), target = canonicalObject(copy.target);
+      for (const write of [...propertyWrites]) {
+        if (canonicalObject(write.object) !== source) continue;
+        const property = copy.prefix ? copy.prefix + '.' + write.property : write.property;
+        if (propertyWrites.some(existing =>
+          canonicalObject(existing.object) === target &&
+          existing.property === property && existing.stored === write.stored)) continue;
+        propertyWrites.push({object:target,property,stored:write.stored});
+        copiesChanged = true;
+      }
+    }
+  }
 
   // Resolve static object-property writes to subsequent property reads.
   // Unknown computed reads conservatively retain every stored value on the object.
