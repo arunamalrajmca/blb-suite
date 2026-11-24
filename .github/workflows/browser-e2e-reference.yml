@@ -285,16 +285,19 @@ jobs:
         include: ${{ fromJSON(needs.change-detection.outputs.reference_matrix) }}
     steps:
       - name: Checkout
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - name: Setup Node
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         id: playwright-cache
         uses: actions/cache@v5
@@ -304,6 +307,7 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         uses: actions/cache@v5
         with:
@@ -312,19 +316,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
+        # actionlint: disable=expression
         if: ${{ matrix.group != 'source-page-button-redirect-refresh' && (matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); const hosts=['https://example.com/*','https://www.gotquestions.org/*','https://www.christianity.com/*','https://www.crosswalk.com/*','https://www.enduringword.com/*']; m.host_permissions=[...(m.host_permissions||[]),...hosts]; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),...hosts]; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run Browser E2E — ${{ matrix.group }}
+        # actionlint: disable=expression
         if: ${{ matrix['file'] || matrix['files'] || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
