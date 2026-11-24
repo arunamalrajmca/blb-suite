@@ -132,8 +132,8 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: interleaved-performance-benchmark
-          always-run: 'true'
-          cache-prefix: blb-ci-v1-performance-interleaved-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          always_run: 'true'
+          cache_prefix: blb-ci-v1-performance-interleaved-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
@@ -216,7 +216,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: original-show-on-blb-benchmark
-          cache-prefix: blb-ci-v1-performance-original-show-on-blb-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-performance-original-show-on-blb-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/original-performance-smoke.jsonl"
@@ -236,7 +236,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: performance-qualification
-          cache-prefix: blb-ci-v1-performance-qualification-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-performance-qualification-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             export BLB_PERF_MIN_TARGETED_IMPROVEMENT=0.03
@@ -323,8 +323,8 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: corpus-lazy-load-ab
-          always-run: 'true'
-          cache-prefix: blb-ci-v1-performance-corpus-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          always_run: 'true'
+          cache_prefix: blb-ci-v1-performance-corpus-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-corpus-ab-results.jsonl"
@@ -338,7 +338,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: corpus-lazy-load-regressions
-          cache-prefix: blb-ci-v1-performance-corpus-regressions-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-performance-corpus-regressions-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: npx playwright test tests/browser/kjv-corpus-lazy-loading.spec.js --grep-invert "interleaved 15-pair cold-start and first-corpus-use A/B against current main" --workers=1 --reporter=line
       - name: Upload corpus A/B measurements
@@ -400,8 +400,8 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: observer-ab-benchmark
-          always-run: 'true'
-          cache-prefix: blb-ci-v1-performance-observer-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          always_run: 'true'
+          cache_prefix: blb-ci-v1-performance-observer-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             set -euo pipefail
