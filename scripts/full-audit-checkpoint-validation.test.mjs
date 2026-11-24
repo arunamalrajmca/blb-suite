@@ -99,10 +99,13 @@ test('failed, skipped, flaky, and expected-failure records are rejected', () => 
   assert.equal(validateSerialCheckpoint(expectedFailure), false);
 });
 
-test('missing, duplicate, out-of-order, and errored records are rejected', () => {
-  const missing = checkpoint();
-  missing.candidateSerial.pop();
-  assert.equal(validateSerialCheckpoint(missing), true); // A shorter contiguous prefix is recoverable.
+test('a shorter contiguous prefix is recoverable, but gaps, duplicates, and errors are rejected', () => {
+  const shorterPrefix = checkpoint();
+  shorterPrefix.candidateSerial.pop();
+  assert.equal(validateSerialCheckpoint(shorterPrefix), true);
+  const missingMiddle = checkpoint();
+  missingMiddle.candidateSerial.splice(4, 1);
+  assert.equal(validateSerialCheckpoint(missingMiddle), false);
   const duplicate = checkpoint();
   duplicate.candidateSerial[8].tests[0].key = duplicate.candidateSerial[7].tests[0].key;
   assert.equal(validateSerialCheckpoint(duplicate), false);
