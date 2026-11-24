@@ -684,3 +684,34 @@ test('preserves nested callback properties through flatMap aggregate results', (
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@5'));
 });
+
+test('traces callback values returned by array find and findLast', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const handlers = [callback];',
+    'const found = handlers.find(() => true);',
+    'const last = handlers.findLast(() => true);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'found@3'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'last@4'));
+});
+
+test('traces callback values through splice results and array fill writes', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = [callback];',
+    'const removed = source.splice(0, 1);',
+    'const selected = removed.at(0);',
+    'const filled = [];',
+    'filled.fill(callback);',
+    'const fromFill = filled.at(0);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'removed@3'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'callback@1' && edge.to === 'fromFill@7'));
+});
