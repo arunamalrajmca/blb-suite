@@ -309,6 +309,7 @@ jobs:
         continue-on-error: true
         with:
           section: browser-matrix
+          always-run: 'true'
           cache-prefix: blb-ci-v1-full-audit-browser-matrix-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
