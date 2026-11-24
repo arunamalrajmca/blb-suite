@@ -145,6 +145,8 @@ function analyzeFile(root, file) {
   const descriptorRequests = [];
   const descriptorCollectionRequests = [];
   const propertyValueCollectionRequests = [];
+  const entryCollectionSources = new Map();
+  const fromEntriesRequests = [];
   const objectAliasParents = new Map();
   const canonicalObject = identity => {
     if (!identity) return identity;
@@ -654,6 +656,12 @@ function analyzeFile(root, file) {
         const collection = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
         if (target && collection) propertyValueCollectionRequests.push({object:target,collection,node});
+        if (name === 'entries' && target && collection) entryCollectionSources.set(collection, target);
+      }
+      if (node.type === 'CallExpression' && name === 'fromEntries' && receiverName === 'Object') {
+        const target = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target && node.arguments[0]) fromEntriesRequests.push({target,entries:node.arguments[0],node});
       }
 
       if (node.type === 'CallExpression' && name === 'getOwnPropertyDescriptor' &&
@@ -904,7 +912,40 @@ function analyzeFile(root, file) {
     }
   });
 
-  // Propagate known property contents through object spread and Object.assign.
+  // Object.fromEntries(Object.entries(source)) recreates the source object's
+  // own property values. Resolve both inline and separately stored entry arrays.
+  for (const request of fromEntriesRequests) {
+    const input = request.entries;
+    let source = null;
+    if (input.type === 'Identifier') source = entryCollectionSources.get(bindingId(input)) || null;
+    else if (input.type === 'CallExpression' && input.callee.type === 'MemberExpression' &&
+        input.callee.object.type === 'Identifier' && input.callee.object.name === 'Object' &&
+        propertyKey(input.callee.property, input.callee.computed) === 'entries' &&
+        input.arguments[0]?.type === 'Identifier') {
+      source = bindingId(input.arguments[0]);
+    }
+    if (source) {
+      propertyCopies.push({target:request.target,source,prefix:''});
+      continue;
+    }
+    if (input.type !== 'ArrayExpression') continue;
+    for (const pair of input.elements) {
+      if (!pair || pair.type !== 'ArrayExpression' || pair.elements.length < 2 || !pair.elements[1]) continue;
+      const property = propertyKey(pair.elements[0], true);
+      const slot = propertySlot(request.target, property === null ? '[dynamic]' : property);
+      const before = flowEdges.length;
+      addContainedReferences(pair.elements[1], slot, 'from-entries-store', pair);
+      for (const edge of flowEdges.slice(before)) {
+        propertyWrites.push({object:request.target,property,stored:edge.from});
+      }
+      if (property !== null && ['ObjectExpression', 'ArrayExpression'].includes(pair.elements[1].type)) {
+        addObjectPropertySlots(pair.elements[1], request.target, [property]);
+      }
+    }
+  }
+
+  // Propagate known property contents through object spread, Object.assign,
+  // and Object.fromEntries(Object.entries(source)).
   // Iterate to a fixed point so chained copies retain their original values.
   let copiesChanged = true;
   let copyPasses = 0;
