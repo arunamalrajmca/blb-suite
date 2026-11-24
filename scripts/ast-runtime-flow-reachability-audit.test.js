@@ -280,3 +280,34 @@ test('traces nested object and array property destructuring to their source valu
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'nestedHandler@3'));
 });
+
+test('connects Object.defineProperty and Object.defineProperties descriptors to later reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = {};',
+    "Object.defineProperty(registry, 'onReady', { value: callback });",
+    'Object.defineProperties(registry, { onStop: { value: callback }, onGet: { get: callback } });',
+    'const ready = registry.onReady;',
+    'const stopped = registry.onStop;',
+    'const getter = registry.onGet;'
+  ].join('\n'));
+  for (const target of ['ready@5', 'stopped@6', 'getter@7']) {
+    assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+      edge.from === 'function@1' && edge.to === target), 'expected descriptor flow to ' + target);
+  }
+});
+
+test('connects Reflect.set values to static reads and keeps dynamic writes conservative', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = {};',
+    "Reflect.set(registry, 'onReady', callback);",
+    'const ready = registry.onReady;',
+    'Reflect.set(registry, dynamicKey, callback);',
+    'const stopped = registry.onStop;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'ready@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'stopped@6'));
+});
