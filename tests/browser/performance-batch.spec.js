@@ -339,6 +339,7 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
               '--no-default-browser-check'
             ]
           });
+          let result;
           try {
             let [worker] = context.serviceWorkers();
             if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 15000 });
@@ -356,16 +357,16 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
             }));
             const extensionId = worker.url().split('/')[2];
             const page = context.pages()[0] || await context.newPage();
-            const result = await runScenario(expect, scenario, page, context, worker, extensionId);
-            const record = { scenario, sample, variant, handoffMs: result.handoffMs,
-              ...(result.firstTabMs == null ? {} : { firstTabMs: result.firstTabMs }),
-              ...(result.secondTabMs == null ? {} : { secondTabMs: result.secondTabMs }) };
-            fs.appendFileSync(outputPath, JSON.stringify(record) + '\n');
-            completed[variant].set(key, record);
-            console.log('BLB performance sample: ' + scenario + ' ' + result.handoffMs + ' ms');
+            result = await runScenario(expect, scenario, page, context, worker, extensionId);
           } finally {
             await context.close();
           }
+          const record = { scenario, sample, variant, handoffMs: result.handoffMs,
+            ...(result.firstTabMs == null ? {} : { firstTabMs: result.firstTabMs }),
+            ...(result.secondTabMs == null ? {} : { secondTabMs: result.secondTabMs }) };
+          fs.appendFileSync(outputPath, JSON.stringify(record) + '\n');
+          completed[variant].set(key, record);
+          console.log('BLB performance sample: ' + scenario + ' ' + result.handoffMs + ' ms');
         }
       }
     }
