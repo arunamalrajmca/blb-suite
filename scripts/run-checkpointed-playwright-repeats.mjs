@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
@@ -71,7 +71,7 @@ function runBatch({ spec, grep, repeats, workers, maxFailures, outputDirectory, 
   const args = [cli, 'test', spec, '--grep', grep, '--repeat-each=' + repeats,
     '--workers=' + workers, '--max-failures=' + maxFailures, '--reporter=json', '--output=' + outputDirectory];
   const result = spawnSync(process.execPath, args, {
-    cwd:process.cwd(), encoding:'utf8', maxBuffer:64*1024*1024, timeout:30*60*1000,
+    cwd:process.cwd(), encoding:'utf8', maxBuffer:64*1024*1024, timeout:10*60*1000,
     env:{ ...process.env, NO_COLOR:'1', FORCE_COLOR:'0' }
   });
   const stdout = result.stdout || '';
@@ -128,7 +128,7 @@ export function runCheckpointedPlaywrightRepeats({
   return manifest;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   try {
     const [spec, grep, repeats, batchSize, workers, maxFailures = '1'] = process.argv.slice(2);
     if (!spec || !grep) throw new Error('Usage: node scripts/run-checkpointed-playwright-repeats.mjs <spec> <grep> <repeats> <batch-size> <workers> [max-failures]');
