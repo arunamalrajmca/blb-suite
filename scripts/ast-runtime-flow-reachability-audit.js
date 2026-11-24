@@ -931,7 +931,10 @@ function analyzeFile(root, file) {
       if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
       propertyWrites.push({
         object:request.descriptors,
-        property:write.property === null ? null : write.property + '.value',
+        property:write.property === null ? null : (() => {
+          const [first, ...rest] = write.property.split('.');
+          return [first, 'value', ...rest].join('.');
+        })(),
         stored:write.stored
       });
     }
