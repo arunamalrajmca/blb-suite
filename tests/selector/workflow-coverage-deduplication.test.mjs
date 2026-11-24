@@ -26,8 +26,8 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   for (const spec of groupBRequiredSpecs) assert.ok(groupsWorkflow.includes(spec));
   for (const spec of studySessionSpecs) assert.ok(groupsWorkflow.includes(spec));
   assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
-  const start = groupsWorkflow.indexOf("  core-group-a-changed-browser-specs:\\n");
-  const end = groupsWorkflow.indexOf("\\n  core-study-sessions:", start);
+  const start = groupsWorkflow.indexOf("  core-group-a-changed-browser-specs:\n");
+  const end = groupsWorkflow.indexOf("\n  core-study-sessions:", start);
   assert.ok(start >= 0 && end > start);
   const changedRunner = groupsWorkflow.slice(start, end);
   assert.ok(changedRunner.includes("inputs.group_a_required == 'true' && inputs.group_a_changed_browser_specs != ''"));
