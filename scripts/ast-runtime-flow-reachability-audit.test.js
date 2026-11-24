@@ -944,7 +944,7 @@ test('traces callback return values through Function.prototype.call and apply', 
     'const callback = () => work();',
     'const fromCall = identity.call(null, callback);',
     'const fromApply = identity.apply(null, [callback]);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
     edge.kind === 'function-callback-parameter' && edge.to === 'next@1'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'next@1' &&
@@ -958,7 +958,7 @@ test('traces callback return values through Reflect.apply', () => {
     'function identity(next) { return next; }',
     'const callback = () => work();',
     'const selected = Reflect.apply(identity, null, [callback]);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
     edge.kind === 'function-callback-parameter' && edge.to === 'next@1'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'next@1' &&
