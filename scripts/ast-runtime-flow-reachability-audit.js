@@ -422,6 +422,7 @@ function analyzeFile(root, file) {
     'notify', 'publish', 'invoke', 'execute', 'callHandler', 'handleEvent'
   ]);
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice']);
+  const containerReadMethods = new Set(['get', 'pop', 'shift', 'at']);
 
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
@@ -560,13 +561,17 @@ function analyzeFile(root, file) {
         const values = name === 'set' ? node.arguments.slice(1, 2) : node.arguments;
         const key = name === 'set' ? literalKey(node.arguments[0]) : null;
         for (const value of values) {
-          const stored = value.type === 'Identifier' ? bindingId(value) :
-            isFunction(value) ? 'function@' + value.loc.start.line :
-            value.type === 'MemberExpression'
-              ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
+          const storedFunction = value.type === 'Identifier'
+            ? functionVariables.get(variableForNode.get(value)) : null;
+          const isStoredCallback = isFunction(value) || !!storedFunction;
+          const stored = value.type === 'Identifier'
+            ? (storedFunction ? 'function@' + storedFunction.loc.start.line : bindingId(value))
+            : isFunction(value) ? 'function@' + value.loc.start.line
+              : value.type === 'MemberExpression'
+                ? 'container-value@' + value.loc.start.line + ':' + value.loc.start.column : null;
           if (stored) {
-            addEdge(stored, container, isFunction(value) ? 'container-store-callback' : 'container-store', node, name);
-            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier'});
+            addEdge(stored, container, isStoredCallback ? 'container-store-callback' : 'container-store', node, name);
+            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
             const identity = 'aggregate@' + value.loc.start.line + ':' + value.loc.start.column;
             const before = flowEdges.length;
@@ -579,11 +584,16 @@ function analyzeFile(root, file) {
           }
         }
       }
-      if (node.type === 'CallExpression' && name === 'get' && receiverName) {
+      if (node.type === 'CallExpression' && containerReadMethods.has(name) && receiverName &&
+          !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
-        addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.get');
-        containerReads.push({container:bindingId(receiver),key:literalKey(node.arguments[0]),assigned,node});
+        addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.' + name);
+        containerReads.push({
+          container:bindingId(receiver),
+          key:name === 'get' || name === 'at' ? literalKey(node.arguments[0]) : null,
+          assigned,node
+        });
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const calledVariable = variableForNode.get(node.callee);
