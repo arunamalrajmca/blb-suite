@@ -179,31 +179,6 @@ jobs:
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) }}
         run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
 
-      - name: Run every non-delegated changed browser spec
-        if: ${{ !cancelled() && inputs.group_a_changed_browser_specs != '' }}
-        env:
-          GROUP_A_CHANGED_BROWSER_SPECS: ${{ inputs.group_a_changed_browser_specs }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          IFS=',' read -r -a specs <<< "$GROUP_A_CHANGED_BROWSER_SPECS"
-          headed_spec="tests/browser/service-worker-shortcut-headed.spec.js"
-          normal_specs=()
-          total="${#specs[@]}"
-          for index in "${!specs[@]}"; do
-            spec="${specs[$index]}"
-            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Selected %s\n' "$((index + 1))" "$total" "$spec"
-            if [[ "$spec" == "$headed_spec" ]]; then
-              echo "Delegated to the single-owner native X11 workflow: $spec"
-            else
-              normal_specs+=("$spec")
-            fi
-          done
-          if (( ${#normal_specs[@]} > 0 )); then
-            npx playwright test "${normal_specs[@]}" --max-failures=1
-          fi
-
       - name: Run selected Group A behavior regressions in one Playwright process
         if: ${{ !cancelled() }}
         env:
@@ -291,6 +266,78 @@ jobs:
           path: selection-stage-benchmark/selection-action-timing.json
           if-no-files-found: ignore
           retention-days: 14
+
+  core-group-a-changed-browser-specs:
+    # Split the selected changed-spec inventory across two isolated runners.
+    # Each Playwright process retains the repository's one-worker setting.
+    if: ${{ inputs.group_a_required == 'true' && inputs.group_a_changed_browser_specs != '' }}
+    name: BROWSER E2E — GROUP A — CHANGED SPECS — shard ${{ matrix.shard }}/2
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+      - name: Cache npm download data
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-npm-
+      - run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+      - name: Grant test-only generic host access
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+      - name: Run assigned changed browser specs
+        env:
+          GROUP_A_CHANGED_BROWSER_SPECS: ${{ inputs.group_a_changed_browser_specs }}
+          SHARD_INDEX: ${{ matrix.shard }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a specs <<< "$GROUP_A_CHANGED_BROWSER_SPECS"
+          headed_spec="tests/browser/service-worker-shortcut-headed.spec.js"
+          normal_specs=()
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            if [[ "$spec" == "$headed_spec" ]]; then
+              echo "Delegated to the single-owner native X11 workflow: $spec"
+            else
+              normal_specs+=("$spec")
+            fi
+          done
+          shard_specs=()
+          for index in "${!normal_specs[@]}"; do
+            if (( index % 2 == SHARD_INDEX - 1 )); then
+              shard_specs+=("${normal_specs[$index]}")
+            fi
+          done
+          printf 'Shard %s/2 assigned %s of %s non-delegated changed browser specs.\\n' "$SHARD_INDEX" "${#shard_specs[@]}" "${#normal_specs[@]}"
+          if (( ${#shard_specs[@]} == 0 )); then
+            echo "No changed browser specs assigned to this shard."
+            exit 0
+          fi
+          for spec in "${shard_specs[@]}"; do
+            printf 'Running %s\\n' "$spec"
+          done
+          npx playwright test "${shard_specs[@]}" --max-failures=1
 
   core-study-sessions:
     if: ${{ inputs.study_sessions_required == 'true' }}
@@ -428,6 +475,7 @@ jobs:
     name: Validate selected feature groups
     needs:
       - core-group-a
+      - core-group-a-changed-browser-specs
       - core-user-actions
       - toggle-permission-lifecycle
       - core-study-sessions
@@ -439,6 +487,8 @@ jobs:
         env:
           GROUP_A_REQUIRED: ${{ inputs.group_a_required }}
           GROUP_A_RESULT: ${{ needs.core-group-a.result }}
+          GROUP_A_CHANGED_SPECS_REQUIRED: ${{ inputs.group_a_required == 'true' && inputs.group_a_changed_browser_specs != '' }}
+          GROUP_A_CHANGED_SPECS_RESULT: ${{ needs.core-group-a-changed-browser-specs.result }}
           CORE_USER_ACTIONS_REQUIRED: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
           CORE_USER_ACTIONS_RESULT: ${{ needs.core-user-actions.result }}
           TOGGLE_REQUIRED: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_specs, 'tests/browser/popup-master-toggle-regression.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-master-toggle-regression.spec.js') || contains(inputs.changed_specs, 'tests/browser/redirect-toggle-isolation.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/redirect-toggle-isolation.spec.js') || contains(inputs.changed_specs, 'tests/browser/optional-host-permission-lifecycle.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/optional-host-permission-lifecycle.spec.js')) }}
@@ -464,6 +514,7 @@ jobs:
             fi
           }
           check_group "Group A features" "$GROUP_A_REQUIRED" "$GROUP_A_RESULT"
+          check_group "Group A changed browser specs" "$GROUP_A_CHANGED_SPECS_REQUIRED" "$GROUP_A_CHANGED_SPECS_RESULT"
           check_group "Core user actions" "$CORE_USER_ACTIONS_REQUIRED" "$CORE_USER_ACTIONS_RESULT"
           check_group "Toggle and permission lifecycle" "$TOGGLE_REQUIRED" "$TOGGLE_RESULT"
           check_group "Study Sessions" "$STUDY_REQUIRED" "$STUDY_RESULT"
