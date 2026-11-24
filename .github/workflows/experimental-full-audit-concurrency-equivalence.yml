@@ -107,8 +107,9 @@ jobs:
         if: always()
         env:
           REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          if node -e "const fs=require('fs'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); process.exit(s.complete===true?0:1)" "$REPORT_DIR" 2>/dev/null; then
+          if node -e "const fs=require('fs'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); const i=JSON.parse(fs.readFileSync(p+'/inventory.json','utf8')); process.exit(s.complete===true && i.sourceCommit===process.env.SOURCE_SHA?0:1)" "$REPORT_DIR" 2>/dev/null; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
