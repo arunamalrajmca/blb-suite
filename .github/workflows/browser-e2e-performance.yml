@@ -251,6 +251,8 @@ jobs:
 
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
+      - name: Verify delegated browser test ownership inventory
+        run: node scripts/test-suite-inventory.mjs
 
       - name: Install Playwright Chromium
         run: npx playwright install chromium
