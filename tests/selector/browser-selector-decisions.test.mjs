@@ -1118,7 +1118,10 @@ test("four-worker lifecycle contention stress schedules four independent browser
     "tests/browser/extension-lifecycle.spec.js"
   ]) assert.ok(block.includes(spec), "concurrency stress must include " + spec);
   assert.match(block, /for round in 1 2/);
-  assert.match(block, /--workers=4 --max-failures=0 --reporter=line/);
+  assert.match(block, /for round in 1 2/);
+  assert.match(block, /round-\\$round\\.complete/);
+  assert.match(block, /Reusing passed four-worker lifecycle contention round/);
+  assert.match(block, /--workers=4 --max-failures=1 --reporter=line/);
 });
 
 test("performance batching retains interleaved paired samples with a fresh Chromium profile per sample", () => {
