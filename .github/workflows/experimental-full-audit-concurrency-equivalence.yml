@@ -10,7 +10,7 @@ on:
         type: string
   pull_request:
     branches: [ main ]
-    # Run on opt-in label and every subsequent PR-head update while the label remains.
+    # The opt-in label starts the audit; later recovery runs are manual dispatches so PR updates cannot restart the expensive baseline.
     types: [labeled]
 
 permissions:
