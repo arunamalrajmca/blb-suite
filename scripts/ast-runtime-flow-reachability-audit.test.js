@@ -228,3 +228,31 @@ test('connects property writes through the original object to reads through an a
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@4' && edge.to === 'handler@6'));
 });
+
+test('propagates property values through object spread and chained spread copies', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = { onReady: callback };',
+    'const merged = { ...source };',
+    'const chained = { ...merged };',
+    'const handler = chained.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@5'));
+});
+
+test('propagates property values through Object.assign into existing and newly assigned objects', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const source = { onReady: callback };',
+    'const target = {};',
+    'Object.assign(target, source);',
+    'const first = target.onReady;',
+    'const copied = Object.assign({}, source);',
+    'const second = copied.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'first@5'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'second@7'));
+});
