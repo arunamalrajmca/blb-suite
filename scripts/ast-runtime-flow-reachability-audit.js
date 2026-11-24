@@ -472,6 +472,9 @@ function analyzeFile(root, file) {
             containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier'});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
             const identity = 'aggregate@' + value.loc.start.line + ':' + value.loc.start.column;
+            const before = flowEdges.length;
+            addContainedReferences(value, container, 'container-store', node);
+            for (const edge of flowEdges.slice(before)) containerWrites.push({container, key, stored:edge.from, node});
             addEdge(identity, container, 'container-store-aggregate', node, name);
             addContainedReferences(value, identity, 'container-store', node);
             addObjectPropertySlots(value, identity);
@@ -506,9 +509,16 @@ function analyzeFile(root, file) {
           if (assigned) {
             for (const returned of returnedValues(calledFunction)) {
               if (returned.type === 'Identifier') {
-                const returnedBinding = bindingId(returned);
-                addEdge(returnedBinding, assigned, 'function-return', node, node.callee.name);
-                linkObjectAlias(assigned, returnedBinding);
+                const returnedVariable = variableForNode.get(returned);
+                const returnedFunction = functionVariables.get(returnedVariable);
+                if (returnedFunction) {
+                  addEdge('function@' + returnedFunction.loc.start.line, assigned,
+                    'function-return-callback', node, node.callee.name);
+                } else {
+                  const returnedBinding = bindingId(returned);
+                  addEdge(returnedBinding, assigned, 'function-return', node, node.callee.name);
+                  linkObjectAlias(assigned, returnedBinding);
+                }
                 continue;
               }
               if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
