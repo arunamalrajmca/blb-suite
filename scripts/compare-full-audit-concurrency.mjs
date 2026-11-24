@@ -101,13 +101,21 @@ try {
 
   if (mode === 'stage-serial') {
     console.log('[2/2] Running checkpointed isolated serial baseline.');
-    const serial = [];
-    const serialErrors = [];
+    const serialResultsPath = path.join(reportRoot, 'serial-results.json');
+    const serialErrorsPath = path.join(reportRoot, 'serial-errors.json');
+    const serial = fs.existsSync(serialResultsPath) ? JSON.parse(fs.readFileSync(serialResultsPath, 'utf8')) : [];
+    const serialErrors = fs.existsSync(serialErrorsPath) ? JSON.parse(fs.readFileSync(serialErrorsPath, 'utf8')) : [];
+    if (serial.length > scheduled.length) throw new Error('Serial checkpoint contains more tests than the current inventory.');
+    const batchSize = Number(process.env.BLB_CONCURRENCY_SERIAL_BATCH_SIZE || scheduled.length);
+    if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error('BLB_CONCURRENCY_SERIAL_BATCH_SIZE must be a positive integer.');
+    const batchStart = serial.length;
+    const batchEnd = Math.min(scheduled.length, batchStart + batchSize);
     const serialStartedAt = Date.now();
     const serialCheckpointPath = path.join(reportRoot, 'serial-checkpoint.json');
     const scheduledPath = path.join(reportRoot, 'scheduled-test-list.txt');
     fs.writeFileSync(scheduledPath, scheduled.join('\\n') + '\\n');
-    for (let index = 0; index < scheduled.length; index++) {
+    console.log('Serial checkpoint batch [' + batchStart + '/' + scheduled.length + ' → ' + batchEnd + '/' + scheduled.length + '].');
+    for (let index = batchStart; index < batchEnd; index++) {
       const oneTestPath = path.join(tempRoot, 'one-test.txt');
       fs.writeFileSync(oneTestPath, scheduled[index] + '\\n');
       const logPath = path.join(reportRoot, 'serial-' + String(index + 1).padStart(4, '0') + '.log');
@@ -126,29 +134,34 @@ try {
       if (bad) serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
         signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
       writeJson(serialCheckpointPath, {
-        completed: serial.length, scheduled: scheduled.length,
+        completed: serial.length, scheduled: scheduled.length, batchStart, batchEnd,
         elapsedMs: Date.now() - serialStartedAt, serialErrors, records: serial
       });
+      writeJson(serialResultsPath, serial);
+      writeJson(serialErrorsPath, serialErrors);
       if (bad) {
         console.log('Serial baseline stopped at first anomaly [' + (index + 1) + '/' + scheduled.length + '].');
         break;
       }
-      if ((index + 1) % 10 === 0 || index + 1 === scheduled.length) {
+      if ((serial.length % 10 === 0) || index + 1 === batchEnd) {
         const elapsedMs = Date.now() - serialStartedAt;
-        const averageMs = elapsedMs / (index + 1);
-        const remainingMinutes = Math.ceil((scheduled.length - index - 1) * averageMs / 60_000);
-        console.log('Serial baseline [' + (index + 1) + '/' + scheduled.length + '] | elapsed=' + Math.round(elapsedMs / 60_000) + 'm | estimated remaining=' + remainingMinutes + 'm | anomalies=0');
+        const averageMs = elapsedMs / Math.max(1, index + 1 - batchStart);
+        const remainingMinutes = Math.ceil((scheduled.length - serial.length) * averageMs / 60_000);
+        console.log('Serial baseline [' + serial.length + '/' + scheduled.length + '] | batch elapsed=' + Math.round(elapsedMs / 60_000) + 'm | estimated remaining=' + remainingMinutes + 'm | anomalies=' + serialErrors.length);
       }
     }
-    writeJson(path.join(reportRoot, 'serial-results.json'), serial);
-    writeJson(path.join(reportRoot, 'serial-errors.json'), serialErrors);
+    const batchComplete = serialErrors.length === 0 && serial.length === batchEnd;
     const complete = serial.length === scheduled.length && serialErrors.length === 0;
     writeJson(path.join(reportRoot, 'serial-stage-summary.json'), {
-      complete, scheduledTestCount: scheduled.length, serialProcessCount: serial.length,
-      serialAnomalies: serialErrors, elapsedMs: Date.now() - serialStartedAt
+      complete, batchComplete, batchStart, batchEnd, scheduledTestCount: scheduled.length,
+      serialProcessCount: serial.length, serialAnomalies: serialErrors,
+      elapsedMs: Date.now() - serialStartedAt
     });
-    console.log('Serial stage: ' + JSON.stringify({ complete, completed: serial.length, scheduled: scheduled.length, anomalies: serialErrors.length }));
-    if (!complete) process.exitCode = 1;
+    console.log('Serial stage batch: ' + JSON.stringify({
+      batchComplete, complete, completed: serial.length, scheduled: scheduled.length,
+      batchStart, batchEnd, anomalies: serialErrors.length
+    }));
+    if (!batchComplete) process.exitCode = 1;
   } else if (mode === 'stage-parallel') {
     const repetition = Number(process.env.BLB_CONCURRENCY_REPETITION || 0);
     if (![1, 2, 3].includes(repetition)) throw new Error('BLB_CONCURRENCY_REPETITION must be 1, 2, or 3.');
