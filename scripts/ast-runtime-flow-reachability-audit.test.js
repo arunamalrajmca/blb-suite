@@ -407,3 +407,38 @@ test('recognizes invocation of a callback stored in an object property', () => {
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@3'));
 });
+
+test('tracks instance fields and methods through class this properties and construction', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class Base {',
+    '  constructor() { this.onReady = callback; }',
+    '  invoke() { return this.onReady; }',
+    '}',
+    'class Child extends Base {}',
+    'const instance = new Child();',
+    'const handler = instance.onReady;',
+    'const method = instance.invoke;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@8'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@4' && edge.to === 'method@9'));
+});
+
+test('tracks class instance fields and static class methods as property values', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class Registry {',
+    '  onReady = callback;',
+    '  static onStop() { stop(); }',
+    '}',
+    'const instance = new Registry();',
+    'const handler = instance.onReady;',
+    'const staticHandler = Registry.onStop;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@7'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@4' && edge.to === 'staticHandler@8'));
+});
