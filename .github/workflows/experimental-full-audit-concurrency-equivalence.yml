@@ -105,7 +105,7 @@ jobs:
       - name: Configure serial checkpoint recovery directory
         run: |
           echo "BLB_CONCURRENCY_SERIAL_RECOVERY_DIR=${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery" >> "$GITHUB_ENV"
-          echo "BLB_CONCURRENCY_ALLOW_WORKFLOW_ONLY_RECOVERY=true" >> "$GITHUB_ENV"
+          echo "BLB_CONCURRENCY_ALLOW_AUDIT_HARNESS_ONLY_RECOVERY=true" >> "$GITHUB_ENV"
       - name: Restore a prior complete serial baseline when requested
         if: ${{ github.event.inputs.reuse_run_id != '' }}
         uses: actions/download-artifact@v6
