@@ -35,17 +35,6 @@ jobs:
           fetch-depth: 1
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency"
-      - name: Fetch prior serial checkpoint commits for strict compatibility verification
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        env:
-          RECOVERY_ROOT: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery
-        run: |
-          while IFS= read -r inventory; do
-            source_sha="$(node -e "const i=require(process.argv[1]); process.stdout.write(i.sourceCommit || '')" "$inventory")"
-            if [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]]; then
-              git fetch --no-tags --depth=1 origin "$source_sha"
-            fi
-          done < <(find "$RECOVERY_ROOT" -name inventory.json -type f -print)
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
@@ -122,7 +111,7 @@ jobs:
           REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          if node -e "const fs=require('fs'),crypto=require('crypto'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); const i=JSON.parse(fs.readFileSync(p+'/inventory.json','utf8')); const r=JSON.parse(fs.readFileSync(p+'/serial-results.json','utf8')); const e=JSON.parse(fs.readFileSync(p+'/serial-errors.json','utf8')); const list=i.scheduledTests; const digest=Array.isArray(list)?crypto.createHash('sha256').update(JSON.stringify(list)).digest('hex'):''; const seen=new Set(); const records=Array.isArray(r)&&Array.isArray(list)&&r.length===list.length&&r.every((x,n)=>{const t=x.tests?.[0]; if(x.inventoryEntry!==list[n]||x.exitCode!==0||x.parseError||x.tests?.length!==1||!t?.key||!t.status||seen.has(t.key)) return false; seen.add(t.key); return true;}); process.exit(s.complete===true&&i.sourceCommit===process.env.SOURCE_SHA&&Array.isArray(list)&&i.scheduled===list.length&&i.scheduledDigest===digest&&s.scheduledTestCount===list.length&&s.serialProcessCount===list.length&&records&&Array.isArray(e)&&e.length===0?0:1)" "$REPORT_DIR" 2>/dev/null; then
+          if node -e "const fs=require('fs'),crypto=require('crypto'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); const i=JSON.parse(fs.readFileSync(p+'/inventory.json','utf8')); const r=JSON.parse(fs.readFileSync(p+'/serial-results.json','utf8')); const e=JSON.parse(fs.readFileSync(p+'/serial-errors.json','utf8')); const list=i.scheduledTests; const digest=Array.isArray(list)?crypto.createHash('sha256').update(JSON.stringify(list)).digest('hex'):''; const seen=new Set(); const records=Array.isArray(r)&&Array.isArray(list)&&r.length===list.length&&r.every((x,n)=>{const t=x.tests?.[0]; if(x.inventoryEntry!==list[n]||x.exitCode!==0||x.parseError||x.tests?.length!==1||!t?.key||t.status!=='passed'||t.overallStatus!=='expected'||t.expectedStatus!=='passed'||seen.has(t.key)) return false; seen.add(t.key); return true;}); process.exit(s.complete===true&&i.sourceCommit===process.env.SOURCE_SHA&&Array.isArray(list)&&i.scheduled===list.length&&i.scheduledDigest===digest&&s.scheduledTestCount===list.length&&s.serialProcessCount===list.length&&records&&Array.isArray(e)&&e.length===0?0:1)" "$REPORT_DIR" 2>/dev/null; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
@@ -245,6 +234,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Check concurrency audit script syntax
         run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Run checkpoint recovery validator regression tests
+        run: node --test scripts/full-audit-checkpoint-validation.test.mjs
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
       - name: Serial baseline batch 1 — next 100 isolated tests
