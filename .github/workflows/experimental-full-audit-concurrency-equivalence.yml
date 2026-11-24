@@ -93,115 +93,7 @@ jobs:
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep" "${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery"
       - name: Configure serial checkpoint recovery directory
         run: echo "BLB_CONCURRENCY_SERIAL_RECOVERY_DIR=${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery" >> "$GITHUB_ENV"
-      - name: Restore a prior complete serial baseline when requested      - name: Restore prior serial checkpoint batch 1 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-1-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-01
-      - name: Restore prior serial checkpoint batch 2 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-2-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-02
-      - name: Restore prior serial checkpoint batch 3 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-3-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-03
-      - name: Restore prior serial checkpoint batch 4 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-4-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-04
-      - name: Restore prior serial checkpoint batch 5 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-5-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-05
-      - name: Restore prior serial checkpoint batch 6 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-6-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-06
-      - name: Restore prior serial checkpoint batch 7 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-7-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-07
-      - name: Restore prior serial checkpoint batch 8 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-8-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-08
-      - name: Restore prior serial checkpoint batch 9 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-9-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-09
-      - name: Restore prior serial checkpoint batch 10 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-10-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-10
-      - name: Restore prior serial checkpoint batch 11 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-11-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-11
-      - name: Restore prior serial checkpoint batch 12 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-serial-batch-12-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-12
-
+      - name: Restore a prior complete serial baseline when requested
         if: ${{ github.event.inputs.reuse_run_id != '' }}
         uses: actions/download-artifact@v6
         continue-on-error: true
@@ -210,6 +102,125 @@ jobs:
           run-id: ${{ github.event.inputs.reuse_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Check whether a complete serial baseline was restored
+        id: complete_serial_restore
+        if: always()
+        env:
+          REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+        run: |
+          if node -e "const fs=require('fs'); const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+'/serial-stage-summary.json','utf8')); process.exit(s.complete===true?0:1)" "$REPORT_DIR" 2>/dev/null; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Restore prior serial checkpoint batch 1 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-1-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-01
+      - name: Restore prior serial checkpoint batch 2 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-2-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-02
+      - name: Restore prior serial checkpoint batch 3 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-3-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-03
+      - name: Restore prior serial checkpoint batch 4 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-4-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-04
+      - name: Restore prior serial checkpoint batch 5 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-5-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-05
+      - name: Restore prior serial checkpoint batch 6 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-6-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-06
+      - name: Restore prior serial checkpoint batch 7 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-7-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-07
+      - name: Restore prior serial checkpoint batch 8 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-8-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-08
+      - name: Restore prior serial checkpoint batch 9 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-9-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-09
+      - name: Restore prior serial checkpoint batch 10 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-10-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-10
+      - name: Restore prior serial checkpoint batch 11 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-11-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-11
+      - name: Restore prior serial checkpoint batch 12 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-12-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-12
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
