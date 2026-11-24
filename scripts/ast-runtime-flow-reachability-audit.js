@@ -595,12 +595,21 @@ function analyzeFile(root, file) {
 
     if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
       const object = bindingId(node.object), property = propertyKey(node.property, node.computed);
-      propertyReads.push({
-        object, property,
-        assigned: parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
-          ? bindingId(parent.id) : null,
-        node
-      });
+      let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+        ? bindingId(parent.id) : null;
+      if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
+        const schedulerName = calleeName(parent.callee);
+        if (callbackSchedulers.has(schedulerName)) {
+          assigned = 'scheduler@' + parent.loc.start.line;
+          add('callbacks', 'stored-property-callback-registration', node,
+            schedulerName + ' receives ' + (property || 'dynamic property') + ' from ' + node.object.name);
+        }
+      } else if (parent?.type === 'CallExpression' && parent.callee === node) {
+        assigned = 'callback-invocation@' + parent.loc.start.line;
+        add('callbacks', 'stored-property-callback-invocation', node,
+          (property || 'dynamic property') + ' invoked from ' + node.object.name);
+      }
+      propertyReads.push({object,property,assigned,node});
     }
 
     if (node.type === 'VariableDeclarator') {
