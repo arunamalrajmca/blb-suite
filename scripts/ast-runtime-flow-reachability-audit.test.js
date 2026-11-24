@@ -839,3 +839,37 @@ test('keeps same-named object methods on different objects separate', () => {
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' && edge.kind === 'object-wrap-factory-return-callback'));
   assert.ok(!result.flowEdges.some(edge => edge.from === 'function@2' && edge.kind === 'object-wrap-factory-return-callback'));
 });
+
+
+test('traces callback factories returned by class instance and static methods', () => {
+  const result = audit([
+    'class HandlerFactory {',
+    '  create() { return () => start(); }',
+    '  static createStatic() { return () => stop(); }',
+    '}',
+    'const instance = new HandlerFactory();',
+    'const alias = instance;',
+    'const callback = alias.create();',
+    'const staticCallback = HandlerFactory.createStatic();',
+    'const wrapped = { handler: instance.create() };'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'function-return-callback' && edge.to === 'callback@7'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
+    edge.kind === 'function-return-callback' && edge.to === 'staticCallback@8'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'object-wrap-factory-return-callback' && edge.to.includes('wrapped@9')));
+});
+
+test('keeps class method factory identities separate across different classes', () => {
+  const result = audit([
+    'class FirstFactory { make() { return () => firstWork(); } }',
+    'class SecondFactory { make() { return () => secondWork(); } }',
+    'const instance = new FirstFactory();',
+    'const callback = instance.make();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
+  assert.ok(!result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
+});
