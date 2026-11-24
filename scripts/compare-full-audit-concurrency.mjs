@@ -96,9 +96,131 @@ try {
   console.log('Discovered ' + entries.length + '; delegated to dedicated workflows ' + delegated.length + '; comparison inventory ' + scheduled.length + '.');
 
   const mode = process.env.BLB_CONCURRENCY_MODE || 'full';
-  if (!['screen', 'full'].includes(mode)) throw new Error('Unknown BLB_CONCURRENCY_MODE: ' + mode);
+  const stageModes = ['stage-serial', 'stage-parallel'];
+  if (!['screen', 'full', ...stageModes].includes(mode)) throw new Error('Unknown BLB_CONCURRENCY_MODE: ' + mode);
 
-  if (mode === 'screen') {
+  if (mode === 'stage-serial') {
+    console.log('[2/2] Running checkpointed isolated serial baseline.');
+    const serial = [];
+    const serialErrors = [];
+    const serialStartedAt = Date.now();
+    const serialCheckpointPath = path.join(reportRoot, 'serial-checkpoint.json');
+    const scheduledPath = path.join(reportRoot, 'scheduled-test-list.txt');
+    fs.writeFileSync(scheduledPath, scheduled.join('\\n') + '\\n');
+    for (let index = 0; index < scheduled.length; index++) {
+      const oneTestPath = path.join(tempRoot, 'one-test.txt');
+      fs.writeFileSync(oneTestPath, scheduled[index] + '\\n');
+      const logPath = path.join(reportRoot, 'serial-' + String(index + 1).padStart(4, '0') + '.log');
+      const result = run(['--test-list', oneTestPath, '--workers=1', '--max-failures=0', '--reporter=json'], { timeout: 180_000 });
+      fs.writeFileSync(logPath, (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+      let tests = [];
+      let parseError = null;
+      try { tests = collectTests(parseJsonReport(result.stdout || '', 'serial test ' + (index + 1))); }
+      catch (error) { parseError = error.message; }
+      const record = {
+        inventoryEntry: scheduled[index], exitCode: result.status, signal: result.signal || null,
+        timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'), tests, parseError
+      };
+      serial.push(record);
+      const bad = result.status !== 0 || tests.length !== 1 || !tests[0].status || parseError;
+      if (bad) serialErrors.push({ index: index + 1, entry: scheduled[index], exitCode: result.status,
+        signal: result.signal, parseError, observedTests: tests.length, status: tests[0]?.status || null });
+      writeJson(serialCheckpointPath, {
+        completed: serial.length, scheduled: scheduled.length,
+        elapsedMs: Date.now() - serialStartedAt, serialErrors, records: serial
+      });
+      if (bad) {
+        console.log('Serial baseline stopped at first anomaly [' + (index + 1) + '/' + scheduled.length + '].');
+        break;
+      }
+      if ((index + 1) % 10 === 0 || index + 1 === scheduled.length) {
+        const elapsedMs = Date.now() - serialStartedAt;
+        const averageMs = elapsedMs / (index + 1);
+        const remainingMinutes = Math.ceil((scheduled.length - index - 1) * averageMs / 60_000);
+        console.log('Serial baseline [' + (index + 1) + '/' + scheduled.length + '] | elapsed=' + Math.round(elapsedMs / 60_000) + 'm | estimated remaining=' + remainingMinutes + 'm | anomalies=0');
+      }
+    }
+    writeJson(path.join(reportRoot, 'serial-results.json'), serial);
+    writeJson(path.join(reportRoot, 'serial-errors.json'), serialErrors);
+    const complete = serial.length === scheduled.length && serialErrors.length === 0;
+    writeJson(path.join(reportRoot, 'serial-stage-summary.json'), {
+      complete, scheduledTestCount: scheduled.length, serialProcessCount: serial.length,
+      serialAnomalies: serialErrors, elapsedMs: Date.now() - serialStartedAt
+    });
+    console.log('Serial stage: ' + JSON.stringify({ complete, completed: serial.length, scheduled: scheduled.length, anomalies: serialErrors.length }));
+    if (!complete) process.exitCode = 1;
+  } else if (mode === 'stage-parallel') {
+    const repetition = Number(process.env.BLB_CONCURRENCY_REPETITION || 0);
+    if (![1, 2, 3].includes(repetition)) throw new Error('BLB_CONCURRENCY_REPETITION must be 1, 2, or 3.');
+    const inventoryPath = path.join(reportRoot, 'inventory.json');
+    const serialPath = path.join(reportRoot, 'serial-results.json');
+    const scheduledPath = path.join(reportRoot, 'scheduled-test-list.txt');
+    if (![inventoryPath, serialPath, scheduledPath].every(file => fs.existsSync(file))) {
+      throw new Error('Parallel stage is missing the serial-baseline artifact files.');
+    }
+    const inventory = JSON.parse(fs.readFileSync(inventoryPath, 'utf8'));
+    const serial = JSON.parse(fs.readFileSync(serialPath, 'utf8'));
+    const stageScheduled = fs.readFileSync(scheduledPath, 'utf8').split(/\\r?\\n/).filter(Boolean);
+    if (serial.length !== stageScheduled.length || inventory.scheduled !== stageScheduled.length) {
+      throw new Error('Serial baseline artifact is incomplete or does not match its inventory.');
+    }
+    const serialByKey = new Map();
+    for (const record of serial) {
+      if (record.exitCode !== 0 || record.parseError || record.tests?.length !== 1) {
+        throw new Error('Serial baseline contains a failed or malformed test record.');
+      }
+      const test = record.tests[0];
+      if (serialByKey.has(test.key)) throw new Error('Serial baseline contains duplicate test identity: ' + test.key);
+      serialByKey.set(test.key, test);
+    }
+    console.log('[1/2] Running complete four-worker repetition ' + repetition + '/3 (fail fast).');
+    const listPathForStage = path.join(reportRoot, 'scheduled-test-list.txt');
+    const result = run(['--test-list', listPathForStage, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
+    fs.writeFileSync(path.join(reportRoot, 'parallel-round-' + repetition + '.log'),
+      (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+    let tests = [];
+    let parseError = null;
+    try { tests = collectTests(parseJsonReport(result.stdout || '', 'parallel repetition ' + repetition)); }
+    catch (error) { parseError = error.message; }
+    const parallelByKey = new Map();
+    const duplicates = [];
+    for (const test of tests) {
+      if (parallelByKey.has(test.key)) duplicates.push(test.key);
+      parallelByKey.set(test.key, test);
+    }
+    const missing = [...serialByKey.keys()].filter(key => !parallelByKey.has(key));
+    const extra = [...parallelByKey.keys()].filter(key => !serialByKey.has(key));
+    const mismatches = [];
+    for (const [key, serialTest] of serialByKey) {
+      const parallelTest = parallelByKey.get(key);
+      if (parallelTest && (serialTest.status !== parallelTest.status ||
+          serialTest.overallStatus !== parallelTest.overallStatus ||
+          serialTest.expectedStatus !== parallelTest.expectedStatus ||
+          serialTest.retryCount !== parallelTest.retryCount)) {
+        mismatches.push({ key, serial: {
+          status: serialTest.status, overallStatus: serialTest.overallStatus,
+          expectedStatus: serialTest.expectedStatus, retryCount: serialTest.retryCount
+        }, parallel: {
+          status: parallelTest.status, overallStatus: parallelTest.overallStatus,
+          expectedStatus: parallelTest.expectedStatus, retryCount: parallelTest.retryCount
+        }});
+      }
+    }
+    const complete = result.status === 0 && !parseError && tests.length === stageScheduled.length &&
+      missing.length === 0 && extra.length === 0 && duplicates.length === 0 && mismatches.length === 0;
+    const summary = {
+      repetition, scheduledTestCount: stageScheduled.length, observedTestCount: tests.length,
+      exitCode: result.status, timedOut: Boolean(result.error && result.error.code === 'ETIMEDOUT'),
+      parseError, missing, extra, duplicates, statusMismatches: mismatches, complete
+    };
+    writeJson(path.join(reportRoot, 'parallel-round-' + repetition + '-results.json'), { repetition, exitCode: result.status, tests, parseError });
+    writeJson(path.join(reportRoot, 'parallel-round-' + repetition + '-summary.json'), summary);
+    console.log('Parallel stage ' + repetition + '/3: ' + JSON.stringify({
+      complete, observed: tests.length, expected: stageScheduled.length, missing: missing.length,
+      extra: extra.length, duplicates: duplicates.length, mismatches: mismatches.length, exitCode: result.status
+    }));
+    if (!complete) process.exitCode = 1;
+  } else if (mode === 'screen') {
     console.log('[2/2] Running one complete four-worker screening pass (fail fast).');
     const result = run(['--test-list', listPath, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
     fs.writeFileSync(path.join(reportRoot, 'screening.log'), (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
