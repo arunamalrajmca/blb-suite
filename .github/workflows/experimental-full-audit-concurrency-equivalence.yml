@@ -3,12 +3,18 @@ run-name: Full Browser Concurrency Equivalence — ${{ github.ref_name }} — Ru
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse_run_id:
+        description: 'Optional prior run ID; artifacts are reused only when commit and inventory fingerprints match.'
+        required: false
+        type: string
   pull_request:
     branches: [ main ]
     # Run on opt-in label and every subsequent PR-head update while the label remains.
     types: [labeled, synchronize]
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
