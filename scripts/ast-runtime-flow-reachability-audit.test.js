@@ -289,7 +289,7 @@ test('preserves returned aggregate identity so later property reads retain neste
     'const entry = createEntry();',
     'const handler = entry.onReady;',
     'const hooks = entry.hooks;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
@@ -303,7 +303,7 @@ test('preserves aggregate property identities through direct Map storage and ret
     "registry.set('entry', { onReady: callback });",
     "const entry = registry.get('entry');",
     'const handler = entry.onReady;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'aggregate@3:22' && edge.to === 'entry@4'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
@@ -318,7 +318,7 @@ test('preserves object aliases stored in containers through retrieval and proper
     "registry.set('entry', entry);",
     "const restored = registry.get('entry');",
     'const handler = restored.onReady;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@6'));
 });
