@@ -469,3 +469,30 @@ test('traces object-property values returned from helper functions', () => {
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
 });
+
+test('connects Reflect.get values to consumers using literal and dynamic keys', () => {
+  const result = audit([
+    'const ready = () => start();',
+    'const stopped = () => stop();',
+    'const registry = { onReady: ready, onStop: stopped };',
+    "const handler = Reflect.get(registry, 'onReady');",
+    'const dynamicHandler = Reflect.get(registry, selectedKey);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'dynamicHandler@5'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@2' && edge.to === 'dynamicHandler@5'));
+});
+
+test('connects Object.getOwnPropertyDescriptor values to later descriptor.value reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    "const descriptor = Object.getOwnPropertyDescriptor(registry, 'onReady');",
+    'const handler = descriptor.value;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+});
