@@ -132,6 +132,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: interleaved-performance-benchmark
+          always-run: 'true'
           cache-prefix: blb-ci-v1-performance-interleaved-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
@@ -322,6 +323,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: corpus-lazy-load-ab
+          always-run: 'true'
           cache-prefix: blb-ci-v1-performance-corpus-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/kjv-corpus-lazy-loading.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
@@ -398,6 +400,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: observer-ab-benchmark
+          always-run: 'true'
           cache-prefix: blb-ci-v1-performance-observer-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
