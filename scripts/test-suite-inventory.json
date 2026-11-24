@@ -163,6 +163,13 @@
       "owner": ".github/workflows/manual-full-test-audit.yml",
       "requiredText": "node scripts/test-suite-inventory.mjs",
       "executionEnvironment": "node"
+    },
+    {
+      "id": "full-audit-checkpoint-validator-tests",
+      "pattern": "scripts/full-audit-checkpoint-validation.test.mjs",
+      "owner": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
+      "requiredText": "node --test scripts/full-audit-checkpoint-validation.test.mjs",
+      "executionEnvironment": "node"
     }
   ],
   "manualOnly": [
