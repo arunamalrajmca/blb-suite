@@ -366,29 +366,6 @@ jobs:
           fetch-depth: 1
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
-      - name: Download passing serial baseline
-        uses: actions/download-artifact@v6
-        with:
-          name: full-audit-deep-serial-${{ github.run_id }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
-      - name: Restore prior successful parallel repetition 3 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-repetition-3-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
-      - name: Restore prior successful parallel repetition 2 when requested
-        if: ${{ github.event.inputs.reuse_run_id != '' }}
-        uses: actions/download-artifact@v6
-        continue-on-error: true
-        with:
-          name: full-audit-deep-repetition-2-${{ github.event.inputs.reuse_run_id }}
-          run-id: ${{ github.event.inputs.reuse_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
       - name: Restore prior successful parallel repetition 1 when requested
         if: ${{ github.event.inputs.reuse_run_id != '' }}
         uses: actions/download-artifact@v6
@@ -397,6 +374,11 @@ jobs:
           name: full-audit-deep-repetition-1-${{ github.event.inputs.reuse_run_id }}
           run-id: ${{ github.event.inputs.reuse_run_id }}
           github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
           path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -440,6 +422,15 @@ jobs:
           fetch-depth: 1
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Restore prior successful parallel repetition 2 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-repetition-2-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
       - name: Download passing serial baseline
         uses: actions/download-artifact@v6
         with:
@@ -487,6 +478,15 @@ jobs:
           fetch-depth: 1
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Restore prior successful parallel repetition 3 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-repetition-3-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
       - name: Download passing serial baseline
         uses: actions/download-artifact@v6
         with:
