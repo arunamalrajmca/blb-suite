@@ -97,7 +97,7 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: native-x11-regressions
-          cache-prefix: blb-ci-v1-native-x11-${{ github.sha }}-${{ hashFiles('extension/background.js', 'extension/manifest.json', 'tests/browser/fixtures.js', 'tests/browser/service-worker-shortcut-headed.spec.js', 'tests/browser/native-prerender-activation.spec.js', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-native-shortcut.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-native-x11-${{ github.sha }}-${{ hashFiles('extension/background.js', 'extension/manifest.json', 'tests/browser/fixtures.js', 'tests/browser/service-worker-shortcut-headed.spec.js', 'tests/browser/native-prerender-activation.spec.js', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-native-shortcut.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/background.js', 'extension/manifest.json', 'tests/browser/fixtures.js', 'tests/browser/service-worker-shortcut-headed.spec.js', 'tests/browser/native-prerender-activation.spec.js', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-native-shortcut.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: >-
             BLB_HEADFUL_EXTENSION_TESTS=1
