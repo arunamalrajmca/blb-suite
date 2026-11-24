@@ -137,6 +137,67 @@ function analyzeFile(root, file) {
     });
   };
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
+  const containerWrites = [];
+  const containerReads = [];
+  const literalKey = node => node && node.type === 'Literal' &&
+    ['string', 'number'].includes(typeof node.value) ? String(node.value) : null;
+  // Follow only value-bearing syntax. Function bodies are deliberately opaque:
+  // their lexical captures are inventoried separately and must not be mistaken
+  // for values eagerly stored in the wrapper.
+  const addContainedReferences = (value, destination, kind, origin, depth = 0) => {
+    if (!value || depth > 12) return;
+    if (value.type === 'Identifier') {
+      addEdge(bindingId(value), destination, kind, origin || value, value.name);
+      return;
+    }
+    if (isFunction(value)) {
+      addEdge('function@' + value.loc.start.line, destination, kind + '-callback', origin || value, 'stored function value');
+      return;
+    }
+    if (value.type === 'ObjectExpression') {
+      for (const property of value.properties) {
+        if (property.type === 'SpreadElement') addContainedReferences(property.argument, destination, kind + '-spread', origin || property, depth + 1);
+        else if (property.type === 'Property') addContainedReferences(property.value, destination, kind, origin || property, depth + 1);
+      }
+      return;
+    }
+    if (value.type === 'ArrayExpression') {
+      for (const element of value.elements) addContainedReferences(element, destination, kind, origin || value, depth + 1);
+      return;
+    }
+    if (value.type === 'SequenceExpression') {
+      for (const expression of value.expressions) addContainedReferences(expression, destination, kind, origin || value, depth + 1);
+      return;
+    }
+    if (value.type === 'ConditionalExpression') {
+      addContainedReferences(value.consequent, destination, kind, origin || value, depth + 1);
+      addContainedReferences(value.alternate, destination, kind, origin || value, depth + 1);
+      return;
+    }
+    if (value.type === 'LogicalExpression') {
+      addContainedReferences(value.left, destination, kind, origin || value, depth + 1);
+      addContainedReferences(value.right, destination, kind, origin || value, depth + 1);
+      return;
+    }
+    if (value.type === 'MemberExpression' && value.object.type === 'Identifier') {
+      addEdge(bindingId(value.object), destination, kind + '-member-value', origin || value, propertyName(value) || 'computed member');
+    }
+  };
+  const returnedValues = fn => {
+    const returned = [];
+    const scan = (node, isRoot = false) => {
+      if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
+      if (!isRoot && isFunction(node)) return;
+      if (node.type === 'ReturnStatement' && node.argument) returned.push(node.argument);
+      for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'range', 'start', 'end'].includes(key)) continue;
+        if (Array.isArray(value)) value.forEach(child => scan(child));
+        else if (value && typeof value.type === 'string') scan(value);
+      }
+    };
+    scan(fn.body, true);
+    return returned;
+  };
   const functionNodes = [];
   const functionVariables = new Map();
   const functionDeclarationsByName = new Map();
@@ -284,17 +345,26 @@ function analyzeFile(root, file) {
           receiverName && !['Object', 'Reflect', 'Array'].includes(receiverName)) {
         add('container-storage', 'container-write', node, receiverName + '.' + name);
         const container = bindingId(receiver);
-        for (const argument of node.arguments) {
-          if (argument.type === 'Identifier') addEdge(bindingId(argument), container,
-            'container-store', node, name);
-          else if (isFunction(argument)) addEdge('function@' + argument.loc.start.line,
-            container, 'container-store-callback', node, name);
+        const values = name === 'set' ? node.arguments.slice(1, 2) : node.arguments;
+        const key = name === 'set' ? literalKey(node.arguments[0]) : null;
+        for (const value of values) {
+          const stored = value.type === 'Identifier' ? bindingId(value) :
+            isFunction(value) ? 'function@' + value.loc.start.line : null;
+          if (stored) {
+            addEdge(stored, container, isFunction(value) ? 'container-store-callback' : 'container-store', node, name);
+            containerWrites.push({container, key, stored, node});
+          } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
+            const before = flowEdges.length;
+            addContainedReferences(value, container, 'container-store', node);
+            for (const edge of flowEdges.slice(before)) containerWrites.push({container, key, stored:edge.from, node});
+          }
         }
       }
       if (node.type === 'CallExpression' && name === 'get' && receiverName) {
         const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
         addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.get');
+        containerReads.push({container:bindingId(receiver),key:literalKey(node.arguments[0]),assigned,node});
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const calledVariable = variableForNode.get(node.callee);
@@ -315,16 +385,13 @@ function analyzeFile(root, file) {
           const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
             ? bindingId(parent.id) : null;
           if (assigned) {
-            const returned = new Set();
-            visit(calledFunction.body, returnedNode => {
-              if (returnedNode.type === 'ReturnStatement' &&
-                  returnedNode.argument && returnedNode.argument.type === 'Identifier') {
-                const sourceBinding = bindingId(returnedNode.argument);
-                if (sourceBinding) returned.add(sourceBinding);
+            for (const returned of returnedValues(calledFunction)) {
+              const before = flowEdges.length;
+              addContainedReferences(returned, assigned, 'function-return', node);
+              if (returned.type === 'Identifier' && flowEdges.length === before) {
+                addEdge(bindingId(returned), assigned, 'function-return', node, node.callee.name);
               }
-            });
-            if (returned.size === 1) addEdge([...returned][0], assigned,
-              'function-return', node, node.callee.name);
+            }
           }
         }
       }
@@ -362,14 +429,7 @@ function analyzeFile(root, file) {
         add('object-wrapping', 'aggregate-wrapper', node,
           node.init.type + ' may retain nested function/object identities');
         const container = bindingId(node.id);
-        const values = node.init.type === 'ObjectExpression'
-          ? node.init.properties.filter(property => property.type === 'Property').map(property => property.value)
-          : node.init.elements.filter(Boolean);
-        for (const value of values) {
-          if (value.type === 'Identifier') addEdge(bindingId(value), container, 'object-wrap', value, node.init.type);
-          else if (isFunction(value)) addEdge('function@' + value.loc.start.line,
-            container, 'object-wrap-callback', value, node.init.type);
-        }
+        addContainedReferences(node.init, container, 'object-wrap', node);
         if (node.init.type === 'ArrayExpression') {
           for (const element of node.init.elements) {
             if (element && isFunction(element)) add('callbacks', 'callback-stored-in-array', element, 'array element');
@@ -458,6 +518,18 @@ function analyzeFile(root, file) {
       add('prototype-mutation', 'class-extends', node, 'class inheritance');
     }
   });
+
+  // Resolve container reads against all statically observed writes. A
+  // literal Map key narrows the edge; unknown keys conservatively include every
+  // stored value so a dynamic lookup cannot hide a live callback/object.
+  for (const read of containerReads) {
+    for (const write of containerWrites) {
+      if (write.container !== read.container) continue;
+      if (read.key !== null && write.key !== null && read.key !== write.key) continue;
+      addEdge(write.stored, read.assigned, 'container-value-read', read.node,
+        read.key === null ? 'dynamic container key' : 'key=' + read.key);
+    }
+  }
 
   // Captured closure records above may include the same captured binding in
   // multiple nested scopes. Deduplicate exact evidence for stable CI output.
