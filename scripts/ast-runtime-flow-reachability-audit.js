@@ -469,11 +469,13 @@ function analyzeFile(root, file) {
             isFunction(value) ? 'function@' + value.loc.start.line : null;
           if (stored) {
             addEdge(stored, container, isFunction(value) ? 'container-store-callback' : 'container-store', node, name);
-            containerWrites.push({container, key, stored, node});
+            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier'});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
-            const before = flowEdges.length;
-            addContainedReferences(value, container, 'container-store', node);
-            for (const edge of flowEdges.slice(before)) containerWrites.push({container, key, stored:edge.from, node});
+            const identity = 'aggregate@' + value.loc.start.line + ':' + value.loc.start.column;
+            addEdge(identity, container, 'container-store-aggregate', node, name);
+            addContainedReferences(value, identity, 'container-store', node);
+            addObjectPropertySlots(value, identity);
+            containerWrites.push({container, key, stored:identity, node, objectValue:true});
           }
         }
       }
@@ -503,11 +505,21 @@ function analyzeFile(root, file) {
             ? bindingId(parent.id) : null;
           if (assigned) {
             for (const returned of returnedValues(calledFunction)) {
-              const before = flowEdges.length;
-              addContainedReferences(returned, assigned, 'function-return', node);
-              if (returned.type === 'Identifier' && flowEdges.length === before) {
-                addEdge(bindingId(returned), assigned, 'function-return', node, node.callee.name);
+              if (returned.type === 'Identifier') {
+                const returnedBinding = bindingId(returned);
+                addEdge(returnedBinding, assigned, 'function-return', node, node.callee.name);
+                linkObjectAlias(assigned, returnedBinding);
+                continue;
               }
+              if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
+                const identity = 'aggregate@' + returned.loc.start.line + ':' + returned.loc.start.column;
+                addEdge(identity, assigned, 'function-return-aggregate', node, node.callee.name);
+                addContainedReferences(returned, identity, 'function-return', node);
+                addObjectPropertySlots(returned, identity);
+                linkObjectAlias(assigned, identity);
+                continue;
+              }
+              addContainedReferences(returned, assigned, 'function-return', node);
             }
           }
         }
@@ -714,6 +726,7 @@ function analyzeFile(root, file) {
       if (read.key !== null && write.key !== null && read.key !== write.key) continue;
       addEdge(write.stored, read.assigned, 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
+      if (write.objectValue && read.assigned) linkObjectAlias(read.assigned, write.stored);
     }
   }
 
