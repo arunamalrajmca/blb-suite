@@ -345,11 +345,8 @@ function analyzeFile(root, file) {
     // return the callback or aggregate being retained. Follow its explicit
     // return expressions, while the depth bound prevents recursive factories
     // from causing unbounded analysis.
-    if (value.type === 'CallExpression' && value.callee.type === 'Identifier') {
-      const calledVariable = variableForNode.get(value.callee);
-      const named = functionDeclarationsByName.get(value.callee.name) || [];
-      const called = (calledVariable && functionVariables.get(calledVariable)) ||
-        (named.length === 1 ? named[0] : null);
+    if (value.type === 'CallExpression') {
+      const called = resolveCalledFunction(value);
       if (called) {
         for (const returned of returnedValues(called)) {
           addContainedReferences(returned, destination, kind + '-factory-return', origin || value, depth + 1);
@@ -426,6 +423,37 @@ function analyzeFile(root, file) {
       }
     }
   });
+
+  const objectMethodFunctions = new Map();
+  visit(ast, (node, parent, ancestors) => {
+    if (node.type !== 'Property' || !isFunction(node.value)) return;
+    const objectExpression = ancestors[ancestors.length - 1];
+    const declaration = ancestors[ancestors.length - 2];
+    if (objectExpression?.type !== 'ObjectExpression' ||
+        declaration?.type !== 'VariableDeclarator' ||
+        declaration.init !== objectExpression || declaration.id.type !== 'Identifier') return;
+    const property = propertyKey(node.key, node.computed);
+    if (property === null) return;
+    const key = bindingId(declaration.id) + '::' + property;
+    if (!objectMethodFunctions.has(key)) objectMethodFunctions.set(key, []);
+    objectMethodFunctions.get(key).push(node.value);
+  });
+  const resolveCalledFunction = call => {
+    if (!call || call.type !== 'CallExpression') return null;
+    if (call.callee.type === 'Identifier') {
+      const variable = variableForNode.get(call.callee);
+      const named = functionDeclarationsByName.get(call.callee.name) || [];
+      return (variable && functionVariables.get(variable)) ||
+        (named.length === 1 ? named[0] : null);
+    }
+    if (call.callee.type === 'MemberExpression' && call.callee.object.type === 'Identifier') {
+      const property = propertyKey(call.callee.property, call.callee.computed);
+      if (property === null) return null;
+      const methods = objectMethodFunctions.get(bindingId(call.callee.object) + '::' + property) || [];
+      return methods.length === 1 ? methods[0] : null;
+    }
+    return null;
+  };
 
   // Lexical captures are function-to-outer-binding edges even when the function
   // is registered or invoked later by a runtime outside this source file.
@@ -728,11 +756,8 @@ function analyzeFile(root, file) {
           }
         }
       }
-      if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
-        const calledVariable = variableForNode.get(node.callee);
-        const namedFunctions = functionDeclarationsByName.get(node.callee.name) || [];
-        const calledFunction = (calledVariable && functionVariables.get(calledVariable)) ||
-          (namedFunctions.length === 1 ? namedFunctions[0] : null);
+      if (node.type === 'CallExpression') {
+        const calledFunction = resolveCalledFunction(node);
         if (calledFunction) {
           for (let index = 0; index < Math.min(node.arguments.length, calledFunction.params.length); index++) {
             const argument = node.arguments[index];
