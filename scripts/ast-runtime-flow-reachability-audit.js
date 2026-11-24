@@ -143,6 +143,8 @@ function analyzeFile(root, file) {
   const iteratorSources = new Map();
   const iteratorNextRequests = [];
   const callbackIterationRequests = [];
+  const mapContainers = new Set();
+  const mapKeyWrites = [];
   const propertyWrites = [];
   const propertyReads = [];
   const propertyCopies = [];
@@ -611,7 +613,7 @@ function analyzeFile(root, file) {
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice', 'fill']);
   const containerReadMethods = new Set(['get', 'pop', 'shift', 'at', 'find', 'findLast', 'splice']);
   const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
-  const callbackIterationMethods = new Set(['map', 'flatMap', 'filter', 'find', 'findLast', 'forEach', 'some', 'every', 'reduce', 'reduceRight']);
+  const callbackIterationMethods = new Set(['map', 'flatMap', 'filter', 'find', 'findLast', 'forEach', 'some', 'every', 'reduce', 'reduceRight', 'sort', 'toSorted']);
   const weakRefSources = new Map();
   const finalizationRegistryCallbacks = new Map();
 
@@ -808,6 +810,34 @@ function analyzeFile(root, file) {
           }
         }
       }
+      if (node.type === 'CallExpression' && name === 'set' &&
+          receiver?.type === 'Identifier' && mapContainers.has(bindingId(receiver)) &&
+          node.arguments[0]) {
+        const keyValue = node.arguments[0];
+        let storedKey = null;
+        if (keyValue.type === 'Identifier') {
+          const keyFunction = functionVariables.get(variableForNode.get(keyValue));
+          storedKey = keyFunction ? 'function@' + keyFunction.loc.start.line : bindingId(keyValue);
+        } else if (isFunction(keyValue)) {
+          storedKey = 'function@' + keyValue.loc.start.line;
+        } else if (['ObjectExpression', 'ArrayExpression'].includes(keyValue.type)) {
+          storedKey = 'map-key-aggregate@' + keyValue.loc.start.line + ':' + keyValue.loc.start.column;
+          addContainedReferences(keyValue, storedKey, 'map-key-store', node);
+          addObjectPropertySlots(keyValue, storedKey);
+        } else if (keyValue.type === 'MemberExpression') {
+          storedKey = 'map-key-value@' + keyValue.loc.start.line + ':' + keyValue.loc.start.column;
+          const reference = memberReference(keyValue);
+          if (reference) propertyReads.push({object:reference.object,property:reference.property,assigned:storedKey,node:keyValue});
+        } else if (keyValue.type === 'CallExpression' || keyValue.type === 'AwaitExpression') {
+          storedKey = 'map-key-expression@' + keyValue.loc.start.line + ':' + keyValue.loc.start.column;
+          addContainedReferences(keyValue, storedKey, 'map-key-store', node);
+        }
+        if (storedKey) mapKeyWrites.push({
+          container:bindingId(receiver),stored:storedKey,
+          objectValue:!String(storedKey).startsWith('function@'),node
+        });
+      }
+
       if (node.type === 'CallExpression' && name === 'register' &&
           receiver?.type === 'Identifier') {
         const callback = finalizationRegistryCallbacks.get(bindingId(receiver));
@@ -917,14 +947,27 @@ function analyzeFile(root, file) {
         const callback = isFunction(callbackArgument) ? callbackArgument :
           callbackArgument?.type === 'Identifier'
             ? functionVariables.get(variableForNode.get(callbackArgument)) : null;
-        const parameterIndex = name === 'reduce' || name === 'reduceRight' ? 1 : 0;
-        const parameterNode = callback?.params?.[parameterIndex];
-        const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
-        if (source && ['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(parameter?.type)) {
-          callbackIterationRequests.push({
-            source,parameter:parameter.type === 'Identifier' ? bindingId(parameter) : null,
-            parameterPattern:parameter,includeObjectValues,entries,node,method:name
-          });
+        const parameterIndexes = name === 'sort' || name === 'toSorted' ? [0, 1] :
+          [name === 'reduce' || name === 'reduceRight' ? 1 : 0];
+        for (const parameterIndex of parameterIndexes) {
+          const parameterNode = callback?.params?.[parameterIndex];
+          const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
+          if (source && ['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(parameter?.type)) {
+            callbackIterationRequests.push({
+              source,parameter:parameter.type === 'Identifier' ? bindingId(parameter) : null,
+              parameterPattern:parameter,includeObjectValues,entries,node,method:name
+            });
+          }
+        }
+        if (name === 'forEach' && source && mapContainers.has(source)) {
+          const keyParameterNode = callback?.params?.[1];
+          const keyParameter = keyParameterNode?.type === 'AssignmentPattern' ? keyParameterNode.left : keyParameterNode;
+          if (['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(keyParameter?.type)) {
+            callbackIterationRequests.push({
+              source,parameter:keyParameter.type === 'Identifier' ? bindingId(keyParameter) : null,
+              parameterPattern:keyParameter,includeObjectValues,entries:false,node,method:name,role:'map-key'
+            });
+          }
         }
       }
       if (node.type === 'CallExpression' && ['map', 'flatMap'].includes(name) && receiverName &&
@@ -1255,6 +1298,13 @@ function analyzeFile(root, file) {
           node.init.callee.type === 'Identifier' &&
           ['Map', 'Set', 'WeakMap', 'WeakSet'].includes(node.init.callee.name)) {
         add('container-storage', 'container-construction', node, node.init.callee.name);
+        if (node.init.callee.name === 'Map' && node.id.type === 'Identifier') {
+          mapContainers.add(bindingId(node.id));
+        }
+      }
+      if (node.init?.type === 'Identifier' && node.id.type === 'Identifier' &&
+          mapContainers.has(bindingId(node.init))) {
+        mapContainers.add(bindingId(node.id));
       }
       if (node.init && node.init.type === 'MemberExpression' &&
           node.init.object.type === 'Identifier') {
@@ -1504,6 +1554,13 @@ function analyzeFile(root, file) {
     }
   };
   for (const request of callbackIterationRequests) {
+    if (request.role === 'map-key') {
+      for (const write of mapKeyWrites) {
+        if (canonicalObject(write.container) !== canonicalObject(request.source)) continue;
+        bindCallbackValue(request, write.stored, write.objectValue, null);
+      }
+      continue;
+    }
     for (const write of containerWrites) {
       if (canonicalObject(write.container) !== canonicalObject(request.source)) continue;
       bindCallbackValue(request, write.stored, write.objectValue, write.key);
