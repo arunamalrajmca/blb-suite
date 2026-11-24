@@ -1148,7 +1148,7 @@ function analyzeFile(root, file) {
     // Treat their numeric slots as container elements for find/findLast/at/etc.
     for (const write of propertyWrites) {
       if (canonicalObject(write.object) !== canonicalObject(read.container)) continue;
-      if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
+      if (write.property !== null && !/^\d+$/.test(write.property)) continue;
       if (read.key !== null && write.property !== null && read.key !== write.property) continue;
       addEdge(write.stored, read.assigned, 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
