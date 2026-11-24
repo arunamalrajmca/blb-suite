@@ -13,6 +13,9 @@ inputs:
   run:
     description: Shell command to execute when no compatible completed checkpoint exists.
     required: true
+  source-sha:
+    description: Exact checked-out source commit; defaults to the workflow SHA.
+    required: false
   always-run:
     description: Execute the section runner even after restoring a complete marker so it can validate and reuse internal partial checkpoints.
     required: false
@@ -56,7 +59,7 @@ runs:
       shell: bash
       env:
         SECTION: ${{ inputs.section }}
-        SOURCE_SHA: ${{ github.sha }}
+        SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
       run: |
         set -euo pipefail
@@ -75,7 +78,7 @@ runs:
       shell: bash
       env:
         BLB_CI_CHECKPOINT_DIR: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
-        BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ github.sha }}
+        BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
         BLB_CI_CHECKPOINT_FINGERPRINT: ${{ inputs.fingerprint }}
       run: ${{ inputs.run }}
     - name: Record successful section completion
