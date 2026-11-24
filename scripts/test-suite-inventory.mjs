@@ -102,11 +102,55 @@ for (const area of productionCoverage) {
     }
   }
 }
+const productionModuleCoverage = manifest.productionModuleCoverage || [];
+const extensionManifest = JSON.parse(readRepoFile('extension/manifest.json'));
+const manifestModules = new Set([
+  ...(extensionManifest.background?.service_worker ? ['extension/' + extensionManifest.background.service_worker] : []),
+  ...(extensionManifest.content_scripts || []).flatMap(group => (group.js || []).map(file => 'extension/' + file))
+]);
+const mappedModules = new Map();
+for (const module of productionModuleCoverage) {
+  if (!module.path || mappedModules.has(module.path)) fail('Production module coverage has a missing or duplicate path: ' + module.path);
+  mappedModules.set(module.path, module);
+  if (!manifestModules.has(module.path)) fail('Production module coverage entry is not loaded by the extension manifest: ' + module.path);
+  if (!fs.existsSync(path.join(root, module.path))) fail('Production module is missing: ' + module.path);
+  if (!['direct-integration','indirect-integration','unmapped'].includes(module.coverageLevel)) {
+    fail('Production module has an invalid coverage level: ' + module.path);
+  }
+  if (module.coverageLevel !== 'direct-integration' && (!module.gap || !module.gap.trim())) {
+    fail('Production module gap must be explicit: ' + module.path);
+  }
+  if (module.coverageLevel === 'direct-integration' && (!Array.isArray(module.testFiles) || !module.testFiles.length)) {
+    fail('Directly mapped production module has no test evidence: ' + module.path);
+  }
+  for (const evidence of module.testFiles || []) {
+    if (!evidence.path || !classified.has(evidence.path)) {
+      fail('Production module evidence is not owned by an automated test suite: ' + module.path + ' -> ' + evidence.path);
+      continue;
+    }
+    const testContent = readRepoFile(evidence.path);
+    for (const requiredText of evidence.requiredText || []) {
+      if (!testContent.includes(requiredText)) fail('Production module evidence no longer matches its regression assertion: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
+    }
+    if (module.coverageLevel === 'direct-integration' && !(evidence.requiredText || []).length) {
+      fail('Direct integration evidence must identify its exact regression assertion: ' + module.path + ' -> ' + evidence.path);
+    }
+  }
+}
+for (const modulePath of manifestModules) {
+  if (!mappedModules.has(modulePath)) fail('Manifest-loaded production module has no coverage disposition: ' + modulePath);
+}
+for (const modulePath of mappedModules.keys()) {
+  if (!manifestModules.has(modulePath)) fail('Coverage registry contains a module outside the manifest-loaded inventory: ' + modulePath);
+}
+const directModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'direct-integration').length;
+const indirectModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'indirect-integration').length;
+const unmappedModuleCount = productionModuleCoverage.filter(module => module.coverageLevel === 'unmapped').length;
 const total = counts.reduce((sum,item)=>sum+item.count,0);
 console.log('Repository test inventory');
 for (const suite of counts) console.log('  '+suite.id+': '+suite.count+' file(s)');
 console.log('  Automated inventory total: '+total+' file(s)');
 console.log('  Explicit manual-only harnesses: '+manifest.manualOnly.length);
-console.log('  Test-looking files discovered: '+candidates.length);
+console.log('  Test-looking files discovered: '+candidates.length);\nconsole.log('  Manifest-loaded production modules: '+manifestModules.size+' ('+directModuleCount+' direct integration, '+indirectModuleCount+' indirect integration, '+unmappedModuleCount+' unmapped)');
 if (errors.length) { for (const error of errors) console.error('FAIL: '+error); process.exitCode=1; }
 else console.log('PASS: every discovered test file has an explicit execution owner.');
