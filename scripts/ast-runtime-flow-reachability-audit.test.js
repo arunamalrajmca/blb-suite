@@ -1263,7 +1263,7 @@ test('binds stored callback values to findIndex callback parameters', () => {
     'const cleanup = () => work();',
     'const callbacks = [cleanup];',
     'const index = callbacks.findIndex(callback => callback());'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
 });
@@ -1273,7 +1273,7 @@ test('binds stored callback values to findLastIndex callback parameters', () => 
     'const cleanup = () => work();',
     'const callbacks = [cleanup];',
     'const index = callbacks.findLastIndex(callback => callback());'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
 });
