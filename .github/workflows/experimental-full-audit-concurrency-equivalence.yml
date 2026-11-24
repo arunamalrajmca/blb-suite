@@ -52,6 +52,7 @@ jobs:
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency
           BLB_CONCURRENCY_MODE: screen
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
@@ -117,6 +118,7 @@ jobs:
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -131,10 +133,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 2 — next 100 isolated tests
         id: serial_batch_2
-        if: success()
+        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -149,10 +152,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 3 — next 100 isolated tests
         id: serial_batch_3
-        if: success()
+        if: ${{ success() && steps.serial_batch_2.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -167,10 +171,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 4 — next 100 isolated tests
         id: serial_batch_4
-        if: success()
+        if: ${{ success() && steps.serial_batch_3.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -185,10 +190,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 5 — next 100 isolated tests
         id: serial_batch_5
-        if: success()
+        if: ${{ success() && steps.serial_batch_4.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -203,10 +209,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 6 — next 100 isolated tests
         id: serial_batch_6
-        if: success()
+        if: ${{ success() && steps.serial_batch_5.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -221,10 +228,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 7 — next 100 isolated tests
         id: serial_batch_7
-        if: success()
+        if: ${{ success() && steps.serial_batch_6.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -239,10 +247,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 8 — next 100 isolated tests
         id: serial_batch_8
-        if: success()
+        if: ${{ success() && steps.serial_batch_7.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -257,10 +266,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 9 — next 100 isolated tests
         id: serial_batch_9
-        if: success()
+        if: ${{ success() && steps.serial_batch_8.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -275,10 +285,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 10 — next 100 isolated tests
         id: serial_batch_10
-        if: success()
+        if: ${{ success() && steps.serial_batch_9.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -293,10 +304,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 11 — next 100 isolated tests
         id: serial_batch_11
-        if: success()
+        if: ${{ success() && steps.serial_batch_10.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -311,10 +323,11 @@ jobs:
           retention-days: 30
       - name: Serial baseline batch 12 — next 100 isolated tests
         id: serial_batch_12
-        if: success()
+        if: ${{ success() && steps.serial_batch_11.outputs.complete != 'true' }}
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -372,6 +385,7 @@ jobs:
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_REPETITION: '1'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -418,6 +432,7 @@ jobs:
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_REPETITION: '2'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
@@ -464,6 +479,7 @@ jobs:
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BLB_CONCURRENCY_REPETITION: '3'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
