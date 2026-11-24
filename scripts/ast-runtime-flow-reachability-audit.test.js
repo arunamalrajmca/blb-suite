@@ -116,7 +116,7 @@ test('propagates returned closures and nested object/array wrapper identities to
     'function makeNested() { return { hooks: [callback], state: { service } }; }',
     'const fromClosure = makeCallback();',
     'const fromWrapper = makeNested();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback' &&
     edge.from === 'function@2' && edge.to === 'fromClosure@5'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback' &&
@@ -134,7 +134,7 @@ test('connects container values to reads by matching static keys and conservativ
     "registry.set('stopped', stopped);",
     "const handler = registry.get('ready');",
     'const dynamicHandler = registry.get(key);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'ready@2' && edge.to === 'handler@6'));
   assert.ok(!result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
@@ -150,7 +150,7 @@ test('tracks nested aggregate values stored in containers through subsequent rea
     'const callback = () => service.run();',
     "registry.set('entry', { callbacks: [callback], service });",
     "const entry = registry.get('entry');"
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@3' && edge.to === 'entry@5'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
