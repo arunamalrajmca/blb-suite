@@ -323,7 +323,7 @@ function analyzeFile(root, file) {
       }
     }
     if (!method || !classNode) return null;
-    const nestedFunctions = ancestors.slice(methodIndex + 1).filter(isFunction);
+    const nestedFunctions = ancestors.slice(methodIndex + 1).filter(fn => isFunction(fn) && fn !== method.value);
     if (nestedFunctions.some(fn => fn.type !== 'ArrowFunctionExpression')) return null;
     const declaration = [...ancestors].reverse().find(node =>
       node.type === 'VariableDeclarator' && node.id.type === 'Identifier');
