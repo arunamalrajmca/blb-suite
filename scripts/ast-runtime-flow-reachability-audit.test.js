@@ -584,9 +584,9 @@ test('traces callbacks retrieved from array containers with pop and shift', () =
     'const shifted = queue.shift();'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
-    edge.from === 'function@1' && edge.to === 'popped@4'));
+    edge.from === 'callback@1' && edge.to === 'popped@4'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
-    edge.from === 'function@1' && edge.to === 'shifted@7'));
+    edge.from === 'callback@1' && edge.to === 'shifted@7'));
 });
 
 test('traces callbacks retrieved from array containers with at and a literal index', () => {
@@ -597,5 +597,5 @@ test('traces callbacks retrieved from array containers with at and a literal ind
     'const selected = handlers.at(0);'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
-    edge.from === 'function@1' && edge.to === 'selected@4'));
+    edge.from === 'callback@1' && edge.to === 'selected@4'));
 });
