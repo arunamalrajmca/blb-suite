@@ -567,7 +567,7 @@ test('traces nested values through the top-level descriptor value boundary', () 
     'const registry = { nested: { onReady: callback } };',
     'const descriptors = Object.getOwnPropertyDescriptors(registry);',
     'const handler = descriptors.nested.value.onReady;'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
 });
