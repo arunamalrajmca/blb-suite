@@ -763,3 +763,37 @@ test('traces Map entry values through stored iterators and destructured for-of l
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'callback@1' && edge.to === 'handler@5'));
 });
+
+test('binds stored callback values to array map callback parameters', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const handlers = [callback];',
+    'const mapped = handlers.map(handler => handler);',
+    'const selected = mapped.at(0);'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-argument' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'handler@3' && edge.to === 'selected@4'));
+});
+
+test('binds object values to forEach callback parameters for nested property reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'const items = [registry];',
+    'items.forEach(item => { const handler = item.onReady; });'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+});
+
+test('binds Object.values results to collection callback parameters', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'Object.values(registry).forEach(handler => handler());'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-argument' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+});
