@@ -796,7 +796,7 @@ function analyzeFile(root, file) {
     const readObject = canonicalObject(read.object);
     const matches = propertyWrites.filter(write =>
       canonicalObject(write.object) === readObject &&
-      (read.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+      (read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
     for (const write of matches) {
       addEdge(write.stored, destination, 'property-value-read', read.node,
