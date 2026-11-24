@@ -1216,3 +1216,44 @@ test('traces both Map.entries tuple positions into destructured for-of bindings'
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
     edge.to === 'value@4'));
 });
+
+
+test('traces Array.from mapper input and returned callback identity', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'const mapped = Array.from(callbacks, callback => callback);',
+    'const selected = mapped.at(0);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
+    edge.to === 'selected@4' && edge.kind === 'container-value-read'));
+});
+
+test('traces Object.values callback values through an Array.from mapper', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const registry = { onCleanup: cleanup };',
+    'const mapped = Array.from(Object.values(registry), callback => callback);',
+    'const selected = mapped.at(0);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
+    edge.to === 'selected@4' && edge.kind === 'container-value-read'));
+});
+
+test('supports a separately declared Array.from mapper callback', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'function identity(callback) { return callback; }',
+    'const mapped = Array.from(callbacks, identity);',
+    'const selected = mapped.at(0);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
+    edge.to === 'selected@5' && edge.kind === 'container-value-read'));
+});
