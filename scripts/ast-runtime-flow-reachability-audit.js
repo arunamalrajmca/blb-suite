@@ -812,7 +812,8 @@ function analyzeFile(root, file) {
           receiver?.type === 'Identifier') {
         const callback = finalizationRegistryCallbacks.get(bindingId(receiver));
         const holdings = node.arguments[1];
-        const parameter = callback?.params?.[0];
+        const parameterNode = callback?.params?.[0];
+        const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
         if (callback && holdings && parameter?.type === 'Identifier') {
           if (holdings.type === 'Identifier') {
             const holdingsFunction = functionVariables.get(variableForNode.get(holdings));
@@ -827,6 +828,15 @@ function analyzeFile(root, file) {
             addContainedReferences(holdings, bindingId(parameter),
               'finalization-holdings', node);
           }
+        } else if (callback && holdings &&
+            (parameter?.type === 'ObjectPattern' || parameter?.type === 'ArrayPattern')) {
+          let holdingsIdentity = holdings.type === 'Identifier' ? bindingId(holdings) : null;
+          if (!holdingsIdentity && ['ObjectExpression', 'ArrayExpression'].includes(holdings.type)) {
+            holdingsIdentity = 'finalization-holdings@' + holdings.loc.start.line + ':' + holdings.loc.start.column;
+            addContainedReferences(holdings, holdingsIdentity, 'finalization-holdings', node);
+            addObjectPropertySlots(holdings, holdingsIdentity);
+          }
+          if (holdingsIdentity) addDestructuredPropertyReads(parameter, holdingsIdentity);
         }
       }
 
@@ -892,24 +902,28 @@ function analyzeFile(root, file) {
       if (node.type === 'CallExpression' && callbackIterationMethods.has(name)) {
         let source = receiverName && !['Object', 'Reflect'].includes(receiverName)
           ? bindingId(receiver) : null;
-        let includeObjectValues = false;
+        let includeObjectValues = false, entries = false;
         if (!source && receiver?.type === 'CallExpression' &&
             receiver.callee.type === 'MemberExpression' &&
             receiver.callee.object.type === 'Identifier' && receiver.callee.object.name === 'Object' &&
             ['values', 'entries'].includes(propertyKey(receiver.callee.property, receiver.callee.computed)) &&
             receiver.arguments[0]?.type === 'Identifier') {
+          const collectionMethod = propertyKey(receiver.callee.property, receiver.callee.computed);
           source = bindingId(receiver.arguments[0]);
           includeObjectValues = true;
+          entries = collectionMethod === 'entries';
         }
         const callbackArgument = node.arguments[0];
         const callback = isFunction(callbackArgument) ? callbackArgument :
           callbackArgument?.type === 'Identifier'
             ? functionVariables.get(variableForNode.get(callbackArgument)) : null;
         const parameterIndex = name === 'reduce' || name === 'reduceRight' ? 1 : 0;
-        const parameter = callback?.params?.[parameterIndex];
-        if (source && parameter?.type === 'Identifier') {
+        const parameterNode = callback?.params?.[parameterIndex];
+        const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
+        if (source && ['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(parameter?.type)) {
           callbackIterationRequests.push({
-            source,parameter:bindingId(parameter),includeObjectValues,node,method:name
+            source,parameter:parameter.type === 'Identifier' ? bindingId(parameter) : null,
+            parameterPattern:parameter,includeObjectValues,entries,node,method:name
           });
         }
       }
@@ -1469,19 +1483,35 @@ function analyzeFile(root, file) {
   }
 
   // Array/Map higher-order callbacks receive the values stored by their
-  // receiver. Bind those values to callback parameters so identity reads and
-  // nested property accesses inside the callback remain reachable.
+  // receiver. Bind both identifier parameters and destructured object/array
+  // parameters so callback identity and nested property reads remain reachable.
+  const bindCallbackValue = (request, stored, objectValue = false, property = null) => {
+    if (request.parameter) {
+      addEdge(stored, request.parameter, 'container-callback-argument', request.node, request.method);
+      if (objectValue) linkObjectAlias(request.parameter, stored);
+      return;
+    }
+    const pattern = request.parameterPattern;
+    if (!pattern) return;
+    if (request.entries && pattern.type === 'ArrayPattern') {
+      const tuple = 'object-entry@' + request.node.loc.start.line + ':' + String(property || 'dynamic') + ':' + String(stored);
+      propertyWrites.push({object:tuple,property:'1',stored});
+      addDestructuredPropertyReads(pattern, tuple);
+      return;
+    }
+    if (pattern.type === 'ObjectPattern' || pattern.type === 'ArrayPattern') {
+      addDestructuredPropertyReads(pattern, stored);
+    }
+  };
   for (const request of callbackIterationRequests) {
     for (const write of containerWrites) {
       if (canonicalObject(write.container) !== canonicalObject(request.source)) continue;
-      addEdge(write.stored, request.parameter, 'container-callback-argument', request.node, request.method);
-      if (write.objectValue) linkObjectAlias(request.parameter, write.stored);
+      bindCallbackValue(request, write.stored, write.objectValue, write.key);
     }
-    for (const write of propertyWrites) {
+    for (const write of propertyWrites.slice()) {
       if (canonicalObject(write.object) !== canonicalObject(request.source)) continue;
       if (!request.includeObjectValues && write.property !== null && !/^[0-9]+$/.test(write.property)) continue;
-      addEdge(write.stored, request.parameter, 'container-callback-argument', request.node, request.method);
-      if (!String(write.stored).startsWith('function@')) linkObjectAlias(request.parameter, write.stored);
+      bindCallbackValue(request, write.stored, !String(write.stored).startsWith('function@'), write.property);
     }
   }
 

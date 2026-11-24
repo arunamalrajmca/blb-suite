@@ -1086,3 +1086,47 @@ test('binds Object.values results to collection callback parameters', () => {
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-argument' &&
     edge.from === 'function@1' && edge.to === 'handler@3'));
 });
+
+
+test('traces callbacks through destructured FinalizationRegistry object holdings', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const target = {};',
+    'const registry = new FinalizationRegistry(({ onCleanup }) => onCleanup());',
+    'registry.register(target, { onCleanup: cleanup });'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'onCleanup@3' && edge.kind === 'property-value-read'));
+});
+
+test('traces callbacks through destructured FinalizationRegistry array holdings', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const target = {};',
+    'const registry = new FinalizationRegistry(([label, callback]) => callback());',
+    "registry.register(target, ['cleanup', cleanup]);"
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'property-value-read'));
+});
+
+test('binds object properties to destructured array collection callback parameters', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const item = { onCleanup: cleanup };',
+    'const items = [item];',
+    'items.forEach(({ onCleanup }) => onCleanup());'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'onCleanup@4' && edge.kind === 'property-value-read'));
+});
+
+test('binds Object.entries values to destructured callback value parameters', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const registry = { onCleanup: cleanup };',
+    'Object.entries(registry).forEach(([key, callback]) => callback());'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'property-value-read'));
+});
