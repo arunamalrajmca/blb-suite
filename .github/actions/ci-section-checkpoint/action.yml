@@ -58,6 +58,8 @@ runs:
       shell: bash
       env:
         BLB_CI_CHECKPOINT_DIR: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
+        BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ github.sha }}
+        BLB_CI_CHECKPOINT_FINGERPRINT: ${{ inputs.fingerprint }}
       run: ${{ inputs.run }}
     - name: Record successful section completion
       if: ${{ success() && steps.check.outputs.complete != 'true' }}
