@@ -123,7 +123,7 @@ function runShard(entries, index, directory, workers) {
   fs.rmSync(reportPath, { force: true });
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   const outputDirectory = path.join(directory, 'browser-shard-' + String(index).padStart(2, '0') + '-results');
-  const args = [cli, 'test', '--test-list', listPath, '--workers=' + workers, '--max-failures=0', '--output=' + outputDirectory];
+  const args = [cli, 'test', '--test-list', listPath, '--workers=' + workers, '--max-failures=1', '--output=' + outputDirectory];
   const result = spawnSync(process.execPath, args, {
     cwd: process.cwd(),
     encoding: 'utf8',
@@ -157,7 +157,7 @@ export function runCheckpointedBrowserAudit({
   directory = process.env.BLB_CI_CHECKPOINT_DIR,
   sourceSha = process.env.BLB_CI_CHECKPOINT_SOURCE_SHA,
   fingerprint = process.env.BLB_CI_CHECKPOINT_FINGERPRINT,
-  shardCount = 4,
+  shardCount = 8,
   workers = 4,
   executeShard = runShard
 }) {
