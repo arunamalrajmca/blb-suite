@@ -1168,3 +1168,51 @@ test('binds both array values to toSorted comparator callback parameters', () =>
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'right@3' && edge.kind === 'container-callback-argument'));
 });
+
+
+test('traces Map constructor keys and values through forEach callback parameters', () => {
+  const result = audit([
+    'const keyCleanup = () => keyWork();',
+    'const valueCleanup = () => valueWork();',
+    'const registry = new Map([[keyCleanup, valueCleanup]]);',
+    'registry.forEach((value, key) => { key(); value(); });'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'key@4' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.to === 'value@4' && edge.kind === 'container-callback-argument'));
+});
+
+test('binds Set.forEach second callback parameter to the stored value', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = new Set([cleanup]);',
+    'callbacks.forEach((value, key) => key());'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'key@3' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces Map.keys iterator values into for-of bindings', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const value = () => otherWork();',
+    'const registry = new Map([[cleanup, value]]);',
+    'for (const key of registry.keys()) key();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'key@4' && edge.kind === 'container-key-read'));
+});
+
+test('traces both Map.entries tuple positions into destructured for-of bindings', () => {
+  const result = audit([
+    'const keyCleanup = () => keyWork();',
+    'const valueCleanup = () => valueWork();',
+    'const registry = new Map([[keyCleanup, valueCleanup]]);',
+    'for (const [key, value] of registry.entries()) { key(); value(); }'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'key@4' && edge.kind === 'container-key-read'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.to === 'value@4'));
+});
