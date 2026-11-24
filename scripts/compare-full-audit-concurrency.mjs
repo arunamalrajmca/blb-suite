@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -118,9 +119,26 @@ try {
     console.log('[2/2] Running checkpointed isolated serial baseline.');
     const serialResultsPath = path.join(reportRoot, 'serial-results.json');
     const serialErrorsPath = path.join(reportRoot, 'serial-errors.json');
-    const serial = fs.existsSync(serialResultsPath) ? JSON.parse(fs.readFileSync(serialResultsPath, 'utf8')) : [];
-    const serialErrors = fs.existsSync(serialErrorsPath) ? JSON.parse(fs.readFileSync(serialErrorsPath, 'utf8')) : [];
-    if (serial.length > scheduled.length) throw new Error('Serial checkpoint contains more tests than the current inventory.');
+    let serial = fs.existsSync(serialResultsPath) ? JSON.parse(fs.readFileSync(serialResultsPath, 'utf8')) : [];
+    let serialErrors = fs.existsSync(serialErrorsPath) ? JSON.parse(fs.readFileSync(serialErrorsPath, 'utf8')) : [];
+    const serialKeys = new Set();
+    const restoredBaselineValid = priorInventoryMatches && serial.length === scheduled.length &&
+      serialErrors.length === 0 && serial.every((record, index) => {
+        const test = record.tests?.[0];
+        if (record.inventoryEntry !== scheduled[index] || record.exitCode !== 0 ||
+            record.parseError || record.tests?.length !== 1 || !test?.key || !test.status ||
+            serialKeys.has(test.key)) return false;
+        serialKeys.add(test.key);
+        return true;
+      });
+    if (serial.length > scheduled.length || (serial.length > 0 && !restoredBaselineValid)) {
+      serial = [];
+      serialErrors = [];
+      fs.rmSync(serialResultsPath, { force: true });
+      fs.rmSync(serialErrorsPath, { force: true });
+      fs.rmSync(path.join(reportRoot, 'serial-checkpoint.json'), { force: true });
+      console.log('Discarded incomplete or invalid serial checkpoint; restarting the baseline from test 1.');
+    }
     const batchSize = Number(process.env.BLB_CONCURRENCY_SERIAL_BATCH_SIZE || scheduled.length);
     if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error('BLB_CONCURRENCY_SERIAL_BATCH_SIZE must be a positive integer.');
     const batchStart = serial.length;
@@ -174,8 +192,9 @@ try {
     });
     console.log('Serial stage batch: ' + JSON.stringify({
       batchComplete, complete, completed: serial.length, scheduled: scheduled.length,
-      batchStart, batchEnd, anomalies: serialErrors.length
+      batchStart, batchEnd, anomalies: serialErrors.length, reusedCompleteBaseline: restoredBaselineValid
     }));
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'complete=' + String(complete) + '\n');
     if (!batchComplete) process.exitCode = 1;
   } else if (mode === 'stage-parallel') {
     const repetition = Number(process.env.BLB_CONCURRENCY_REPETITION || 0);
@@ -192,8 +211,9 @@ try {
     if (JSON.stringify(stageScheduled) !== JSON.stringify(scheduled)) {
       throw new Error('Downloaded serial baseline inventory does not exactly match the current checked-out test inventory.');
     }
-    if (serial.length !== stageScheduled.length || inventory.scheduled !== stageScheduled.length) {
-      throw new Error('Serial baseline artifact is incomplete or does not match its inventory.');
+    if (inventory.sourceCommit !== sourceCommit || inventory.scheduledDigest !== scheduledDigest ||
+        serial.length !== stageScheduled.length || inventory.scheduled !== stageScheduled.length) {
+      throw new Error('Serial baseline artifact is incomplete or does not match the current source commit and exact inventory fingerprint.');
     }
     const serialByKey = new Map();
     for (const record of serial) {
