@@ -634,34 +634,36 @@ function analyzeFile(root, file) {
         if (assigned && callback) {
           const returns = callback.body.type === 'BlockStatement'
             ? returnedValues(callback) : [callback.body];
-          const returnedItems = name === 'flatMap' && returned.type === 'ArrayExpression'
-            ? returned.elements.filter(Boolean) : [returned];
-          for (const returnedItem of returnedItems) {
-            let stored = null, objectValue = false;
-            if (returnedItem.type === 'Identifier') {
-              const returnedFunction = functionVariables.get(variableForNode.get(returnedItem));
-              stored = bindingId(returnedItem);
-              if (returnedFunction) {
-                addEdge('function@' + returnedFunction.loc.start.line, stored,
-                  'function-variable-identity', node, name);
-              } else objectValue = true;
-            } else if (isFunction(returnedItem)) {
-              stored = 'function@' + returnedItem.loc.start.line;
-            } else if (returnedItem.type === 'MemberExpression') {
-              const reference = memberReference(returnedItem);
-              if (reference) {
-                stored = 'array-transform-value@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
-                propertyReads.push({object:reference.object,property:reference.property,assigned:stored,node:returnedItem});
+          for (const returned of returns) {
+            const returnedItems = name === 'flatMap' && returned.type === 'ArrayExpression'
+              ? returned.elements.filter(Boolean) : [returned];
+            for (const returnedItem of returnedItems) {
+              let stored = null, objectValue = false;
+              if (returnedItem.type === 'Identifier') {
+                const returnedFunction = functionVariables.get(variableForNode.get(returnedItem));
+                stored = bindingId(returnedItem);
+                if (returnedFunction) {
+                  addEdge('function@' + returnedFunction.loc.start.line, stored,
+                    'function-variable-identity', node, name);
+                } else objectValue = true;
+              } else if (isFunction(returnedItem)) {
+                stored = 'function@' + returnedItem.loc.start.line;
+              } else if (returnedItem.type === 'MemberExpression') {
+                const reference = memberReference(returnedItem);
+                if (reference) {
+                  stored = 'array-transform-value@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
+                  propertyReads.push({object:reference.object,property:reference.property,assigned:stored,node:returnedItem});
+                }
+              } else if (['ObjectExpression', 'ArrayExpression'].includes(returnedItem.type)) {
+                stored = 'array-transform-aggregate@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
+                addContainedReferences(returnedItem, stored, 'array-transform-return', node);
+                addObjectPropertySlots(returnedItem, stored);
+                objectValue = true;
               }
-            } else if (['ObjectExpression', 'ArrayExpression'].includes(returnedItem.type)) {
-              stored = 'array-transform-aggregate@' + returnedItem.loc.start.line + ':' + returnedItem.loc.start.column;
-              addContainedReferences(returnedItem, stored, 'array-transform-return', node);
-              addObjectPropertySlots(returnedItem, stored);
-              objectValue = true;
-            }
-            if (stored) {
-              addEdge(stored, assigned, 'array-transform-result', node, name);
-              containerWrites.push({container:assigned,key:null,stored,node,objectValue});
+              if (stored) {
+                addEdge(stored, assigned, 'array-transform-result', node, name);
+                containerWrites.push({container:assigned,key:null,stored,node,objectValue});
+              }
             }
           }
         }
@@ -1110,7 +1112,7 @@ function analyzeFile(root, file) {
       }
       for (const write of propertyWrites) {
         if (canonicalObject(write.object) !== source) continue;
-        if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
+        if (write.property !== null && !/^\d+$/.test(write.property)) continue;
         copied.push({
           container:target,key:null,stored:write.stored,node:copy.node,
           objectValue:!String(write.stored).startsWith('function@')
