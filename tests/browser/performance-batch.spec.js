@@ -312,7 +312,7 @@ test('Interleaved baseline/candidate performance batch preserves isolated sample
       candidate: readCompleted(candidateOutput, 'candidate')
     };
     const total = scenarios.length * samples * 2;
-    let progress = completed.baseline.size + completed.candidate.size;
+    let progress = 0;
     for (const scenario of scenarios) {
       for (let sample = 1; sample <= samples; sample++) {
         const order = sample % 2 === 1 ? ['baseline', 'candidate'] : ['candidate', 'baseline'];
