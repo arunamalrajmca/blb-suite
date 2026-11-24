@@ -878,12 +878,12 @@ function analyzeFile(root, file) {
           const callProperty = node.callee.type === 'MemberExpression'
             ? propertyKey(node.callee.property, node.callee.computed) : null;
           if (callProperty === 'call') actualArguments = node.arguments.slice(1);
-          else if (callProperty === 'apply') {
-            const argumentArray = node.arguments[1];
+          else if (receiverName === 'Reflect' && name === 'apply') {
+            const argumentArray = node.arguments[2];
             actualArguments = argumentArray?.type === 'ArrayExpression'
               ? argumentArray.elements.filter(Boolean) : [];
-          } else if (receiverName === 'Reflect' && name === 'apply') {
-            const argumentArray = node.arguments[2];
+          } else if (callProperty === 'apply') {
+            const argumentArray = node.arguments[1];
             actualArguments = argumentArray?.type === 'ArrayExpression'
               ? argumentArray.elements.filter(Boolean) : [];
           }
