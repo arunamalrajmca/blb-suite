@@ -23,25 +23,23 @@ concurrency:
 
 jobs:
   checkpoint-recovery-unit-tests:
-      if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
-      name: Checkpoint recovery validator unit tests
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout selected ref
-          uses: actions/checkout@v5
-          with:
-            ref: ${{ github.event.pull_request.head.sha || github.sha }}
-        - name: Setup Node
-          uses: actions/setup-node@v5
-          with:
-            node-version: 22
-        - name: Check recovery script syntax
-          run: node --check scripts/compare-full-audit-concurrency.mjs
-        - name: Run checkpoint recovery validator tests
-          run: node --test scripts/full-audit-checkpoint-validation.test.mjs
-  
-  
-jobs:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    name: Checkpoint recovery validator unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Check recovery script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Run checkpoint recovery validator tests
+        run: node --test scripts/full-audit-checkpoint-validation.test.mjs
+
   screen-complete-browser-inventory:
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_run_id == '' }}
     name: Fail-fast complete-inventory browser screening
