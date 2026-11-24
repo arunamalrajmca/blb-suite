@@ -142,10 +142,10 @@ function analyzeFile(root, file) {
   const propertyWrites = [];
   const propertyReads = [];
   const propertySlot = (object, property) => object + '::property::' + property;
-  const propertyKey = property => {
+  const propertyKey = (property, computed = false) => {
     if (!property) return null;
-    if (!property.computed && property.type === 'Identifier') return property.name;
-    if (property.computed && property.type === 'Literal' &&
+    if (!computed && property.type === 'Identifier') return property.name;
+    if (computed && property.type === 'Literal' &&
         ['string', 'number'].includes(typeof property.value)) return String(property.value);
     return null;
   };
@@ -164,7 +164,7 @@ function analyzeFile(root, file) {
           continue;
         }
         if (property.type !== 'Property') continue;
-        const key = propertyKey(property.key);
+        const key = propertyKey(property.key, property.computed);
         if (key === null) continue;
         const fullPath = [...prefix, key];
         const slot = propertySlot(object, fullPath.join('.'));
@@ -477,7 +477,7 @@ function analyzeFile(root, file) {
     }
 
     if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
-      const object = bindingId(node.object), property = propertyKey(node.property);
+      const object = bindingId(node.object), property = propertyKey(node.property, node.computed);
       propertyReads.push({
         object, property,
         assigned: parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
@@ -525,7 +525,7 @@ function analyzeFile(root, file) {
     if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
       add('mutation', 'member-assignment', node, propertyName(node.left) || 'computed property');
       if (node.left.object.type === 'Identifier') {
-        const object = bindingId(node.left.object), property = propertyKey(node.left.property);
+        const object = bindingId(node.left.object), property = propertyKey(node.left.property, node.left.computed);
         if (property !== null) {
           const slot = propertySlot(object, property);
           const before = flowEdges.length;
