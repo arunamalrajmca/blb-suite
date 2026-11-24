@@ -4,7 +4,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const scenarios = ['paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse'];
+const allScenarios = ['paragraph-classify', 'paragraph-two-tab', 'selection', 'fresh', 'reuse'];
+const requestedScenarios = (process.env.BLB_PERF_SCENARIOS || '').trim();
+const scenarios = requestedScenarios ? requestedScenarios.split(/\\s+/) : allScenarios;
+if (!scenarios.length || scenarios.some(scenario => !allScenarios.includes(scenario)) ||
+    new Set(scenarios).size !== scenarios.length) {
+  throw new Error('BLB_PERF_SCENARIOS must contain unique supported scenario names');
+}
 const samples = Number(process.env.BLB_PERF_SAMPLES || 11);
 const baselineSource = path.resolve(process.env.BLB_BASELINE_EXTENSION_PATH || '');
 const candidateSource = path.resolve(process.env.BLB_CANDIDATE_EXTENSION_PATH || '');
