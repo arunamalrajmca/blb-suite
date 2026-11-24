@@ -202,3 +202,29 @@ test('keeps dynamic object-property reads conservative across stored properties'
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@3' && edge.to === 'selected@6'));
 });
+
+test('preserves property stores and reads across multiple object aliases', () => {
+  const result = audit([
+    'const registry = {};',
+    'const firstAlias = registry;',
+    'const secondAlias = firstAlias;',
+    'const callback = () => start();',
+    'secondAlias.onReady = callback;',
+    'const handler = registry.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@4' && edge.to === 'handler@6'));
+});
+
+test('connects property writes through the original object to reads through an assigned alias', () => {
+  const result = audit([
+    'const registry = {};',
+    'let alias = {};',
+    'alias = registry;',
+    'const callback = () => start();',
+    'registry.onReady = callback;',
+    'const handler = alias.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@4' && edge.to === 'handler@6'));
+});
