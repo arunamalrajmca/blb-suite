@@ -142,6 +142,7 @@ function analyzeFile(root, file) {
   const containerCopies = [];
   const iteratorSources = new Map();
   const iteratorNextRequests = [];
+  const callbackIterationRequests = [];
   const propertyWrites = [];
   const propertyReads = [];
   const propertyCopies = [];
@@ -610,7 +611,9 @@ function analyzeFile(root, file) {
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice', 'fill']);
   const containerReadMethods = new Set(['get', 'pop', 'shift', 'at', 'find', 'findLast', 'splice']);
   const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
+  const callbackIterationMethods = new Set(['map', 'flatMap', 'filter', 'find', 'findLast', 'forEach', 'some', 'every', 'reduce', 'reduceRight']);
   const weakRefSources = new Map();
+  const finalizationRegistryCallbacks = new Map();
 
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
@@ -625,6 +628,17 @@ function analyzeFile(root, file) {
       if (assigned) {
         weakRefSources.set(assigned, node.arguments[0]);
         addContainedReferences(node.arguments[0], assigned, 'weakref-store', node);
+      }
+    }
+    if (node.type === 'NewExpression' && node.callee.type === 'Identifier' &&
+        node.callee.name === 'FinalizationRegistry' && node.arguments[0]) {
+      const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+        ? bindingId(parent.id) : null;
+      if (assigned) {
+        const callback = isFunction(node.arguments[0]) ? node.arguments[0] :
+          node.arguments[0].type === 'Identifier' ? resolveFunctionValue(node.arguments[0]) : null;
+        if (callback) finalizationRegistryCallbacks.set(assigned, callback);
+        addContainedReferences(node.arguments[0], assigned, 'finalization-registry-callback', node);
       }
     }
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
@@ -794,6 +808,28 @@ function analyzeFile(root, file) {
           }
         }
       }
+      if (node.type === 'CallExpression' && name === 'register' &&
+          receiver?.type === 'Identifier') {
+        const callback = finalizationRegistryCallbacks.get(bindingId(receiver));
+        const holdings = node.arguments[1];
+        const parameter = callback?.params?.[0];
+        if (callback && holdings && parameter?.type === 'Identifier') {
+          if (holdings.type === 'Identifier') {
+            const holdingsFunction = functionVariables.get(variableForNode.get(holdings));
+            if (holdingsFunction) {
+              addEdge('function@' + holdingsFunction.loc.start.line, bindingId(parameter),
+                'finalization-holdings-callback', node);
+            } else {
+              addEdge(bindingId(holdings), bindingId(parameter),
+                'finalization-holdings-value', node);
+            }
+          } else {
+            addContainedReferences(holdings, bindingId(parameter),
+              'finalization-holdings', node);
+          }
+        }
+      }
+
       if (node.type === 'CallExpression' && name === 'deref' &&
           receiver?.type === 'Identifier') {
         const source = weakRefSources.get(bindingId(receiver));
@@ -851,6 +887,30 @@ function analyzeFile(root, file) {
               containerCopies.push({source,target:assigned,node});
             }
           }
+        }
+      }
+      if (node.type === 'CallExpression' && callbackIterationMethods.has(name)) {
+        let source = receiverName && !['Object', 'Reflect'].includes(receiverName)
+          ? bindingId(receiver) : null;
+        let includeObjectValues = false;
+        if (!source && receiver?.type === 'CallExpression' &&
+            receiver.callee.type === 'MemberExpression' &&
+            receiver.callee.object.type === 'Identifier' && receiver.callee.object.name === 'Object' &&
+            ['values', 'entries'].includes(propertyKey(receiver.callee.property, receiver.callee.computed)) &&
+            receiver.arguments[0]?.type === 'Identifier') {
+          source = bindingId(receiver.arguments[0]);
+          includeObjectValues = true;
+        }
+        const callbackArgument = node.arguments[0];
+        const callback = isFunction(callbackArgument) ? callbackArgument :
+          callbackArgument?.type === 'Identifier'
+            ? functionVariables.get(variableForNode.get(callbackArgument)) : null;
+        const parameterIndex = name === 'reduce' || name === 'reduceRight' ? 1 : 0;
+        const parameter = callback?.params?.[parameterIndex];
+        if (source && parameter?.type === 'Identifier') {
+          callbackIterationRequests.push({
+            source,parameter:bindingId(parameter),includeObjectValues,node,method:name
+          });
         }
       }
       if (node.type === 'CallExpression' && ['map', 'flatMap'].includes(name) && receiverName &&
@@ -1405,6 +1465,23 @@ function analyzeFile(root, file) {
     for (const write of [...propertyWrites]) {
       if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
       propertyWrites.push({object:request.collection,property:null,stored:write.stored});
+    }
+  }
+
+  // Array/Map higher-order callbacks receive the values stored by their
+  // receiver. Bind those values to callback parameters so identity reads and
+  // nested property accesses inside the callback remain reachable.
+  for (const request of callbackIterationRequests) {
+    for (const write of containerWrites) {
+      if (canonicalObject(write.container) !== canonicalObject(request.source)) continue;
+      addEdge(write.stored, request.parameter, 'container-callback-argument', request.node, request.method);
+      if (write.objectValue) linkObjectAlias(request.parameter, write.stored);
+    }
+    for (const write of propertyWrites) {
+      if (canonicalObject(write.object) !== canonicalObject(request.source)) continue;
+      if (!request.includeObjectValues && write.property !== null && !/^[0-9]+$/.test(write.property)) continue;
+      addEdge(write.stored, request.parameter, 'container-callback-argument', request.node, request.method);
+      if (!String(write.stored).startsWith('function@')) linkObjectAlias(request.parameter, write.stored);
     }
   }
 
