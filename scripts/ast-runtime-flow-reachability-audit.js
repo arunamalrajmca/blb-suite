@@ -1214,11 +1214,11 @@ function analyzeFile(root, file) {
         containerWrites.push({container:read.assigned,key:null,stored:write.stored,node:read.node,objectValue:write.objectValue});
       }
     }
-    // Array literals are represented as property writes until copied or read.
-    // Treat their numeric slots as container elements for find/findLast/at/etc.
+    // Array/object values are represented as property writes until copied or read.
+    // Numeric slots model arrays; Object.values/entries for-of loops consume all own values.
     for (const write of propertyWrites) {
       if (canonicalObject(write.object) !== canonicalObject(read.container)) continue;
-      if (write.property !== null && !/^\d+$/.test(write.property)) continue;
+      if (!read.includeObjectValues && write.property !== null && !/^\d+$/.test(write.property)) continue;
       if (read.key !== null && write.property !== null && read.key !== write.property) continue;
       addEdge(write.stored, read.assigned, 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
