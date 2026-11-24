@@ -337,3 +337,73 @@ test('tracks properties inherited from an inline Object.create prototype literal
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@3'));
 });
+
+
+test('preserves returned aggregate identity so later property reads retain nested callbacks', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'function createEntry() { return { onReady: callback, hooks: [callback] }; }',
+    'const entry = createEntry();',
+    'const handler = entry.onReady;',
+    'const hooks = entry.hooks;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'hooks@5'));
+});
+
+test('preserves aggregate property identities through direct Map storage and retrieval', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('entry', { onReady: callback });",
+    "const entry = registry.get('entry');",
+    'const handler = entry.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'aggregate@3:22' && edge.to === 'entry@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@5'));
+});
+
+test('preserves object aliases stored in containers through retrieval and property reads', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    'const entry = { onReady: callback };',
+    "registry.set('entry', entry);",
+    "const restored = registry.get('entry');",
+    'const handler = restored.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@6'));
+});
+
+
+test('connects callbacks stored in object properties to event and promise scheduler registrations', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    "bus.on('ready', registry.onReady);",
+    "target.addEventListener('ready', registry.onReady);",
+    'Promise.resolve().then(registry.onReady);'
+  ].join('\n'));
+  for (const line of [3, 4, 5]) {
+    assert.ok(result.findings.some(item => item.category === 'callbacks' &&
+      item.kind === 'stored-property-callback-registration' && item.line === line));
+    assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+      edge.from === 'function@1' && edge.to === 'scheduler@' + line));
+  }
+});
+
+test('recognizes invocation of a callback stored in an object property', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'registry.onReady();'
+  ].join('\n'));
+  assert.ok(has(result, 'callbacks', 'stored-property-callback-invocation'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@3'));
+});
