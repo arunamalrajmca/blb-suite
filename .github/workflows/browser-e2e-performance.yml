@@ -29,6 +29,7 @@ on:
       - '!scripts/test-*.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/test-suite-inventory.json'
       - 'playwright.config.js'
       - 'playwright.config.ts'
       - '.github/workflows/manual-full-test-audit.yml'
@@ -42,7 +43,7 @@ concurrency:
 jobs:
   performance:
     name: Measured performance qualification
-    # The full audit delegates performance.spec.js to this measured benchmark.
+    # The full audit delegates both performance specs to this measured benchmark.
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -180,6 +181,15 @@ jobs:
             npx playwright test tests/browser/performance-batch.spec.js --workers=1
           fi
 
+      - name: Run the original single-case Show on BLB performance benchmark
+        if: ${{ !startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver') }}
+        env:
+          BLB_PERF_OUTPUT: ${{ runner.temp }}/original-performance-smoke.jsonl
+        run: |
+          : > "$BLB_PERF_OUTPUT"
+          npx playwright test tests/browser/performance.spec.js --workers=1
+          test -s "$BLB_PERF_OUTPUT"
+
       - name: Require measured performance qualification
        
         env:
@@ -209,6 +219,7 @@ jobs:
             test-results/
             ${{ runner.temp }}/baseline-performance.jsonl
             ${{ runner.temp }}/candidate-performance.jsonl
+            ${{ runner.temp }}/original-performance-smoke.jsonl
             ${{ runner.temp }}/performance-report.md
             ${{ runner.temp }}/blb-test-build/*.zip
             ${{ runner.temp }}/blb-test-build/*.sha256
@@ -250,6 +261,8 @@ jobs:
 
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
+      - name: Verify delegated browser test ownership inventory
+        run: node scripts/test-suite-inventory.mjs
 
       - name: Install Playwright Chromium
         run: npx playwright install chromium
