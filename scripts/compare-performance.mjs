@@ -33,8 +33,13 @@ function summarize(samples) {
     ? ['range-resolver', 'selection', 'fresh', 'reuse']
     : ['selection', 'fresh', 'reuse', 'paragraph-two-tab', 'paragraph-classify'];
   for (const scenario of requiredScenarios) {
-    const values = samples.filter(s => s.scenario === scenario).map(s => s.handoffMs);
-    if (!values.length) throw new Error(`Missing ${scenario} samples`);
+    const scenarioRecords = samples.filter(s => s.scenario === scenario);
+    const values = scenarioRecords.map(s => s.handoffMs);
+    if (values.length !== 11) throw new Error(`Expected exactly 11 ${scenario} samples, found ${values.length}`);
+    if (scenarioRecords.every(record => Number.isInteger(record.sample)) &&
+        new Set(scenarioRecords.map(record => record.sample)).size !== 11) {
+      throw new Error(`Duplicate or missing ${scenario} sample identities`);
+    }
     byScenario[scenario] = { median: median(values), count: values.length };
   }
   return byScenario;
