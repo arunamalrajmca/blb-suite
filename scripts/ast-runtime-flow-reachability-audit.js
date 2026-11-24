@@ -144,7 +144,9 @@ function analyzeFile(root, file) {
   const iteratorNextRequests = [];
   const callbackIterationRequests = [];
   const mapContainers = new Set();
+  const setContainers = new Set();
   const mapKeyWrites = [];
+  const mapKeyIteratorReads = [];
   const propertyWrites = [];
   const propertyReads = [];
   const propertyCopies = [];
@@ -892,13 +894,19 @@ function analyzeFile(root, file) {
           assigned,node
         });
       }
-      if (node.type === 'CallExpression' && ['values', 'entries'].includes(name) &&
+      if (node.type === 'CallExpression' && ['values', 'entries', 'keys'].includes(name) &&
           receiverName && !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
-        if (assigned) iteratorSources.set(assigned, {
-          container:bindingId(receiver), entries:name === 'entries'
-        });
+        if (assigned) {
+          const container = bindingId(receiver);
+          const keys = name === 'keys' && mapContainers.has(container);
+          const setKeysAreValues = name === 'keys' && setContainers.has(container);
+          iteratorSources.set(assigned, {
+            container, entries:name === 'entries', keys,
+            values:name === 'values' || setKeysAreValues
+          });
+        }
       }
       if (node.type === 'CallExpression' && name === 'next' && receiverName) {
         const iterator = iteratorSources.get(bindingId(receiver));
@@ -959,13 +967,15 @@ function analyzeFile(root, file) {
             });
           }
         }
-        if (name === 'forEach' && source && mapContainers.has(source)) {
+        if (name === 'forEach' && source &&
+            (mapContainers.has(source) || setContainers.has(source))) {
           const keyParameterNode = callback?.params?.[1];
           const keyParameter = keyParameterNode?.type === 'AssignmentPattern' ? keyParameterNode.left : keyParameterNode;
           if (['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(keyParameter?.type)) {
             callbackIterationRequests.push({
               source,parameter:keyParameter.type === 'Identifier' ? bindingId(keyParameter) : null,
-              parameterPattern:keyParameter,includeObjectValues,entries:false,node,method:name,role:'map-key'
+              parameterPattern:keyParameter,includeObjectValues,entries:false,node,method:name,
+              role:mapContainers.has(source) ? 'map-key' : 'set-second'
             });
           }
         }
@@ -1298,13 +1308,50 @@ function analyzeFile(root, file) {
           node.init.callee.type === 'Identifier' &&
           ['Map', 'Set', 'WeakMap', 'WeakSet'].includes(node.init.callee.name)) {
         add('container-storage', 'container-construction', node, node.init.callee.name);
-        if (node.init.callee.name === 'Map' && node.id.type === 'Identifier') {
-          mapContainers.add(bindingId(node.id));
+        if (node.id.type === 'Identifier' && node.init.callee.name === 'Map') mapContainers.add(bindingId(node.id));
+        if (node.id.type === 'Identifier' && node.init.callee.name === 'Set') setContainers.add(bindingId(node.id));
+        const container = bindingId(node.id);
+        const storedIdentity = (value, role) => {
+          if (!value) return null;
+          if (value.type === 'Identifier') {
+            const fn = functionVariables.get(variableForNode.get(value));
+            return fn ? 'function@' + fn.loc.start.line : bindingId(value);
+          }
+          if (isFunction(value)) return 'function@' + value.loc.start.line;
+          if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
+            const identity = 'container-initial-' + role + '@' + value.loc.start.line + ':' + value.loc.start.column;
+            addContainedReferences(value, identity, 'container-initial-value', node);
+            addObjectPropertySlots(value, identity);
+            return identity;
+          }
+          if (value.type === 'MemberExpression') {
+            const identity = 'container-initial-' + role + '@' + value.loc.start.line + ':' + value.loc.start.column;
+            const reference = memberReference(value);
+            if (reference) propertyReads.push({object:reference.object,property:reference.property,assigned:identity,node:value});
+            return identity;
+          }
+          return null;
+        };
+        const initialEntries = node.init.arguments[0];
+        if (node.init.callee.name === 'Map' && initialEntries?.type === 'ArrayExpression') {
+          for (const entry of initialEntries.elements) {
+            if (entry?.type !== 'ArrayExpression') continue;
+            const key = storedIdentity(entry.elements[0], 'map-key');
+            const value = storedIdentity(entry.elements[1], 'map-value');
+            if (key) mapKeyWrites.push({container,stored:key,objectValue:!String(key).startsWith('function@'),node});
+            if (value) containerWrites.push({container,key:null,stored:value,objectValue:!String(value).startsWith('function@'),node});
+          }
+        }
+        if (node.init.callee.name === 'Set' && initialEntries?.type === 'ArrayExpression') {
+          for (const value of initialEntries.elements) {
+            const stored = storedIdentity(value, 'set-value');
+            if (stored) containerWrites.push({container,key:null,stored,objectValue:!String(stored).startsWith('function@'),node});
+          }
         }
       }
-      if (node.init?.type === 'Identifier' && node.id.type === 'Identifier' &&
-          mapContainers.has(bindingId(node.init))) {
-        mapContainers.add(bindingId(node.id));
+      if (node.init?.type === 'Identifier' && node.id.type === 'Identifier') {
+        if (mapContainers.has(bindingId(node.init))) mapContainers.add(bindingId(node.id));
+        if (setContainers.has(bindingId(node.init))) setContainers.add(bindingId(node.id));
       }
       if (node.init && node.init.type === 'MemberExpression' &&
           node.init.object.type === 'Identifier') {
@@ -1394,11 +1441,12 @@ function analyzeFile(root, file) {
     }
     if (node.type === 'ForOfStatement') {
       const right = node.right;
-      let source = null, includeObjectValues = false, entries = false;
+      let source = null, includeObjectValues = false, entries = false, keys = false;
       if (right.type === 'Identifier') {
         const iterator = iteratorSources.get(bindingId(right));
-        if (iterator) { source = iterator.container; entries = iterator.entries; }
-        else source = bindingId(right);
+        if (iterator) {
+          source = iterator.container; entries = iterator.entries; keys = iterator.keys;
+        } else source = bindingId(right);
       } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
         const method = propertyKey(right.callee.property, right.callee.computed);
         const receiverNode = right.callee.object;
@@ -1406,18 +1454,25 @@ function analyzeFile(root, file) {
           if (receiverNode.name === 'Object' && ['values', 'entries'].includes(method) &&
               right.arguments[0]?.type === 'Identifier') {
             source = bindingId(right.arguments[0]); includeObjectValues = true; entries = method === 'entries';
-          } else if (['values', 'entries'].includes(method)) {
+          } else if (['values', 'entries', 'keys'].includes(method)) {
             source = bindingId(receiverNode); entries = method === 'entries';
+            keys = method === 'keys' && mapContainers.has(source);
           }
         }
       }
       let targetNode = node.left;
       if (targetNode.type === 'VariableDeclaration') targetNode = targetNode.declarations[0]?.id;
-      if (entries && targetNode?.type === 'ArrayPattern') targetNode = targetNode.elements[1];
-      const target = targetNode?.type === 'Identifier' ? bindingId(targetNode) : null;
+      const entryPattern = entries && targetNode?.type === 'ArrayPattern' ? targetNode : null;
+      const keyNode = entryPattern?.elements[0] || (keys ? targetNode : null);
+      const valueNode = entryPattern ? entryPattern.elements[1] : (keys ? null : targetNode);
+      const keyTarget = keyNode?.type === 'Identifier' ? bindingId(keyNode) : null;
+      const target = valueNode?.type === 'Identifier' ? bindingId(valueNode) : null;
       if (source && target) containerReads.push({
         container:source,key:null,assigned:target,node,includeObjectValues
       });
+      if (source && keyTarget && (keys || entries)) {
+        mapKeyIteratorReads.push({container:source,assigned:keyTarget,node});
+      }
     }
     if (node.type === 'ForInStatement' || node.type === 'ForOfStatement') {
       add('reflection', 'enumerated-object-keys', node, node.type);
@@ -1569,6 +1624,15 @@ function analyzeFile(root, file) {
       if (canonicalObject(write.object) !== canonicalObject(request.source)) continue;
       if (!request.includeObjectValues && write.property !== null && !/^[0-9]+$/.test(write.property)) continue;
       bindCallbackValue(request, write.stored, !String(write.stored).startsWith('function@'), write.property);
+    }
+  }
+
+  // Map.keys() and the first element of Map.entries() expose key identities.
+  for (const request of mapKeyIteratorReads) {
+    for (const write of mapKeyWrites) {
+      if (canonicalObject(write.container) !== canonicalObject(request.container)) continue;
+      addEdge(write.stored, request.assigned, 'container-key-read', request.node);
+      if (write.objectValue) linkObjectAlias(request.assigned, write.stored);
     }
   }
 
