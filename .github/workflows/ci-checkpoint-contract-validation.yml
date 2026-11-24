@@ -1,0 +1,65 @@
+name: CI Checkpoint Contract Validation
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/actions/ci-section-checkpoint/**'
+      - '.github/workflows/browser-tests.yml'
+      - '.github/workflows/manual-full-test-audit.yml'
+      - '.github/workflows/browser-native-shortcut.yml'
+      - '.github/workflows/browser-e2e-performance.yml'
+      - '.github/workflows/experimental-master-toggle-registration-diagnostics.yml'
+      - 'scripts/ci-section-checkpoint.*'
+      - 'scripts/run-checkpointed-playwright-*.mjs'
+      - 'scripts/test-suite-inventory.*'
+      - 'tests/browser/performance*.spec.js'
+      - 'tests/browser/kjv-corpus-lazy-loading.spec.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-checkpoint-contract-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate checkpoint workflows, action, inventory, and recovery contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Install locked Node dependencies
+        run: npm ci
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Validate workflow and composite-action YAML
+        run: |
+          actionlint
+          ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file) }' \
+            .github/actions/ci-section-checkpoint/action.yml \
+            .github/workflows/browser-tests.yml \
+            .github/workflows/manual-full-test-audit.yml \
+            .github/workflows/browser-native-shortcut.yml \
+            .github/workflows/browser-e2e-performance.yml \
+            .github/workflows/experimental-master-toggle-registration-diagnostics.yml
+      - name: Validate complete test ownership and production-module coverage
+        run: node scripts/test-suite-inventory.mjs
+      - name: Test checkpoint marker, browser shard, and concurrent repeat recovery
+        run: |
+          node --test \
+            scripts/ci-section-checkpoint.test.mjs \
+            scripts/run-checkpointed-playwright-audit.test.mjs \
+            scripts/run-checkpointed-playwright-repeats.test.mjs
