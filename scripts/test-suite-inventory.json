@@ -177,6 +177,27 @@
       "owner": ".github/workflows/experimental-full-audit-concurrency-equivalence.yml",
       "requiredText": "node --test scripts/full-audit-checkpoint-validation.test.mjs",
       "executionEnvironment": "node"
+    },
+    {
+      "id": "ci-section-checkpoint-tests",
+      "pattern": "scripts/ci-section-checkpoint.test.mjs",
+      "owner": ".github/workflows/browser-tests.yml",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "actions/cache/restore@v5"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "actions/cache/save@v5"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "ci-section-checkpoint"
+        }
+      ]
     }
   ],
   "manualOnly": [
@@ -197,5 +218,87 @@
       "reason": "PowerShell wrapper for the deterministic regression suite; the underlying Node regression groups are executed by the full audit."
     }
   ],
-  "manualVerification": "PRE-MERGE-CHECKLIST.md remains the source of required manual Brave/Chrome verification for native context menus, browser-specific permissions, and protected PDF behavior."
+  "manualVerification": "PRE-MERGE-CHECKLIST.md remains the source of required manual Brave/Chrome verification for native context menus, browser-specific permissions, and protected PDF behavior.",
+  "productionCoverage": [
+    {
+      "id": "mv3-worker-lifecycle-and-recovery",
+      "productionFiles": [
+        "extension/background.js",
+        "extension/manifest.json"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a real MV3 service-worker termination is recovered by a content-script selection request",
+            "a terminated worker reconciles stale host registrations and expires pending intents on its next real activation",
+            "browser restart reconciles persisted host registrations and pending permission intents using the same profile",
+            "selection runtime messages survive repeated transient No SW dispatch failures"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "reference-resolution-and-four-user-actions",
+      "productionFiles": [
+        "extension/content.js",
+        "extension/reference-core.js",
+        "extension/books.js"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/extension-reference-actions.spec.js",
+          "requiredText": [
+            "Single-word verse cues resolve the same adjacent passage through all four actions",
+            "all 66 canonical book suffixes resolve through all four actions with both separators",
+            "Double-click generic reference grammar — exhaustive token coverage — OT and NT",
+            "Same-chapter ranges — all 66 books through "
+          ]
+        }
+      ]
+    },
+    {
+      "id": "site-registration-and-source-page-activation",
+      "productionFiles": [
+        "extension/background.js",
+        "extension/content.js",
+        "extension/manifest.json"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/site-registration-opt-out-race.spec.js",
+          "requiredText": [
+            "rapid site opt-out waits for an older registration reconciliation before unregistering",
+            "master OFF-to-ON recovery repairs registrations after an older tab activation finishes",
+            "a failed in-flight activation does not suppress a fresh eligible current-tab fallback"
+          ]
+        },
+        {
+          "path": "tests/browser/source-page-button-redirect-separation.spec.js",
+          "requiredText": [
+            "every shared-registry page-button host shows the exact button on content pages and excludes homepages",
+            "registered source-page collector remains available regardless of redirect preference",
+            "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "multiverse-tab-state-and-handoff",
+      "productionFiles": [
+        "extension/background.js",
+        "extension/content.js"
+      ],
+      "testFiles": [
+        {
+          "path": "tests/browser/service-worker-lifecycle.spec.js",
+          "requiredText": [
+            "a replaced MV3 tab migrates extension-owned destination and MultiVerse state",
+            "closing multiple MultiVerse tabs concurrently removes every persisted tab record",
+            "a MultiVerse link opened from BLB in a new tab defaults to Tool View on first load"
+          ]
+        }
+      ]
+    }
+  ]
 }
