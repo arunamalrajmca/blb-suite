@@ -763,3 +763,39 @@ test('traces Map entry values through stored iterators and destructured for-of l
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'callback@1' && edge.to === 'handler@5'));
 });
+
+
+test('traces callbacks returned by nested factories inside object and array wrappers', () => {
+  const result = audit([
+    'function makeHandler() { return () => start(); }',
+    'const wrapped = { handler: makeHandler() };',
+    'const handlers = [makeHandler()];'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'object-wrap-factory-return-callback'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'object-wrap-factory-return-callback' && edge.to.includes('handlers@3')));
+});
+
+test('traces async factory callback values through await inside object wrappers', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'async function makeHandler() { return callback; }',
+    'const wrapped = { handler: await makeHandler() };'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'object-wrap-factory-return-callback'));
+});
+
+test('traces callback values through Promise.resolve before container storage and retrieval', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = [];',
+    'registry.push(Promise.resolve(callback));',
+    'const selected = registry.pop();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.kind === 'container-store-expression-transparent-call-callback'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.to === 'selected@4'));
+});
