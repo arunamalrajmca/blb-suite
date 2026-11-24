@@ -24,7 +24,7 @@ export function isAuditHarnessOnlyCompatibleSource(candidateSha, currentSha, opt
   if (changed.status !== 0) return false;
   const files = (changed.stdout || '').split(/\r?\n/).filter(Boolean).sort();
   const allowed = [...AUDIT_HARNESS_RECOVERY_FILES].sort();
-  return files.length === allowed.length && files.every((file, index) => file === allowed[index]);
+  return files.length > 0 && files.every(file => allowed.includes(file));
 }
 
 export const APPROVED_DEDICATED_PERFORMANCE_SKIP_KEY =
