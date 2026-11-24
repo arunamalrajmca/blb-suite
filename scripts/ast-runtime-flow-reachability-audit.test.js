@@ -890,7 +890,7 @@ test('traces this and super factory calls through inherited instance and static 
     'const wrapper = instance.create();',
     'const staticWrapper = ChildFactory.createStatic();',
     'const viaSuper = instance.createViaSuper();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
     edge.kind === 'function-return-factory-return-callback' && edge.to.includes('wrapper@11')));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
@@ -905,7 +905,7 @@ test('resolves inherited class method factories directly on derived instances', 
     'class ChildFactory extends BaseFactory {}',
     'const instance = new ChildFactory();',
     'const callback = instance.make();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.kind === 'function-return-callback' && edge.to === 'callback@4'));
 });
