@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const SHA = /^[a-f0-9]{40}$/;
 const FINGERPRINT = /^[a-f0-9]{64}$/;
@@ -67,7 +68,7 @@ function main(argv) {
   console.log('complete=' + (compatible ? 'true' : 'false'));
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   try {
     main(process.argv.slice(2));
   } catch (error) {
