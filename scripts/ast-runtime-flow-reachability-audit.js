@@ -217,6 +217,43 @@ function analyzeFile(root, file) {
       });
     }
   };
+  const addDestructuredPropertyReads = (pattern, object, prefix = [], depth = 0) => {
+    if (!pattern || depth > 10) return;
+    const addTarget = (target, property, node) => {
+      if (!target) return;
+      if (target.type === 'AssignmentPattern') return addTarget(target.left, property, node);
+      if (target.type === 'RestElement') {
+        const variable = target.argument.type === 'Identifier' ? bindingId(target.argument) : null;
+        propertyReads.push({object,property:null,assigned:variable,node:node||target});
+        return;
+      }
+      if (target.type === 'Identifier') {
+        propertyReads.push({object,property,assigned:bindingId(target),node:node||target});
+        return;
+      }
+      if (target.type === 'ObjectPattern') return addDestructuredPropertyReads(target, object, property.split('.'), depth + 1);
+      if (target.type === 'ArrayPattern') {
+        target.elements.forEach((element,index)=>{
+          if(element)addTarget(element,[property,String(index)].filter(Boolean).join('.'),node||element);
+        });
+      }
+    };
+    if (pattern.type === 'ObjectPattern') {
+      for (const property of pattern.properties) {
+        if (property.type === 'RestElement') {
+          addTarget(property, prefix.join('.'), property);
+          continue;
+        }
+        const key = propertyKey(property.key, property.computed);
+        const fullPath = key === null ? prefix : [...prefix,key];
+        addTarget(property.value, fullPath.join('.'), property);
+      }
+    } else if (pattern.type === 'ArrayPattern') {
+      pattern.elements.forEach((element,index)=>{
+        if(element)addTarget(element,[...prefix,String(index)].join('.'),element);
+      });
+    }
+  };
   const literalKey = node => node && node.type === 'Literal' &&
     ['string', 'number'].includes(typeof node.value) ? String(node.value) : null;
   // Follow only value-bearing syntax. Function bodies are deliberately opaque:
@@ -547,6 +584,12 @@ function analyzeFile(root, file) {
       if (node.id.type === 'ObjectPattern' && node.init) {
         add('indirect-methods', 'destructured-property-alias', node,
           'destructuring may retain method references');
+        if (node.init.type === 'Identifier') {
+          addDestructuredPropertyReads(node.id, bindingId(node.init));
+        }
+      }
+      if (node.id.type === 'ArrayPattern' && node.init?.type === 'Identifier') {
+        addDestructuredPropertyReads(node.id, bindingId(node.init));
       }
       if (node.init && node.init.type === 'Identifier' && node.id.type === 'Identifier') {
         add('object-wrapping', 'identifier-alias', node, node.init.name + ' -> ' + node.id.name);
