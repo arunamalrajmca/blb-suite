@@ -181,6 +181,15 @@ jobs:
             npx playwright test tests/browser/performance-batch.spec.js --workers=1
           fi
 
+      - name: Run the original single-case Show on BLB performance benchmark
+        if: ${{ !startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver') }}
+        env:
+          BLB_PERF_OUTPUT: ${{ runner.temp }}/original-performance-smoke.jsonl
+        run: |
+          : > "$BLB_PERF_OUTPUT"
+          npx playwright test tests/browser/performance.spec.js --workers=1
+          test -s "$BLB_PERF_OUTPUT"
+
       - name: Require measured performance qualification
        
         env:
@@ -210,6 +219,7 @@ jobs:
             test-results/
             ${{ runner.temp }}/baseline-performance.jsonl
             ${{ runner.temp }}/candidate-performance.jsonl
+            ${{ runner.temp }}/original-performance-smoke.jsonl
             ${{ runner.temp }}/performance-report.md
             ${{ runner.temp }}/blb-test-build/*.zip
             ${{ runner.temp }}/blb-test-build/*.sha256
