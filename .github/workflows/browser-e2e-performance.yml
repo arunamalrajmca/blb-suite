@@ -212,31 +212,53 @@ jobs:
 
       - name: Run the original single-case Show on BLB performance benchmark
         if: ${{ !startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver') }}
-        env:
-          BLB_PERF_OUTPUT: ${{ runner.temp }}/original-performance-smoke.jsonl
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: original-show-on-blb-benchmark
+          cache-prefix: blb-ci-v1-performance-original-show-on-blb-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/original-performance-smoke.jsonl"
+            touch "$BLB_PERF_OUTPUT"
+            npx playwright test tests/browser/performance.spec.js --workers=1
+            test -s "$BLB_PERF_OUTPUT"
+      - name: Restore cached performance measurements for qualification
         run: |
-          : > "$BLB_PERF_OUTPUT"
-          npx playwright test tests/browser/performance.spec.js --workers=1
-          test -s "$BLB_PERF_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/blb-test-build"
+          cp "$RUNNER_TEMP"/../blb-ci-checkpoints/interleaved-performance-benchmark/baseline-performance.jsonl "$RUNNER_TEMP/baseline-performance.jsonl"
+          cp "$RUNNER_TEMP"/../blb-ci-checkpoints/interleaved-performance-benchmark/candidate-performance.jsonl "$RUNNER_TEMP/candidate-performance.jsonl"
+          if [[ -f "$RUNNER_TEMP/../blb-ci-checkpoints/original-show-on-blb-benchmark/original-performance-smoke.jsonl" ]]; then
+            cp "$RUNNER_TEMP/../blb-ci-checkpoints/original-show-on-blb-benchmark/original-performance-smoke.jsonl" "$RUNNER_TEMP/original-performance-smoke.jsonl"
+          fi
 
       - name: Require measured performance qualification
-       
-        env:
-          BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
-          BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
-          BLB_PERF_REQUIRE_IMPROVEMENT: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')) && '1' || '0' }}
-          BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.50
-          BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT: 0.50
-          BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT: 0.50
-          BLB_PERF_MAX_PARAGRAPH_REGRESSION: 0.10
-          BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION: 0.10
-          BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION: 0.10
-          BLB_PERF_MAX_FRESH_REGRESSION: 0.10
-          BLB_PERF_MIN_RANGE_RESOLVER_IMPROVEMENT: 0.50
-          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
-        run: |
-          set -o pipefail
-          node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: performance-qualification
+          cache-prefix: blb-ci-v1-performance-qualification-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            export BLB_PERF_MIN_TARGETED_IMPROVEMENT=0.03
+            export BLB_PERF_MAX_SELECTION_REGRESSION=0.10
+            export BLB_PERF_REQUIRE_IMPROVEMENT=${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')) && '1' || '0' }}
+            export BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT=0.50
+            export BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT=0.50
+            export BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT=0.50
+            export BLB_PERF_MAX_PARAGRAPH_REGRESSION=0.10
+            export BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION=0.10
+            export BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION=0.10
+            export BLB_PERF_MAX_FRESH_REGRESSION=0.10
+            export BLB_PERF_MIN_RANGE_RESOLVER_IMPROVEMENT=0.50
+            export BLB_PERF_TARGET=${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
+            node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
+      - name: Upload resumable performance sample checkpoints
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-performance-checkpoints-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/blb-ci-checkpoints/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Upload performance diagnostics
         if: always()
