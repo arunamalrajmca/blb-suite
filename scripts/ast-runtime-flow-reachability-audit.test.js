@@ -1059,7 +1059,7 @@ test('binds stored callback values to array map callback parameters', () => {
     'const handlers = [callback];',
     'const mapped = handlers.map(handler => handler);',
     'const selected = mapped.at(0);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-argument' &&
     edge.from === 'function@1' && edge.to === 'handler@3'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
@@ -1072,7 +1072,7 @@ test('binds object values to forEach callback parameters for nested property rea
     'const registry = { onReady: callback };',
     'const items = [registry];',
     'items.forEach(item => { const handler = item.onReady; });'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
 });
@@ -1082,7 +1082,7 @@ test('binds Object.values results to collection callback parameters', () => {
     'const callback = () => start();',
     'const registry = { onReady: callback };',
     'Object.values(registry).forEach(handler => handler());'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-argument' &&
     edge.from === 'function@1' && edge.to === 'handler@3'));
 });
