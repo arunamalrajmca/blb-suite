@@ -311,3 +311,29 @@ test('connects Reflect.set values to static reads and keeps dynamic writes conse
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'stopped@6'));
 });
+
+test('propagates inherited property values through Object.create and Object.setPrototypeOf', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const prototype = { onReady: callback };',
+    'const instance = Object.create(prototype);',
+    'const first = instance.onReady;',
+    'const secondInstance = {};',
+    'Object.setPrototypeOf(secondInstance, prototype);',
+    'const second = secondInstance.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'first@4'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'second@7'));
+});
+
+test('tracks properties inherited from an inline Object.create prototype literal', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const instance = Object.create({ onReady: callback });',
+    'const handler = instance.onReady;'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@3'));
+});
