@@ -92,6 +92,61 @@ try {
   fs.writeFileSync(listPath, scheduled.join('\n') + '\n');
   const sourceCommit = process.env.BLB_CONCURRENCY_SOURCE_SHA || process.env.GITHUB_SHA || 'unknown';
   const scheduledDigest = crypto.createHash('sha256').update(JSON.stringify(scheduled)).digest('hex');
+
+  // Recover the longest valid contiguous serial checkpoint from independently
+  // downloaded batch artifacts. Every candidate is bound to the exact source
+  // commit and scheduled inventory, and every record must match its position.
+  // Invalid, stale, duplicated, failed, or non-contiguous evidence is ignored.
+  const serialRecoveryRoot = process.env.BLB_CONCURRENCY_SERIAL_RECOVERY_DIR;
+  if (process.env.BLB_CONCURRENCY_MODE === 'stage-serial' && serialRecoveryRoot && fs.existsSync(serialRecoveryRoot)) {
+    const validateSerialCheckpoint = directory => {
+      try {
+        const candidateInventory = JSON.parse(fs.readFileSync(path.join(directory, 'inventory.json'), 'utf8'));
+        const candidateSerial = JSON.parse(fs.readFileSync(path.join(directory, 'serial-results.json'), 'utf8'));
+        const candidateErrors = JSON.parse(fs.readFileSync(path.join(directory, 'serial-errors.json'), 'utf8'));
+        if (candidateInventory.sourceCommit !== sourceCommit ||
+            candidateInventory.scheduledDigest !== scheduledDigest ||
+            candidateInventory.scheduled !== scheduled.length ||
+            !Array.isArray(candidateSerial) || !Array.isArray(candidateErrors) ||
+            candidateSerial.length > scheduled.length || candidateErrors.length !== 0) return null;
+        const keys = new Set();
+        for (let index = 0; index < candidateSerial.length; index++) {
+          const record = candidateSerial[index];
+          const test = record.tests?.[0];
+          if (record.inventoryEntry !== scheduled[index] || record.exitCode !== 0 ||
+              record.parseError || record.tests?.length !== 1 || !test?.key || !test.status ||
+              keys.has(test.key)) return null;
+          keys.add(test.key);
+        }
+        return { directory, count: candidateSerial.length };
+      } catch { return null; }
+    };
+    const recoveryCandidates = fs.readdirSync(serialRecoveryRoot, { withFileTypes: true })
+      .filter(entry => entry.isDirectory())
+      .map(entry => path.join(serialRecoveryRoot, entry.name))
+      .map(validateSerialCheckpoint)
+      .filter(Boolean)
+      .sort((left, right) => right.count - left.count);
+    const bestCheckpoint = recoveryCandidates[0];
+    if (bestCheckpoint && bestCheckpoint.count > 0) {
+      for (const name of ['inventory.json', 'serial-results.json', 'serial-errors.json',
+        'serial-checkpoint.json', 'serial-stage-summary.json', 'scheduled-test-list.txt']) {
+        const source = path.join(bestCheckpoint.directory, name);
+        if (fs.existsSync(source)) fs.copyFileSync(source, path.join(reportRoot, name));
+      }
+      for (let index = 1; index <= bestCheckpoint.count; index++) {
+        const name = 'serial-' + String(index).padStart(4, '0') + '.log';
+        const source = path.join(bestCheckpoint.directory, name);
+        if (fs.existsSync(source)) fs.copyFileSync(source, path.join(reportRoot, name));
+      }
+      console.log('Recovered the longest verified serial checkpoint: ' +
+        bestCheckpoint.count + '/' + scheduled.length + ' tests from ' +
+        path.basename(bestCheckpoint.directory) + '.');
+    } else {
+      console.log('No valid prior serial batch checkpoint matched this source commit and exact inventory; serial baseline will start from test 1.');
+    }
+  }
+
   const inventoryPath = path.join(reportRoot, 'inventory.json');
   const priorInventory = fs.existsSync(inventoryPath) ? JSON.parse(fs.readFileSync(inventoryPath, 'utf8')) : null;
   const priorInventoryMatches = priorInventory?.sourceCommit === sourceCommit &&
