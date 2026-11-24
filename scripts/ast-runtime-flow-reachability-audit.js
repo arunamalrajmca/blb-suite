@@ -882,7 +882,7 @@ function analyzeFile(root, file) {
   // A descriptor object exposes the stored value (or accessor) under its
   // own `value` property. Preserve that identity for later descriptor.value reads.
   for (const request of descriptorRequests) {
-    for (const write of propertyWrites) {
+    for (const write of [...propertyWrites]) {
       if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
       if (request.property !== null && write.property !== null && write.property !== request.property) continue;
       propertyWrites.push({
