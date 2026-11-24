@@ -980,6 +980,91 @@ function analyzeFile(root, file) {
           }
         }
       }
+      if (node.type === 'CallExpression' && receiverName === 'Array' && name === 'from') {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        const iterable = node.arguments[0];
+        const mapperArgument = node.arguments[1];
+        const mapper = isFunction(mapperArgument) ? mapperArgument :
+          mapperArgument?.type === 'Identifier'
+            ? functionVariables.get(variableForNode.get(mapperArgument)) : null;
+        let source = null, includeObjectValues = false, entries = false, role = null;
+        if (iterable?.type === 'Identifier') {
+          const iterator = iteratorSources.get(bindingId(iterable));
+          if (iterator?.entries) source = null;
+          else if (iterator) {
+            source = iterator.container;
+            if (iterator.keys && mapContainers.has(source)) role = 'map-key';
+          } else source = bindingId(iterable);
+        } else if (iterable?.type === 'ArrayExpression') {
+          source = 'array-from-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          addContainedReferences(iterable, source, 'array-from-source', node);
+          addObjectPropertySlots(iterable, source);
+        } else if (iterable?.type === 'CallExpression' &&
+            iterable.callee.type === 'MemberExpression' &&
+            iterable.callee.object.type === 'Identifier' && iterable.callee.object.name === 'Object' &&
+            ['values', 'entries'].includes(propertyKey(iterable.callee.property, iterable.callee.computed)) &&
+            iterable.arguments[0]?.type === 'Identifier') {
+          const collectionMethod = propertyKey(iterable.callee.property, iterable.callee.computed);
+          source = bindingId(iterable.arguments[0]);
+          includeObjectValues = true;
+          entries = collectionMethod === 'entries';
+        } else if (iterable?.type === 'CallExpression' &&
+            iterable.callee.type === 'MemberExpression' &&
+            iterable.callee.object.type === 'Identifier') {
+          const collectionMethod = propertyKey(iterable.callee.property, iterable.callee.computed);
+          const container = bindingId(iterable.callee.object);
+          if (collectionMethod === 'values') source = container;
+          else if (collectionMethod === 'keys' && mapContainers.has(container)) {
+            source = container; role = 'map-key';
+          }
+        }
+        if (assigned && mapper && source) {
+          const parameterNode = mapper.params?.[0];
+          const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
+          if (['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(parameter?.type)) {
+            callbackIterationRequests.push({
+              source,parameter:parameter.type === 'Identifier' ? bindingId(parameter) : null,
+              parameterPattern:parameter,includeObjectValues,entries,node,method:'Array.from',role
+            });
+          }
+          const returns = mapper.body.type === 'BlockStatement'
+            ? returnedValues(mapper) : [mapper.body];
+          for (const returned of returns) {
+            let stored = null, objectValue = false;
+            if (returned.type === 'Identifier') {
+              const returnedFunction = functionVariables.get(variableForNode.get(returned));
+              stored = bindingId(returned);
+              if (returnedFunction) addEdge('function@' + returnedFunction.loc.start.line, stored,
+                'function-variable-identity', node, 'Array.from');
+              else objectValue = true;
+            } else if (isFunction(returned)) {
+              stored = 'function@' + returned.loc.start.line;
+            } else if (returned.type === 'MemberExpression') {
+              const reference = memberReference(returned);
+              if (reference) {
+                stored = 'array-from-value@' + returned.loc.start.line + ':' + returned.loc.start.column;
+                propertyReads.push({object:reference.object,property:reference.property,assigned:stored,node:returned});
+              }
+            } else if (['ObjectExpression', 'ArrayExpression'].includes(returned.type)) {
+              stored = 'array-from-aggregate@' + returned.loc.start.line + ':' + returned.loc.start.column;
+              addContainedReferences(returned, stored, 'array-from-return', node);
+              addObjectPropertySlots(returned, stored);
+              objectValue = true;
+            } else if (returned.type === 'CallExpression' || returned.type === 'AwaitExpression') {
+              stored = 'array-from-expression@' + returned.loc.start.line + ':' + returned.loc.start.column;
+              addContainedReferences(returned, stored, 'array-from-return', node);
+              objectValue = true;
+            }
+            if (stored) {
+              addEdge(stored, assigned, 'array-from-result', node, 'Array.from');
+              containerWrites.push({container:assigned,key:null,stored,node,objectValue});
+            }
+          }
+        } else if (assigned && source && !mapper) {
+          containerCopies.push({source,target:assigned,node});
+        }
+      }
       if (node.type === 'CallExpression' && ['map', 'flatMap'].includes(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
