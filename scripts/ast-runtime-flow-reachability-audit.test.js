@@ -152,7 +152,7 @@ test('tracks nested aggregate values stored in containers through subsequent rea
     "const entry = registry.get('entry');"
   ].join('\\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
-    edge.from === 'callback@3' && edge.to === 'entry@5'));
+    edge.from === 'function@3' && edge.to === 'entry@5'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'service@2' && edge.to === 'entry@5'));
 });
