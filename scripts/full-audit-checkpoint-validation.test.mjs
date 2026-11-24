@@ -130,7 +130,7 @@ test('source, digest, and ordered inventory mismatches are rejected', () => {
   assert.equal(validateSerialCheckpoint(reordered), false);
 });
 
-test('failed, skipped, flaky, and expected-failure records are rejected', () => {
+test('failed, unapproved skipped, flaky, and expected-failure records are rejected', () => {
   for (const status of ['failed', 'skipped', 'timedOut']) {
     const result = checkpoint();
     result.candidateSerial[4].tests[0].status = status;
@@ -142,6 +142,25 @@ test('failed, skipped, flaky, and expected-failure records are rejected', () => 
   const expectedFailure = checkpoint();
   expectedFailure.candidateSerial[4].tests[0].expectedStatus = 'failed';
   assert.equal(validateSerialCheckpoint(expectedFailure), false);
+});
+
+test('the exact dedicated KJV corpus performance test may be skipped, but no other test may', () => {
+  const entry = '[extension-chromium] › tests/browser/kjv-corpus-lazy-loading.spec.js:319:1 › interleaved 15-pair cold-start and first-corpus-use A/B against current main';
+  const key = 'extension-chromium|kjv-corpus-lazy-loading.spec.js|319|1|kjv-corpus-lazy-loading.spec.js › interleaved 15-pair cold-start and first-corpus-use A/B against current main';
+  const approved = {
+    inventoryEntry: entry, exitCode: 0, parseError: null,
+    tests: [{
+      key, status: 'skipped', overallStatus: 'skipped',
+      expectedStatus: 'passed', retryCount: 0, errors: []
+    }]
+  };
+  assert.equal(isSuccessfulSerialTestRecord(approved, entry), true);
+  const wrongIdentity = structuredClone(approved);
+  wrongIdentity.tests[0].key += ' (unexpected)';
+  assert.equal(isSuccessfulSerialTestRecord(wrongIdentity, entry), false);
+  const wrongShape = structuredClone(approved);
+  wrongShape.tests[0].retryCount = 1;
+  assert.equal(isSuccessfulSerialTestRecord(wrongShape, entry), false);
 });
 
 test('a shorter contiguous prefix is recoverable, but gaps, duplicates, and errors are rejected', () => {
