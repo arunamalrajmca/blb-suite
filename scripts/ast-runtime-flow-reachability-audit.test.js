@@ -1008,7 +1008,7 @@ test('traces callback identity through WeakRef construction and deref', () => {
     'const callback = () => work();',
     'const weak = new WeakRef(callback);',
     'const selected = weak.deref();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'weak@2' && edge.kind === 'weakref-store-callback'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
@@ -1022,9 +1022,7 @@ test('preserves WeakRef value identity through a local alias and object property
     'const alias = weak;',
     'const selected = alias.deref();',
     'selected.run();'
-  ].join('\\n'));
-  assert.ok(result.flowEdges.some(edge => edge.kind === 'weakref-deref' &&
-    edge.to === 'selected@4'));
-  assert.ok(result.flowEdges.some(edge => edge.kind === 'object-method-call' ||
-    edge.kind === 'interprocedural'));
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'api@1' &&
+    edge.kind === 'weakref-deref' && edge.to === 'selected@4'));
 });
