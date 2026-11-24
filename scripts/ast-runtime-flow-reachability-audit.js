@@ -422,6 +422,7 @@ function analyzeFile(root, file) {
     'notify', 'publish', 'invoke', 'execute', 'callHandler', 'handleEvent'
   ]);
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice']);
+  const containerReadMethods = new Set(['get', 'pop', 'shift', 'at']);
 
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
@@ -579,11 +580,16 @@ function analyzeFile(root, file) {
           }
         }
       }
-      if (node.type === 'CallExpression' && name === 'get' && receiverName) {
+      if (node.type === 'CallExpression' && containerReadMethods.has(name) && receiverName &&
+          !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
-        addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.get');
-        containerReads.push({container:bindingId(receiver),key:literalKey(node.arguments[0]),assigned,node});
+        addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.' + name);
+        containerReads.push({
+          container:bindingId(receiver),
+          key:name === 'get' || name === 'at' ? literalKey(node.arguments[0]) : null,
+          assigned,node
+        });
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
         const calledVariable = variableForNode.get(node.callee);
