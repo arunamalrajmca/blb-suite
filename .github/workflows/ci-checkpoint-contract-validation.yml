@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - '.github/actions/ci-section-checkpoint/**'
+      - '.github/workflows/ci-checkpoint-contract-validation.yml'
       - '.github/workflows/browser-tests.yml'
       - '.github/workflows/manual-full-test-audit.yml'
       - '.github/workflows/browser-native-shortcut.yml'
