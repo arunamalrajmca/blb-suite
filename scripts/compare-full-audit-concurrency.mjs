@@ -146,14 +146,14 @@ try {
     const serialStartedAt = Date.now();
     const serialCheckpointPath = path.join(reportRoot, 'serial-checkpoint.json');
     const scheduledPath = path.join(reportRoot, 'scheduled-test-list.txt');
-    fs.writeFileSync(scheduledPath, scheduled.join('\\n') + '\\n');
+    fs.writeFileSync(scheduledPath, scheduled.join('\n') + '\n');
     console.log('Serial checkpoint batch [' + batchStart + '/' + scheduled.length + ' → ' + batchEnd + '/' + scheduled.length + '].');
     for (let index = batchStart; index < batchEnd; index++) {
       const oneTestPath = path.join(tempRoot, 'one-test.txt');
-      fs.writeFileSync(oneTestPath, scheduled[index] + '\\n');
+      fs.writeFileSync(oneTestPath, scheduled[index] + '\n');
       const logPath = path.join(reportRoot, 'serial-' + String(index + 1).padStart(4, '0') + '.log');
       const result = run(['--test-list', oneTestPath, '--workers=1', '--max-failures=0', '--reporter=json'], { timeout: 180_000 });
-      fs.writeFileSync(logPath, (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+      fs.writeFileSync(logPath, (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
       let tests = [];
       let parseError = null;
       try { tests = collectTests(parseJsonReport(result.stdout || '', 'serial test ' + (index + 1))); }
@@ -207,7 +207,7 @@ try {
     }
     const inventory = JSON.parse(fs.readFileSync(inventoryPath, 'utf8'));
     const serial = JSON.parse(fs.readFileSync(serialPath, 'utf8'));
-    const stageScheduled = fs.readFileSync(scheduledPath, 'utf8').split(/\\r?\\n/).filter(Boolean);
+    const stageScheduled = fs.readFileSync(scheduledPath, 'utf8').split(/\r?\n/).filter(Boolean);
     if (JSON.stringify(stageScheduled) !== JSON.stringify(scheduled)) {
       throw new Error('Downloaded serial baseline inventory does not exactly match the current checked-out test inventory.');
     }
@@ -261,7 +261,7 @@ try {
       const listPathForStage = path.join(reportRoot, 'scheduled-test-list.txt');
       const result = run(['--test-list', listPathForStage, '--workers=4', '--max-failures=1', '--reporter=json'], { timeout: 21_000_000 });
       fs.writeFileSync(path.join(reportRoot, 'parallel-round-' + repetition + '.log'),
-        (result.stdout || '') + '\\n--- STDERR ---\\n' + (result.stderr || ''));
+        (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || ''));
       let tests = [];
       let parseError = null;
       try { tests = collectTests(parseJsonReport(result.stdout || '', 'parallel repetition ' + repetition)); }
