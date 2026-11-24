@@ -488,6 +488,43 @@ function analyzeFile(root, file) {
     });
   }
 
+  const resolveFunctionValue = expression => {
+    if (!expression) return null;
+    if (expression.type === 'Identifier') {
+      const variable = variableForNode.get(expression);
+      const named = functionDeclarationsByName.get(expression.name) || [];
+      return (variable && functionVariables.get(variable)) ||
+        (named.length === 1 ? named[0] : null);
+    }
+    if (expression.type !== 'MemberExpression') return null;
+    const property = propertyKey(expression.property, expression.computed);
+    if (property === null) return null;
+    const receiverNode = expression.object;
+    if (receiverNode.type === 'Identifier') {
+      const receiver = bindingId(receiverNode);
+      const methods = objectMethodFunctions.get(receiver + '::' + property) || [];
+      if (methods.length === 1) return methods[0];
+    }
+    const ancestors = ancestorsByNode.get(expression) || [];
+    let classIdentity = null;
+    if (receiverNode.type === 'Identifier') {
+      const receiver = bindingId(receiverNode);
+      classIdentity = classInstanceSources.get(receiver) || classStaticBindings.get(receiver) || null;
+    } else if (receiverNode.type === 'ThisExpression') {
+      classIdentity = classContext(ancestors);
+    } else if (receiverNode.type === 'Super') {
+      const current = classContext(ancestors);
+      classIdentity = current ? classParentSources.get(current) || null : null;
+    }
+    const seen = new Set();
+    while (classIdentity && !seen.has(classIdentity)) {
+      seen.add(classIdentity);
+      const methods = classMethodFunctions.get(classIdentity + '::' + property) || [];
+      if (methods.length === 1) return methods[0];
+      classIdentity = classParentSources.get(classIdentity) || null;
+    }
+    return null;
+  };
   const resolveCalledFunction = call => {
     if (!call || call.type !== 'CallExpression') return null;
     if (call.callee.type === 'Identifier') {
@@ -936,6 +973,20 @@ function analyzeFile(root, file) {
               addDescriptorValues(propertyKey(descriptor.key, descriptor.computed), descriptor.value);
             }
           }
+        }
+      }
+
+      if (node.type === 'CallExpression' && name === 'bind' &&
+          node.callee.type === 'MemberExpression') {
+        const originalFunction = resolveFunctionValue(node.callee.object);
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (originalFunction && assigned) {
+          addEdge('function@' + originalFunction.loc.start.line, assigned,
+            'bound-function-result', node, 'Function.prototype.bind');
+          const variable = parent?.type === 'VariableDeclarator'
+            ? variableForNode.get(parent.id) : null;
+          if (variable) functionVariables.set(variable, originalFunction);
         }
       }
 
