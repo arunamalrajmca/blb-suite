@@ -305,7 +305,7 @@ test('preserves aggregate property identities through direct Map storage and ret
     'const handler = entry.onReady;'
   ].join('\\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
-    edge.from === 'aggregate@3:24' && edge.to === 'entry@4'));
+    edge.from === 'aggregate@3:22' && edge.to === 'entry@4'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@5'));
 });
