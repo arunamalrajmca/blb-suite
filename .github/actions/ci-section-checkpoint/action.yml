@@ -86,7 +86,7 @@ runs:
       shell: bash
       env:
         SECTION: ${{ inputs.section }}
-        SOURCE_SHA: ${{ github.sha }}
+        SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
       run: |
         set -euo pipefail
