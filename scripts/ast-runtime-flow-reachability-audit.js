@@ -623,7 +623,7 @@ function analyzeFile(root, file) {
   const containerMethods = new Set(['set', 'add', 'put', 'push', 'unshift', 'splice', 'fill']);
   const containerReadMethods = new Set(['get', 'pop', 'shift', 'at', 'find', 'findLast', 'splice']);
   const containerCopyMethods = new Set(['slice', 'filter', 'toReversed', 'toSorted', 'toSpliced']);
-  const callbackIterationMethods = new Set(['map', 'flatMap', 'filter', 'find', 'findLast', 'forEach', 'some', 'every', 'reduce', 'reduceRight', 'sort', 'toSorted']);
+  const callbackIterationMethods = new Set(['map', 'flatMap', 'filter', 'find', 'findLast', 'findIndex', 'findLastIndex', 'forEach', 'some', 'every', 'reduce', 'reduceRight', 'sort', 'toSorted']);
   const weakRefSources = new Map();
   const finalizationRegistryCallbacks = new Map();
 
