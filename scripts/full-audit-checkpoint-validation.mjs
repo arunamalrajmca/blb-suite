@@ -27,12 +27,25 @@ export function isAuditHarnessOnlyCompatibleSource(candidateSha, currentSha, opt
   return files.length === allowed.length && files.every((file, index) => file === allowed[index]);
 }
 
+export const APPROVED_DEDICATED_PERFORMANCE_SKIP_KEY =
+  'extension-chromium|kjv-corpus-lazy-loading.spec.js|319|1|kjv-corpus-lazy-loading.spec.js › interleaved 15-pair cold-start and first-corpus-use A/B against current main';
+
 export function isSuccessfulSerialTestRecord(record, expectedInventoryEntry, seenKeys = new Set()) {
   const test = record?.tests?.[0];
+  const passed = test?.status === 'passed' && test?.overallStatus === 'expected';
+  // This one browser test is deliberately skipped in the concurrency audit
+  // because it runs only with BLB_PERF_OUTPUT in the dedicated performance
+  // workflow. Accept only its exact identity and normal expected-skip shape;
+  // every other skipped, flaky, timed-out, or failed record remains invalid.
+  const approvedDedicatedSkip =
+    test?.key === APPROVED_DEDICATED_PERFORMANCE_SKIP_KEY &&
+    test.status === 'skipped' && test.overallStatus === 'skipped' &&
+    test.expectedStatus === 'passed' && test.retryCount === 0 &&
+    Array.isArray(test.errors) && test.errors.length === 0;
   if (record?.inventoryEntry !== expectedInventoryEntry || record?.exitCode !== 0 ||
       record?.parseError || record?.tests?.length !== 1 || !test?.key ||
-      test.status !== 'passed' || test.overallStatus !== 'expected' ||
-      test.expectedStatus !== 'passed' || seenKeys.has(test.key)) return false;
+      (!passed && !approvedDedicatedSkip) || test.expectedStatus !== 'passed' ||
+      seenKeys.has(test.key)) return false;
   seenKeys.add(test.key);
   return true;
 }
