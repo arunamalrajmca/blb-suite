@@ -438,6 +438,49 @@ function analyzeFile(root, file) {
     if (!objectMethodFunctions.has(key)) objectMethodFunctions.set(key, []);
     objectMethodFunctions.get(key).push(node.value);
   });
+  const classMethodFunctions = new Map();
+  const classStaticBindings = new Map();
+  const classInstanceSources = new Map();
+  visit(ast, (node, parent, ancestors) => {
+    if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
+      const declaration = [...ancestors].reverse().find(item =>
+        item.type === 'VariableDeclarator' && item.id.type === 'Identifier');
+      const className = node.id?.name || declaration?.id.name;
+      if (!className) return;
+      const staticIdentity = 'class-static@' + className;
+      if (node.id) classStaticBindings.set(bindingId(node.id), staticIdentity);
+      if (declaration?.id) classStaticBindings.set(bindingId(declaration.id), staticIdentity);
+      for (const element of node.body.body) {
+        if (element.type !== 'MethodDefinition') continue;
+        const property = propertyKey(element.key, element.computed);
+        if (property === null) continue;
+        const identity = element.static ? staticIdentity : 'class-instance@' + className;
+        const key = identity + '::' + property;
+        if (!classMethodFunctions.has(key)) classMethodFunctions.set(key, []);
+        classMethodFunctions.get(key).push(element.value);
+      }
+    }
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+        node.init?.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
+      classInstanceSources.set(bindingId(node.id), 'class-instance@' + node.init.callee.name);
+    }
+  });
+  // Preserve class-instance identity through simple local aliases.
+  let aliasesChanged = true;
+  while (aliasesChanged) {
+    aliasesChanged = false;
+    visit(ast, node => {
+      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+          node.init?.type !== 'Identifier') return;
+      const source = classInstanceSources.get(bindingId(node.init));
+      const target = bindingId(node.id);
+      if (source && !classInstanceSources.has(target)) {
+        classInstanceSources.set(target, source);
+        aliasesChanged = true;
+      }
+    });
+  }
+
   const resolveCalledFunction = call => {
     if (!call || call.type !== 'CallExpression') return null;
     if (call.callee.type === 'Identifier') {
@@ -449,8 +492,13 @@ function analyzeFile(root, file) {
     if (call.callee.type === 'MemberExpression' && call.callee.object.type === 'Identifier') {
       const property = propertyKey(call.callee.property, call.callee.computed);
       if (property === null) return null;
-      const methods = objectMethodFunctions.get(bindingId(call.callee.object) + '::' + property) || [];
-      return methods.length === 1 ? methods[0] : null;
+      const receiver = bindingId(call.callee.object);
+      const methods = objectMethodFunctions.get(receiver + '::' + property) || [];
+      if (methods.length === 1) return methods[0];
+      const classIdentity = classInstanceSources.get(receiver) || classStaticBindings.get(receiver);
+      const classMethods = classIdentity
+        ? (classMethodFunctions.get(classIdentity + '::' + property) || []) : [];
+      return classMethods.length === 1 ? classMethods[0] : null;
     }
     return null;
   };
