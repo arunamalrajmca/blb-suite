@@ -143,6 +143,8 @@ function analyzeFile(root, file) {
   const propertyReads = [];
   const propertyCopies = [];
   const descriptorRequests = [];
+  const descriptorCollectionRequests = [];
+  const propertyValueCollectionRequests = [];
   const objectAliasParents = new Map();
   const canonicalObject = identity => {
     if (!identity) return identity;
@@ -639,6 +641,21 @@ function analyzeFile(root, file) {
         }
       }
 
+      if (node.type === 'CallExpression' && name === 'getOwnPropertyDescriptors' &&
+          receiverName === 'Object') {
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const descriptors = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target && descriptors) descriptorCollectionRequests.push({object:target,descriptors,node});
+      }
+      if (node.type === 'CallExpression' && ['values', 'entries'].includes(name) &&
+          receiverName === 'Object') {
+        const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
+        const collection = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        if (target && collection) propertyValueCollectionRequests.push({object:target,collection,node});
+      }
+
       if (node.type === 'CallExpression' && name === 'getOwnPropertyDescriptor' &&
           receiverName === 'Object') {
         const target = node.arguments[0]?.type === 'Identifier' ? bindingId(node.arguments[0]) : null;
@@ -904,6 +921,28 @@ function analyzeFile(root, file) {
         propertyWrites.push({object:target,property,stored:write.stored});
         copiesChanged = true;
       }
+    }
+  }
+
+  // Object.getOwnPropertyDescriptors returns one descriptor object per
+  // property. Preserve source property paths through each descriptor's value.
+  for (const request of descriptorCollectionRequests) {
+    for (const write of [...propertyWrites]) {
+      if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
+      propertyWrites.push({
+        object:request.descriptors,
+        property:write.property === null ? null : write.property + '.value',
+        stored:write.stored
+      });
+    }
+  }
+
+  // Object.values and Object.entries expose stored values through collection
+  // indexes. Unknown indexes remain conservative rather than losing callbacks.
+  for (const request of propertyValueCollectionRequests) {
+    for (const write of [...propertyWrites]) {
+      if (canonicalObject(write.object) !== canonicalObject(request.object)) continue;
+      propertyWrites.push({object:request.collection,property:null,stored:write.stored});
     }
   }
 
