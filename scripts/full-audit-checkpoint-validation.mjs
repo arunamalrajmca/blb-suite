@@ -44,7 +44,8 @@ export function isSuccessfulSerialTestRecord(record, expectedInventoryEntry, see
     Array.isArray(test.errors) && test.errors.length === 0;
   if (record?.inventoryEntry !== expectedInventoryEntry || record?.exitCode !== 0 ||
       record?.parseError || record?.tests?.length !== 1 || !test?.key ||
-      (!passed && !approvedDedicatedSkip) || test.expectedStatus !== 'passed' ||
+      (!passed && !approvedDedicatedSkip) ||
+      (!approvedDedicatedSkip && test.expectedStatus !== 'passed') ||
       seenKeys.has(test.key)) return false;
   seenKeys.add(test.key);
   return true;
