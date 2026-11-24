@@ -1130,3 +1130,41 @@ test('binds Object.entries values to destructured callback value parameters', ()
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'property-value-read'));
 });
+
+
+test('binds Map keys to the second forEach callback parameter', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const value = () => otherWork();',
+    'const registry = new Map();',
+    'const alias = registry;',
+    'alias.set(cleanup, value);',
+    'alias.forEach((entry, key) => key());'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'key@6' && edge.kind === 'container-callback-argument'));
+});
+
+test('binds both array values to sort comparator callback parameters', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'callbacks.sort((left, right) => { left(); right(); });'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'left@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'right@3' && edge.kind === 'container-callback-argument'));
+});
+
+test('binds both array values to toSorted comparator callback parameters', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'const sorted = callbacks.toSorted((left, right) => left === right);'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'left@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'right@3' && edge.kind === 'container-callback-argument'));
+});
