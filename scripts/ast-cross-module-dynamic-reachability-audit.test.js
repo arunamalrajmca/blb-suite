@@ -416,3 +416,35 @@ test('tracks literal and unknown computed members after a namespace export path'
   assert.ok(r.dynamicPropertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.property===null&&x.namespace&&x.namespacePath.join('.')==='service'));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces imported object properties through parameter destructuring and local destructuring aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-destructuring-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {}, stop() {}, reset() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function invoke({ start }) { start(); } export function stop(target) { const { stop } = target; stop(); }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke, stop } from './helper.js'; invoke(api); stop(api);");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  const refs=r.interprocedural.propertyReferences;
+  assert.ok(refs.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'&&x.flow==='interprocedural-parameter-destructuring'));
+  assert.ok(refs.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='stop'&&x.flow==='interprocedural-destructuring'));
+  assert.ok(!refs.some(x=>x.to==='service.js'&&x.property==='reset'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('traces imported object identity through nested helper calls returned from a wrapper',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-chained-return-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {}, stop() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { service as api } from './service.js';",
+   'function identity(value) { return value; }',
+   'function relay(value) { return identity(value); }',
+   'const result = relay(api);',
+   'result.start();'
+  ].join('\n'));
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.property==='start'));
+  assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'&&x.property==='stop'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
