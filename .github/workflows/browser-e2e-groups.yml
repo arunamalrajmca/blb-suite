@@ -83,7 +83,7 @@ jobs:
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "${{ matrix.grep }}"
- toggle-permission-lifecycle:
+  toggle-permission-lifecycle:
     if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_specs, 'tests/browser/popup-master-toggle-regression.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-master-toggle-regression.spec.js') || contains(inputs.changed_specs, 'tests/browser/redirect-toggle-isolation.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/redirect-toggle-isolation.spec.js') || contains(inputs.changed_specs, 'tests/browser/optional-host-permission-lifecycle.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/optional-host-permission-lifecycle.spec.js')) }}
     name: BROWSER E2E — TOGGLE/PERMISSION — ${{ matrix.spec }}
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-reference.yml', '.github/workflows/browser-e2e-groups.yml', '.github/workflows/browser-e2e-focused-regressions.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             npx playwright test "${{ matrix.spec }}" --max-failures=1
- core-group-a:
+  core-group-a:
     # Skip the runner entirely when the selector says this group is irrelevant.
     if: ${{ inputs.group_a_required == 'true' }}
     name: BROWSER E2E — GROUP A — FEATURES
@@ -377,7 +377,7 @@ jobs:
               printf 'Running %s\n' "$spec"
             done
             npx playwright test "${shard_specs[@]}" --max-failures=1
- core-study-sessions:
+  core-study-sessions:
     if: ${{ inputs.study_sessions_required == 'true' }}
     name: BROWSER E2E — STUDY SESSIONS
     runs-on: ubuntu-latest
@@ -444,7 +444,7 @@ jobs:
                 npx playwright test "${specs[@]}"
             # PDF export coverage is already included in study-session-popup-ui-regression.spec.js.
             # Do not invoke the removed study-session-export.spec.js path.
- core-group-b:
+  core-group-b:
     # Test execution does not need history; the selector job handles the base diff.
     if: ${{ inputs.group_b_required == 'true' }}
     name: BROWSER E2E — GROUP B — CLIPBOARD/LINKS
@@ -516,7 +516,7 @@ jobs:
             done
             printf 'Running %d selected Group B specs in one Playwright process.\n' "${#specs[@]}"
             npx playwright test "${specs[@]}"
- feature-groups-summary:
+  feature-groups-summary:
     name: Validate selected feature groups
     needs:
       - core-group-a
