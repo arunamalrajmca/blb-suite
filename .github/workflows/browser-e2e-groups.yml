@@ -329,13 +329,13 @@ jobs:
               shard_specs+=("${normal_specs[$index]}")
             fi
           done
-          printf 'Shard %s/2 assigned %s of %s non-delegated changed browser specs.\\n' "$SHARD_INDEX" "${#shard_specs[@]}" "${#normal_specs[@]}"
+          printf 'Shard %s/2 assigned %s of %s non-delegated changed browser specs.\n' "$SHARD_INDEX" "${#shard_specs[@]}" "${#normal_specs[@]}"
           if (( ${#shard_specs[@]} == 0 )); then
             echo "No changed browser specs assigned to this shard."
             exit 0
           fi
           for spec in "${shard_specs[@]}"; do
-            printf 'Running %s\\n' "$spec"
+            printf 'Running %s\n' "$spec"
           done
           npx playwright test "${shard_specs[@]}" --max-failures=1
 
