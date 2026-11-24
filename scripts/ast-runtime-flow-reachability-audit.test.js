@@ -1034,7 +1034,7 @@ test('traces cleanup callbacks retained by FinalizationRegistry and their holdin
     'const target = {};',
     'const registry = new FinalizationRegistry(holdings => holdings());',
     'registry.register(target, cleanup);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'registry@3' && edge.kind === 'finalization-registry-callback-callback'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
@@ -1047,7 +1047,7 @@ test('traces callbacks nested inside FinalizationRegistry holdings objects', () 
     'const target = {};',
     'const registry = new FinalizationRegistry(holdings => holdings.onCleanup());',
     'registry.register(target, { onCleanup: cleanup });'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'holdings@3' && edge.kind === 'finalization-holdings-callback'));
 });
