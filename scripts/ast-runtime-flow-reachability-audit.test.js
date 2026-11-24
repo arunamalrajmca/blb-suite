@@ -916,7 +916,7 @@ test('traces bound callback identity and retains it through object wrappers', ()
     'const callback = () => work();',
     'const bound = callback.bind(null);',
     'const wrapper = { handler: bound };'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'bound@2' && edge.kind === 'bound-function-result'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
@@ -930,7 +930,7 @@ test('traces bound object-method and class-method callback values', () => {
     'class Factory { handler() { work(); } }',
     'const instance = new Factory();',
     'const classBound = instance.handler.bind(instance);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'objectBound@2' && edge.kind === 'bound-function-result'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@3' &&
