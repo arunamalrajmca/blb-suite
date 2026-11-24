@@ -575,6 +575,14 @@ function analyzeFile(root, file) {
     }
     return null;
   };
+  const resolveFunctionReference = reference => {
+    if (!reference || reference.type !== 'Identifier') return null;
+    const variable = variableForNode.get(reference);
+    const direct = variable && functionVariables.get(variable);
+    if (direct) return direct;
+    const named = functionDeclarationsByName.get(reference.name) || [];
+    return named.length === 1 ? named[0] : null;
+  };
 
   // Lexical captures are function-to-outer-binding edges even when the function
   // is registered or invoked later by a runtime outside this source file.
@@ -954,7 +962,7 @@ function analyzeFile(root, file) {
         const callbackArgument = node.arguments[0];
         const callback = isFunction(callbackArgument) ? callbackArgument :
           callbackArgument?.type === 'Identifier'
-            ? functionVariables.get(variableForNode.get(callbackArgument)) : null;
+            ? resolveFunctionReference(callbackArgument) : null;
         const parameterIndexes = name === 'sort' || name === 'toSorted' ? [0, 1] :
           [name === 'reduce' || name === 'reduceRight' ? 1 : 0];
         for (const parameterIndex of parameterIndexes) {
@@ -987,7 +995,7 @@ function analyzeFile(root, file) {
         const mapperArgument = node.arguments[1];
         const mapper = isFunction(mapperArgument) ? mapperArgument :
           mapperArgument?.type === 'Identifier'
-            ? functionVariables.get(variableForNode.get(mapperArgument)) : null;
+            ? resolveFunctionReference(mapperArgument) : null;
         let source = null, includeObjectValues = false, entries = false, role = null;
         if (iterable?.type === 'Identifier') {
           const iterator = iteratorSources.get(bindingId(iterable));
