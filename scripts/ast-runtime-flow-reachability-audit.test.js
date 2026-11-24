@@ -1140,7 +1140,7 @@ test('binds Map keys to the second forEach callback parameter', () => {
     'const alias = registry;',
     'alias.set(cleanup, value);',
     'alias.forEach((entry, key) => key());'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'key@6' && edge.kind === 'container-callback-argument'));
 });
@@ -1150,7 +1150,7 @@ test('binds both array values to sort comparator callback parameters', () => {
     'const cleanup = () => work();',
     'const callbacks = [cleanup];',
     'callbacks.sort((left, right) => { left(); right(); });'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'left@3' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
@@ -1162,7 +1162,7 @@ test('binds both array values to toSorted comparator callback parameters', () =>
     'const cleanup = () => work();',
     'const callbacks = [cleanup];',
     'const sorted = callbacks.toSorted((left, right) => left === right);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'left@3' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
