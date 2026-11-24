@@ -141,6 +141,26 @@ function analyzeFile(root, file) {
   const containerReads = [];
   const propertyWrites = [];
   const propertyReads = [];
+  const objectAliasParents = new Map();
+  const canonicalObject = identity => {
+    if (!identity) return identity;
+    let current = identity;
+    while (objectAliasParents.has(current) && objectAliasParents.get(current) !== current) {
+      current = objectAliasParents.get(current);
+    }
+    let next = identity;
+    while (objectAliasParents.has(next) && objectAliasParents.get(next) !== current) {
+      const parent = objectAliasParents.get(next);
+      objectAliasParents.set(next, current);
+      next = parent;
+    }
+    return current;
+  };
+  const linkObjectAlias = (left, right) => {
+    if (!left || !right) return;
+    const a = canonicalObject(left), b = canonicalObject(right);
+    if (a !== b) objectAliasParents.set(a, b);
+  };
   const propertySlot = (object, property) => object + '::property::' + property;
   const propertyKey = (property, computed = false) => {
     if (!property) return null;
@@ -519,7 +539,12 @@ function analyzeFile(root, file) {
       if (node.init && node.init.type === 'Identifier' && node.id.type === 'Identifier') {
         add('object-wrapping', 'identifier-alias', node, node.init.name + ' -> ' + node.id.name);
         addEdge(bindingId(node.init), bindingId(node.id), 'identifier-alias', node, node.init.name + ' -> ' + node.id.name);
+        linkObjectAlias(bindingId(node.id), bindingId(node.init));
       }
+    }
+
+    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' && node.right.type === 'Identifier') {
+      linkObjectAlias(bindingId(node.left), bindingId(node.right));
     }
 
     if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
@@ -594,8 +619,9 @@ function analyzeFile(root, file) {
   // Resolve static object-property writes to subsequent property reads.
   // Unknown computed reads conservatively retain every stored value on the object.
   for (const read of propertyReads) {
+    const readObject = canonicalObject(read.object);
     const matches = propertyWrites.filter(write =>
-      write.object === read.object &&
+      canonicalObject(write.object) === readObject &&
       (read.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
     for (const write of matches) {
