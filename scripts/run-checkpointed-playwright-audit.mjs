@@ -119,6 +119,9 @@ function runShard(entries, index, directory, workers) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-browser-audit-shard-'));
   const listPath = path.join(temp, 'tests.txt');
   fs.writeFileSync(listPath, entries.join('\n') + '\n');
+  const reportPath = path.join(process.cwd(), 'test-results/results.json');
+  fs.rmSync(reportPath, { force: true });
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   const args = [cli, 'test', '--test-list', listPath, '--workers=' + workers, '--max-failures=0'];
   const result = spawnSync(process.execPath, args, {
     cwd: process.cwd(),
