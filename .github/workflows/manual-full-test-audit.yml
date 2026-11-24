@@ -449,7 +449,7 @@ jobs:
               echo "Legacy-versus-parallel concurrency compatibility check failed."
               exit 1
             fi
-            echo "Running all $total browser test cases in four resumable shards, each with four workers."
+            echo "Running all $total browser test cases in eight resumable shards, each with four workers."
             node scripts/run-checkpointed-playwright-audit.mjs "$test_list"
       - name: Upload reusable browser-audit checkpoint diagnostics
         if: always()
