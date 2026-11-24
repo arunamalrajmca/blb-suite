@@ -394,49 +394,98 @@ jobs:
           fs.writeFileSync(path, source.replace(needle, 'if (false && !pageButtonDomObserver) {'));
           NODE
           grep -n "false && !pageButtonDomObserver" "$RUNNER_TEMP/observer-off/content.js"
-      - name: Interleaved A/B benchmark
-        shell: bash
-        env:
-          BLB_PERF_SAMPLES: 15
-        run: |
-          set -euo pipefail
-          ON="$RUNNER_TEMP/observer-on"
-          OFF="$RUNNER_TEMP/observer-off"
-          ON_OUT="$RUNNER_TEMP/observer-on.jsonl"
-          OFF_OUT="$RUNNER_TEMP/observer-off.jsonl"
-          : > "$ON_OUT"
-          : > "$OFF_OUT"
-          for ((sample=1; sample<=BLB_PERF_SAMPLES; sample++)); do
-            if (( sample % 2 == 1 )); then
-              BLB_EXTENSION_PATH="$ON" BLB_PERF_OUTPUT="$ON_OUT" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1
-              BLB_EXTENSION_PATH="$OFF" BLB_PERF_OUTPUT="$OFF_OUT" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1
-            else
-              BLB_EXTENSION_PATH="$OFF" BLB_PERF_OUTPUT="$OFF_OUT" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1
-              BLB_EXTENSION_PATH="$ON" BLB_PERF_OUTPUT="$ON_OUT" BLB_PERF_SCENARIO=selection npx playwright test tests/browser/performance.spec.js --workers=1
-            fi
-          done
-          node <<'NODE'
-          const fs = require('fs');
-          const median = values => [...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
-          const read = path => fs.readFileSync(path,'utf8').trim().split(/\r?\n/).filter(Boolean).map(line=>JSON.parse(line).handoffMs);
-          const on = read(process.env.RUNNER_TEMP + '/observer-on.jsonl');
-          const off = read(process.env.RUNNER_TEMP + '/observer-off.jsonl');
-          if (on.length !== off.length || on.length < 10) throw new Error('Missing or mismatched A/B samples');
-          const paired = on.map((v,i)=>(v-off[i])/off[i]*100);
-          console.log('Observer enabled samples (ms): ' + on.join(', '));
-          console.log('Observer disabled samples (ms): ' + off.join(', '));
-          console.log('Observer enabled median: ' + median(on) + ' ms');
-          console.log('Observer disabled median: ' + median(off) + ' ms');
-          console.log('Paired median change with observer enabled: ' + median(paired.map(v=>Math.round(v*10)/10)).toFixed(1) + '%');
-          NODE
+      - name: Interleaved A/B benchmark with per-sample recovery
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: observer-ab-benchmark
+          cache-prefix: blb-ci-v1-performance-observer-ab-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ hashFiles('extension/**', 'tests/browser/performance.spec.js', 'scripts/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-e2e-performance.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          run: |
+            set -euo pipefail
+            ON="$BLB_CI_CHECKPOINT_DIR/observer-on.jsonl"
+            OFF="$BLB_CI_CHECKPOINT_DIR/observer-off.jsonl"
+            mkdir -p "$BLB_CI_CHECKPOINT_DIR"
+            touch "$ON" "$OFF"
+            sample_exists() {
+              local output_path="$1"
+              local variant="$2"
+              local sample="$3"
+              node - "$output_path" "$variant" "$sample" <<'NODE'
+            const fs = require('fs');
+            const [file, variant, sample] = process.argv.slice(2);
+            if (!fs.existsSync(file)) process.exit(1);
+            const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean);
+            let records;
+            try { records = lines.map(line => JSON.parse(line)); }
+            catch (error) { console.error('Malformed observer A/B checkpoint: ' + error.message); process.exit(2); }
+            const matches = records.filter(record => record.scenario === 'selection' &&
+              record.variant === variant && String(record.sample) === sample);
+            if (matches.length > 1) { console.error('Duplicate observer A/B sample'); process.exit(2); }
+            process.exit(matches.length === 1 ? 0 : 1);
+            NODE
+            }
+            run_sample() {
+              local variant="$1"
+              local extension_path="$2"
+              local output_path="$3"
+              local status=0
+              sample_exists "$output_path" "$variant" "$sample" || status=$?
+              if [[ "$status" -eq 0 ]]; then
+                echo "Reusing observer A/B sample [$sample/15] $variant."
+                return
+              fi
+              if [[ "$status" -ne 1 ]]; then
+                echo "::error::Observer A/B checkpoint is malformed."
+                return "$status"
+              fi
+              BLB_EXTENSION_PATH="$extension_path" \
+                BLB_PERF_OUTPUT="$output_path" \
+                BLB_PERF_SCENARIO=selection \
+                BLB_PERF_VARIANT="$variant" \
+                BLB_PERF_SAMPLE="$sample" \
+                npx playwright test tests/browser/performance.spec.js --workers=1
+            }
+            for ((sample=1; sample<=15; sample++)); do
+              printf '\n[%d/30] observer A/B pair sample=%d/15\n' "$((sample * 2 - 1))" "$sample"
+              if (( sample % 2 == 1 )); then
+                run_sample observer-on "$RUNNER_TEMP/observer-on" "$ON"
+                run_sample observer-off "$RUNNER_TEMP/observer-off" "$OFF"
+              else
+                run_sample observer-off "$RUNNER_TEMP/observer-off" "$OFF"
+                run_sample observer-on "$RUNNER_TEMP/observer-on" "$ON"
+              fi
+            done
+            node - "$ON" "$OFF" <<'NODE'
+            const fs = require('fs');
+            const median = values => [...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
+            const read = (file, variant) => {
+              const records = fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).map(JSON.parse);
+              records.sort((a,b)=>a.sample-b.sample);
+              if (records.length !== 15 || records.some((record,index) =>
+                record.variant !== variant || record.scenario !== 'selection' ||
+                record.sample !== index + 1 || !Number.isFinite(record.handoffMs))) {
+                throw new Error('Invalid or incomplete observer A/B samples for ' + variant);
+              }
+              return records;
+            };
+            const on = read(process.argv[2], 'observer-on');
+            const off = read(process.argv[3], 'observer-off');
+            const paired = on.map((record,index)=>(record.handoffMs-off[index].handoffMs)/off[index].handoffMs*100);
+            console.log('Observer enabled samples (ms): ' + on.map(record=>record.handoffMs).join(', '));
+            console.log('Observer disabled samples (ms): ' + off.map(record=>record.handoffMs).join(', '));
+            console.log('Observer enabled median: ' + median(on.map(record=>record.handoffMs)) + ' ms');
+            console.log('Observer disabled median: ' + median(off.map(record=>record.handoffMs)) + ' ms');
+            console.log('Paired median change with observer enabled: ' + median(paired.map(value=>Math.round(value*10)/10)).toFixed(1) + '%');
+            NODE
+
       - name: Upload A/B samples
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: dom-observer-ab-samples
           path: |
-            ${{ runner.temp }}/observer-on.jsonl
-            ${{ runner.temp }}/observer-off.jsonl
+            ${{ runner.temp }}/blb-ci-checkpoints/observer-ab-benchmark/observer-on.jsonl
+            ${{ runner.temp }}/blb-ci-checkpoints/observer-ab-benchmark/observer-off.jsonl
             playwright-report/
             test-results/
           if-no-files-found: ignore
