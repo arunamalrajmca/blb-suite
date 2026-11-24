@@ -438,9 +438,12 @@ function analyzeFile(root, file) {
     if (!objectMethodFunctions.has(key)) objectMethodFunctions.set(key, []);
     objectMethodFunctions.get(key).push(node.value);
   });
+  const ancestorsByNode = new WeakMap();
+  visit(ast, (node, parent, ancestors) => ancestorsByNode.set(node, ancestors));
   const classMethodFunctions = new Map();
   const classStaticBindings = new Map();
   const classInstanceSources = new Map();
+  const classParentSources = new Map();
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
       const declaration = [...ancestors].reverse().find(item =>
@@ -448,6 +451,10 @@ function analyzeFile(root, file) {
       const className = node.id?.name || declaration?.id.name;
       if (!className) return;
       const staticIdentity = 'class-static@' + className;
+      if (node.superClass?.type === 'Identifier') {
+        classParentSources.set('class-instance@' + className, 'class-instance@' + node.superClass.name);
+        classParentSources.set(staticIdentity, 'class-static@' + node.superClass.name);
+      }
       if (node.id) classStaticBindings.set(bindingId(node.id), staticIdentity);
       if (declaration?.id) classStaticBindings.set(bindingId(declaration.id), staticIdentity);
       for (const element of node.body.body) {
@@ -489,16 +496,34 @@ function analyzeFile(root, file) {
       return (variable && functionVariables.get(variable)) ||
         (named.length === 1 ? named[0] : null);
     }
-    if (call.callee.type === 'MemberExpression' && call.callee.object.type === 'Identifier') {
+    if (call.callee.type === 'MemberExpression') {
       const property = propertyKey(call.callee.property, call.callee.computed);
       if (property === null) return null;
-      const receiver = bindingId(call.callee.object);
-      const methods = objectMethodFunctions.get(receiver + '::' + property) || [];
-      if (methods.length === 1) return methods[0];
-      const classIdentity = classInstanceSources.get(receiver) || classStaticBindings.get(receiver);
-      const classMethods = classIdentity
-        ? (classMethodFunctions.get(classIdentity + '::' + property) || []) : [];
-      return classMethods.length === 1 ? classMethods[0] : null;
+      const receiverNode = call.callee.object;
+      if (receiverNode.type === 'Identifier') {
+        const receiver = bindingId(receiverNode);
+        const methods = objectMethodFunctions.get(receiver + '::' + property) || [];
+        if (methods.length === 1) return methods[0];
+      }
+      const ancestors = ancestorsByNode.get(call) || [];
+      let classIdentity = null;
+      if (receiverNode.type === 'Identifier') {
+        const receiver = bindingId(receiverNode);
+        classIdentity = classInstanceSources.get(receiver) || classStaticBindings.get(receiver) || null;
+      } else if (receiverNode.type === 'ThisExpression') {
+        classIdentity = classContext(ancestors);
+      } else if (receiverNode.type === 'Super') {
+        const current = classContext(ancestors);
+        classIdentity = current ? classParentSources.get(current) || null : null;
+      }
+      const seen = new Set();
+      while (classIdentity && !seen.has(classIdentity)) {
+        seen.add(classIdentity);
+        const classMethods = classMethodFunctions.get(classIdentity + '::' + property) || [];
+        if (classMethods.length === 1) return classMethods[0];
+        classIdentity = classParentSources.get(classIdentity) || null;
+      }
+      return null;
     }
     return null;
   };
