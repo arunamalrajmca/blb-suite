@@ -173,6 +173,9 @@ test('the exact dedicated KJV corpus performance test may be skipped, but no oth
   const wrongShape = structuredClone(approved);
   wrongShape.tests[0].retryCount = 1;
   assert.equal(isSuccessfulSerialTestRecord(wrongShape, entry), false);
+  const wrongExpectedStatus = structuredClone(approved);
+  wrongExpectedStatus.tests[0].expectedStatus = 'passed';
+  assert.equal(isSuccessfulSerialTestRecord(wrongExpectedStatus, entry), false);
 });
 
 test('a shorter contiguous prefix is recoverable, but gaps, duplicates, and errors are rejected', () => {
