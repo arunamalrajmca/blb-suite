@@ -1051,7 +1051,7 @@
         {
           "path": "tests/browser/study-session-concurrency.spec.js",
           "requiredText": [
-            "concurrent Study captures preserve every reference, Strong's entry, and search term"
+            "concurrent Study notes and capture operations do not overwrite one another"
           ]
         }
       ],
