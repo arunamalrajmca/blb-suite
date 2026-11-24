@@ -1707,8 +1707,12 @@ test('a delayed settings callback from the replaced content bundle cannot reclai
             signalStarted();
             return new Promise((resolve, reject) => {
               releaseRead = () => originalGet(keys).then(value => {
-                signalFinished();
+                // Resolve the storage read first. Its awaiting refresh callback
+                // must run before the test observes completion; otherwise the
+                // test can assert in the microtask gap before the stale callback
+                // has actually resumed.
                 resolve(value);
+                queueMicrotask(signalFinished);
               }, reject);
             });
           }

@@ -1770,7 +1770,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
     const messageRoot = initialNode?.closest?.(
       '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '[itemprop="articleBody"], .dt-post-body, .body.markup, .available-content, .post-content, ' +
       '.entry-content, .article-body, .article-content, .content-body'
     ) || initialNode?.closest?.('article, main, [role="main"]');
     // Resolve a numbered-book suffix from its exact live Range before the
@@ -3374,6 +3374,9 @@ let doubleClickBound = false;
 let doubleClickSettingsReady = false;
 let doubleClickSettingsRefreshPromise = null;
 let doubleClickSettingsRefreshGeneration = 0;
+// Once this content-script instance is replaced, no outstanding callback or
+// event delivery from its closure may change document-level listener ownership.
+let contentBundleDisposed = false;
 const recentDoubleClickDestinations = new WeakMap();
 let doubleClickRequestSequence = 0;
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
@@ -3901,7 +3904,7 @@ function handleDoubleClickBlb(event) {
           const cueRoot = contextualTarget instanceof Element
             ? contextualTarget.closest(
               '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-              '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+              '[itemprop="articleBody"], .dt-post-body, .body.markup, .available-content, .post-content, ' +
               '.entry-content, .article-body, .article-content, .content-body'
             )
             : null;
@@ -3975,7 +3978,7 @@ function handleDoubleClickBlb(event) {
         const getVerseDiagnosticRoot = () => contextualTarget instanceof Element
           ? contextualTarget.closest(
             '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-            '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+            '[itemprop="articleBody"], .dt-post-body, .body.markup, .available-content, .post-content, ' +
             '.entry-content, .article-body, .article-content, .content-body'
           )
           : null;
@@ -4013,7 +4016,7 @@ function handleDoubleClickBlb(event) {
 }
 
 function enableDoubleClickBlb() {
-  if (doubleClickBound) return;
+  if (contentBundleDisposed || doubleClickBound) return;
   try {
     const previous = window[DOUBLE_CLICK_WINDOW_GUARD];
     if (typeof previous === 'function' && previous !== handleDoubleClickBlb) {
@@ -4028,22 +4031,19 @@ function enableDoubleClickBlb() {
 }
 
 function disableDoubleClickBlb() {
-  // Remove both this instance's listener and any older handler retained by the
-  // window guard after content-script reinjection. removeEventListener is safe
-  // when either handler is already absent.
+  // A retired bundle may still have an already-queued callback. It may remove
+  // only its own listener; never remove or clear the replacement bundle's
+  // handler from the shared window guard.
   document.removeEventListener('dblclick', handleDoubleClickBlb, true);
-  const guardedHandler = window[DOUBLE_CLICK_WINDOW_GUARD];
-  if (typeof guardedHandler === 'function') {
-    document.removeEventListener('dblclick', guardedHandler, true);
+  if (window[DOUBLE_CLICK_WINDOW_GUARD] === handleDoubleClickBlb) {
+    try { delete window[DOUBLE_CLICK_WINDOW_GUARD]; }
+    catch (_) { window[DOUBLE_CLICK_WINDOW_GUARD] = undefined; }
   }
   doubleClickBound = false;
-  // Do not leave an obsolete content-script closure or a misleading "bound"
-  // marker on the page after the feature has been disabled.
-  try { delete window[DOUBLE_CLICK_WINDOW_GUARD]; }
-  catch (_) { window[DOUBLE_CLICK_WINDOW_GUARD] = undefined; }
 }
 
 async function refreshDoubleClickBlb() {
+  if (contentBundleDisposed) return;
   const generation = ++doubleClickSettingsRefreshGeneration;
   try {
     const siteKey = getPageSelectionSiteKey();
@@ -4053,7 +4053,7 @@ async function refreshDoubleClickBlb() {
       return;
     }
     const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
-    if (generation !== doubleClickSettingsRefreshGeneration) return;
+    if (contentBundleDisposed || generation !== doubleClickSettingsRefreshGeneration) return;
     // Permission revocation may occur while the storage read is pending. Recheck
     // the gate after awaiting so a stale enabled snapshot cannot restore listeners.
     if (!suiteEnabled || siteHostAccessRevoked) {
@@ -4163,7 +4163,7 @@ chrome.storage.local.get({siteHostAccessRevokedSites:{}}).then(data => {
 }).catch(() => {});
 
 function handleContentSettingsChanged(changes, area) {
-  if (area !== 'local') return;
+  if (contentBundleDisposed || area !== 'local') return;
   if (changes.siteHostAccessRevokedSites) {
     siteHostAccessRevocationGeneration += 1;
     const revokedSites = changes.siteHostAccessRevokedSites.newValue &&
@@ -4233,6 +4233,7 @@ chrome.storage.onChanged.addListener(handleContentSettingsChanged);
 // already-active tab. Reapply the current settings through the same refresh
 // path as storage.onChanged, then acknowledge only after the bundle is ready.
 const contentScriptRefreshHandshakeListener = (message, sender, sendResponse) => {
+  if (contentBundleDisposed) return false;
   if (message?.type !== 'blbSuiteRefreshSiteFeatures' || sender?.id !== chrome.runtime.id) return false;
   chrome.storage.local.get({
     masterEnabled:true,
@@ -4253,9 +4254,9 @@ chrome.runtime.onMessage.addListener(contentScriptRefreshHandshakeListener);
 try { window.__blbSuiteRefreshHandshakeReadyV1 = true; } catch (_) {}
 
 const contentSettingsCleanup = () => {
-  // Invalidate any storage-backed Double-click refresh still awaiting a read.
-  // Otherwise an old bundle can resume after reinjection and reclaim the
-  // document-level dblclick handler from the replacement instance.
+  // Retire this closure before invalidating pending work or releasing listeners.
+  // Queued storage/message callbacks must not start a fresh refresh after cleanup.
+  contentBundleDisposed = true;
   doubleClickSettingsRefreshGeneration += 1;
   disableDoubleClickBlb();
   chrome.storage.onChanged.removeListener(handleContentSettingsChanged);

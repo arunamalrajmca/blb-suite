@@ -1,61 +1,80 @@
 name: Experimental Full-Audit Concurrency Equivalence
-run-name: Browser Concurrency Sample — ${{ github.ref_name }} — Run ${{ github.run_number }}
+run-name: Full Browser Concurrency Equivalence — ${{ github.ref_name }} — Run ${{ github.run_number }}
 
 on:
   workflow_dispatch:
+    inputs:
+      reuse_run_id:
+        description: 'Optional prior run ID; artifacts are reused only when commit and inventory fingerprints match.'
+        required: false
+        type: string
   pull_request:
     branches: [ main ]
-    # This representative serial-versus-parallel comparison is an explicit
-    # qualification step, not a per-commit prerequisite. It inventories every
-    # spec file but executes only risk-weighted representatives from each.
-    types: [labeled]
+    # PR updates run only the focused lifecycle-race regression. Full audits are manual dispatches only.
+    types: [synchronize]
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
-  group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}-${{ github.event.label.name || github.event.action || 'dispatch' }}
+  group: full-audit-concurrency-equivalence-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  compare-representative-browser-inventory:
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-audit-concurrency-equivalence') }}
-    name: Compare representative one-worker and four-worker browser audits
+  checkpoint-recovery-unit-tests:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    name: Checkpoint recovery validator unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Check recovery script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Run checkpoint recovery validator tests
+        run: node --test scripts/full-audit-checkpoint-validation.test.mjs
+
+  screen-complete-browser-inventory:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.reuse_run_id == '' }}
+    name: Fail-fast complete-inventory browser screening
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - name: Checkout selected ref
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
-
       - name: Prepare evidence directory
         run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency"
-
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install --prefer-offline --no-audit --no-fund
-
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
-
-      - name: Compare representative tests from every spec under both execution models
+      - name: Run fail-fast four-worker screening over the complete browser inventory
         id: comparison
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency
+          BLB_CONCURRENCY_MODE: screen
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
-
-      - name: Upload serial and parallel comparison evidence
+      - name: Upload complete-inventory screening evidence
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -63,18 +82,620 @@ jobs:
           path: ${{ runner.temp }}/blb-full-audit-concurrency
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Publish comparison result
+      - name: Publish screening result
         if: always()
         env:
           OUTCOME: ${{ steps.comparison.outcome }}
         run: |
           {
-            echo "## Full-audit concurrency equivalence"
+            echo "## Complete-inventory concurrency screening"
             echo
-            echo "Execution: one-worker serial baseline versus one four-worker run over the same risk-weighted sample; the complete inventory is still discovered and accounted for."
+            echo "Execution: one complete four-worker screening pass with fail-fast enabled."
+            echo "Screening result: **$OUTCOME**"
             echo
-            echo "Result: **$OUTCOME**"
-            echo
-            echo "The uploaded artifact contains the complete discovered inventory, per-spec sample rationale, serial and parallel test records, logs, and exact identity/status/retry comparisons."
+            echo "This preliminary screen is not a serial-versus-parallel equivalence proof."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  deep-serial-baseline:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: Deep stage 1 — isolated serial baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep" "${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery"
+      - name: Configure serial checkpoint recovery directory
+        run: |
+          echo "BLB_CONCURRENCY_SERIAL_RECOVERY_DIR=${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery" >> "$GITHUB_ENV"
+          echo "BLB_CONCURRENCY_ALLOW_AUDIT_HARNESS_ONLY_RECOVERY=true" >> "$GITHUB_ENV"
+      - name: Restore a prior complete serial baseline when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Check whether a complete serial baseline was restored
+        id: complete_serial_restore
+        if: always()
+        env:
+          REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if node --input-type=module -e 'import fs from "node:fs"; import crypto from "node:crypto"; import { isSuccessfulSerialTestRecord } from "./scripts/full-audit-checkpoint-validation.mjs"; const p=process.argv[1]; const s=JSON.parse(fs.readFileSync(p+"/serial-stage-summary.json","utf8")); const i=JSON.parse(fs.readFileSync(p+"/inventory.json","utf8")); const r=JSON.parse(fs.readFileSync(p+"/serial-results.json","utf8")); const e=JSON.parse(fs.readFileSync(p+"/serial-errors.json","utf8")); const list=i.scheduledTests; const digest=Array.isArray(list)?crypto.createHash("sha256").update(JSON.stringify(list)).digest("hex"):""; const seen=new Set(); const records=Array.isArray(r)&&Array.isArray(list)&&r.length===list.length&&r.every((x,n)=>isSuccessfulSerialTestRecord(x,list[n],seen)); process.exit(s.complete===true&&i.sourceCommit===process.env.SOURCE_SHA&&Array.isArray(list)&&i.scheduled===list.length&&i.scheduledDigest===digest&&s.scheduledTestCount===list.length&&s.serialProcessCount===list.length&&records&&Array.isArray(e)&&e.length===0?0:1)' "$REPORT_DIR" 2>/dev/null; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Restore prior serial checkpoint batch 1 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-1-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-01
+      - name: Restore prior serial checkpoint batch 2 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-2-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-02
+      - name: Restore prior serial checkpoint batch 3 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-3-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-03
+      - name: Restore prior serial checkpoint batch 4 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-4-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-04
+      - name: Restore prior serial checkpoint batch 5 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-5-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-05
+      - name: Restore prior serial checkpoint batch 6 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-6-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-06
+      - name: Restore prior serial checkpoint batch 7 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-7-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-07
+      - name: Restore prior serial checkpoint batch 8 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-8-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-08
+      - name: Restore prior serial checkpoint batch 9 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-9-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-09
+      - name: Restore prior serial checkpoint batch 10 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-10-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-10
+      - name: Restore prior serial checkpoint batch 11 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-11-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-11
+      - name: Restore prior serial checkpoint batch 12 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' && steps.complete_serial_restore.outputs.complete != 'true' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-serial-batch-12-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-recovery/batch-12
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Verify repository test ownership inventory
+        run: node scripts/test-suite-inventory.mjs
+      - name: Serial baseline batch 1 — next 100 isolated tests
+        id: serial_batch_1
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 1
+        if: always() && steps.serial_batch_1.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-1-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 2 — next 100 isolated tests
+        id: serial_batch_2
+        if: ${{ success() && steps.serial_batch_1.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 2
+        if: always() && steps.serial_batch_2.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-2-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 3 — next 100 isolated tests
+        id: serial_batch_3
+        if: ${{ success() && steps.serial_batch_2.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 3
+        if: always() && steps.serial_batch_3.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-3-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 4 — next 100 isolated tests
+        id: serial_batch_4
+        if: ${{ success() && steps.serial_batch_3.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 4
+        if: always() && steps.serial_batch_4.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-4-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 5 — next 100 isolated tests
+        id: serial_batch_5
+        if: ${{ success() && steps.serial_batch_4.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 5
+        if: always() && steps.serial_batch_5.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-5-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 6 — next 100 isolated tests
+        id: serial_batch_6
+        if: ${{ success() && steps.serial_batch_5.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 6
+        if: always() && steps.serial_batch_6.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-6-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 7 — next 100 isolated tests
+        id: serial_batch_7
+        if: ${{ success() && steps.serial_batch_6.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 7
+        if: always() && steps.serial_batch_7.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-7-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 8 — next 100 isolated tests
+        id: serial_batch_8
+        if: ${{ success() && steps.serial_batch_7.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 8
+        if: always() && steps.serial_batch_8.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-8-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 9 — next 100 isolated tests
+        id: serial_batch_9
+        if: ${{ success() && steps.serial_batch_8.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 9
+        if: always() && steps.serial_batch_9.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-9-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 10 — next 100 isolated tests
+        id: serial_batch_10
+        if: ${{ success() && steps.serial_batch_9.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 10
+        if: always() && steps.serial_batch_10.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-10-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 11 — next 100 isolated tests
+        id: serial_batch_11
+        if: ${{ success() && steps.serial_batch_10.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 11
+        if: always() && steps.serial_batch_11.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-11-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 12 — next 100 isolated tests
+        id: serial_batch_12
+        if: ${{ success() && steps.serial_batch_11.outputs.complete != 'true' }}
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 12
+        if: always() && steps.serial_batch_12.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-12-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Require the complete serial inventory before parallel qualification
+        run: node -e "const s=require(process.env.SUMMARY); if (!s.complete) { console.error(JSON.stringify(s)); process.exit(1); }"
+        env:
+          SUMMARY: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-stage-summary.json
+      - name: Upload complete serial baseline for dependent repetitions
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: error
+          retention-days: 30
+
+  deep-parallel-repetition-1:
+    needs: [deep-serial-baseline]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: Deep stage 2 — parallel repetition 1 of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Restore prior successful parallel repetition 1 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-repetition-1-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Stage 2 — run and compare parallel repetition 1 (fail fast)
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_REPETITION: '1'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload repetition 1 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-repetition-1-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+
+  deep-parallel-repetition-2:
+    needs: [deep-parallel-repetition-1]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: Deep stage 3 — parallel repetition 2 of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Restore prior successful parallel repetition 2 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-repetition-2-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Stage 3 — run and compare parallel repetition 2 (fail fast)
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_REPETITION: '2'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload repetition 2 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-repetition-2-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+
+  deep-parallel-repetition-3:
+    needs: [deep-parallel-repetition-2]
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    name: Deep stage 4 — parallel repetition 3 of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Prepare evidence directory
+        run: mkdir -p "${{ runner.temp }}/blb-full-audit-concurrency-deep"
+      - name: Restore prior successful parallel repetition 3 when requested
+        if: ${{ github.event.inputs.reuse_run_id != '' }}
+        uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          name: full-audit-deep-repetition-3-${{ github.event.inputs.reuse_run_id }}
+          run-id: ${{ github.event.inputs.reuse_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Download passing serial baseline
+        uses: actions/download-artifact@v6
+        with:
+          name: full-audit-deep-serial-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Check concurrency audit script syntax
+        run: node --check scripts/compare-full-audit-concurrency.mjs
+      - name: Stage 4 — run and compare parallel repetition 3 (fail fast)
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-parallel
+          BLB_CONCURRENCY_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BLB_CONCURRENCY_REPETITION: '3'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Upload repetition 3 evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-repetition-3-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+
+  validate-retired-content-bundle-listener-race:
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' }}
+    name: Focused retired content-bundle listener race regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout updated PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run the exact lifecycle race regression without relaxing assertions
+        run: >-
+          npx playwright test tests/browser/extension-lifecycle.spec.js
+          --project=extension-chromium
+          --workers=1
+          --max-failures=1
+          --grep="a delayed settings callback from the replaced content bundle cannot reclaim the Double-click listener"
+          --reporter=list
+      - name: Preserve focused regression diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: focused-retired-content-bundle-listener-race-${{ github.run_id }}
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 30

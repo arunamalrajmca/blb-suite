@@ -1212,7 +1212,7 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     await page.locator('#bible-reference').click();
     await expect.poll(() => extensionWorker.evaluate(async target => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      const matches = tabs.filter(tab => (tab.url || tab.pendingUrl || '') === target);
+      const matches = tabs.filter(tab => tab.url === target || tab.pendingUrl === target);
       const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
       return {count:matches.length, activeId:active?.id ?? null, matchId:matches[0]?.id ?? null};
     }, destinationUrl)).toEqual({

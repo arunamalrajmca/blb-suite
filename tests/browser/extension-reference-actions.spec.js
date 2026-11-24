@@ -684,6 +684,87 @@ test.describe('core user-visible E2E', () => {
       waitUntil: 'domcontentloaded'
     });
     await page.waitForLoadState('load').catch(() => {});
+    // The article host is covered by a runtime-registered content script, not
+    // a manifest match. The background activates the committed document from
+    // tabs.onUpdated('complete'); page load alone does not mean that async
+    // registration/injection and the content-script bootstrap have finished.
+    // Wait for the real document-level handler before dispatching the gesture,
+    // otherwise worker contention can make the test double-click a page that
+    // does not yet have the extension listener installed.
+    const readIsolatedWorldActivationState = () => extensionWorker.evaluate(async pageUrl => {
+      const tabs = await chrome.tabs.query({});
+      const tab = tabs.find(candidate => candidate.url === pageUrl || candidate.pendingUrl === pageUrl);
+      if (!tab?.id) return { ready:false, reason:'source-tab-not-found', pageUrl };
+      try {
+        // chrome.scripting.executeScript defaults to ISOLATED world, the same
+        // JavaScript world used by content.js. page.evaluate() runs in MAIN
+        // world and cannot observe content-script window properties.
+        const [result] = await chrome.scripting.executeScript({
+          target:{ tabId:tab.id },
+          func:() => ({
+            fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true,
+            loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+            handlerBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function',
+            refreshHandshakeReady:window.__blbSuiteRefreshHandshakeReadyV1 === true
+          })
+        });
+        const state = result?.result || {};
+        return { ...state, ready:state.loaded === true && state.handlerBound === true, tabId:tab.id, url:tab.url };
+      } catch (error) {
+        return { ready:false, reason:'isolated-world-probe-failed', error:String(error), tabId:tab.id, url:tab.url };
+      }
+    }, page.url());
+    try {
+      await expect.poll(readIsolatedWorldActivationState, {
+        timeout:20000, intervals:[100, 200, 300, 500]
+      }).toMatchObject({ ready:true, loaded:true, handlerBound:true });
+    } catch (error) {
+      const diagnostic = await extensionWorker.evaluate(async pageUrl => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find(candidate => candidate.url === pageUrl || candidate.pendingUrl === pageUrl);
+        if (!tab?.id) return { pageUrl, reason:'source-tab-not-found' };
+        const settings = await chrome.storage.local.get({
+          masterEnabled:true, doubleClickBlbSites:{}, pageSelectionButtonSites:{},
+          siteHostAccessRevokedSites:{}
+        });
+        const pattern = (() => { try { return new URL(tab.url).origin + '/*'; } catch (_) { return ''; } })();
+        let permission = false;
+        try { permission = await chrome.permissions.contains({origins:[pattern]}); }
+        catch (cause) { permission = {error:String(cause)}; }
+        let shouldInject = false, files = [];
+        try {
+          shouldInject = await shouldInjectContentScriptForTab(tab, settings);
+          files = contentScriptFilesForTab(tab, settings);
+        } catch (cause) { shouldInject = {error:String(cause)}; }
+        let registrations = [];
+        try {
+          registrations = (await chrome.scripting.getRegisteredContentScripts())
+            .filter(script => (script.matches || []).includes(pattern));
+        } catch (cause) { registrations = [{error:String(cause)}]; }
+        let isolatedWorld = null;
+        try {
+          const [result] = await chrome.scripting.executeScript({
+            target:{tabId:tab.id},
+            func:() => ({
+              fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true,
+              loaded:window.__blbSuiteContentScriptLoadedV2 === true,
+              handlerBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function',
+              refreshHandshakeReady:window.__blbSuiteRefreshHandshakeReadyV1 === true
+            })
+          });
+          isolatedWorld = result?.result ?? null;
+        } catch (cause) { isolatedWorld = {error:String(cause)}; }
+        return {
+          tab:{id:tab.id,url:tab.url,pendingUrl:tab.pendingUrl || null,status:tab.status},
+          settings, pattern, permission, shouldInject, files, registrations, isolatedWorld,
+          hasInjectionLock:typeof contentScriptInjectionLocks !== 'undefined' && contentScriptInjectionLocks.has(tab.id),
+          registrationLockCount:typeof runtimeContentScriptRegistrationLocks !== 'undefined'
+            ? runtimeContentScriptRegistrationLocks.size : null
+        };
+      }, page.url());
+      console.error('Article verse-context isolated-world activation diagnostics: ' + JSON.stringify(diagnostic));
+      throw error;
+    }
     // Ensure the actual article content is present before marking its real cue.
     const article = page.locator('.available-content, .body.markup, .post-body, .dt-post-body').first();
     await expect(article, 'Supply of Grace article body must render').toBeVisible({ timeout: 20000 });
