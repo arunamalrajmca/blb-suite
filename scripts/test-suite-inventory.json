@@ -198,6 +198,23 @@
           "requiredText": "ci-section-checkpoint"
         }
       ]
+    },
+    {
+      "id": "checkpointed-browser-audit-runner-tests",
+      "pattern": "scripts/run-checkpointed-playwright-audit.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/manual-full-test-audit.yml",
+          "requiredText": "node scripts/run-checkpointed-playwright-audit.mjs \"$test_list\""
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "BLB_CI_CHECKPOINT_FINGERPRINT"
+        }
+      ]
     }
   ],
   "manualOnly": [
