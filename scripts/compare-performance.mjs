@@ -1,8 +1,24 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 
-function readSamples(path) {
-  return fs.readFileSync(path, 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+function readSamples(path, expectedVariant) {
+  const records = fs.readFileSync(path, 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse);
+  if (records.some(record => Number.isInteger(record.sample) || record.variant != null)) {
+    const seen = new Set();
+    for (const record of records) {
+      if (!Number.isInteger(record.sample) || record.sample < 1 || record.sample > 11 ||
+          record.variant !== expectedVariant) {
+        throw new Error('Invalid resumable performance sample identity in ' + path);
+      }
+      const key = record.scenario + '|' + record.sample;
+      if (seen.has(key)) throw new Error('Duplicate resumable performance sample: ' + key);
+      seen.add(key);
+    }
+    records.sort((left, right) =>
+      String(left.scenario).localeCompare(String(right.scenario)) || left.sample - right.sample
+    );
+  }
+  return records;
 }
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -24,8 +40,8 @@ function summarize(samples) {
   return byScenario;
 }
 
-const baselineSamples = readSamples(process.argv[2]);
-const candidateSamples = readSamples(process.argv[3]);
+const baselineSamples = readSamples(process.argv[2], 'baseline');
+const candidateSamples = readSamples(process.argv[3], 'candidate');
 const baseline = summarize(baselineSamples);
 const candidate = summarize(candidateSamples);
 
