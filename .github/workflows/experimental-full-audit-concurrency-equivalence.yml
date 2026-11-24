@@ -96,20 +96,220 @@ jobs:
         run: node --check scripts/compare-full-audit-concurrency.mjs
       - name: Verify repository test ownership inventory
         run: node scripts/test-suite-inventory.mjs
-      - name: Stage 1 — run isolated serial baseline with per-test checkpoints
+      - name: Serial baseline batch 1 — next 100 isolated tests
+        if: success()
         env:
           BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
           BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         run: node scripts/compare-full-audit-concurrency.mjs
-      - name: Upload serial baseline and checkpoint evidence
+      - name: Preserve serial checkpoint batch 1
         if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-1-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 2 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 2
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-2-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 3 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 3
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-3-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 4 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 4
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-4-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 5 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 5
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-5-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 6 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 6
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-6-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 7 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 7
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-7-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 8 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 8
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-8-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 9 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 9
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-9-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 10 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 10
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-10-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 11 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 11
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-11-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Serial baseline batch 12 — next 100 isolated tests
+        if: success()
+        env:
+          BLB_CONCURRENCY_REPORT_DIR: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          BLB_CONCURRENCY_MODE: stage-serial
+          BLB_CONCURRENCY_SERIAL_BATCH_SIZE: '100'
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: node scripts/compare-full-audit-concurrency.mjs
+      - name: Preserve serial checkpoint batch 12
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: full-audit-deep-serial-batch-12-${{ github.run_id }}
+          path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Require the complete serial inventory before parallel qualification
+        run: node -e "const s=require(process.env.SUMMARY); if (!s.complete) { console.error(JSON.stringify(s)); process.exit(1); }"
+        env:
+          SUMMARY: ${{ runner.temp }}/blb-full-audit-concurrency-deep/serial-stage-summary.json
+      - name: Upload complete serial baseline for dependent repetitions
         uses: actions/upload-artifact@v6
         with:
           name: full-audit-deep-serial-${{ github.run_id }}
           path: ${{ runner.temp }}/blb-full-audit-concurrency-deep
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
   deep-parallel-repetition-1:
