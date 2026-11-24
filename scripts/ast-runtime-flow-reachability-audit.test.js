@@ -560,3 +560,14 @@ test('traces callback values exposed through Object.values and Object.entries', 
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'entryHandler@6'));
 });
+
+test('traces nested values through the top-level descriptor value boundary', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { nested: { onReady: callback } };',
+    'const descriptors = Object.getOwnPropertyDescriptors(registry);',
+    'const handler = descriptors.nested.value.onReady;'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+});
