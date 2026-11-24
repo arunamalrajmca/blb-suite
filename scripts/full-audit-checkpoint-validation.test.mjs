@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import {
   AUDIT_HARNESS_RECOVERY_FILES,
   isAuditHarnessOnlyCompatibleSource,
@@ -59,6 +60,49 @@ test('only the exact audit-harness-only ancestor change set is compatible', () =
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: true, runGit }), true);
   assert.equal(isAuditHarnessOnlyCompatibleSource('not-a-sha', current, { enabled: true, runGit }), false);
   assert.equal(isAuditHarnessOnlyCompatibleSource(source, current, { enabled: false, runGit }), false);
+});
+
+test('the real git ancestry and diff checks accept only the four-file audit-harness change', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-git-compatibility-test-'));
+  const git = (...args) => {
+    const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return (result.stdout || '').trim();
+  };
+  try {
+    git('init');
+    git('config', 'user.name', 'Checkpoint Test');
+    git('config', 'user.email', 'checkpoint-test@example.invalid');
+    for (const file of AUDIT_HARNESS_RECOVERY_FILES) {
+      const target = path.join(directory, file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, 'baseline\n');
+    }
+    git('add', '.');
+    git('commit', '-m', 'baseline');
+    const baseline = git('rev-parse', 'HEAD');
+    for (const file of AUDIT_HARNESS_RECOVERY_FILES) {
+      fs.writeFileSync(path.join(directory, file), 'audit harness update\n');
+    }
+    git('add', '.');
+    git('commit', '-m', 'audit harness only');
+    const harnessHead = git('rev-parse', 'HEAD');
+    assert.equal(isAuditHarnessOnlyCompatibleSource(baseline, harnessHead, {
+      enabled: true, cwd: directory
+    }), true);
+
+    const productionFile = path.join(directory, 'extension', 'content.js');
+    fs.mkdirSync(path.dirname(productionFile), { recursive: true });
+    fs.writeFileSync(productionFile, 'production change\n');
+    git('add', '.');
+    git('commit', '-m', 'production change');
+    const productionHead = git('rev-parse', 'HEAD');
+    assert.equal(isAuditHarnessOnlyCompatibleSource(baseline, productionHead, {
+      enabled: true, cwd: directory
+    }), false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('a production or test-inventory change invalidates audit-harness compatibility', () => {
