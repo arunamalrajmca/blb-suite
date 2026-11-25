@@ -60,11 +60,23 @@ function collectExportsAndImports(ast,file){
   const isModuleExportsReference=node=>node?.type==='MemberExpression'&&node.object.type==='Identifier'
     &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
   const moduleExportsReplacements=[];
+  const resolveVariable=identifier=>(scopeManager.scopes||[]).flatMap(scope=>scope.references||[])
+    .find(item=>item.identifier===identifier)?.resolved||null;
   const resolveVariableDeclarator=identifier=>{
-    const reference=(scopeManager.scopes||[]).flatMap(scope=>scope.references||[])
-      .find(item=>item.identifier===identifier);
-    const definition=reference?.resolved?.defs?.find(item=>item.type==='Variable');
+    const definition=resolveVariable(identifier)?.defs?.find(item=>item.type==='Variable');
     return definition?.node?.type==='VariableDeclarator'?definition.node:null;
+  };
+  const resolveStaticObjectSpread=identifier=>{
+    if(identifier?.type!=='Identifier')return null;
+    const variable=resolveVariable(identifier);
+    const declarator=variable?.defs?.find(item=>item.type==='Variable')?.node;
+    if(declarator?.type!=='VariableDeclarator'||declarator.init?.type!=='ObjectExpression'
+      ||declarator.parent?.type==='VariableDeclaration'&&declarator.parent.kind!=='const')return null;
+    const references=(variable.references||[]).filter(reference=>reference.identifier!==declarator.id);
+    // The binding must be read only at this spread site; any additional use could
+    // mutate the object or make its runtime contents differ from the initializer.
+    if(references.length!==1||references[0].identifier!==identifier||!references[0].isRead())return null;
+    return declarator.init;
   };
   const isCurrentCommonJsExportAlias=(identifier,atNode=identifier)=>{
     if(identifier?.type!=='Identifier')return false;
@@ -77,7 +89,18 @@ function collectExportsAndImports(ast,file){
     if(node?.type==='Identifier'&&isCurrentCommonJsExportAlias(node))return true;
     return isModuleExportsReference(node);
   };
-  const recordObjectProperties=(object,exportsSnapshot=null)=>{
+  const recordObjectProperties=(object,exportsSnapshot=null,activeAliases=new Set())=>{
+    if(object?.type==='Identifier'){
+      const variable=resolveVariable(object);
+      const declarator=variable?.defs?.find(item=>item.type==='Variable')?.node;
+      const staticObject=resolveStaticObjectSpread(object);
+      if(staticObject&&declarator&&!activeAliases.has(declarator)){
+        activeAliases.add(declarator);
+        recordObjectProperties(staticObject,exportsSnapshot,activeAliases);
+        activeAliases.delete(declarator);
+      }
+      return;
+    }
     if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
       &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
       &&isUnboundGlobal(object.callee.object)){
@@ -97,7 +120,7 @@ function collectExportsAndImports(ast,file){
         // Literal spreads and a proven current CommonJS exports snapshot are safe; other identifiers remain unknown.
         if(exportsSnapshot!==null&&property.argument.type==='Identifier'&&property.argument.name==='exports'&&isUnboundGlobal(property.argument)){
           for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
-        }else recordObjectProperties(property.argument,exportsSnapshot);
+        }else recordObjectProperties(property.argument,exportsSnapshot,activeAliases);
         continue;
       }
       if(property.type!=='Property'||property.kind!=='init')continue;
