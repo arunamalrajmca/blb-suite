@@ -31,7 +31,7 @@ const matches = {
 };
 
 export function fingerprintTreeEntries(entries, predicate) {
-  const selected = entries.filter(entry => predicate(entry.path)).sort((a, b) => a.path.localeCompare(b.path));
+  const selected = entries.filter(entry => predicate(entry.path)).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   if (!selected.length) throw new Error('No tracked source files matched the checkpoint fingerprint scope.');
   const hash = crypto.createHash('sha256');
   for (const entry of selected) hash.update(entry.path + '\0' + (entry.mode || '100644') + '\0' + entry.sha + '\n');
