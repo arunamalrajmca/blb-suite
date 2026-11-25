@@ -809,7 +809,8 @@ test('resolves literal object spreads but leaves identifier spreads unproven',()
   ].join('\n'));
   fs.writeFileSync(path.join(root,'dynamic.cjs'),[
    'function service() {}',
-   'const source = { service };',
+   'function createSource() { return { service }; }',
+   'const source = createSource();',
    'module.exports = { ...source };'
   ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),[
