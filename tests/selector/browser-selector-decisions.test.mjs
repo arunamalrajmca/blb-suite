@@ -1336,8 +1336,23 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "full-audit changes must trigger the native shortcut workflow");
   assert.ok(performance.includes("tests/browser/performance-batch.spec.js --workers=1"),
     "the batched benchmark must have a dedicated performance-workflow owner");
-  assert.ok(performance.includes(".github/workflows/manual-full-test-audit.yml"),
-    "full-audit changes must trigger the performance workflow");
+  const performancePathFilters = performance.split("    paths:\\n")[1]?.split("\\n  workflow_dispatch:")[0] || "";
+  assert.ok(performancePathFilters.includes("'extension/**'") &&
+    performancePathFilters.includes("'package.json'") &&
+    performancePathFilters.includes("'package-lock.json'"),
+    "measured performance must run for shipped extension or production dependency changes");
+  assert.ok(!performancePathFilters.includes("'tests/**'") &&
+    !performancePathFilters.includes("'scripts/**'") &&
+    !performancePathFilters.includes(".github/workflows/") &&
+    !performancePathFilters.includes(".github/actions/"),
+    "test, CI, workflow, and developer-tooling changes alone must not trigger end-user performance runs");
+  assert.ok(!performancePathFilters.includes(".github/workflows/manual-full-test-audit.yml"),
+    "full-audit workflow changes alone must not trigger measured performance");
+  assert.ok(audit.includes("Detect end-user production changes for performance qualification") &&
+    audit.includes("has_production_changes=true") &&
+    audit.includes("has_production_changes=false") &&
+    audit.includes("SKIPPED — no relevant production changes"),
+    "the full-audit summary must explicitly skip performance when shipped production code is unchanged");
   assert.ok(reference.includes("!contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
     "the References workflow must suppress its browser matrix when the full audit owns the suite");
   assert.ok(performance.includes("'ci-full-test-audit'"),
