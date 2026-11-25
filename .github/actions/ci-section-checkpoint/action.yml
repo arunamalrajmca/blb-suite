@@ -12,7 +12,7 @@ inputs:
     required: false
     default: ''
   fingerprint:
-    description: Exact source and environment fingerprint recorded in the completion marker.
+    description: Exact source/test-input fingerprint; the action records the runner and toolchain environment separately.
     required: true
   run:
     description: Shell command to execute when no compatible completed checkpoint exists.
@@ -59,7 +59,10 @@ runs:
         RUNNER_ARCH: ${{ runner.arch }}
       run: |
         set -euo pipefail
-        value=$(printf '%s' "$RUNNER_OS|$RUNNER_ARCH|$IMAGE|$NODE_VERSION" | sha256sum | cut -d' ' -f1)
+        npm_version=$(npm --version 2>/dev/null || printf 'unavailable')
+        python_version=$(python --version 2>/dev/null || printf 'unavailable')
+        playwright_version=$(npx playwright --version 2>/dev/null || printf 'unavailable')
+        value=$(printf '%s' "$RUNNER_OS|$RUNNER_ARCH|$IMAGE|$NODE_VERSION|$npm_version|$python_version|$playwright_version" | sha256sum | cut -d' ' -f1)
         echo "value=$value" >> "$GITHUB_OUTPUT"
     - name: Restore the newest compatible section checkpoint
       id: restore
