@@ -58,7 +58,7 @@ runs:
         key: ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
           ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
-          ${{ inputs.restore_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
+          ${{ inputs.restore_prefix }}
     - name: Validate the restored completion marker
       id: check
       shell: bash
