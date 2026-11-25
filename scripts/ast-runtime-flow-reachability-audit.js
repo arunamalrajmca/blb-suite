@@ -986,7 +986,7 @@ function analyzeFile(root, file) {
       }
       const asyncIterables = resolveAsyncIterableExpressions(node.init);
       if (asyncIterables.length) {
-        const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
+        const source = assigned || ('iterable-source@' + node.init.loc.start.line + ':' + node.init.loc.start.column);
         asyncIterableSources.set(assigned, source);
         for (const asyncIterable of asyncIterables) {
           if (asyncIterable.collection) {
@@ -1399,7 +1399,9 @@ function analyzeFile(root, file) {
           return [candidate];
         }) : resolvedIterables;
         if (compatibleIterables.length) {
-          source = 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          source = iterable?.type === 'Identifier'
+            ? asyncIterableSources.get(bindingId(iterable)) || bindingId(iterable)
+            : 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           for (const iterableCandidate of compatibleIterables) {
             if (iterableCandidate.collection) {
               if (iterableCandidate.collection.arguments[0]) {
