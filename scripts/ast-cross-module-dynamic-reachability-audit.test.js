@@ -638,3 +638,20 @@ test('keeps Object.assign and defineProperty writes through detached exports ali
   for(const name of ['staleAssign','staleDefine']) assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported===name&&x.unresolvedExport),name);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves statically known template-literal CommonJS export keys',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-template-export-keys-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'function stopService() {}',
+   "module.exports[`start`] = startService;",
+   "Object.defineProperty(module.exports, `stop`, { value: stopService });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { start, stop } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
