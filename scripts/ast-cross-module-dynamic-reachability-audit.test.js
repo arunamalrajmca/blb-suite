@@ -1426,9 +1426,21 @@ test('invalidates CommonJS export owners when Object.assign receives Object.crea
    '  [key]: { enumerable: true, value: createService() }',
    '}));'
   ].join('\n'));
-  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
-  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='service'
-    &&x.exportedLocal===null&&x.unresolvedExport),'dynamic Object.create descriptor keys may overwrite service');
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function service() {}',
+   "const key = process.env.EXPORT_NAME;",
+   'module.exports = { service, ...Object.create(null, {',
+   '  [key]: { enumerable: true, value: createService() }',
+   '}) };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: assignedService } = require('./service.cjs');",
+   "const { service: spreadService } = require('./spread.cjs');"
+  ].join('\n'));
+  const files=['service.cjs','spread.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['service.cjs','spread.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal===null&&x.unresolvedExport),'dynamic Object.create descriptor keys may overwrite service in '+target);
+  }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
