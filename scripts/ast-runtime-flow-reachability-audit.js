@@ -660,6 +660,12 @@ function analyzeFile(root, file) {
     if (expression.type === 'AwaitExpression') {
       return resolveAsyncIterableExpressions(expression.argument, seen);
     }
+    if (expression.type === 'ChainExpression') {
+      return resolveAsyncIterableExpressions(expression.expression, seen);
+    }
+    if (expression.type === 'AssignmentExpression') {
+      return resolveAsyncIterableExpressions(expression.right, seen);
+    }
     if (expression.type === 'ConditionalExpression') {
       return [
         ...resolveAsyncIterableExpressions(expression.consequent, new Set(seen)),
