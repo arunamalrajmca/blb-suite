@@ -623,6 +623,13 @@ function analyzeFile(root, file) {
               values.push(...yieldedValues(asyncIterable.iterator, seen));
             } else if (asyncIterable.iterator) {
               values.push(...asyncIteratorResultValues(asyncIterable.iterator));
+              if (asyncIterable.iteratorObject &&
+                  returnedValues(asyncIterable.iterator).some(returned => returned.type === 'ThisExpression')) {
+                const nextMethod = asyncIterable.iteratorObject.properties.find(property =>
+                  property.type === 'Property' && propertyKey(property.key, property.computed) === 'next' &&
+                  isFunction(property.value))?.value;
+                if (nextMethod) values.push(...asyncIteratorStepValues(nextMethod));
+              }
             }
           }
         } else values.push(node.argument);
