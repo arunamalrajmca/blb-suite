@@ -516,13 +516,13 @@ jobs:
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 1
       - name: Save browser-shard checkpoint after shard 1/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Save browser-matrix performance checkpoint after shard 1/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -535,13 +535,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 2
       - name: Save browser-shard checkpoint after shard 2/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Save browser-matrix performance checkpoint after shard 2/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -554,13 +554,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 3
       - name: Save browser-shard checkpoint after shard 3/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Save browser-matrix performance checkpoint after shard 3/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -573,13 +573,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 4
       - name: Save browser-shard checkpoint after shard 4/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Save browser-matrix performance checkpoint after shard 4/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -592,13 +592,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 5
       - name: Save browser-shard checkpoint after shard 5/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Save browser-matrix performance checkpoint after shard 5/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -611,13 +611,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 6
       - name: Save browser-shard checkpoint after shard 6/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Save browser-matrix performance checkpoint after shard 6/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -630,13 +630,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 7
       - name: Save browser-shard checkpoint after shard 7/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Save browser-matrix performance checkpoint after shard 7/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -649,13 +649,13 @@ if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 8
       - name: Save browser-shard checkpoint after shard 8/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Save browser-matrix performance checkpoint after shard 8/8
-if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
