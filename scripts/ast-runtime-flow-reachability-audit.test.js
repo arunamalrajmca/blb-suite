@@ -1288,7 +1288,7 @@ test('binds stored callback values to Array.fromAsync mapper parameters', () => 
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'), JSON.stringify(result.flowEdges));
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
 });
 
 test('tracks callback values returned by an awaited Array.fromAsync mapper', () => {
@@ -1331,7 +1331,7 @@ test('binds stored callback values to Map.groupBy mapper parameters', () => {
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument' &&
-    edge.method === 'Map.groupBy'), JSON.stringify(result.flowEdges));
+    edge.detail === 'Map.groupBy'));
 });
 
 test('supports a separately declared Object.groupBy mapper callback', () => {
@@ -1343,5 +1343,5 @@ test('supports a separately declared Object.groupBy mapper callback', () => {
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument' &&
-    edge.method === 'Object.groupBy'), JSON.stringify(result.flowEdges));
+    edge.detail === 'Object.groupBy'));
 });
