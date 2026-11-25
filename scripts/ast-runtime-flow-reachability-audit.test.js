@@ -1379,7 +1379,7 @@ test('traces async-generator yielded callbacks through for-await-of bindings', (
     '    handler();',
     '  }',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@7'));
 });
@@ -1391,7 +1391,7 @@ test('traces direct async-generator calls through for-await-of bindings', () => 
     'async function run() {',
     '  for await (const handler of handlers()) handler();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@4'));
 });
@@ -1407,7 +1407,7 @@ test('traces awaited async-iterator next values through the step value property'
     '  const selected = step.value;',
     '  selected();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'selected@7'));
 });
