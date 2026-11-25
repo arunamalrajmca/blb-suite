@@ -678,49 +678,50 @@ function analyzeFile(root, file) {
     }
     return null;
   };
-  const resolveAsyncIterableExpression = (expression, seen = new Set()) => {
-    if (!expression) return null;
+  const resolveAsyncIterableExpressions = (expression, seen = new Set()) => {
+    if (!expression) return [];
     if (expression.type === 'AwaitExpression') {
-      return resolveAsyncIterableExpression(expression.argument, seen);
+      return resolveAsyncIterableExpressions(expression.argument, seen);
     }
     if (expression.type === 'ObjectExpression') {
       const iterator = asyncIteratorMethod(expression);
-      return iterator ? {iterator} : null;
-    }
-    if (expression.type === 'Identifier') {
-      const variable = variableForNode.get(expression);
-      if (!variable || seen.has(variable)) return null;
-      seen.add(variable);
-      const definitions = (variable.defs || []).filter(def =>
-        def.type === 'Variable' && def.node?.type === 'VariableDeclarator' && def.node.init);
-      if (definitions.length === 1) {
-        return resolveAsyncIterableExpression(definitions[0].node.init, seen);
-      }
-      return null;
+      return iterator ? [{iterator}] : [];
     }
     if (expression.type === 'NewExpression') {
       const classNode = classForInstanceExpression(expression);
-      return classNode ? {classNode} : null;
+      return classNode ? [{classNode}] : [];
+    }
+    if (expression.type === 'Identifier') {
+      const variable = variableForNode.get(expression);
+      if (!variable || seen.has(variable)) return [];
+      const nextSeen = new Set(seen);
+      nextSeen.add(variable);
+      const definitions = (variable.defs || []).filter(def =>
+        def.type === 'Variable' && def.node?.type === 'VariableDeclarator' && def.node.init);
+      if (definitions.length === 1) {
+        return resolveAsyncIterableExpressions(definitions[0].node.init, nextSeen);
+      }
+      return [];
     }
     if (expression.type === 'CallExpression') {
       if (expression.callee.type === 'MemberExpression' &&
           expression.callee.object.type === 'Identifier' &&
           expression.callee.object.name === 'Promise' &&
           propertyName(expression.callee) === 'resolve') {
-        return resolveAsyncIterableExpression(expression.arguments[0], seen);
+        return resolveAsyncIterableExpressions(expression.arguments[0], seen);
       }
-      const generator = resolveGeneratorExpression(expression);
-      if (generator?.generator) return {generator};
       const called = resolveCalledFunction(expression);
-      if (!called || seen.has(called)) return null;
-      seen.add(called);
-      for (const returned of returnedValues(called)) {
-        const iterable = resolveAsyncIterableExpression(returned, seen);
-        if (iterable) return iterable;
-      }
+      if (called?.generator) return [{generator:called}];
+      if (!called || seen.has(called)) return [];
+      const nextSeen = new Set(seen);
+      nextSeen.add(called);
+      return returnedValues(called).flatMap(returned =>
+        resolveAsyncIterableExpressions(returned, nextSeen));
     }
-    return null;
+    return [];
   };
+  const resolveAsyncIterableExpression = (expression, seen = new Set()) =>
+    resolveAsyncIterableExpressions(expression, seen)[0] || null;
   const resolveObjectExpression = expression => {
     if (expression?.type === 'AwaitExpression') return resolveObjectExpression(expression.argument);
     if (expression?.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
