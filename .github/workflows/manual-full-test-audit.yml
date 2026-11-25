@@ -31,6 +31,36 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
+      - name: Detect end-user production changes for performance qualification
+        id: production_impact
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            git fetch origin "$PR_BASE_SHA" --depth=1
+            base_ref="$PR_BASE_SHA"
+          else
+            git fetch origin main --depth=1
+            base_ref=FETCH_HEAD
+          fi
+          changed_files=$(git diff --name-only "$base_ref...HEAD")
+          production_files=$(printf '%s\\n' "$changed_files" | awk '
+            /^extension\\// &&
+            $0 !~ /^extension\\/(icons|store-assets)\\// &&
+            $0 != "extension/THIRD-PARTY-NOTICES.txt" { print; next }
+            $0 == "package.json" || $0 == "package-lock.json" { print }
+          ')
+          if [[ -n "$production_files" ]]; then
+            echo "has_production_changes=true" >> "$GITHUB_OUTPUT"
+            echo "End-user production changes detected:"
+            printf '%s\\n' "$production_files"
+          else
+            echo "has_production_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No shipped extension or production dependency changes; performance qualification will be skipped."
+          fi
+
       - name: Fingerprint committed audit inputs
         id: fingerprints
         run: node scripts/ci-checkpoint-fingerprints.mjs >> "$GITHUB_OUTPUT"
@@ -738,9 +768,15 @@ jobs:
           RESOLVER: ${{ steps.resolver.outcome }}
           SELECTION: ${{ steps.selection.outcome }}
           FEATURES: ${{ steps.features.outcome }}
+          HAS_PRODUCTION_CHANGES: ${{ steps.production_impact.outputs.has_production_changes }}
         run: |
           {
             echo "## Manual full-test audit"
+            if [[ "$HAS_PRODUCTION_CHANGES" == "true" ]]; then
+              echo "| End-user Performance qualification | Delegated — production changes detected |"
+            else
+              echo "| End-user Performance qualification | SKIPPED — no relevant production changes |"
+            fi
             echo
             echo "| Suite | Result |"
             echo "|---|---|"
