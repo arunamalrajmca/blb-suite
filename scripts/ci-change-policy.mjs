@@ -18,6 +18,8 @@ export function isNonRuntimePath(path) {
     || path === "scripts/validate-build.js"
     || path === "scripts/run-validation-tests.js"
     || path === "scripts/validation-test-manifest.json"
+    || path === "scripts/test-suite-inventory.json"
+    || path === "scripts/test-suite-inventory.json"
     || path === "regression-suite/Run-BLB-Regression.ps1"
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
