@@ -500,7 +500,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 1/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
@@ -513,7 +512,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 2/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
@@ -526,7 +524,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 3/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
@@ -539,7 +536,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 4/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
@@ -552,7 +548,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 5/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
@@ -565,7 +560,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 6/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
@@ -578,7 +572,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 7/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
@@ -591,7 +584,6 @@ jobs:
       - name: Save browser-shard checkpoint after shard 8/8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
-        continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
