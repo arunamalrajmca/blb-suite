@@ -616,7 +616,6 @@ jobs:
           }
           console.log(`All ${manifest.shardCount} browser shards passed and were checkpointed.`);
           NODE
-st_list"
       - name: Upload reusable browser-audit checkpoint diagnostics
         if: always()
         uses: actions/upload-artifact@v6
