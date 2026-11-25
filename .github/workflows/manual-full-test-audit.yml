@@ -329,14 +329,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix" "$RUNNER_TEMP/blb-browser-shard-checkpoints"
           touch "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"
 
-      - name: Restore dedicated browser-shard checkpoint
-        id: browser_shard_restore
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
-          restore-keys: |
-            blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-
       - name: Prepare complete browser test list and concurrency compatibility
         id: browser_prepare
         continue-on-error: true
@@ -501,6 +493,16 @@ jobs:
             echo "BLB_CI_CHECKPOINT_SOURCE_SHA=$BLB_CI_CHECKPOINT_SOURCE_SHA" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_FINGERPRINT=$BLB_CI_CHECKPOINT_FINGERPRINT" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT=$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT" >> "$GITHUB_ENV"
+
+      - name: Restore dedicated browser-shard checkpoint
+        id: browser_shard_restore
+        if: ${{ steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          restore-keys: |
+            blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-
 
       - name: Restore browser-matrix performance checkpoint
         id: browser_matrix_restore
@@ -692,7 +694,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: blb-full-audit-checkpoints-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl/
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           if-no-files-found: ignore
           retention-days: 30
 
@@ -710,7 +712,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: blb-corpus-ab-full-audit
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl/blb-performance.jsonl
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           if-no-files-found: warn
           retention-days: 14
 
