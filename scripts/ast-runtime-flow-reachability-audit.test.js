@@ -1286,7 +1286,7 @@ test('binds stored callback values to Array.fromAsync mapper parameters', () => 
     'async function run() {',
     '  await Array.fromAsync(callbacks, callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@4' && edge.kind === 'container-callback-argument' &&
     edge.method === 'Array.fromAsync'));
@@ -1300,7 +1300,7 @@ test('tracks callback values returned by an awaited Array.fromAsync mapper', () 
     '  const mapped = await Array.fromAsync(callbacks, callback => callback);',
     '  const selected = mapped.at(0);',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@4' && edge.kind === 'container-callback-argument' &&
     edge.method === 'Array.fromAsync'));
@@ -1317,7 +1317,7 @@ test('supports a separately declared Array.fromAsync mapper callback', () => {
     '  const mapped = await Array.fromAsync(callbacks, identity);',
     '  const selected = mapped.at(0);',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@4' && edge.kind === 'container-callback-argument' &&
     edge.method === 'Array.fromAsync'));
