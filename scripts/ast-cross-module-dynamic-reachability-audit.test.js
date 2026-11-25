@@ -1011,3 +1011,20 @@ test('resolves isolated const object aliases used as CommonJS spreads and assign
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='mutated.cjs'&&x.imported==='service'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('recursively traces isolated const spread aliases and preserves override order',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-nested-const-spread-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function originalService() {}',
+   'function overrideService() {}',
+   'const inner = { service: originalService };',
+   'const outer = { ...inner };',
+   'module.exports = { ...outer, service: overrideService };'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='overrideService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
