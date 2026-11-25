@@ -1274,9 +1274,13 @@ test("full audit delegates performance and physical-input tests to workflows tri
   const guardedShardCondition = "if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}";
   assert.equal(audit.split(guardedShardCondition).length - 1, 9,
     "browser shard progression must stop after a failed durable checkpoint upload");
-  const cancellationSafeSaveCondition = "if: ${{ always() && steps.browser_prepare.outcome == 'success' }}";
-  assert.equal(audit.split(cancellationSafeSaveCondition).length - 1, 16,
-    "completed shard checkpoints must still be uploaded when a run is cancelled between steps");
+  const cancellationSafeSaveConditions = audit.split("\n").filter(line =>
+    line.includes("if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_")
+  );
+  assert.equal(cancellationSafeSaveConditions.length, 16,
+    "each completed or cancelled shard must have two checkpoint uploads");
+  assert.equal(new Set(cancellationSafeSaveConditions).size, 8,
+    "checkpoint uploads must be tied to their own shard and skip shards that never started");
   const manifestSaveBlocks = audit.split("- name: Save browser-shard checkpoint after shard ").slice(1)
     .map(block => block.split("\n      - name:")[0]);
   assert.equal(manifestSaveBlocks.length, 8, "every browser shard must have its own durable checkpoint save");
