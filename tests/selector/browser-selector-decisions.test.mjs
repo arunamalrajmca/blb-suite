@@ -1270,8 +1270,6 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint") &&
     audit.includes("node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-"),
     "browser-shard restore keys must be scoped to the exact runner/toolchain environment");
-  assert.equal((audit.match(/key: blb-browser-shards-v1-.*steps\\.browser_prepare\\.outputs\\.environment_fingerprint/g) || []).length, 8,
-    "all eight saved shard checkpoints must use the same environment-scoped key scheme");
   const preflight = readFileSync(
     new URL("../../.github/workflows/ci-checkpoint-contract-validation.yml", import.meta.url),
     "utf8"
@@ -1280,7 +1278,8 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "fingerprint implementation and tests must trigger the short checkpoint contract preflight");
   for (let shard = 1; shard <= 8; shard++) {
     const suffix = String(shard).padStart(2, "0");
-    assert.equal((audit.match(new RegExp("run-checkpointed-playwright-audit\\\\.mjs.* " + shard + "(?:\\\\s|$)", "g")) || []).length, 1,
+    const command = 'run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" ' + shard;
+    assert.equal(audit.split(command).length - 1, 1,
       "browser shard " + shard + " must be invoked exactly once with its matching index");
     assert.ok(audit.includes("shard-" + suffix),
       "browser shard " + shard + " must have its own immutable checkpoint key");
@@ -1314,6 +1313,8 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.equal(manifestSaveBlocks.length, 8, "every browser shard must have its own durable checkpoint save");
   assert.ok(manifestSaveBlocks.every(block => !block.includes("continue-on-error: true")),
     "durable browser-shard checkpoint uploads must not be silently ignored");
+  assert.ok(manifestSaveBlocks.every(block => block.includes("steps.browser_prepare.outputs.environment_fingerprint")),
+    "all eight saved shard checkpoints must use the environment-scoped cache key scheme");
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
     "native Chromium _self prerender activation initializes the activated document without tab replacement",
