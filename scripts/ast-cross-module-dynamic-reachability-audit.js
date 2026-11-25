@@ -51,6 +51,14 @@ function collectExportsAndImports(ast,file){
     if(node?.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked;
     return null;
   };
+  const staticGetterLocal=getter=>{
+    if(!getter||!['ArrowFunctionExpression','FunctionExpression'].includes(getter.type)||getter.params.length!==0)return null;
+    if(getter.type==='ArrowFunctionExpression'&&getter.body.type==='Identifier')return getter.body.name;
+    if(getter.type==='FunctionExpression'&&getter.body.type==='BlockStatement'
+      &&getter.body.body.length===1&&getter.body.body[0].type==='ReturnStatement'
+      &&getter.body.body[0].argument?.type==='Identifier')return getter.body.body[0].argument.name;
+    return null;
+  };
   const descriptorExportLocal=descriptor=>{
     if(descriptor?.type!=='ObjectExpression')return null;
     const valueProperty=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
@@ -58,12 +66,7 @@ function collectExportsAndImports(ast,file){
     if(valueProperty?.value.type==='Identifier')return valueProperty.value.name;
     const getter=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
       &&property.key.type==='Identifier'&&property.key.name==='get')?.value;
-    if(!getter||!['ArrowFunctionExpression','FunctionExpression'].includes(getter.type)||getter.params.length!==0)return null;
-    if(getter.type==='ArrowFunctionExpression'&&getter.body.type==='Identifier')return getter.body.name;
-    if(getter.type==='FunctionExpression'&&getter.body.type==='BlockStatement'
-      &&getter.body.body.length===1&&getter.body.body[0].type==='ReturnStatement'
-      &&getter.body.body[0].argument?.type==='Identifier')return getter.body.body[0].argument.name;
-    return null;
+    return staticGetterLocal(getter);
   };
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed?staticPropertyKey(member.property):member.property.name)
@@ -138,9 +141,14 @@ function collectExportsAndImports(ast,file){
         }else recordObjectProperties(property.argument,exportsSnapshot,activeAliases);
         continue;
       }
-      if(property.type!=='Property'||property.kind!=='init')continue;
+      if(property.type!=='Property')continue;
       const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
       if(key===null||key===undefined)continue;
+      if(property.kind==='get'){
+        setCommonJsExport(String(key),staticGetterLocal(property.value));
+        continue;
+      }
+      if(property.kind!=='init')continue;
       setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
   };
