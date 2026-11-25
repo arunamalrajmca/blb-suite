@@ -49,6 +49,18 @@ runs:
         set -euo pipefail
         echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
         echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+    - name: Fingerprint the test environment
+      id: environment
+      shell: bash
+      env:
+        IMAGE: ${{ steps.runtime.outputs.image }}
+        NODE_VERSION: ${{ steps.runtime.outputs.node }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        value=$(printf '%s' "$RUNNER_OS|$RUNNER_ARCH|$IMAGE|$NODE_VERSION" | sha256sum | cut -d' ' -f1)
+        echo "value=$value" >> "$GITHUB_OUTPUT"
     - name: Restore the newest compatible section checkpoint
       id: restore
       uses: actions/cache/restore@v5
@@ -66,11 +78,12 @@ runs:
         SECTION: ${{ inputs.section }}
         SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
+        ENVIRONMENT_FINGERPRINT: ${{ steps.environment.outputs.value }}
       run: |
         set -euo pipefail
         node scripts/ci-section-checkpoint.mjs check \
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
-          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" >> "$GITHUB_OUTPUT"
+          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" "$ENVIRONMENT_FINGERPRINT" >> "$GITHUB_OUTPUT"
     - name: Remove completion marker before validating resumable internal state
       if: ${{ inputs.always_run == 'true' && steps.check.outputs.complete == 'true' }}
       shell: bash
@@ -85,6 +98,7 @@ runs:
         BLB_CI_CHECKPOINT_DIR: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
         BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         BLB_CI_CHECKPOINT_FINGERPRINT: ${{ inputs.fingerprint }}
+        BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT: ${{ steps.environment.outputs.value }}
       run: ${{ inputs.run }}
     - name: Record successful section completion
       if: ${{ success() && (steps.check.outputs.complete != 'true' || inputs.always_run == 'true') }}
@@ -93,11 +107,12 @@ runs:
         SECTION: ${{ inputs.section }}
         SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
+        ENVIRONMENT_FINGERPRINT: ${{ steps.environment.outputs.value }}
       run: |
         set -euo pipefail
         node scripts/ci-section-checkpoint.mjs write \
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
-          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT"
+          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" "$ENVIRONMENT_FINGERPRINT"
     - name: Preserve completed or partial checkpoint after this attempt
       if: ${{ always() && (steps.check.outputs.complete != 'true' || inputs.always_run == 'true') }}
       uses: actions/cache/save@v5
