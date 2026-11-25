@@ -103,7 +103,7 @@ function readManifest(directory, expected) {
       if (diff.status !== 0) return null;
       compatibleExpected = {
         ...expected,
-        changedFiles: diff.stdout.split(/\\r?\\n/).map(value => value.trim()).filter(Boolean)
+        changedFiles: diff.stdout.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
       };
     }
     if (!isCompatibleShardManifest(candidate, compatibleExpected)) return null;
