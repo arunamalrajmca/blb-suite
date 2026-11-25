@@ -87,6 +87,23 @@ runs:
         node scripts/ci-section-checkpoint.mjs check \
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
           "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" "$ENVIRONMENT_FINGERPRINT" >> "$GITHUB_OUTPUT"
+    - name: Report checkpoint reuse decision
+      shell: bash
+      env:
+        SECTION: ${{ inputs.section }}
+        COMPLETE: ${{ steps.check.outputs.complete }}
+        REASON: ${{ steps.check.outputs.reason }}
+        ALWAYS_RUN: ${{ inputs.always_run }}
+      run: |
+        if [[ "$COMPLETE" == "true" ]]; then
+          if [[ "$ALWAYS_RUN" == "true" ]]; then
+            echo "::notice::Checkpoint accepted for $SECTION; the section runner will validate and reuse its internal saved results."
+          else
+            echo "::notice::Checkpoint accepted for $SECTION; skipping the section execution."
+          fi
+        else
+          echo "::notice::Checkpoint not reusable for $SECTION (reason: ${REASON:-unknown}); executing the section."
+        fi
     - name: Remove completion marker before validating resumable internal state
       if: ${{ inputs.always_run == 'true' && steps.check.outputs.complete == 'true' }}
       shell: bash
