@@ -1324,8 +1324,7 @@ function analyzeFile(root, file) {
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
           }
-        } else if ((iterable?.type === 'CallExpression' || iterable?.type === 'AwaitExpression' ||
-            iterable?.type === 'NewExpression') && resolveAsyncIterableExpressions(iterable).length) {
+        } else if (resolveAsyncIterableExpressions(iterable).length) {
           const asyncIterables = resolveAsyncIterableExpressions(iterable);
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           for (const asyncIterable of asyncIterables) {
@@ -1934,8 +1933,7 @@ function analyzeFile(root, file) {
             source = iterator.container; entries = iterator.entries; keys = iterator.keys;
           } else source = bindingId(right);
         }
-      } else if ((right.type === 'CallExpression' || right.type === 'AwaitExpression' ||
-          right.type === 'NewExpression') && resolveAsyncIterableExpressions(right).length) {
+      } else if (resolveAsyncIterableExpressions(right).length) {
         const asyncIterables = resolveAsyncIterableExpressions(right);
         source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
         for (const asyncIterable of asyncIterables) {
