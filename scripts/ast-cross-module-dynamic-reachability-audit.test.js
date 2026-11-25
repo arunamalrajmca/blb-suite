@@ -1589,3 +1589,18 @@ test('preserves defineProperty factory targets and applies enumerability overrid
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='multiple.cjs'&&x.imported==='extra'&&x.exportedLocal==='extra'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('does not infer defineProperties factory exports from accessor descriptor maps',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-define-properties-accessor-map-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'module.exports = Object.assign({ service }, Object.defineProperties({}, {',
+   '  get service() { return { enumerable: true, value: createService() }; }',
+   '}));'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
