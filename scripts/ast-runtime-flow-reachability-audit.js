@@ -1318,7 +1318,8 @@ function analyzeFile(root, file) {
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
           }
-        } else if (iterable?.type === 'CallExpression' && resolveAsyncIterableExpressions(iterable).length) {
+        } else if ((iterable?.type === 'CallExpression' || iterable?.type === 'AwaitExpression' ||
+            iterable?.type === 'NewExpression') && resolveAsyncIterableExpressions(iterable).length) {
           const asyncIterables = resolveAsyncIterableExpressions(iterable);
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           for (const asyncIterable of asyncIterables) {
