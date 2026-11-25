@@ -114,7 +114,12 @@ function collectExportsAndImports(ast,file){
     }
     if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
-    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true});
+    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
+      const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
+        &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
+        &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
+      imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports});
+    }
     if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
       &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
       &&isUnboundGlobal(n.callee.object)){
@@ -197,6 +202,10 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
         if(importedBinding.imported==='*')return {file:target,local:null,namespace:true,namespaceTarget:target};
         return resolveExportOrigin(target,importedBinding.imported,meta,files,new Set([...active,key]));
       }
+    }
+    if(name==='default'&&data.imports.some(item=>item.commonjsReexportAll)){
+      const item=data.imports.find(entry=>entry.commonjsReexportAll),target=resolveLocal(file,item.source,new Set(files));
+      if(target)return {file:target,local:null,namespace:true,namespaceTarget:target};
     }
     return {file,local:typeof local==='string'?local:null};
   }
