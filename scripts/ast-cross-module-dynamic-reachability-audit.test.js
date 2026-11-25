@@ -1425,7 +1425,7 @@ test('invalidates CommonJS export owners when Object.assign receives Object.crea
    '  service: { enumerable: true, value: service },',
    '  [key]: { enumerable: true, value: createService() }',
    '}));'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='service'
