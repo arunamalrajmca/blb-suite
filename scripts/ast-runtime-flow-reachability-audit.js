@@ -1081,6 +1081,45 @@ function analyzeFile(root, file) {
           containerCopies.push({source,target:assigned,node});
         }
       }
+      if (node.type === 'CallExpression' && name === 'groupBy' &&
+          ['Map', 'Object'].includes(receiverName)) {
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : null;
+        const iterable = node.arguments[0];
+        const mapperArgument = node.arguments[1];
+        const mapper = isFunction(mapperArgument) ? mapperArgument :
+          mapperArgument?.type === 'Identifier'
+            ? resolveFunctionReference(mapperArgument) : null;
+        let source = null, includeObjectValues = false, entries = false;
+        if (iterable?.type === 'Identifier') {
+          const iterator = iteratorSources.get(bindingId(iterable));
+          source = iterator?.container || bindingId(iterable);
+        } else if (iterable?.type === 'ArrayExpression') {
+          source = 'group-by-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          addContainedReferences(iterable, source, 'group-by-source', node);
+          addObjectPropertySlots(iterable, source);
+        } else if (iterable?.type === 'CallExpression' &&
+            iterable.callee.type === 'MemberExpression' &&
+            iterable.callee.object.type === 'Identifier' &&
+            iterable.callee.object.name === 'Object' &&
+            ['values', 'entries'].includes(propertyKey(iterable.callee.property, iterable.callee.computed)) &&
+            iterable.arguments[0]?.type === 'Identifier') {
+          source = bindingId(iterable.arguments[0]);
+          includeObjectValues = true;
+          entries = propertyKey(iterable.callee.property, iterable.callee.computed) === 'entries';
+        }
+        if (mapper && source) {
+          const parameterNode = mapper.params?.[0];
+          const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
+          if (['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(parameter?.type)) {
+            callbackIterationRequests.push({
+              source,parameter:parameter.type === 'Identifier' ? bindingId(parameter) : null,
+              parameterPattern:parameter,includeObjectValues,entries,node,method:receiverName + '.groupBy'
+            });
+          }
+          if (assigned) containerCopies.push({source,target:assigned,node});
+        }
+      }
       if (node.type === 'CallExpression' && ['map', 'flatMap'].includes(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
         const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
