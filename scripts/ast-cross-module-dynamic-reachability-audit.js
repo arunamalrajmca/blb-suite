@@ -178,6 +178,7 @@ function collectExportsAndImports(ast,file){
       }
       return;
     }
+    if(method==='create'){recordObjectProperties(value);return;}
     if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
   };
   visit(ast,n=>{
