@@ -15,6 +15,7 @@ on:
       - '.github/workflows/browser-e2e-groups.yml'
       - '.github/workflows/browser-e2e-focused-regressions.yml'
       - 'scripts/ci-section-checkpoint.*'
+      - 'scripts/ci-checkpoint-fingerprints.*'
       - 'scripts/run-checkpointed-playwright-*.mjs'
       - 'scripts/test-suite-inventory.*'
       - 'scripts/validate-build.js'
