@@ -1094,12 +1094,14 @@ function analyzeFile(root, file) {
         if (iterable?.type === 'Identifier') {
           const asyncSource = asyncIterableSources.get(bindingId(iterable));
           if (asyncSource) source = asyncSource;
-          const iterator = iteratorSources.get(bindingId(iterable));
-          if (iterator?.entries) source = null;
-          else if (iterator) {
-            source = iterator.container;
-            if (iterator.keys && mapContainers.has(source)) role = 'map-key';
-          } else source = bindingId(iterable);
+          else {
+            const iterator = iteratorSources.get(bindingId(iterable));
+            if (iterator?.entries) source = null;
+            else if (iterator) {
+              source = iterator.container;
+              if (iterator.keys && mapContainers.has(source)) role = 'map-key';
+            } else source = bindingId(iterable);
+          }
         } else if (iterable?.type === 'CallExpression' && iterable.callee.type === 'Identifier') {
           const generator = resolveFunctionReference(iterable.callee);
           if (generator?.generator) {
