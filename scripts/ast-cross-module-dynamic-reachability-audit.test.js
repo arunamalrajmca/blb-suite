@@ -524,3 +524,39 @@ test('does not treat shadowed Object or exports bindings as CommonJS export APIs
   for(const name of ['service','fake','fakeAgain']) assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported===name&&x.unresolvedExport),name);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('tracks immutable local aliases of CommonJS exports by lexical binding identity',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-export-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'function stopService() {}',
+   'const api = module.exports;',
+   'const publicApi = exports;',
+   'api.start = startService;',
+   "Object.assign(publicApi, { stop: stopService });"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { start, stop } from './service.cjs';",
+   'start(); stop();'
+  ].join('\\n'));
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not transfer CommonJS export alias identity to shadowed parameters',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-export-alias-shadow-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'const api = module.exports;',
+   'function shadow(api) { api.fake = service; }'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { fake } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='fake'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
