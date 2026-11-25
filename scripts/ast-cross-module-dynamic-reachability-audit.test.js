@@ -1226,3 +1226,21 @@ test('does not infer returned defineProperties exports with dynamic descriptor k
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('does not retain static defineProperties owners when a dynamic key may overwrite them',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-define-properties-dynamic-overwrite-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   "const key = process.env.EXPORT_NAME;",
+   'Object.defineProperties(module.exports, {',
+   '  service: { value: service },',
+   '  [key]: { value: createService() }',
+   '});'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
