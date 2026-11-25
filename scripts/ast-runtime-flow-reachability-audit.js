@@ -393,8 +393,15 @@ function analyzeFile(root, file) {
     if (!name) return null;
     return method.static ? 'class-static@' + name : 'class-instance@' + name;
   };
+  const returnedValuesCache = new WeakMap();
   const returnedValues = fn => {
-    if (fn && fn.body && fn.body.type !== 'BlockStatement') return [fn.body];
+    if (!fn || typeof fn !== 'object') return [];
+    if (returnedValuesCache.has(fn)) return returnedValuesCache.get(fn);
+    if (fn.body && fn.body.type !== 'BlockStatement') {
+      const values = [fn.body];
+      returnedValuesCache.set(fn, values);
+      return values;
+    }
     const returned = [];
     const scan = (node, isRoot = false) => {
       if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
@@ -407,6 +414,7 @@ function analyzeFile(root, file) {
       }
     };
     scan(fn.body, true);
+    returnedValuesCache.set(fn, returned);
     return returned;
   };
   const functionNodes = [];
@@ -606,11 +614,40 @@ function analyzeFile(root, file) {
       if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
       if (!root && isFunction(node)) return;
       if (node.type === 'YieldExpression' && node.argument) {
-        if (node.delegate && node.argument.type === 'CallExpression' &&
-            node.argument.callee.type === 'Identifier') {
-          const delegated = resolveFunctionReference(node.argument.callee);
-          if (delegated && delegated.generator) values.push(...yieldedValues(delegated, seen));
-          else values.push(node.argument);
+        if (node.delegate) {
+          const asyncIterables = resolveAsyncIterableExpressions(node.argument);
+          if (!asyncIterables.length) values.push(node.argument);
+          for (const asyncIterable of asyncIterables) {
+            if (asyncIterable.collection) {
+              const initialValues = asyncIterable.collection.arguments[0];
+              if (initialValues) values.push(initialValues);
+            } else if (asyncIterable.array) {
+              for (const element of asyncIterable.array.elements) {
+                if (element) values.push(element.type === 'SpreadElement' ? element.argument : element);
+              }
+            } else if (asyncIterable.generator) {
+              values.push(...yieldedValues(asyncIterable.generator, seen));
+            } else if (asyncIterable.classNode) {
+              const methods = classAsyncIteratorMethods(asyncIterable.classNode) ||
+                classSyncIteratorMethods(asyncIterable.classNode);
+              if (methods?.iterator?.generator) {
+                values.push(...yieldedValues(methods.iterator, seen));
+              } else if (methods?.next) {
+                values.push(...asyncIteratorStepValues(methods.next));
+              }
+            } else if (asyncIterable.iterator?.generator) {
+              values.push(...yieldedValues(asyncIterable.iterator, seen));
+            } else if (asyncIterable.iterator) {
+              values.push(...asyncIteratorResultValues(asyncIterable.iterator));
+              if (asyncIterable.iteratorObject &&
+                  returnedValues(asyncIterable.iterator).some(returned => returned.type === 'ThisExpression')) {
+                const nextMethod = asyncIterable.iteratorObject.properties.find(property =>
+                  property.type === 'Property' && propertyKey(property.key, property.computed) === 'next' &&
+                  isFunction(property.value))?.value;
+                if (nextMethod) values.push(...asyncIteratorStepValues(nextMethod));
+              }
+            }
+          }
         } else values.push(node.argument);
         return;
       }
@@ -633,6 +670,98 @@ function analyzeFile(root, file) {
       return property.value;
     }
     return null;
+  };
+  const syncIteratorMethod = objectExpression => {
+    if (!objectExpression || objectExpression.type !== 'ObjectExpression') return null;
+    for (const property of objectExpression.properties) {
+      if (property.type !== 'Property' || !isFunction(property.value) ||
+          !property.computed || property.key.type !== 'MemberExpression' ||
+          property.key.object.type !== 'Identifier' || property.key.object.name !== 'Symbol' ||
+          property.key.property.type !== 'Identifier' || property.key.property.name !== 'iterator') continue;
+      return property.value;
+    }
+    return null;
+  };
+  const resolveAsyncIterableExpressionsUncached = (expression, seen = new Set()) => {
+    if (!expression) return [];
+    if (expression.type === 'AwaitExpression') {
+      return resolveAsyncIterableExpressions(expression.argument, seen);
+    }
+    if (expression.type === 'ChainExpression') {
+      return resolveAsyncIterableExpressions(expression.expression, seen);
+    }
+    if (expression.type === 'AssignmentExpression') {
+      return resolveAsyncIterableExpressions(expression.right, seen);
+    }
+    if (expression.type === 'ConditionalExpression') {
+      return [
+        ...resolveAsyncIterableExpressions(expression.consequent, new Set(seen)),
+        ...resolveAsyncIterableExpressions(expression.alternate, new Set(seen))
+      ];
+    }
+    if (expression.type === 'LogicalExpression') {
+      return [
+        ...resolveAsyncIterableExpressions(expression.left, new Set(seen)),
+        ...resolveAsyncIterableExpressions(expression.right, new Set(seen))
+      ];
+    }
+    if (expression.type === 'SequenceExpression') {
+      return resolveAsyncIterableExpressions(expression.expressions.at(-1), seen);
+    }
+    if (expression.type === 'ArrayExpression') {
+      return [{array:expression, iteratorKind:'sync'}];
+    }
+    if (expression.type === 'ObjectExpression') {
+      const asyncIterator = asyncIteratorMethod(expression);
+      if (asyncIterator) return [{iterator:asyncIterator, iteratorObject:expression, iteratorKind:'async'}];
+      const syncIterator = syncIteratorMethod(expression);
+      return syncIterator ? [{iterator:syncIterator, iteratorObject:expression, iteratorKind:'sync'}] : [];
+    }
+    if (expression.type === 'NewExpression') {
+      const classNode = classForInstanceExpression(expression);
+      if (classNode) return [{classNode}];
+      if (expression.callee.type === 'Identifier' && ['Map', 'Set'].includes(expression.callee.name)) {
+        return [{collection:expression, collectionKind:expression.callee.name, iteratorKind:'sync'}];
+      }
+      return [];
+    }
+    if (expression.type === 'Identifier') {
+      const variable = variableForNode.get(expression);
+      if (!variable || seen.has(variable)) return [];
+      const nextSeen = new Set(seen);
+      nextSeen.add(variable);
+      const definitions = (variable.defs || []).filter(def =>
+        def.type === 'Variable' && def.node?.type === 'VariableDeclarator' && def.node.init);
+      if (definitions.length === 1) {
+        return resolveAsyncIterableExpressions(definitions[0].node.init, nextSeen);
+      }
+      return [];
+    }
+    if (expression.type === 'CallExpression') {
+      if (expression.callee.type === 'MemberExpression' &&
+          expression.callee.object.type === 'Identifier' &&
+          expression.callee.object.name === 'Promise' &&
+          propertyName(expression.callee) === 'resolve') {
+        return resolveAsyncIterableExpressions(expression.arguments[0], seen);
+      }
+      const called = resolveCalledFunction(expression);
+      if (called?.generator) return [{generator:called, iteratorKind:called.async ? 'async' : 'sync'}];
+      if (!called || seen.has(called)) return [];
+      const nextSeen = new Set(seen);
+      nextSeen.add(called);
+      return returnedValues(called).flatMap(returned =>
+        resolveAsyncIterableExpressions(returned, nextSeen));
+    }
+    return [];
+  };
+  const iterableExpressionCache = new WeakMap();
+  const resolveAsyncIterableExpressions = (expression, seen = new Set()) => {
+    if (!expression) return [];
+    if (seen.size) return resolveAsyncIterableExpressionsUncached(expression, seen);
+    if (iterableExpressionCache.has(expression)) return iterableExpressionCache.get(expression);
+    const resolved = resolveAsyncIterableExpressionsUncached(expression, new Set());
+    iterableExpressionCache.set(expression, resolved);
+    return resolved;
   };
   const resolveObjectExpression = expression => {
     if (expression?.type === 'AwaitExpression') return resolveObjectExpression(expression.argument);
@@ -665,7 +794,7 @@ function analyzeFile(root, file) {
     }
     return null;
   };
-  const classAsyncIteratorMethods = classNode => {
+  const classIteratorMethods = (classNode, symbolName) => {
     if (!classNode) return null;
     const methods = {iterator:null,next:null,return:null,throw:null};
     const seenClasses = new Set();
@@ -673,15 +802,15 @@ function analyzeFile(root, file) {
     while (currentClass && !seenClasses.has(currentClass)) {
       seenClasses.add(currentClass);
       for (const element of currentClass.body?.body || []) {
-      if (element.type !== 'MethodDefinition') continue;
-      let key = propertyKey(element.key, element.computed);
-      if (element.computed && element.key?.type === 'MemberExpression' &&
-          element.key.object.type === 'Identifier' && element.key.object.name === 'Symbol' &&
-          element.key.property.type === 'Identifier' && element.key.property.name === 'asyncIterator') {
-        key = 'Symbol.asyncIterator';
-      }
-      if (key === 'Symbol.asyncIterator') methods.iterator = element.value;
-      else if (['next','return','throw'].includes(key) && !methods[key]) methods[key] = element.value;
+        if (element.type !== 'MethodDefinition') continue;
+        let key = propertyKey(element.key, element.computed);
+        if (element.computed && element.key?.type === 'MemberExpression' &&
+            element.key.object.type === 'Identifier' && element.key.object.name === 'Symbol' &&
+            element.key.property.type === 'Identifier' && element.key.property.name === symbolName) {
+          key = 'Symbol.' + symbolName;
+        }
+        if (key === 'Symbol.' + symbolName) methods.iterator = element.value;
+        else if (['next','return','throw'].includes(key) && !methods[key]) methods[key] = element.value;
       }
       const parentName = currentClass.superClass?.type === 'Identifier' ? currentClass.superClass.name : null;
       const parents = parentName ? classDeclarationsByName.get(parentName) || [] : [];
@@ -689,6 +818,8 @@ function analyzeFile(root, file) {
     }
     return methods.iterator ? methods : null;
   };
+  const classAsyncIteratorMethods = classNode => classIteratorMethods(classNode, 'asyncIterator');
+  const classSyncIteratorMethods = classNode => classIteratorMethods(classNode, 'iterator');
   const registerClassAsyncIterator = (classNode, source, origin) => {
     const methods = classAsyncIteratorMethods(classNode);
     if (!methods) return false;
@@ -696,7 +827,25 @@ function analyzeFile(root, file) {
       if (method) addEdge('function@' + method.loc.start.line, source,
         'async-iterator-protocol-callback', origin, 'class async iterator protocol method');
     }
-    if (methods.next) registerAsyncIteratorValues(methods.next, source, origin, true);
+    if (methods.iterator?.generator) {
+      registerAsyncIteratorValues(methods.iterator, source, origin);
+    } else if (methods.next) {
+      registerAsyncIteratorValues(methods.next, source, origin, true);
+    }
+    return true;
+  };
+  const registerClassSyncIterator = (classNode, source, origin) => {
+    const methods = classSyncIteratorMethods(classNode);
+    if (!methods) return false;
+    for (const method of Object.values(methods)) {
+      if (method) addEdge('function@' + method.loc.start.line, source,
+        'sync-iterator-protocol-callback', origin, 'class sync iterator protocol method');
+    }
+    if (methods.iterator?.generator) {
+      registerAsyncIteratorValues(methods.iterator, source, origin);
+    } else if (methods.next) {
+      registerAsyncIteratorValues(methods.next, source, origin, true);
+    }
     return true;
   };
   const asyncIteratorStepValues = nextMethod => {
@@ -725,9 +874,16 @@ function analyzeFile(root, file) {
     }
     return values;
   };
-  const registerAsyncIteratorValues = (fn, source, origin, directNextMethod = false) => {
+  const registerAsyncIteratorValues = (fn, source, origin, directNextMethod = false, iteratorObject = null) => {
     const values = fn?.generator ? yieldedValues(fn) :
       directNextMethod ? asyncIteratorStepValues(fn) : asyncIteratorResultValues(fn);
+    if (!fn?.generator && !directNextMethod && iteratorObject &&
+        returnedValues(fn).some(returned => returned.type === 'ThisExpression')) {
+      const nextMethod = iteratorObject.properties.find(property =>
+        property.type === 'Property' && propertyKey(property.key, property.computed) === 'next' &&
+        isFunction(property.value))?.value;
+      if (nextMethod) values.push(...asyncIteratorStepValues(nextMethod));
+    }
     if (!fn?.generator) {
       for (const returned of returnedValues(fn)) {
         const iteratorObject = resolveObjectExpression(returned);
@@ -820,26 +976,35 @@ function analyzeFile(root, file) {
         if (iteratorSource) asyncIteratorInstanceSources.set(assigned, iteratorSource);
       }
       const iteratorClass = classForInstanceExpression(node.init);
-      if (iteratorClass) {
-        const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-        if (registerClassAsyncIterator(iteratorClass, source, node.init)) {
-          asyncIterableSources.set(assigned, source);
-          asyncIteratorInstanceSources.set(assigned, source);
-        }
+      const classIterator = iteratorClass && classAsyncIteratorMethods(iteratorClass);
+      if (classIterator && returnedValues(classIterator.iterator).some(value => value.type === 'ThisExpression')) {
+        // The class itself is the iterator (Symbol.asyncIterator returns this).
+        // The iterable registration below owns its yielded values; retain only
+        // the iterator-instance alias needed for explicit next() calls.
+        asyncIteratorInstanceSources.set(assigned, assigned);
       }
-      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier') {
-        const generator = resolveFunctionReference(node.init.callee);
-        if (generator?.generator) {
-          const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-          asyncIterableSources.set(assigned, source);
-          registerAsyncIteratorValues(generator, source, node.init);
-        }
-      } else if (node.init?.type === 'ObjectExpression') {
-        const iterator = asyncIteratorMethod(node.init);
-        if (iterator) {
-          const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-          asyncIterableSources.set(assigned, source);
-          registerAsyncIteratorValues(iterator, source, node.init);
+      const asyncIterables = resolveAsyncIterableExpressions(node.init);
+      if (asyncIterables.length) {
+        const source = assigned || ('iterable-source@' + node.init.loc.start.line + ':' + node.init.loc.start.column);
+        asyncIterableSources.set(assigned, source);
+        for (const asyncIterable of asyncIterables) {
+          if (asyncIterable.collection) {
+            if (asyncIterable.collectionKind === 'Map') mapContainers.add(assigned);
+            else if (asyncIterable.collectionKind === 'Set') setContainers.add(assigned);
+            if (asyncIterable.collection.arguments[0]) {
+              addContainedReferences(asyncIterable.collection.arguments[0], source, 'iterable-collection-source', node.init);
+              addObjectPropertySlots(asyncIterable.collection.arguments[0], source);
+            }
+          } else if (asyncIterable.array) {
+            addContainedReferences(asyncIterable.array, source, 'array-from-source', node.init);
+            addObjectPropertySlots(asyncIterable.array, source);
+          } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
+          else if (asyncIterable.classNode) {
+            if (!registerClassAsyncIterator(asyncIterable.classNode, source, node.init)) {
+              registerClassSyncIterator(asyncIterable.classNode, source, node.init);
+            }
+          }
+          else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init, false, asyncIterable.iteratorObject);
         }
       }
     }
@@ -1223,9 +1388,47 @@ function analyzeFile(root, file) {
           mapperArgument?.type === 'Identifier'
             ? resolveFunctionReference(mapperArgument) : null;
         let source = null, includeObjectValues = false, entries = false, role = null;
-        if (iterable?.type === 'Identifier') {
+        const resolvedIterables = resolveAsyncIterableExpressions(iterable);
+        const compatibleIterables = name === 'from' ? resolvedIterables.flatMap(candidate => {
+          if (candidate.iteratorKind === 'async') {
+            const syncIterator = candidate.iteratorObject && syncIteratorMethod(candidate.iteratorObject);
+            return syncIterator ? [{...candidate, iterator:syncIterator, iteratorKind:'sync'}] : [];
+          }
+          if (candidate.classNode && !classSyncIteratorMethods(candidate.classNode)) return [];
+          return [candidate];
+        }) : resolvedIterables;
+        if (compatibleIterables.length) {
+          source = iterable?.type === 'Identifier'
+            ? asyncIterableSources.get(bindingId(iterable)) || bindingId(iterable)
+            : 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          for (const iterableCandidate of compatibleIterables) {
+            if (iterableCandidate.collection) {
+              if (iterableCandidate.collectionKind === 'Map') {
+                entries = true;
+                includeObjectValues = true;
+                mapContainers.add(source);
+              } else if (iterableCandidate.collectionKind === 'Set') {
+                setContainers.add(source);
+              }
+              if (iterableCandidate.collection.arguments[0]) {
+                addContainedReferences(iterableCandidate.collection.arguments[0], source, 'iterable-collection-source', node);
+                addObjectPropertySlots(iterableCandidate.collection.arguments[0], source);
+              }
+            } else if (iterableCandidate.array) {
+              addContainedReferences(iterableCandidate.array, source, 'array-from-source', node);
+              addObjectPropertySlots(iterableCandidate.array, source);
+            } else if (iterableCandidate.generator) registerAsyncIteratorValues(iterableCandidate.generator, source, iterable);
+            else if (iterableCandidate.classNode) {
+              if (name === 'from') registerClassSyncIterator(iterableCandidate.classNode, source, iterable);
+              else if (!registerClassAsyncIterator(iterableCandidate.classNode, source, iterable)) {
+                registerClassSyncIterator(iterableCandidate.classNode, source, iterable);
+              }
+            } else registerAsyncIteratorValues(iterableCandidate.iterator, source, iterable, false, iterableCandidate.iteratorObject);
+          }
+        } else if (iterable?.type === 'Identifier') {
           const asyncSource = asyncIterableSources.get(bindingId(iterable));
-          if (asyncSource) source = asyncSource;
+          if (asyncSource && name !== 'from') source = asyncSource;
+          else if (asyncSource && name === 'from') source = null;
           else {
             const iterator = iteratorSources.get(bindingId(iterable));
             if (iterator?.entries) source = null;
@@ -1234,20 +1437,21 @@ function analyzeFile(root, file) {
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
           }
-        } else if (iterable?.type === 'CallExpression' && iterable.callee.type === 'Identifier') {
-          const generator = resolveFunctionReference(iterable.callee);
-          if (generator?.generator) {
-            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-            registerAsyncIteratorValues(generator, source, iterable);
-          }
         } else if (classForInstanceExpression(iterable)) {
-          source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-          registerClassAsyncIterator(classForInstanceExpression(iterable), source, iterable);
+          const classNode = classForInstanceExpression(iterable);
+          const candidateSource = 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          const registered = name === 'from'
+            ? registerClassSyncIterator(classNode, candidateSource, iterable)
+            : registerClassAsyncIterator(classNode, candidateSource, iterable) ||
+              registerClassSyncIterator(classNode, candidateSource, iterable);
+          if (registered) source = candidateSource;
         } else if (iterable?.type === 'ObjectExpression') {
-          const iterator = asyncIteratorMethod(iterable);
+          const iterator = name === 'from'
+            ? syncIteratorMethod(iterable)
+            : asyncIteratorMethod(iterable) || syncIteratorMethod(iterable);
           if (iterator) {
-            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-            registerAsyncIteratorValues(iterator, source, iterable);
+            source = 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+            registerAsyncIteratorValues(iterator, source, iterable, false, iterable);
           }
         } else if (iterable?.type === 'ArrayExpression') {
           source = 'array-from-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
@@ -1732,6 +1936,15 @@ function analyzeFile(root, file) {
         if (mapContainers.has(bindingId(node.init))) mapContainers.add(bindingId(node.id));
         if (setContainers.has(bindingId(node.init))) setContainers.add(bindingId(node.id));
       }
+      // A factory may return a fresh Map/Set. Preserve its collection kind
+      // on the receiving binding so later .set/.add mutations and iterator
+      // consumers are modeled just like direct construction.
+      if (node.id.type === 'Identifier' && node.init?.type === 'CallExpression') {
+        for (const iterable of resolveAsyncIterableExpressions(node.init)) {
+          if (iterable.collectionKind === 'Map') mapContainers.add(bindingId(node.id));
+          else if (iterable.collectionKind === 'Set') setContainers.add(bindingId(node.id));
+        }
+      }
       if (node.init && node.init.type === 'MemberExpression' &&
           node.init.object.type === 'Identifier') {
         add('indirect-methods', 'method-value-alias', node,
@@ -1841,11 +2054,30 @@ function analyzeFile(root, file) {
             source = iterator.container; entries = iterator.entries; keys = iterator.keys;
           } else source = bindingId(right);
         }
-      } else if (right.type === 'CallExpression' && right.callee.type === 'Identifier') {
-        const generator = resolveFunctionReference(right.callee);
-        if (generator?.generator) {
-          source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
-          registerAsyncIteratorValues(generator, source, right);
+        if (source && mapContainers.has(source)) {
+          entries = true;
+          includeObjectValues = true;
+        }
+      } else if (resolveAsyncIterableExpressions(right).length) {
+        const asyncIterables = resolveAsyncIterableExpressions(right);
+        source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
+        for (const asyncIterable of asyncIterables) {
+          if (asyncIterable.collection) {
+            if (asyncIterable.collectionKind === 'Map') { entries = true; includeObjectValues = true; }
+            if (asyncIterable.collection.arguments[0]) {
+              addContainedReferences(asyncIterable.collection.arguments[0], source, 'iterable-collection-source', node);
+              addObjectPropertySlots(asyncIterable.collection.arguments[0], source);
+            }
+          } else if (asyncIterable.array) {
+            addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
+            addObjectPropertySlots(asyncIterable.array, source);
+          } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
+          else if (asyncIterable.classNode) {
+            if (!registerClassAsyncIterator(asyncIterable.classNode, source, right)) {
+              registerClassSyncIterator(asyncIterable.classNode, source, right);
+            }
+          }
+          else registerAsyncIteratorValues(asyncIterable.iterator, source, right, false, asyncIterable.iteratorObject);
         }
       } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
         const method = propertyKey(right.callee.property, right.callee.computed);
