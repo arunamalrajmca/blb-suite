@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const shared = [
@@ -60,7 +61,7 @@ export function writeGitHubOutputs(outputPath, fingerprints) {
   fs.appendFileSync(outputPath, lines);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   try {
     const fingerprints = computeSectionFingerprints();
     if (process.env.GITHUB_OUTPUT) writeGitHubOutputs(process.env.GITHUB_OUTPUT, fingerprints);
