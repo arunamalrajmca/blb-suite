@@ -160,7 +160,11 @@ function collectExportsAndImports(ast,file){
       &&isUnboundGlobal(object.callee.object)){
       const method=memberName(object.callee);
       if(method==='assign'){
-        for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot,new Set(),true);
+        for(let index=0;index<object.arguments.length;index++){
+          // Object.assign preserves non-enumerable own properties already on its target;
+          // only later source arguments are restricted to enumerable properties.
+          recordObjectProperties(object.arguments[index],exportsSnapshot,new Set(),index===0?enumerableOnly:true);
+        }
         return;
       }
       if(method==='fromEntries'){recordObjectFromEntries(object);return;}
