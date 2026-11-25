@@ -1341,8 +1341,7 @@ test("full audit delegates performance and physical-input tests to workflows tri
   );
   assert.ok(audit.includes("Detect end-user production changes for performance qualification") &&
     audit.includes('node scripts/detect-end-user-production-changes.mjs "$base_ref"') &&
-    productionImpact.includes("has_production_changes=true") &&
-    productionImpact.includes("has_production_changes=false") &&
+    productionImpact.includes("has_production_changes=${result.hasProductionChanges}") &&
     audit.includes("SKIPPED — no relevant production changes"),
     "the full-audit summary must use the tested production-impact detector and explicitly skip Performance when shipped production code is unchanged");
   assert.ok(reference.includes("!contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
