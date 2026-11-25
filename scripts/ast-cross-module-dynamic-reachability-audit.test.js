@@ -1066,10 +1066,10 @@ test('traces direct identifier-returning getters in CommonJS object exports',()=
    'function service() {}',
    'function resolveService() { return service; }',
    'module.exports = { get service() { return service; }, get dynamic() { return resolveService(); } };'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),[
    "import { service, dynamic } from './service.cjs';"
-  ].join('\\n'));
+  ].join('\n'));
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='dynamic'&&x.exportedLocal!=='resolveService'));
