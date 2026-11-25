@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   createShardManifest,
   isCompatibleShardManifest,
+  invalidateChangedSpecShards,
   partitionTests,
   runCheckpointedBrowserAudit
 } from './run-checkpointed-playwright-audit.mjs';
@@ -49,6 +50,22 @@ test('shard manifests are bound to exact source, fingerprint, inventory, order, 
   malformed.shards[0].exitCode = 0;
   malformed.shards[0].reportValid = false;
   assert.equal(isCompatibleShardManifest(malformed, expected), false);
+});
+
+
+test('only shards containing changed browser spec files are invalidated across commits', () => {
+  const groupedEntries = [
+    ...Array.from({ length: 4 }, (_, index) => '[chromium] › tests/browser/alpha.spec.js:' + (index + 1) + ':1 › alpha ' + (index + 1)),
+    ...Array.from({ length: 4 }, (_, index) => '[chromium] › tests/browser/beta.spec.js:' + (index + 1) + ':1 › beta ' + (index + 1))
+  ];
+  const manifest = createShardManifest({ sourceSha, fingerprint, tests: groupedEntries, shardCount: 4 });
+  for (const shard of manifest.shards) {
+    shard.status = 'passed';
+    shard.exitCode = 0;
+    shard.reportValid = true;
+  }
+  invalidateChangedSpecShards(manifest, ['tests/browser/alpha.spec.js']);
+  assert.deepEqual(manifest.shards.map(shard => shard.status), ['pending', 'pending', 'passed', 'passed']);
 });
 
 test('only passed shards are reused; failed and pending shards execute again', () => {
