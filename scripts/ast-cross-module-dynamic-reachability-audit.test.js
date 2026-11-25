@@ -1525,3 +1525,32 @@ test('respects non-enumerable descriptors when wrapped sources are copied',()=>{
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('traces enumerable defineProperty factories when copied as CommonJS export sources',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-define-property-copy-sources-'));
+ try{
+  fs.writeFileSync(path.join(root,'single.cjs'),[
+   'function service() {}',
+   "module.exports = Object.assign({}, Object.defineProperty({}, 'service', { enumerable: true, value: service }));"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'multiple.cjs'),[
+   'function multiService() {}',
+   'module.exports = { ...Object.defineProperties({}, {',
+   '  service: { enumerable: true, value: multiService }',
+   '}) };'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'non-enumerable.cjs'),[
+   'function hiddenService() {}',
+   "module.exports = Object.assign({}, Object.defineProperty({}, 'service', { value: hiddenService }));"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: singleService } = require('./single.cjs');",
+   "const { service: multiService } = require('./multiple.cjs');",
+   "const { service: hiddenService } = require('./non-enumerable.cjs');"
+  ].join('\\n'));
+  const files=['single.cjs','multiple.cjs','non-enumerable.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='single.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='multiple.cjs'&&x.imported==='service'&&x.exportedLocal==='multiService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='non-enumerable.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
