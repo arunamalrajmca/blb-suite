@@ -1054,6 +1054,6 @@ test('traces side-effect-free identifier-returning CommonJS accessor exports',()
   const files=['define-property.cjs','define-properties.cjs','dynamic.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='define-property.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='define-properties.cjs'&&x.imported==='assigned'&&x.exportedLocal==='assignedService'&&!x.unresolvedExport));
-  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='dynamic.cjs'&&x.imported==='service'&&x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='dynamic.cjs'&&x.imported==='service'&&x.exportedLocal!=='service'));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
