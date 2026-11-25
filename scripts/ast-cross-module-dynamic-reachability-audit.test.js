@@ -1554,3 +1554,38 @@ test('traces enumerable defineProperty factories when copied as CommonJS export 
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='non-enumerable.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('preserves defineProperty factory targets and applies enumerability overrides',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-define-property-factory-targets-'));
+ try{
+  fs.writeFileSync(path.join(root,'preserved.cjs'),[
+   'function service() {}',
+   'function extra() {}',
+   "module.exports = Object.assign({}, Object.defineProperty({ service }, 'extra', { enumerable: true, value: extra }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'hidden.cjs'),[
+   'function service() {}',
+   'function hidden() {}',
+   "module.exports = Object.assign({}, Object.defineProperty({ service }, 'service', { value: hidden }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'multiple.cjs'),[
+   'function service() {}',
+   'function extra() {}',
+   'module.exports = { ...Object.defineProperties({ service }, {',
+   '  service: { value: createService() },',
+   '  extra: { enumerable: true, value: extra }',
+   '}) };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: preservedService, extra: preservedExtra } = require('./preserved.cjs');",
+   "const { service: hiddenService } = require('./hidden.cjs');",
+   "const { service: replacedService, extra: multipleExtra } = require('./multiple.cjs');"
+  ].join('\n'));
+  const files=['preserved.cjs','hidden.cjs','multiple.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='preserved.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='preserved.cjs'&&x.imported==='extra'&&x.exportedLocal==='extra'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='hidden.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='multiple.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='multiple.cjs'&&x.imported==='extra'&&x.exportedLocal==='extra'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
