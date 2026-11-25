@@ -1446,6 +1446,20 @@ test('preserves post-factory Set mutations for Array.fromAsync', () => {
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces Map entry values from factory-created Maps in for-await loops', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeEntries() { return new Map(); }',
+    'const entries = makeEntries();',
+    'entries.set("cleanup", cleanup);',
+    'async function run() {',
+    '  for await (const [key, callback] of entries) callback();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'cleanup@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-value-read'));
+});
+
 test('preserves post-factory Map mutations for Array.fromAsync entry mappers', () => {
   const result = audit([
     'const cleanup = () => work();',
