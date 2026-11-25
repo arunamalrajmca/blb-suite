@@ -86,7 +86,7 @@ function collectExportsAndImports(ast,file){
         for(const argument of object.arguments)recordObjectProperties(argument);
         return;
       }
-      if(['freeze','seal','preventExtensions'].includes(method)){
+      if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method)){
         recordObjectProperties(object.arguments[0]);
         return;
       }
@@ -114,7 +114,7 @@ function collectExportsAndImports(ast,file){
       for(const argument of value.arguments)recordObjectProperties(argument);
       return;
     }
-    if(['freeze','seal','preventExtensions'].includes(method))recordObjectProperties(value.arguments[0]);
+    if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
   };
   visit(ast,n=>{
     if(isModuleExportsAssignment(n)){
