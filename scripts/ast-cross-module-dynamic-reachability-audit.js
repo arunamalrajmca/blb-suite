@@ -72,8 +72,13 @@ function collectExportsAndImports(ast,file){
     if(value?.type==='ObjectExpression'){recordObjectProperties(value);return;}
     if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
       ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
-      ||!isUnboundGlobal(value.callee.object)||memberName(value.callee)!=='assign')return;
-    for(const argument of value.arguments)recordObjectProperties(argument);
+      ||!isUnboundGlobal(value.callee.object))return;
+    const method=memberName(value.callee);
+    if(method==='assign'){
+      for(const argument of value.arguments)recordObjectProperties(argument);
+      return;
+    }
+    if(['freeze','seal','preventExtensions'].includes(method))recordObjectProperties(value.arguments[0]);
   };
   visit(ast,n=>{
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
