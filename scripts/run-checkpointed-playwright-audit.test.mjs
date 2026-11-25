@@ -135,7 +135,8 @@ test('a single-shard invocation checkpoints immediately and later invocations re
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-browser-single-shard-'));
   const list = path.join(directory, 'test-list.txt');
   const checkpoint = path.join(directory, 'checkpoints');
-  fs.writeFileSync(list, entries.join('\\n') + '\\n');
+  const separator = String.fromCharCode(10);
+  fs.writeFileSync(list, entries.join(separator) + separator);
   const calls = [];
   const executeShard = (_tests, index) => {
     calls.push(index);
