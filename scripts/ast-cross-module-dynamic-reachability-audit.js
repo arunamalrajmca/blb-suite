@@ -55,6 +55,13 @@ function collectExportsAndImports(ast,file){
       exports.set(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
   };
+  const recordCommonJsAssignmentValue=value=>{
+    if(value?.type==='ObjectExpression'){recordObjectProperties(value);return;}
+    if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
+      ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
+      ||!isUnboundGlobal(value.callee.object)||memberName(value.callee)!=='assign')return;
+    for(const argument of value.arguments)recordObjectProperties(argument);
+  };
   visit(ast,n=>{
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
       for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(specifier.local.name);
@@ -96,7 +103,7 @@ function collectExportsAndImports(ast,file){
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
         if(n.right.type==='Identifier')exports.set('default',n.right.name);
-        recordObjectProperties(n.right);
+        recordCommonJsAssignmentValue(n.right);
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
