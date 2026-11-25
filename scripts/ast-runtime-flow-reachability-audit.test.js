@@ -1376,7 +1376,7 @@ test('propagates delegated yields from an object-method async generator', () => 
     'async function run() {',
     '  await Array.fromAsync(tasks(), callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@5' && edge.kind === 'container-callback-argument'));
 });
@@ -1390,7 +1390,7 @@ test('propagates delegated yields from an instantiated class async-generator met
     'async function run() {',
     '  await Array.fromAsync(tasks(), callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
