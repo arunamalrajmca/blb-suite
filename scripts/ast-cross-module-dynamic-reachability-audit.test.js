@@ -519,8 +519,8 @@ test('does not treat shadowed Object or exports bindings as CommonJS export APIs
    '  exports.fakeAgain = service;',
    '}'
   ].join('\n'));
-  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service, fake, fakeAgain } from './service.cjs';");
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
+  for(const name of ['service','fake','fakeAgain']) assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported===name&&x.unresolvedExport),name);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });

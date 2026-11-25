@@ -92,7 +92,7 @@ function collectExportsAndImports(ast,file){
       const obj=n.left.object.type==='Identifier'?n.left.object.name:null;
       const key=memberName(n.left);
       const moduleExportsObject=n.left.object.type==='MemberExpression'
-        &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'
+        &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'&&isUnboundGlobal(n.left.object.object)
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
         if(n.right.type==='Identifier')exports.set('default',n.right.name);
