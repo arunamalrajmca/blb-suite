@@ -976,8 +976,9 @@ function analyzeFile(root, file) {
         if (iteratorSource) asyncIteratorInstanceSources.set(assigned, iteratorSource);
       }
       const iteratorClass = classForInstanceExpression(node.init);
-      if (iteratorClass && classAsyncIteratorMethods(iteratorClass)) {
-        // The class may itself be the iterator (Symbol.asyncIterator returns this).
+      const classIterator = iteratorClass && classAsyncIteratorMethods(iteratorClass);
+      if (classIterator && returnedValues(classIterator.iterator).some(value => value.type === 'ThisExpression')) {
+        // The class itself is the iterator (Symbol.asyncIterator returns this).
         // The iterable registration below owns its yielded values; retain only
         // the iterator-instance alias needed for explicit next() calls.
         asyncIteratorInstanceSources.set(assigned, assigned);
