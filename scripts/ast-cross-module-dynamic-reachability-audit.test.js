@@ -951,3 +951,29 @@ test('copies current exports through Object.assign replacement in argument order
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='exports-before-last.cjs'&&x.imported==='service'&&x.exportedLocal==='overrideService'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('copies current exports through object spread and respects property order',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-object-spread-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'spread-last.cjs'),[
+   'function originalService() {}',
+   'function overrideService() {}',
+   'exports.service = originalService;',
+   'module.exports = { service: overrideService, ...exports };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'explicit-last.cjs'),[
+   'function originalService() {}',
+   'function overrideService() {}',
+   'exports.service = originalService;',
+   'module.exports = { ...exports, service: overrideService };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { service as spreadLast } from './spread-last.cjs';",
+   "import { service as explicitLast } from './explicit-last.cjs';"
+  ].join('\n'));
+  const files=['spread-last.cjs','explicit-last.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='spread-last.cjs'&&x.imported==='service'&&x.exportedLocal==='originalService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='explicit-last.cjs'&&x.imported==='service'&&x.exportedLocal==='overrideService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
