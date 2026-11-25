@@ -725,3 +725,21 @@ test('does not treat shadowed Object.freeze as a native export wrapper',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('clears incremental module.exports properties after later object replacement',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-incremental-replaced-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function staleService() {}',
+   'function currentService() {}',
+   'module.exports = {};',
+   'module.exports.stale = staleService;',
+   'module.exports = { current: currentService };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { stale, current } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='current'&&x.exportedLocal==='currentService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stale'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
