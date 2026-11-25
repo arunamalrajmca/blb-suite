@@ -56,21 +56,18 @@ function collectExportsAndImports(ast,file){
       &&isUnboundGlobal(node.left.object))exportsReassignments.push(node.start);
   });
   const commonJsAliasVariables=new Set();
-  for(const scope of scopeManager.scopes){
-    for(const variable of scope.variables){
-      const definition=variable.defs?.[0];
-      const declaration=definition?.parent;
-      const initializer=definition?.node?.init;
-      if(definition?.type!=='Variable'||declaration?.kind!=='const'
-        ||!isNativeCommonJsExportsTarget(initializer))continue;
-      // Reject aliases if static reassignment can detach them from the live
-      // CommonJS export object before or after the alias is established.
-      const aliasesExports=initializer.type==='Identifier';
-      const detachedBefore=aliasesExports&&exportsReassignments.some(position=>position<initializer.start);
-      const detachedAfter=moduleExportsReassignments.some(position=>position>initializer.end);
-      if(!detachedBefore&&!detachedAfter)commonJsAliasVariables.add(variable);
-    }
-  }
+  visit(ast,(node,parent)=>{
+    if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'
+      ||parent?.type!=='VariableDeclaration'||parent.kind!=='const'
+      ||!isNativeCommonJsExportsTarget(node.init))return;
+    const variable=scopeManager.scopes.flatMap(scope=>scope.variables)
+      .find(candidate=>candidate.identifiers.includes(node.id));
+    if(!variable)return;
+    const aliasesExports=node.init.type==='Identifier';
+    const detachedBefore=aliasesExports&&exportsReassignments.some(position=>position<node.init.start);
+    const detachedAfter=moduleExportsReassignments.some(position=>position>node.init.end);
+    if(!detachedBefore&&!detachedAfter)commonJsAliasVariables.add(variable);
+  });
   const isCommonJsExportsTarget=node=>{
     if(isNativeCommonJsExportsTarget(node))return true;
     if(node?.type!=='Identifier')return false;
