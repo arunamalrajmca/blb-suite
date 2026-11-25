@@ -176,6 +176,30 @@ function collectExportsAndImports(ast,file){
       setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
   };
+  const recordObjectDefineProperties=call=>{
+    const method=memberName(call.callee);
+    const target=call.arguments[0];
+    if(method==='defineProperty'){
+      const key=staticPropertyKey(call.arguments[1]);
+      if(key===null)return false;
+      setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
+      return true;
+    }
+    if(method==='defineProperties'&&call.arguments[1]?.type==='ObjectExpression'){
+      const properties=call.arguments[1].properties||[];
+      const resolved=properties.map(property=>({
+        property,
+        key:property.type==='Property'?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null
+      }));
+      if(resolved.some(item=>item.key===null))return false;
+      for(const item of resolved){
+        if(item.property.kind!=='init')continue;
+        setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
+      }
+      return true;
+    }
+    return false;
+  };
   const recordCommonJsAssignmentValue=(value,exportsSnapshot=null)=>{
     if(value?.type==='ObjectExpression'){recordObjectProperties(value,exportsSnapshot);return;}
     if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
@@ -183,6 +207,11 @@ function collectExportsAndImports(ast,file){
       ||!isUnboundGlobal(value.callee.object))return;
     const method=memberName(value.callee);
     if(method==='fromEntries'){recordObjectFromEntries(value);return;}
+    if(method==='defineProperty'||method==='defineProperties'){
+      recordObjectProperties(value.arguments[0],exportsSnapshot);
+      recordObjectDefineProperties(value);
+      return;
+    }
     if(method==='assign'){
       for(const argument of value.arguments){
         if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
