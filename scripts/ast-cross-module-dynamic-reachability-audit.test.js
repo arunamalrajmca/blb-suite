@@ -448,3 +448,39 @@ test('traces imported object identity through nested helper calls returned from 
   assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'&&x.property==='stop'));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves incremental module.exports property assignments as named CommonJS exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-incremental-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'function stopService() {}',
+   'module.exports.start = startService;',
+   "module.exports['stop'] = stopService;"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { start as startApi, stop as stopApi } from './service.cjs';",
+   'startApi(); stopApi();'
+  ].join('\\n'));
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const name of ['start','stop']){
+   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.cjs'&&x.imported===name&&!x.unresolvedExport),name);
+  }
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('keeps dynamic module.exports property names unresolved instead of guessing exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-dynamic-export-key-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'module.exports[runtimeName] = startService;'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { startService } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='startService'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

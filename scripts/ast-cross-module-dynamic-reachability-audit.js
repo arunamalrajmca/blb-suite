@@ -50,11 +50,21 @@ function collectExportsAndImports(ast,file){
     if(n.type==='ExportDefaultDeclaration')exports.set('default',n.declaration.type==='Identifier'?n.declaration.name:((n.declaration.type==='FunctionDeclaration'||n.declaration.type==='ClassDeclaration')&&n.declaration.id?n.declaration.id.name:null));
     if(n.type==='ExportAllDeclaration'&&n.source){if(n.exported)imports.push({source:n.source.value,imported:'*',exported:n.exported.name||n.exported.value,reexportNamespace:true});else imports.push({source:n.source.value,reexportAll:true});}
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='MemberExpression'){
+      const memberName=member=>member?.type==='MemberExpression'
+        ?(member.computed&&member.property.type==='Literal'?String(member.property.value):(!member.computed?member.property.name:null))
+        :null;
       const obj=n.left.object.type==='Identifier'?n.left.object.name:null;
-      const key=n.left.computed&&n.left.property.type==='Literal'?String(n.left.property.value):(!n.left.computed?n.left.property.name:null);
+      const key=memberName(n.left);
+      const moduleExportsObject=n.left.object.type==='MemberExpression'
+        &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'
+        &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'){
         if(n.right.type==='Identifier')exports.set('default',n.right.name);
         if(n.right.type==='ObjectExpression')for(const p of n.right.properties)if(p.type==='Property')exports.set(String(p.key.name||p.key.value),p.value.type==='Identifier'?p.value.name:null);
+      } else if(moduleExportsObject&&key) {
+        // CommonJS permits incremental named exports after assigning module.exports.
+        // Record only literal property names; dynamic names remain outside this proof.
+        exports.set(key,n.right.type==='Identifier'?n.right.name:null);
       } else if(obj==='exports'&&key)exports.set(key,n.right.type==='Identifier'?n.right.name:null);
     }
   });
