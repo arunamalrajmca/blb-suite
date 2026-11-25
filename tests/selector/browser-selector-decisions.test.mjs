@@ -1272,8 +1272,11 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.equal((audit.match(/name: Save browser-matrix performance checkpoint after shard/g) || []).length, 8,
     "full-audit corpus A/B samples must be checkpointed after every browser shard");
   const guardedShardCondition = "if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}";
-  assert.equal(audit.split(guardedShardCondition).length - 1, 25,
+  assert.equal(audit.split(guardedShardCondition).length - 1, 9,
     "browser shard progression must stop after a failed durable checkpoint upload");
+  const cancellationSafeSaveCondition = "if: ${{ always() && steps.browser_prepare.outcome == 'success' }}";
+  assert.equal(audit.split(cancellationSafeSaveCondition).length - 1, 16,
+    "completed shard checkpoints must still be uploaded when a run is cancelled between steps");
   const manifestSaveBlocks = audit.split("- name: Save browser-shard checkpoint after shard ").slice(1)
     .map(block => block.split("\n      - name:")[0]);
   assert.equal(manifestSaveBlocks.length, 8, "every browser shard must have its own durable checkpoint save");
