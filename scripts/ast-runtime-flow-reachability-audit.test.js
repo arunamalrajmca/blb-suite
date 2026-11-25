@@ -1277,3 +1277,47 @@ test('binds stored callback values to findLastIndex callback parameters', () => 
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
 });
+
+
+test('binds stored callback values to Array.fromAsync mapper parameters', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'async function run() {',
+    '  await Array.fromAsync(callbacks, callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'), JSON.stringify(result.flowEdges));
+});
+
+test('tracks callback values returned by an awaited Array.fromAsync mapper', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'async function run() {',
+    '  const mapped = await Array.fromAsync(callbacks, callback => callback);',
+    '  const selected = mapped.at(0);',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@4' &&
+    edge.to === 'selected@5' && edge.kind === 'container-value-read'));
+});
+
+test('supports a separately declared Array.fromAsync mapper callback', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const callbacks = [cleanup];',
+    'function identity(callback) { return callback; }',
+    'async function run() {',
+    '  const mapped = await Array.fromAsync(callbacks, identity);',
+    '  const selected = mapped.at(0);',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
+    edge.to === 'selected@6' && edge.kind === 'container-value-read'));
+});
