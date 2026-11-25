@@ -698,11 +698,13 @@ function analyzeFile(root, file) {
       return resolveAsyncIterableExpressions(expression.expressions.at(-1), seen);
     }
     if (expression.type === 'ArrayExpression') {
-      return [{array:expression}];
+      return [{array:expression, iteratorKind:'sync'}];
     }
     if (expression.type === 'ObjectExpression') {
-      const iterator = asyncIteratorMethod(expression) || syncIteratorMethod(expression);
-      return iterator ? [{iterator, iteratorObject:expression}] : [];
+      const asyncIterator = asyncIteratorMethod(expression);
+      if (asyncIterator) return [{iterator:asyncIterator, iteratorObject:expression, iteratorKind:'async'}];
+      const syncIterator = syncIteratorMethod(expression);
+      return syncIterator ? [{iterator:syncIterator, iteratorObject:expression, iteratorKind:'sync'}] : [];
     }
     if (expression.type === 'NewExpression') {
       const classNode = classForInstanceExpression(expression);
@@ -728,7 +730,7 @@ function analyzeFile(root, file) {
         return resolveAsyncIterableExpressions(expression.arguments[0], seen);
       }
       const called = resolveCalledFunction(expression);
-      if (called?.generator) return [{generator:called}];
+      if (called?.generator) return [{generator:called, iteratorKind:called.async ? 'async' : 'sync'}];
       if (!called || seen.has(called)) return [];
       const nextSeen = new Set(seen);
       nextSeen.add(called);
@@ -1368,19 +1370,23 @@ function analyzeFile(root, file) {
             } else source = bindingId(iterable);
           }
         } else if (resolveAsyncIterableExpressions(iterable).length) {
-          const asyncIterables = resolveAsyncIterableExpressions(iterable);
-          source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-          for (const asyncIterable of asyncIterables) {
-            if (asyncIterable.array) {
-              addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
-              addObjectPropertySlots(asyncIterable.array, source);
-            } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
-            else if (asyncIterable.classNode) {
-              if (!registerClassAsyncIterator(asyncIterable.classNode, source, iterable)) {
-                registerClassSyncIterator(asyncIterable.classNode, source, iterable);
-              }
+          const asyncIterables = resolveAsyncIterableExpressions(iterable).filter(candidate =>
+            name !== 'from' || candidate.iteratorKind !== 'async' &&
+              (!candidate.classNode || !!classSyncIteratorMethods(candidate.classNode)));
+          if (asyncIterables.length) {
+            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+            for (const asyncIterable of asyncIterables) {
+              if (asyncIterable.array) {
+                addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
+                addObjectPropertySlots(asyncIterable.array, source);
+              } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
+              else if (asyncIterable.classNode) {
+                if (name === 'from') registerClassSyncIterator(asyncIterable.classNode, source, iterable);
+                else if (!registerClassAsyncIterator(asyncIterable.classNode, source, iterable)) {
+                  registerClassSyncIterator(asyncIterable.classNode, source, iterable);
+                }
+              } else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable, false, asyncIterable.iteratorObject);
             }
-            else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable, false, asyncIterable.iteratorObject);
           }
         } else if (classForInstanceExpression(iterable)) {
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
