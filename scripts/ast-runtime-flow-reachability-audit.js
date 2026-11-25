@@ -142,6 +142,8 @@ function analyzeFile(root, file) {
   const containerCopies = [];
   const iteratorSources = new Map();
   const iteratorNextRequests = [];
+  const asyncIteratorInstanceSources = new Map();
+  const asyncIteratorNextRequests = [];
   const callbackIterationRequests = [];
   const mapContainers = new Set();
   const setContainers = new Set();
@@ -700,6 +702,14 @@ function analyzeFile(root, file) {
   visit(ast, (node, parent, ancestors) => {
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
       const assigned = bindingId(node.id);
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'MemberExpression' &&
+          node.init.callee.computed && node.init.callee.property.type === 'MemberExpression' &&
+          node.init.callee.property.object.type === 'Identifier' && node.init.callee.property.object.name === 'Symbol' &&
+          node.init.callee.property.property.type === 'Identifier' && node.init.callee.property.property.name === 'asyncIterator' &&
+          node.init.callee.object.type === 'Identifier') {
+        const source = asyncIterableSources.get(bindingId(node.init.callee.object));
+        if (source) asyncIteratorInstanceSources.set(assigned, source);
+      }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier') {
         const generator = resolveFunctionReference(node.init.callee);
         if (generator?.generator) {
@@ -1006,9 +1016,14 @@ function analyzeFile(root, file) {
       }
       if (node.type === 'CallExpression' && name === 'next' && receiverName) {
         const iterator = iteratorSources.get(bindingId(receiver));
+        const asyncSource = asyncIteratorInstanceSources.get(bindingId(receiver));
+        const declaration = [...ancestors].reverse().find(item => item.type === 'VariableDeclarator' &&
+          item.id.type === 'Identifier' && item.init &&
+          (item.init === node || (item.init.type === 'AwaitExpression' && item.init.argument === node)));
         const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
-          ? bindingId(parent.id) : null;
+          ? bindingId(parent.id) : declaration ? bindingId(declaration.id) : null;
         if (iterator && assigned) iteratorNextRequests.push({iterator,assigned,node});
+        if (asyncSource && assigned) asyncIteratorNextRequests.push({source:asyncSource,assigned,node});
       }
       if (node.type === 'CallExpression' && containerCopyMethods.has(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
@@ -1687,10 +1702,20 @@ function analyzeFile(root, file) {
       const right = node.right;
       let source = null, includeObjectValues = false, entries = false, keys = false;
       if (right.type === 'Identifier') {
-        const iterator = iteratorSources.get(bindingId(right));
-        if (iterator) {
-          source = iterator.container; entries = iterator.entries; keys = iterator.keys;
-        } else source = bindingId(right);
+        const asyncSource = asyncIterableSources.get(bindingId(right));
+        if (asyncSource) source = asyncSource;
+        else {
+          const iterator = iteratorSources.get(bindingId(right));
+          if (iterator) {
+            source = iterator.container; entries = iterator.entries; keys = iterator.keys;
+          } else source = bindingId(right);
+        }
+      } else if (right.type === 'CallExpression' && right.callee.type === 'Identifier') {
+        const generator = resolveFunctionReference(right.callee);
+        if (generator?.generator) {
+          source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
+          registerAsyncYieldValues(generator, source, right);
+        }
       } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
         const method = propertyKey(right.callee.property, right.callee.computed);
         const receiverNode = right.callee.object;
@@ -1901,6 +1926,20 @@ function analyzeFile(root, file) {
     for (const write of propertyWrites.slice()) {
       if (canonicalObject(write.object) !== canonicalObject(request.iterator.container)) continue;
       if (write.property !== null && !/^\d+$/.test(write.property)) continue;
+      propertyWrites.push({object:request.assigned,property:'value',stored:write.stored});
+    }
+  }
+
+  // Async iterator next() resolves to a step object with its yielded value.
+  for (const request of asyncIteratorNextRequests) {
+    for (const write of containerWrites) {
+      if (write.container === request.source) {
+        propertyWrites.push({object:request.assigned,property:'value',stored:write.stored});
+      }
+    }
+    for (const write of propertyWrites.slice()) {
+      if (canonicalObject(write.object) !== canonicalObject(request.source)) continue;
+      if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
       propertyWrites.push({object:request.assigned,property:'value',stored:write.stored});
     }
   }
