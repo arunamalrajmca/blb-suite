@@ -893,3 +893,20 @@ test('resolves object literals wrapped by native Object.setPrototypeOf',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('preserves existing exports when Object.assign mutates and returns module.exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-assign-identity-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function existingService() {}',
+   'function addedService() {}',
+   'module.exports = { existing: existingService };',
+   'module.exports = Object.assign(module.exports, { added: addedService });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { existing, added } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='existing'&&x.exportedLocal==='existingService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='added'&&x.exportedLocal==='addedService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
