@@ -75,6 +75,11 @@ function collectExportsAndImports(ast,file){
     }
     if(object?.type!=='ObjectExpression')return;
     for(const property of object.properties||[]){
+      if(property.type==='SpreadElement'){
+        // Only recurse into literal spread sources; identifier spreads require alias/dataflow proof.
+        recordObjectProperties(property.argument);
+        continue;
+      }
       if(property.type!=='Property'||property.kind!=='init')continue;
       const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
       if(key===null||key===undefined)continue;
