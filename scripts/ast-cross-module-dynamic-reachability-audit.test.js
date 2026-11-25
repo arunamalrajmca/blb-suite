@@ -1444,3 +1444,32 @@ test('invalidates CommonJS export owners when Object.assign receives Object.crea
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('does not treat non-enumerable Object.create descriptors as copied CommonJS exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-nonenumerable-object-create-descriptors-'));
+ try{
+  fs.writeFileSync(path.join(root,'assigned.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'Object.assign(module.exports, Object.create(null, {',
+   '  service: { value: createService() }',
+   '}));'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function service() {}',
+   'module.exports = { service, ...Object.create(null, {',
+   '  service: { value: createService() }',
+   '}) };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: assignedService } = require('./assigned.cjs');",
+   "const { service: spreadService } = require('./spread.cjs');"
+  ].join('\n'));
+  const files=['assigned.cjs','spread.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['assigned.cjs','spread.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='service'&&!x.unresolvedExport),'non-enumerable descriptor must not overwrite '+target+' service');
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
