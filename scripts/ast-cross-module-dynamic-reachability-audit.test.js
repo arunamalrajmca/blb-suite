@@ -526,3 +526,33 @@ test('does not treat shadowed Object or exports bindings as CommonJS export APIs
 });
 
 
+
+
+test('resolves named exports from module.exports assigned an Object.assign result',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-assign-return-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'function stopService() {}',
+   "module.exports = Object.assign({}, { start: startService }, { ['stop']: stopService });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { start, stop } from './service.cjs'; start(); stop();");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not treat a shadowed Object.assign as a CommonJS export factory',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-shadowed-assign-factory-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'function factory(Object) { return Object.assign({}, { service }); }',
+   'module.exports = factory({});'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
