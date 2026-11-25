@@ -910,3 +910,18 @@ test('preserves existing exports when Object.assign mutates and returns module.e
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='added'&&x.exportedLocal==='addedService'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('preserves named exports when current exports object becomes module.exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-exports-object-identity-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'exports.service = service;',
+   'module.exports = exports;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
