@@ -120,33 +120,47 @@ function writeManifest(directory, manifest) {
 }
 
 function readManifest(directory, expected) {
-  try {
-    const candidate = JSON.parse(fs.readFileSync(path.join(directory, 'browser-shards.json'), 'utf8'));
-    let compatibleExpected = expected;
-    if (candidate.sourceSha !== expected.sourceSha) {
-      const diff = spawnSync('git', ['diff', '--name-only', candidate.sourceSha, expected.sourceSha], {
-        cwd: process.cwd(), encoding: 'utf8'
-      });
-      if (diff.status !== 0) return null;
-      compatibleExpected = {
-        ...expected,
-        changedFiles: diff.stdout.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
-      };
-    }
-    if (!isCompatibleShardManifest(candidate, compatibleExpected)) return null;
-    const manifest = structuredClone(candidate);
-    if (candidate.sourceSha !== expected.sourceSha) {
-      invalidateChangedSpecShards(manifest, compatibleExpected.changedFiles);
-      manifest.sourceSha = expected.sourceSha;
-      manifest.fingerprint = expected.fingerprint;
-      writeManifest(directory, manifest);
-      console.log('Restored compatible browser shards across commits; only shards containing changed spec files will rerun.');
-    }
-    return manifest;
-  } catch {
+  const reject = reason => {
+    console.log('Browser checkpoint not reused: ' + reason + '.');
     return null;
+  };
+  let candidate;
+  try {
+    candidate = JSON.parse(fs.readFileSync(path.join(directory, 'browser-shards.json'), 'utf8'));
+  } catch (error) {
+    return reject(error.code === 'ENOENT' ? 'manifest missing' : 'manifest JSON invalid');
   }
-}
+  let compatibleExpected = expected;
+  if (candidate.sourceSha !== expected.sourceSha) {
+    const diff = spawnSync('git', ['diff', '--name-only', candidate.sourceSha, expected.sourceSha], {
+      cwd: process.cwd(), encoding: 'utf8'
+    });
+    if (diff.status !== 0) return reject('source history unavailable for cross-commit validation');
+    compatibleExpected = {
+      ...expected,
+      changedFiles: diff.stdout.split(/\\r?\\n/).map(value => value.trim()).filter(Boolean)
+    };
+  } else if (candidate.fingerprint !== expected.fingerprint) {
+    return reject('committed input fingerprint changed');
+  }
+  if (candidate.environmentFingerprint !== expected.environmentFingerprint) {
+    return reject('runner or toolchain environment fingerprint changed');
+  }
+  if (candidate.schemaVersion !== 3) return reject('manifest schema is not version 3');
+  if (!isCompatibleShardManifest(candidate, compatibleExpected)) {
+    return reject('test inventory, shard layout, or changed-file compatibility validation failed');
+  }
+  const manifest = structuredClone(candidate);
+  if (candidate.sourceSha !== expected.sourceSha) {
+    invalidateChangedSpecShards(manifest, compatibleExpected.changedFiles);
+    manifest.sourceSha = expected.sourceSha;
+    manifest.fingerprint = expected.fingerprint;
+    writeManifest(directory, manifest);
+    console.log('Restored compatible browser shards across commits; only shards containing changed spec files will rerun.');
+  } else {
+    console.log('Restored compatible browser shard checkpoint for the exact committed inputs and environment.');
+  }
+  return manifest;
 
 function collectTestRecords(report) {
   const found = [];
