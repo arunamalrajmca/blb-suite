@@ -584,6 +584,76 @@ function analyzeFile(root, file) {
     return named.length === 1 ? named[0] : null;
   };
 
+  // Async generators and custom async-iterator objects expose yielded values
+  // as the elements consumed by Array.fromAsync. Keep this deliberately
+  // syntactic and conservative: nested functions are not part of the iterator.
+  const asyncIterableSources = new Map();
+  const yieldedValues = (fn, seen = new Set()) => {
+    if (!fn || !fn.generator || seen.has(fn)) return [];
+    seen.add(fn);
+    const values = [];
+    const scan = (node, root = false) => {
+      if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
+      if (!root && isFunction(node)) return;
+      if (node.type === 'YieldExpression' && node.argument) {
+        if (node.delegate && node.argument.type === 'CallExpression' &&
+            node.argument.callee.type === 'Identifier') {
+          const delegated = resolveFunctionReference(node.argument.callee);
+          if (delegated && delegated.generator) values.push(...yieldedValues(delegated, seen));
+          else values.push(node.argument);
+        } else values.push(node.argument);
+        return;
+      }
+      for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'range', 'start', 'end'].includes(key)) continue;
+        if (Array.isArray(value)) value.forEach(child => scan(child));
+        else if (value && typeof value.type === 'string') scan(value);
+      }
+    };
+    scan(fn.body, true);
+    return values;
+  };
+  const asyncIteratorMethod = objectExpression => {
+    if (!objectExpression || objectExpression.type !== 'ObjectExpression') return null;
+    for (const property of objectExpression.properties) {
+      if (property.type !== 'Property' || !isFunction(property.value) ||
+          !property.computed || property.key.type !== 'MemberExpression' ||
+          property.key.object.type !== 'Identifier' || property.key.object.name !== 'Symbol' ||
+          property.key.property.type !== 'Identifier' || property.key.property.name !== 'asyncIterator') continue;
+      return property.value;
+    }
+    return null;
+  };
+  const asyncIteratorFunctionFor = iterable => {
+    if (iterable?.type === 'ObjectExpression') return asyncIteratorMethod(iterable);
+    if (iterable?.type !== 'Identifier') return null;
+    const variable = variableForNode.get(iterable);
+    const definition = variable?.defs?.find(def => def.type === 'Variable' && def.node?.type === 'VariableDeclarator');
+    return asyncIteratorMethod(definition?.node?.init);
+  };
+  const registerAsyncYieldValues = (fn, source, origin) => {
+    for (const value of yieldedValues(fn)) {
+      let stored = null, objectValue = false;
+      if (value.type === 'Identifier') {
+        const storedFunction = functionVariables.get(variableForNode.get(value));
+        stored = storedFunction ? 'function@' + storedFunction.loc.start.line : bindingId(value);
+        if (storedFunction) addEdge('function@' + storedFunction.loc.start.line, stored,
+          'function-variable-identity', origin, 'async iterator yielded function');
+        else objectValue = true;
+      } else if (isFunction(value)) {
+        stored = 'function@' + value.loc.start.line;
+      } else {
+        stored = 'async-yield-value@' + value.loc.start.line + ':' + value.loc.start.column;
+        addContainedReferences(value, stored, 'async-generator-yield', origin);
+        if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) addObjectPropertySlots(value, stored);
+        objectValue = true;
+      }
+      if (!stored) continue;
+      addEdge(stored, source, 'async-generator-yield', origin, 'yielded value');
+      containerWrites.push({container:source,key:null,stored,node:origin,objectValue});
+    }
+  };
+
   // Lexical captures are function-to-outer-binding edges even when the function
   // is registered or invoked later by a runtime outside this source file.
   for (const scope of manager.scopes) {
@@ -628,6 +698,24 @@ function analyzeFile(root, file) {
   const finalizationRegistryCallbacks = new Map();
 
   visit(ast, (node, parent, ancestors) => {
+    if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+      const assigned = bindingId(node.id);
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier') {
+        const generator = resolveFunctionReference(node.init.callee);
+        if (generator?.generator) {
+          const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
+          asyncIterableSources.set(assigned, source);
+          registerAsyncYieldValues(generator, source, node.init);
+        }
+      } else if (node.init?.type === 'ObjectExpression') {
+        const iterator = asyncIteratorMethod(node.init);
+        if (iterator) {
+          const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
+          asyncIterableSources.set(assigned, source);
+          registerAsyncYieldValues(iterator, source, node.init);
+        }
+      }
+    }
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
         node.init?.type === 'Identifier') {
       const source = weakRefSources.get(bindingId(node.init));
@@ -1004,12 +1092,26 @@ function analyzeFile(root, file) {
             ? resolveFunctionReference(mapperArgument) : null;
         let source = null, includeObjectValues = false, entries = false, role = null;
         if (iterable?.type === 'Identifier') {
+          const asyncSource = asyncIterableSources.get(bindingId(iterable));
+          if (asyncSource) source = asyncSource;
           const iterator = iteratorSources.get(bindingId(iterable));
           if (iterator?.entries) source = null;
           else if (iterator) {
             source = iterator.container;
             if (iterator.keys && mapContainers.has(source)) role = 'map-key';
           } else source = bindingId(iterable);
+        } else if (iterable?.type === 'CallExpression' && iterable.callee.type === 'Identifier') {
+          const generator = resolveFunctionReference(iterable.callee);
+          if (generator?.generator) {
+            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+            registerAsyncYieldValues(generator, source, iterable);
+          }
+        } else if (iterable?.type === 'ObjectExpression') {
+          const iterator = asyncIteratorMethod(iterable);
+          if (iterator) {
+            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+            registerAsyncYieldValues(iterator, source, iterable);
+          }
         } else if (iterable?.type === 'ArrayExpression') {
           source = 'array-from-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           addContainedReferences(iterable, source, 'array-from-source', node);
