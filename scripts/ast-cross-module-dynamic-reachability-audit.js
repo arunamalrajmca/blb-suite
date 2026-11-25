@@ -46,8 +46,13 @@ function collectExportsAndImports(ast,file){
   const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
   const isUnboundGlobal=node=>!!node&&node.type==='Identifier'
     &&(scopeManager.globalScope?.through||[]).some(reference=>reference.identifier===node);
+  const staticPropertyKey=node=>{
+    if(node?.type==='Literal'&&(typeof node.value==='string'||typeof node.value==='number'))return String(node.value);
+    if(node?.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked;
+    return null;
+  };
   const memberName=member=>member?.type==='MemberExpression'
-    ?(member.computed&&member.property.type==='Literal'?String(member.property.value):(!member.computed?member.property.name:null))
+    ?(member.computed?staticPropertyKey(member.property):member.property.name)
     :null;
   const isCommonJsExportsTarget=node=>{
     if(node?.type==='Identifier'&&node.name==='exports')return isUnboundGlobal(node);
@@ -58,9 +63,7 @@ function collectExportsAndImports(ast,file){
     if(object?.type!=='ObjectExpression')return;
     for(const property of object.properties||[]){
       if(property.type!=='Property'||property.kind!=='init')continue;
-      const key=property.computed
-        ?(property.key.type==='Literal'?String(property.key.value):null)
-        :(property.key.name??property.key.value);
+      const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
       if(key===null||key===undefined)continue;
       setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
@@ -91,22 +94,20 @@ function collectExportsAndImports(ast,file){
       }
       if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
-        &&n.arguments[1]?.type==='Literal'&&typeof n.arguments[1].value==='string'){
+        &&staticPropertyKey(n.arguments[1])!==null){
         const descriptor=n.arguments[2];
         const value=descriptor?.type==='ObjectExpression'
           ?descriptor.properties.find(property=>property.type==='Property'&&!property.computed
             &&property.key.type==='Identifier'&&property.key.name==='value')?.value
           :null;
-        setCommonJsExport(n.arguments[1].value,value?.type==='Identifier'?value.name:null);
+        setCommonJsExport(staticPropertyKey(n.arguments[1]),value?.type==='Identifier'?value.name:null);
       }
       if(method==='defineProperties'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
         &&n.arguments[1]?.type==='ObjectExpression'){
         for(const property of n.arguments[1].properties||[]){
           if(property.type!=='Property'||property.kind!=='init')continue;
-          const key=property.computed
-            ?(property.key.type==='Literal'?String(property.key.value):null)
-            :(property.key.name??property.key.value);
+          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
           if(key===null||key===undefined)continue;
           const descriptor=property.value;
           const value=descriptor?.type==='ObjectExpression'
