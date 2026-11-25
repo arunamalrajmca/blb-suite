@@ -36,7 +36,7 @@ export function createShardManifest({ sourceSha, fingerprint, tests, shardCount 
   if (new Set(tests).size !== tests.length) throw new Error('Browser test inventory contains duplicate entries.');
   const shards = partitionTests(tests, shardCount);
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceSha,
     fingerprint,
     inventoryDigest: digest(tests),
@@ -46,6 +46,7 @@ export function createShardManifest({ sourceSha, fingerprint, tests, shardCount 
       index: index + 1,
       digest: digest(entries),
       tests: entries,
+      passedTests: [],
       status: 'pending',
       exitCode: null
     }))
@@ -65,7 +66,7 @@ export function isCompatibleShardManifest(candidate, expected) {
       ).filter(Boolean)));
       if (changedFiles.some(file => !referencedSpecs.has(file))) return false;
     }
-    return candidate?.schemaVersion === 1 &&
+    return [1, 2].includes(candidate?.schemaVersion) &&
       candidate.inventoryDigest === base.inventoryDigest &&
       candidate.scheduledTests === base.scheduledTests &&
       candidate.shardCount === base.shardCount &&
@@ -77,8 +78,16 @@ export function isCompatibleShardManifest(candidate, expected) {
         Array.isArray(shard.tests) &&
         shard.tests.length === base.shards[index].tests.length &&
         shard.tests.every((entry, testIndex) => entry === base.shards[index].tests[testIndex]) &&
+        (candidate.schemaVersion === 1 || (
+          Array.isArray(shard.passedTests) &&
+          new Set(shard.passedTests).size === shard.passedTests.length &&
+          shard.passedTests.every(entry => shard.tests.includes(entry))
+        )) &&
         ['pending', 'failed', 'passed'].includes(shard.status) &&
-        (shard.status !== 'passed' || (shard.exitCode === 0 && shard.reportValid === true))
+        (shard.status !== 'passed' || (
+          shard.exitCode === 0 && shard.reportValid === true &&
+          (candidate.schemaVersion === 1 || shard.passedTests.length === shard.tests.length)
+        ))
       );
   } catch {
     return false;
@@ -93,6 +102,7 @@ export function invalidateChangedSpecShards(manifest, changedFiles) {
     ).filter(Boolean));
     if (Array.from(changed).some(file => shardSpecs.has(file))) {
       shard.status = 'pending';
+      shard.passedTests = [];
       shard.exitCode = null;
       shard.reportValid = false;
       delete shard.error;
@@ -124,6 +134,12 @@ function readManifest(directory, expected) {
     }
     if (!isCompatibleShardManifest(candidate, compatibleExpected)) return null;
     const manifest = structuredClone(candidate);
+    if (manifest.schemaVersion === 1) {
+      manifest.schemaVersion = 2;
+      for (const shard of manifest.shards) {
+        shard.passedTests = shard.status === 'passed' ? [...shard.tests] : [];
+      }
+    }
     if (candidate.sourceSha !== expected.sourceSha) {
       for (const shard of manifest.shards) {
         const shardSpecs = new Set(shard.tests.map(entry =>
@@ -188,19 +204,23 @@ function runShard(entries, index, directory, workers) {
   const log = (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || '');
   fs.writeFileSync(path.join(directory, 'browser-shard-' + String(index).padStart(2, '0') + '.log'), log);
   let validReport = false;
+  let passedEntries = [];
   try {
     const report = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'test-results/results.json'), 'utf8'));
     const records = collectTestRecords(report);
-    validReport = records.length === entries.length &&
-      records.every(record =>
-        (record.status === 'passed' && record.overallStatus === 'expected') ||
-        (record.status === 'skipped' && record.overallStatus === 'skipped' && record.expectedStatus === 'skipped')
+    validReport = records.length === entries.length;
+    if (validReport) {
+      passedEntries = entries.filter((_entry, index) =>
+        (records[index].status === 'passed' && records[index].overallStatus === 'expected') ||
+        (records[index].status === 'skipped' && records[index].overallStatus === 'skipped' && records[index].expectedStatus === 'skipped')
       );
+    }
   } catch {}
   fs.rmSync(temp, { recursive: true, force: true });
   return {
     exitCode: Number.isInteger(result.status) ? result.status : 1,
-    passed: result.status === 0 && validReport,
+    passed: result.status === 0 && validReport && passedEntries.length === entries.length,
+    passedEntries,
     error: result.error ? String(result.error) : null,
     validReport
   };
@@ -226,20 +246,27 @@ export function runCheckpointedBrowserAudit({
   if (manifest === fresh) writeManifest(directory, manifest);
   let failures = 0;
   for (const shard of manifest.shards) {
-    if (shard.status === 'passed' && shard.exitCode === 0 && shard.reportValid === true) {
+    shard.passedTests ||= shard.status === 'passed' ? [...shard.tests] : [];
+    const remaining = shard.tests.filter(entry => !shard.passedTests.includes(entry));
+    if (!remaining.length && shard.exitCode === 0 && shard.reportValid === true) {
+      shard.status = 'passed';
       console.log('Reusing passed browser shard [' + shard.index + '/' + shardCount + '] (' + shard.tests.length + ' tests).');
       continue;
     }
-    console.log('Running browser shard [' + shard.index + '/' + shardCount + '] (' + shard.tests.length + ' tests).');
-    const result = executeShard(shard.tests, shard.index, directory, workers);
-    shard.status = result.passed ? 'passed' : 'failed';
+    console.log('Running browser shard [' + shard.index + '/' + shardCount + '] (' + remaining.length + ' remaining tests; ' + shard.passedTests.length + ' already passed).');
+    const result = executeShard(remaining, shard.index, directory, workers);
+    const newlyPassed = result.validReport === true
+      ? (result.passedEntries || (result.passed ? remaining : []))
+      : [];
+    shard.passedTests = [...new Set([...shard.passedTests, ...newlyPassed])];
+    shard.status = result.passed && shard.passedTests.length === shard.tests.length ? 'passed' : 'failed';
     shard.exitCode = result.exitCode;
     shard.error = result.error || null;
     shard.reportValid = result.validReport === true;
     writeManifest(directory, manifest);
-    if (!result.passed) {
+    if (shard.status !== 'passed') {
       failures++;
-      console.error('Browser shard [' + shard.index + '/' + shardCount + '] failed (exit=' + result.exitCode + ', validReport=' + result.validReport + ').');
+      console.error('Browser shard [' + shard.index + '/' + shardCount + '] failed (exit=' + result.exitCode + ', validReport=' + result.validReport + '; ' + shard.passedTests.length + '/' + shard.tests.length + ' tests retained).');
     }
   }
   const passed = manifest.shards.filter(shard => shard.status === 'passed' && shard.exitCode === 0).length;
