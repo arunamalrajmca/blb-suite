@@ -192,7 +192,10 @@ function runShard(entries, index, directory, workers) {
   const reportPath = path.join(process.cwd(), 'test-results/results.json');
   fs.rmSync(reportPath, { force: true });
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  const outputDirectory = path.join(directory, 'browser-shard-' + String(index).padStart(2, '0') + '-results');
+  const diagnosticsDirectory = process.env.BLB_BROWSER_SHARD_DIAGNOSTICS_DIR || path.join(directory, 'diagnostics');
+  fs.mkdirSync(diagnosticsDirectory, { recursive: true });
+  const outputDirectory = path.join(diagnosticsDirectory, 'browser-shard-' + String(index).padStart(2, '0') + '-results');
+  fs.rmSync(outputDirectory, { recursive: true, force: true });
   const args = [cli, 'test', '--test-list', listPath, '--workers=' + workers, '--max-failures=1', '--output=' + outputDirectory];
   const result = spawnSync(process.execPath, args, {
     cwd: process.cwd(),
@@ -202,7 +205,7 @@ function runShard(entries, index, directory, workers) {
     env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }
   });
   const log = (result.stdout || '') + '\n--- STDERR ---\n' + (result.stderr || '');
-  fs.writeFileSync(path.join(directory, 'browser-shard-' + String(index).padStart(2, '0') + '.log'), log);
+  fs.writeFileSync(path.join(diagnosticsDirectory, 'browser-shard-' + String(index).padStart(2, '0') + '.log'), log);
   let validReport = false;
   let passedEntries = [];
   try {
