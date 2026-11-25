@@ -1286,3 +1286,37 @@ test('does not retain CommonJS owners across unknown object spreads or computed 
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='computed.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('invalidates prior CommonJS export owners when descriptor mutations have dynamic keys',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-dynamic-descriptor-mutation-overwrite-'));
+ try{
+  fs.writeFileSync(path.join(root,'define-property.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'Object.defineProperty(module.exports, key, { value: createService() });'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'define-properties.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'Object.defineProperties(module.exports, { [key]: { value: createService() } });'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'unknown-descriptors.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const descriptors = loadDescriptors();',
+   'Object.defineProperties(module.exports, descriptors);'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: propertyService } = require('./define-property.cjs');",
+   "const { service: propertiesService } = require('./define-properties.cjs');",
+   "const { service: unknownService } = require('./unknown-descriptors.cjs');"
+  ].join('\\n'));
+  const files=['define-property.cjs','define-properties.cjs','unknown-descriptors.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['define-property.cjs','define-properties.cjs','unknown-descriptors.cjs']) {
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport),target+' should not retain a stale service owner');
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
