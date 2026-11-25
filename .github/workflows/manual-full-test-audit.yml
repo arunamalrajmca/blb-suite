@@ -31,6 +31,10 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
 
+      - name: Fingerprint committed audit inputs
+        id: fingerprints
+        run: node scripts/ci-checkpoint-fingerprints.mjs >> "$GITHUB_OUTPUT"
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
@@ -59,7 +63,7 @@ jobs:
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test reusable CI checkpoint and browser shard recovery
         run: |
-          node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs
+          node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs
 
       - name: Verify repository-wide test inventory and ownership
         id: inventory
@@ -67,9 +71,9 @@ jobs:
         continue-on-error: true
         with:
           section: inventory
-          cache_prefix: blb-ci-v1-full-audit-inventory-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-inventory-${{ steps.fingerprints.outputs.inventory }}
           restore_prefix: blb-ci-v1-full-audit-inventory-
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.inventory }}
           run: node scripts/test-suite-inventory.mjs
       - name: Run every AST reachability audit test and analysis
         id: ast
@@ -77,9 +81,9 @@ jobs:
         continue-on-error: true
         with:
           section: ast-audits
-          cache_prefix: blb-ci-v1-full-audit-ast-audits-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-ast-audits-${{ steps.fingerprints.outputs.ast }}
           restore_prefix: blb-ci-v1-full-audit-ast-audits-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.ast }}
           run: |
             set -euo pipefail
             for test_file in scripts/ast-*-audit.test.js; do
@@ -109,9 +113,9 @@ jobs:
         continue-on-error: true
         with:
           section: ast-concurrency
-          cache_prefix: blb-ci-v1-full-audit-ast-concurrency-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-ast-concurrency-${{ steps.fingerprints.outputs.astConcurrency }}
           restore_prefix: blb-ci-v1-full-audit-ast-concurrency-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.astConcurrency }}
           run: node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4
       - name: Read manifest version
         id: version
@@ -132,9 +136,9 @@ jobs:
         continue-on-error: true
         with:
           section: build-validation
-          cache_prefix: blb-ci-v1-full-audit-build-validation-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-build-validation-${{ steps.fingerprints.outputs.build }}
           restore_prefix: blb-ci-v1-full-audit-build-validation-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.build }}
           run: node scripts/validate-build.js
       - name: Run browser selector decision tests
         id: selector
@@ -142,9 +146,9 @@ jobs:
         continue-on-error: true
         with:
           section: selector-tests
-          cache_prefix: blb-ci-v1-full-audit-selector-tests-${{ hashFiles('extension/**', 'tests/selector/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-selector-tests-${{ steps.fingerprints.outputs.selector }}
           restore_prefix: blb-ci-v1-full-audit-selector-tests-
-          fingerprint: ${{ hashFiles('extension/**', 'tests/selector/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.selector }}
           run: node --test tests/selector/*.test.mjs
       - name: Run standalone JavaScript test scripts
         id: scripts
@@ -152,9 +156,9 @@ jobs:
         continue-on-error: true
         with:
           section: standalone-scripts
-          cache_prefix: blb-ci-v1-full-audit-standalone-scripts-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-standalone-scripts-${{ steps.fingerprints.outputs.scripts }}
           restore_prefix: blb-ci-v1-full-audit-standalone-scripts-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.scripts }}
           run: |
             set -euo pipefail
             # validate-build.js already executes the scripts in this manifest.
@@ -181,9 +185,9 @@ jobs:
         continue-on-error: true
         with:
           section: python-unittests
-          cache_prefix: blb-ci-v1-full-audit-python-unittests-${{ hashFiles('extension/**', 'tests/**/test_*.py', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-python-unittests-${{ steps.fingerprints.outputs.python }}
           restore_prefix: blb-ci-v1-full-audit-python-unittests-
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**/test_*.py', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.python }}
           run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Install Playwright Chromium
         run: npx playwright install chromium
@@ -197,9 +201,9 @@ jobs:
         continue-on-error: true
         with:
           section: isolated-browser-regressions
-          cache_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-${{ hashFiles('extension/**', 'tests/browser/extension-reference-actions.spec.js', 'tests/browser/service-worker-lifecycle.spec.js', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-${{ steps.fingerprints.outputs.isolatedBrowser }}
           restore_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-
-          fingerprint: ${{ hashFiles('extension/**', 'tests/browser/extension-reference-actions.spec.js', 'tests/browser/service-worker-lifecycle.spec.js', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.isolatedBrowser }}
           run: |
             set -euo pipefail
             rerun_log="$RUNNER_TEMP/blb-prior-audit-failures.log"
@@ -232,9 +236,9 @@ jobs:
         continue-on-error: true
         with:
           section: kjv-corpus-integrity
-          cache_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-${{ steps.fingerprints.outputs.corpus }}
           restore_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.corpus }}
           run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
       - name: Run package regression group
         id: package
@@ -242,9 +246,9 @@ jobs:
         continue-on-error: true
         with:
           section: package-regression
-          cache_prefix: blb-ci-v1-full-audit-package-regression-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-package-regression-${{ steps.fingerprints.outputs.regression }}
           restore_prefix: blb-ci-v1-full-audit-package-regression-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Run resolver regression group
         id: resolver
@@ -252,9 +256,9 @@ jobs:
         continue-on-error: true
         with:
           section: resolver-regression
-          cache_prefix: blb-ci-v1-full-audit-resolver-regression-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-resolver-regression-${{ steps.fingerprints.outputs.regression }}
           restore_prefix: blb-ci-v1-full-audit-resolver-regression-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=resolver
       - name: Run selection regression group
         id: selection
@@ -262,9 +266,9 @@ jobs:
         continue-on-error: true
         with:
           section: selection-regression
-          cache_prefix: blb-ci-v1-full-audit-selection-regression-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-selection-regression-${{ steps.fingerprints.outputs.regression }}
           restore_prefix: blb-ci-v1-full-audit-selection-regression-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=selection
       - name: Run features regression group
         id: features
@@ -272,9 +276,9 @@ jobs:
         continue-on-error: true
         with:
           section: features-regression
-          cache_prefix: blb-ci-v1-full-audit-features-regression-${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-features-regression-${{ steps.fingerprints.outputs.regression }}
           restore_prefix: blb-ci-v1-full-audit-features-regression-
-          fingerprint: ${{ hashFiles('extension/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=features
       - name: Gate full browser audit on all other suites
         id: browser_gate
@@ -323,9 +327,9 @@ jobs:
         with:
           section: browser-matrix
           always_run: 'true'
-          cache_prefix: blb-ci-v1-full-audit-browser-matrix-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}
           restore_prefix: blb-ci-v1-full-audit-browser-matrix-
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          fingerprint: ${{ steps.fingerprints.outputs.browser }}
           run: |
             export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
             export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"
