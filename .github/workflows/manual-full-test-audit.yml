@@ -326,14 +326,6 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix" "$RUNNER_TEMP/blb-browser-shard-checkpoints"
           touch "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"
-      - name: Restore browser-matrix performance checkpoint
-        id: browser_matrix_restore
-        uses: actions/cache/restore@v5
-        with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
-          restore-keys: |
-            blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-
 
       - name: Restore dedicated browser-shard checkpoint
         id: browser_shard_restore
@@ -365,6 +357,7 @@ jobs:
             image="${ImageOS:-unknown}-${ImageVersion:-unknown}"
             environment_fingerprint=$(printf '%s' "${{ runner.os }}|${{ runner.arch }}|$image|$(node --version)|$npm_version|$python_version|$playwright_version" | sha256sum | cut -d' ' -f1)
             export BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT="$environment_fingerprint"
+            echo "environment_fingerprint=$environment_fingerprint" >> "$GITHUB_OUTPUT"
             list_output="$RUNNER_TEMP/blb-playwright-list.txt"
             test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
             if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
@@ -505,6 +498,15 @@ jobs:
             echo "BLB_CI_CHECKPOINT_FINGERPRINT=$BLB_CI_CHECKPOINT_FINGERPRINT" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT=$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT" >> "$GITHUB_ENV"
 
+      - name: Restore browser-matrix performance checkpoint
+        id: browser_matrix_restore
+        if: ${{ steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          restore-keys: |
+            blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-
       - name: Run browser shard 1/8
         id: browser_shard_1
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -523,7 +525,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Run browser shard 2/8
         id: browser_shard_2
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -542,7 +544,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Run browser shard 3/8
         id: browser_shard_3
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -561,7 +563,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Run browser shard 4/8
         id: browser_shard_4
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -580,7 +582,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Run browser shard 5/8
         id: browser_shard_5
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -599,7 +601,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Run browser shard 6/8
         id: browser_shard_6
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -618,7 +620,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Run browser shard 7/8
         id: browser_shard_7
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -637,7 +639,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Run browser shard 8/8
         id: browser_shard_8
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -656,7 +658,7 @@ jobs:
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
-          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Validate all browser shard checkpoints
         id: browser
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
