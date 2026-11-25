@@ -976,13 +976,11 @@ function analyzeFile(root, file) {
         if (iteratorSource) asyncIteratorInstanceSources.set(assigned, iteratorSource);
       }
       const iteratorClass = classForInstanceExpression(node.init);
-      if (iteratorClass) {
-        const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-        if (registerClassAsyncIterator(iteratorClass, source, node.init) ||
-            registerClassSyncIterator(iteratorClass, source, node.init)) {
-          asyncIterableSources.set(assigned, source);
-          asyncIteratorInstanceSources.set(assigned, source);
-        }
+      if (iteratorClass && classAsyncIteratorMethods(iteratorClass)) {
+        // The class may itself be the iterator (Symbol.asyncIterator returns this).
+        // The iterable registration below owns its yielded values; retain only
+        // the iterator-instance alias needed for explicit next() calls.
+        asyncIteratorInstanceSources.set(assigned, assigned);
       }
       const asyncIterables = resolveAsyncIterableExpressions(node.init);
       if (asyncIterables.length) {
