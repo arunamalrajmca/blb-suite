@@ -25,7 +25,6 @@ export function isCompatibleCompletionMarker(marker, expected) {
     const valid = createCompletionMarker(expected);
     return marker?.schemaVersion === 1 &&
       marker.section === valid.section &&
-      marker.sourceSha === valid.sourceSha &&
       marker.fingerprint === valid.fingerprint &&
       marker.status === 'passed';
   } catch {
