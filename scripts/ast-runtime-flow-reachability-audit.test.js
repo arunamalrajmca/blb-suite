@@ -1428,7 +1428,7 @@ test('preserves post-factory array mutations for Array.fromAsync', () => {
     '  await Array.fromAsync(callbacks, callback => callback());',
     '}'
   ].join('\n'));
-  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+  assert.ok(result.flowEdges.some(edge => edge.from === 'cleanup@1' &&
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
 
@@ -1442,7 +1442,7 @@ test('preserves post-factory Set mutations for Array.fromAsync', () => {
     '  await Array.fromAsync(callbacks, callback => callback());',
     '}'
   ].join('\n'));
-  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+  assert.ok(result.flowEdges.some(edge => edge.from === 'cleanup@1' &&
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
 
@@ -1456,7 +1456,7 @@ test('preserves post-factory Map mutations for Array.fromAsync entry mappers', (
     '  await Array.fromAsync(entries, ([key, callback]) => callback());',
     '}'
   ].join('\n'));
-  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+  assert.ok(result.flowEdges.some(edge => edge.from === 'cleanup@1' &&
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
 
