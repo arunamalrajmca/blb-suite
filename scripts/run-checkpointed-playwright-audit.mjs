@@ -228,7 +228,7 @@ function runShard(entries, index, directory, workers) {
 
 export function runCheckpointedBrowserAudit({
   testListPath,
-  directory = process.env.BLB_CI_CHECKPOINT_DIR,
+  directory = process.env.BLB_BROWSER_SHARD_CHECKPOINT_DIR || process.env.BLB_CI_CHECKPOINT_DIR,
   sourceSha = process.env.BLB_CI_CHECKPOINT_SOURCE_SHA,
   fingerprint = process.env.BLB_CI_CHECKPOINT_FINGERPRINT,
   environmentFingerprint = process.env.BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT || '0'.repeat(64),
