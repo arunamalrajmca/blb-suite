@@ -197,9 +197,9 @@ function collectExportsAndImports(ast,file){
         &&parent.callee.object.name==='Object'&&isUnboundGlobal(parent.callee.object)
         &&memberName(parent.callee)==='assign'&&isCommonJsExportsTarget(parent.arguments[0]);
       const spreadAsWholeModuleExports=parent?.type==='SpreadElement'
-        &&parent.parent?.type==='ObjectExpression'&&parent.parent.properties.length===1
-        &&parent.parent.parent?.type==='AssignmentExpression'&&parent.parent.parent.right===parent.parent
-        &&isModuleExportsAssignment(parent.parent.parent);
+        &&moduleExportsReplacements.some(replacement=>replacement.right.type==='ObjectExpression'
+          &&replacement.right.properties.length===1&&replacement.right.properties[0]===parent
+          &&isModuleExportsAssignment(replacement));
       const destructuredRequire=parent?.type==='VariableDeclarator'&&parent.init===n&&parent.id.type==='ObjectPattern';
       if(destructuredRequire){
         for(const property of parent.id.properties||[]){
