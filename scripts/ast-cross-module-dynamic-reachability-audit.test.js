@@ -1244,3 +1244,21 @@ test('does not retain static defineProperties owners when a dynamic key may over
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('does not retain static Object.create descriptor owners when a dynamic key may overwrite them',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-object-create-dynamic-overwrite-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   "const key = process.env.EXPORT_NAME;",
+   'module.exports = Object.create(null, {',
+   '  service: { enumerable: true, value: service },',
+   '  [key]: { enumerable: true, value: createService() }',
+   '});'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
