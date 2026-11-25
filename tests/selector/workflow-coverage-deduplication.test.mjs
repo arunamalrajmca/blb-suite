@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import {
-  mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs, togglePermissionSpecs,
+  featureSpecs, mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs, togglePermissionSpecs,
   groupARequiredSpecs, groupBRequiredSpecs,
   referenceRequiredSpecs, studySessionSpecs
 } from "../../scripts/ci-routing-registry.mjs";
@@ -157,4 +157,43 @@ test("native prerender activation scenarios have one headed X11 execution owner"
   assert.ok(workflow.includes("xvfb-run -a --server-args='-screen 0 1280x900x24'"));
   assert.ok(workflow.includes("tests/browser/native-prerender-activation.spec.js"));
   assert.ok(workflow.includes("tests/browser/service-worker-shortcut-headed.spec.js"));
+});
+
+
+test("feature routing covers every extension module and contains only valid existing spec entries", () => {
+  const extensionRoot = new URL("../../extension/", import.meta.url);
+  const extensionModules = readdirSync(extensionRoot, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith(".js"))
+    .map(entry => "extension/" + entry.name)
+    .sort();
+  const routedModules = [...new Set(featureSpecs.flatMap(group => group.paths)
+    .filter(path => path.startsWith("extension/") && path.endsWith(".js")))].sort();
+  assert.deepEqual(routedModules, extensionModules,
+    "every extension JavaScript module must have focused feature-routing ownership");
+
+  for (const group of featureSpecs) {
+    assert.ok(Array.isArray(group.paths) && group.paths.length > 0, "feature group has source paths");
+    assert.ok(Array.isArray(group.specs) && group.specs.length > 0, "feature group has browser specs");
+    for (const path of group.paths) {
+      assert.equal(typeof path, "string", "feature source path must be a string");
+      assert.ok(existsSync(new URL("../../" + path, import.meta.url)), "feature source exists: " + path);
+    }
+    for (const spec of group.specs) {
+      assert.equal(typeof spec, "string", "feature browser spec must be a string");
+      assert.ok(existsSync(new URL("../../" + spec, import.meta.url)), "feature browser spec exists: " + spec);
+      assert.ok(mappedSpecs.has(spec), "feature browser spec belongs to authoritative inventory: " + spec);
+    }
+  }
+
+  const inventories = [
+    mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs, togglePermissionSpecs,
+    groupARequiredSpecs, groupBRequiredSpecs, referenceRequiredSpecs, studySessionSpecs
+  ];
+  for (const inventory of inventories) {
+    for (const spec of inventory) {
+      assert.equal(typeof spec, "string", "routing inventories must not contain empty array slots");
+      assert.match(spec, /^tests\/browser\/[^/]+\.spec\.js$/, "valid browser spec path: " + spec);
+      assert.ok(existsSync(new URL("../../" + spec, import.meta.url)), "routed spec exists: " + spec);
+    }
+  }
 });
