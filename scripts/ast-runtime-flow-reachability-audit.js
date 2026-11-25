@@ -988,9 +988,15 @@ function analyzeFile(root, file) {
           }
         }
       }
-      if (node.type === 'CallExpression' && receiverName === 'Array' && name === 'from') {
-        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+      if (node.type === 'CallExpression' && receiverName === 'Array' && ['from', 'fromAsync'].includes(name)) {
+        let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
+        if (!assigned && name === 'fromAsync' && parent?.type === 'AwaitExpression') {
+          const declaration = [...ancestors].reverse().find(item =>
+            item.type === 'VariableDeclarator' && item.id.type === 'Identifier' && item.init === parent);
+          if (declaration) assigned = bindingId(declaration.id);
+        }
+        const method = name === 'fromAsync' ? 'Array.fromAsync' : 'Array.from';
         const iterable = node.arguments[0];
         const mapperArgument = node.arguments[1];
         const mapper = isFunction(mapperArgument) ? mapperArgument :
@@ -1027,15 +1033,17 @@ function analyzeFile(root, file) {
             source = container; role = 'map-key';
           }
         }
-        if (assigned && mapper && source) {
+        if (mapper && source) {
           const parameterNode = mapper.params?.[0];
           const parameter = parameterNode?.type === 'AssignmentPattern' ? parameterNode.left : parameterNode;
           if (['Identifier', 'ObjectPattern', 'ArrayPattern'].includes(parameter?.type)) {
             callbackIterationRequests.push({
               source,parameter:parameter.type === 'Identifier' ? bindingId(parameter) : null,
-              parameterPattern:parameter,includeObjectValues,entries,node,method:'Array.from',role
+              parameterPattern:parameter,includeObjectValues,entries,node,method,role
             });
           }
+        }
+        if (assigned && mapper && source) {
           const returns = mapper.body.type === 'BlockStatement'
             ? returnedValues(mapper) : [mapper.body];
           for (const returned of returns) {
@@ -1044,7 +1052,7 @@ function analyzeFile(root, file) {
               const returnedFunction = functionVariables.get(variableForNode.get(returned));
               stored = bindingId(returned);
               if (returnedFunction) addEdge('function@' + returnedFunction.loc.start.line, stored,
-                'function-variable-identity', node, 'Array.from');
+                'function-variable-identity', node, method);
               else objectValue = true;
             } else if (isFunction(returned)) {
               stored = 'function@' + returned.loc.start.line;
@@ -1065,7 +1073,7 @@ function analyzeFile(root, file) {
               objectValue = true;
             }
             if (stored) {
-              addEdge(stored, assigned, 'array-from-result', node, 'Array.from');
+              addEdge(stored, assigned, 'array-from-result', node, method);
               containerWrites.push({container:assigned,key:null,stored,node,objectValue});
             }
           }
