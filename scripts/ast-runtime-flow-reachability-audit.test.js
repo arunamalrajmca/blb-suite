@@ -1555,6 +1555,36 @@ test('traces custom async iterable class instances returned by a factory', () =>
     edge.to === 'callback@7' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces object async iterators that return this from Symbol.asyncIterator', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() { return this; },',
+    '  async next() { return { value: callback, done: false }; }',
+    '};',
+    'async function run() {',
+    '  await Array.fromAsync(iterable, handler => handler());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@7' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces self-returning object async iterators in for-await loops', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() { return this; },',
+    '  async next() { return { value: callback, done: false }; }',
+    '};',
+    'async function run() {',
+    '  for await (const handler of iterable) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@7' && edge.kind === 'container-value-read'));
+});
+
 test('propagates values yielded by a custom Symbol.asyncIterator method', () => {
   const result = audit([
     'const cleanup = () => work();',
