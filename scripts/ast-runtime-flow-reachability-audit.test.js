@@ -1363,7 +1363,7 @@ test('propagates delegated async-generator yields through a local iterator alias
     'async function run() {',
     '  await Array.fromAsync(tasks(), callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@9' && edge.kind === 'container-callback-argument'));
 });
