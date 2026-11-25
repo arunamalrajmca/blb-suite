@@ -25,11 +25,11 @@ test('completion markers require a stable section, full source SHA, and SHA-256 
   assert.throws(() => createCompletionMarker({ ...expected, section: '../escape' }), /stable identifier/);
 });
 
-test('a checkpoint is reusable only for the exact section, commit, fingerprint, schema, and passed status', () => {
+test('a checkpoint is reusable across commits only for the exact section, fingerprint, schema, and passed status', () => {
   const marker = createCompletionMarker(expected);
   assert.equal(isCompatibleCompletionMarker(marker, expected), true);
   assert.equal(isCompatibleCompletionMarker(marker, { ...expected, section: 'other-section' }), false);
-  assert.equal(isCompatibleCompletionMarker(marker, { ...expected, sourceSha: 'c'.repeat(40) }), false);
+  assert.equal(isCompatibleCompletionMarker(marker, { ...expected, sourceSha: 'c'.repeat(40) }), true);
   assert.equal(isCompatibleCompletionMarker(marker, { ...expected, fingerprint: 'd'.repeat(64) }), false);
   assert.equal(isCompatibleCompletionMarker({ ...marker, status: 'failed' }, expected), false);
   assert.equal(isCompatibleCompletionMarker({ ...marker, schemaVersion: 2 }, expected), false);
