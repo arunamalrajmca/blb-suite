@@ -1506,6 +1506,48 @@ test('traces a custom async iterator returned through a local identifier', () =>
     edge.to === 'handler@9' && edge.kind === 'container-value-read'));
 });
 
+test('traces class-based async iterator values and cleanup protocol methods', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class CallbackIterator {',
+    '  [Symbol.asyncIterator]() { return this; }',
+    '  async next() { return Promise.resolve({ value: callback, done: false }); }',
+    '  async return() { return { done: true }; }',
+    '  async throw(error) { throw error; }',
+    '}',
+    'const iterable = new CallbackIterator();',
+    'async function run() {',
+    '  for await (const handler of iterable) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@10'),
+    JSON.stringify(result.flowEdges.filter(edge => edge.kind.includes('async-iterator') ||
+      edge.from === 'function@1' || edge.to === 'handler@10')));
+  for (const line of [3, 4, 5, 6]) {
+    assert.ok(result.flowEdges.some(edge => edge.from === 'function@' + line &&
+      edge.kind === 'async-iterator-protocol-callback'));
+  }
+});
+
+test('unwraps Promise.resolve around custom async iterator and step objects', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() {',
+    '    return Promise.resolve({',
+    '      async next() { return Promise.resolve({ value: callback, done: false }); }',
+    '    });',
+    '  }',
+    '};',
+    'async function run() {',
+    '  for await (const handler of iterable) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@10'));
+});
+
 test('binds stored callback values to Map.groupBy mapper parameters', () => {
   const result = audit([
     'const cleanup = () => work();',
