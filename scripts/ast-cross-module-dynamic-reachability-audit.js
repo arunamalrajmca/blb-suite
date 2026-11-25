@@ -38,7 +38,28 @@ function collectExportsAndImports(ast,file){
     exports.set(String(name),local);
     commonJsExportNames.add(String(name));
   };
+  let commonJsUncertaintyEpoch=0;
+  const setCopiedObjectProperty=(name,local,assignSource=false)=>{
+    const key=String(name);
+    // Object.assign uses [[Set]] on its target. An own '__proto__' source key
+    // may invoke Object.prototype's inherited setter instead of creating an own key.
+    if(assignSource&&key==='__proto__'){
+      if(exports.has(key))setCommonJsExport(key,null);
+      return;
+    }
+    setCommonJsExport(key,local);
+  };
+  const snapshotExportState=()=>({
+    exports:new Map(exports),commonJsNames:new Set(commonJsExportNames),epoch:commonJsUncertaintyEpoch
+  });
+  const restoreExportState=(key,snapshot)=>{
+    if(snapshot.exports.has(key))exports.set(key,snapshot.exports.get(key));
+    else exports.delete(key);
+    if(snapshot.commonJsNames.has(key))commonJsExportNames.add(key);
+    else commonJsExportNames.delete(key);
+  };
   const clearCommonJsExportOwners=()=>{
+    commonJsUncertaintyEpoch++;
     for(const name of commonJsExportNames)exports.delete(name);
     commonJsExportNames.clear();
   };
@@ -63,17 +84,106 @@ function collectExportsAndImports(ast,file){
     return null;
   };
   const descriptorExportLocal=descriptor=>{
-    if(descriptor?.type!=='ObjectExpression')return null;
-    const valueProperty=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
-      &&property.key.type==='Identifier'&&property.key.name==='value');
-    if(valueProperty?.value.type==='Identifier')return valueProperty.value.name;
-    const getter=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
-      &&property.key.type==='Identifier'&&property.key.name==='get')?.value;
+    if(descriptor?.type!=='ObjectExpression'||descriptor.properties?.some(isObjectLiteralPrototypeSetter))return null;
+    let valueProperty=null,getter=null;
+    for(const property of descriptor.properties||[]){
+      if(property.type!=='Property')return null;
+      const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+      if(key===null||key===undefined)return null;
+      if(key==='value')valueProperty=property.value;
+      if(key==='get')getter=property.value;
+    }
+    // A descriptor cannot validly specify both data and accessor fields.
+    if(valueProperty&&getter)return null;
+    if(valueProperty)return valueProperty.type==='Identifier'?valueProperty.name:null;
     return staticGetterLocal(getter);
+  };
+  const descriptorEnumerableState=(descriptor,defaultState=false)=>{
+    if(descriptor?.type!=='ObjectExpression'||descriptor.properties?.some(isObjectLiteralPrototypeSetter))return null;
+    let state=defaultState;
+    for(const property of descriptor.properties||[]){
+      if(property.type==='SpreadElement'){state=null;continue;}
+      if(property.type!=='Property')continue;
+      const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+      if(key===null||key===undefined){state=null;continue;}
+      if(key!=='enumerable')continue;
+      state=property.value.type==='Literal'&&typeof property.value.value==='boolean'?property.value.value:null;
+    }
+    return state;
   };
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed?staticPropertyKey(member.property):member.property.name)
     :null;
+  const isObjectLiteralPrototypeSetter=property=>property?.type==='Property'&&property.kind==='init'
+    &&!property.computed&&!property.shorthand&&!property.method
+    &&((property.key.type==='Identifier'&&property.key.name==='__proto__')
+      ||(property.key.type==='Literal'&&property.key.value==='__proto__'));
+  const existingObjectPropertyEnumerableState=(object,key,activeAliases=new Set())=>{
+    if(object?.type==='Identifier'){
+      const staticObject=resolveStaticObjectSpread(object);
+      if(!staticObject||activeAliases.has(object.name))return null;
+      activeAliases.add(object.name);
+      const state=existingObjectPropertyEnumerableState(staticObject,key,activeAliases);
+      activeAliases.delete(object.name);
+      return state;
+    }
+    if(object?.type==='ObjectExpression'){
+      let state=false;
+      for(const property of object.properties||[]){
+        if(isObjectLiteralPrototypeSetter(property))continue;
+        if(property.type==='SpreadElement'){
+          const argument=property.argument;
+          const source=argument.type==='ObjectExpression'?argument:resolveStaticObjectSpread(argument);
+          const sourceState=source?existingObjectPropertyEnumerableState(source,key,activeAliases):null;
+          if(sourceState===true)state=true;
+          else if(sourceState===null&&state!==true)state=null;
+          continue;
+        }
+        if(property.type!=='Property')continue;
+        const propertyKey=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+        if(propertyKey===null||propertyKey===undefined){if(state!==true)state=null;}
+        else if(String(propertyKey)===String(key))state=true;
+      }
+      return state;
+    }
+    if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
+      &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
+      &&isUnboundGlobal(object.callee.object)){
+      const method=memberName(object.callee);
+      if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
+        const byKey=new Map();
+        for(const property of object.arguments[1].properties||[]){
+          if(isObjectLiteralPrototypeSetter(property))continue;
+          if(property.type!=='Property'||property.kind!=='init')return null;
+          const propertyKey=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+          if(propertyKey===null||propertyKey===undefined)return null;
+          byKey.set(String(propertyKey),property.value);
+        }
+        return byKey.has(String(key))?descriptorEnumerableState(byKey.get(String(key)),false):false;
+      }
+      if(method==='defineProperty'){
+        const targetKey=staticPropertyKey(object.arguments[1]);
+        if(targetKey===null)return null;
+        const existing=existingObjectPropertyEnumerableState(object.arguments[0],key,activeAliases);
+        return String(targetKey)===String(key)?descriptorEnumerableState(object.arguments[2],existing):existing;
+      }
+      if(method==='defineProperties'&&object.arguments[1]?.type==='ObjectExpression'){
+        const baseState=existingObjectPropertyEnumerableState(object.arguments[0],key,activeAliases);
+        const byKey=new Map();
+        for(const property of object.arguments[1].properties||[]){
+          if(isObjectLiteralPrototypeSetter(property))continue;
+          if(property.type!=='Property'||property.kind!=='init')return null;
+          const propertyKey=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+          if(propertyKey===null||propertyKey===undefined)return null;
+          byKey.set(String(propertyKey),property.value);
+        }
+        return byKey.has(String(key))?descriptorEnumerableState(byKey.get(String(key)),baseState):baseState;
+      }
+      if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))
+        return existingObjectPropertyEnumerableState(object.arguments[0],key,activeAliases);
+    }
+    return null;
+  };
   const isModuleExportsAssignment=node=>node?.type==='AssignmentExpression'&&node.operator==='='
     &&node.left.type==='MemberExpression'&&node.left.object.type==='Identifier'
     &&node.left.object.name==='module'&&isUnboundGlobal(node.left.object)&&memberName(node.left)==='exports';
@@ -110,7 +220,7 @@ function collectExportsAndImports(ast,file){
     if(node?.type==='Identifier'&&isCurrentCommonJsExportAlias(node))return true;
     return isModuleExportsReference(node);
   };
-  const recordObjectFromEntries=call=>{
+  const recordObjectFromEntries=(call,assignSource=false)=>{
     const entries=call.arguments[0];
     if(entries?.type!=='ArrayExpression'||entries.elements.some(entry=>entry?.type!=='ArrayExpression'
       ||entry.elements.length!==2||entry.elements.some(element=>!element||element.type==='SpreadElement'))){
@@ -124,17 +234,17 @@ function collectExportsAndImports(ast,file){
       clearCommonJsExportOwners();
       return false;
     }
-    for(const entry of resolved)setCommonJsExport(entry.key,entry.value.type==='Identifier'?entry.value.name:null);
+    for(const entry of resolved)setCopiedObjectProperty(entry.key,entry.value.type==='Identifier'?entry.value.name:null,assignSource);
     return true;
   };
-  const recordObjectProperties=(object,exportsSnapshot=null,activeAliases=new Set())=>{
+  const recordObjectProperties=(object,exportsSnapshot=null,activeAliases=new Set(),enumerableOnly=false,assignSource=false)=>{
     if(object?.type==='Identifier'){
       const variable=resolveVariable(object);
       const declarator=variable?.defs?.find(item=>item.type==='Variable')?.node;
       const staticObject=resolveStaticObjectSpread(object);
       if(staticObject&&declarator&&!activeAliases.has(declarator)){
         activeAliases.add(declarator);
-        recordObjectProperties(staticObject,exportsSnapshot,activeAliases);
+        recordObjectProperties(staticObject,exportsSnapshot,activeAliases,enumerableOnly,assignSource);
         activeAliases.delete(declarator);
       }else{
         // An unknown assignment source may overwrite any previously inferred key.
@@ -147,15 +257,29 @@ function collectExportsAndImports(ast,file){
       &&isUnboundGlobal(object.callee.object)){
       const method=memberName(object.callee);
       if(method==='assign'){
-        for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot);
+        for(let index=0;index<object.arguments.length;index++){
+          // Object.assign preserves non-enumerable own properties already on its target;
+          // only later source arguments are restricted to enumerable properties.
+          recordObjectProperties(object.arguments[index],exportsSnapshot,new Set(),index===0?enumerableOnly:true,assignSource||index>0);
+        }
         return;
       }
-      if(method==='fromEntries'){recordObjectFromEntries(object);return;}
+      if(method==='fromEntries'){recordObjectFromEntries(object,assignSource);return;}
+      if(method==='defineProperty'||method==='defineProperties'){
+        // These APIs mutate and return their first argument; retain its existing
+        // own properties before applying the descriptor changes.
+        const baseline=enumerableOnly?snapshotExportState():null;
+        const epoch=commonJsUncertaintyEpoch;
+        recordObjectProperties(object.arguments[0],exportsSnapshot,new Set(),enumerableOnly,assignSource);
+        const safeBaseline=baseline&&epoch===commonJsUncertaintyEpoch?baseline:null;
+        recordObjectDefineProperties(object,enumerableOnly,safeBaseline,assignSource,object.arguments[0]);
+        return;
+      }
       if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
         // Object.create(proto, descriptors) defines the literal descriptor keys
         // as own properties. Trace only descriptor values/getters already proven
         // to be direct local bindings; dynamic descriptor construction stays unknown.
-        const descriptors=object.arguments[1].properties||[];
+        const descriptors=(object.arguments[1].properties||[]).filter(property=>!isObjectLiteralPrototypeSetter(property));
         const resolved=descriptors.map(property=>({
           property,
           key:property.type==='Property'&&property.kind==='init'
@@ -164,12 +288,30 @@ function collectExportsAndImports(ast,file){
         }));
         // A dynamic key or spread can overwrite any literal descriptor name.
         // Reject the complete descriptor map instead of retaining stale owners.
-        if(resolved.some(item=>item.key===null||item.key===undefined))return;
-        for(const item of resolved)setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
+        if(resolved.some(item=>item.key===null||item.key===undefined)){
+          clearCommonJsExportOwners();
+          return;
+        }
+        if(enumerableOnly){
+          // Duplicate descriptor-map keys collapse during object-literal evaluation.
+          // Only the final descriptor for a key can affect the copied source; a final
+          // non-enumerable descriptor must not erase an earlier property on the target.
+          const lastIndexByKey=new Map();
+          for(let index=0;index<resolved.length;index++)lastIndexByKey.set(String(resolved[index].key),index);
+          const finalResolved=resolved.filter((item,index)=>lastIndexByKey.get(String(item.key))===index);
+          const states=finalResolved.map(item=>descriptorEnumerableState(item.property.value));
+          if(states.some(state=>state===null)){
+            clearCommonJsExportOwners();
+            return;
+          }
+          for(let i=0;i<finalResolved.length;i++)if(states[i])setCopiedObjectProperty(finalResolved[i].key,descriptorExportLocal(finalResolved[i].property.value),assignSource);
+          return;
+        }
+        for(const item of resolved)setCopiedObjectProperty(item.key,descriptorExportLocal(item.property.value),assignSource);
         return;
       }
       if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method)){
-        recordObjectProperties(object.arguments[0],exportsSnapshot);
+        recordObjectProperties(object.arguments[0],exportsSnapshot,new Set(),enumerableOnly,assignSource);
         return;
       }
       // Unknown Object.* factories may produce an arbitrary set of own keys.
@@ -182,11 +324,14 @@ function collectExportsAndImports(ast,file){
       return;
     }
     if(object?.type!=='ObjectExpression')return;
+    const getterKeys=new Set();
     for(const property of object.properties||[]){
+      if(isObjectLiteralPrototypeSetter(property))continue;
       if(property.type==='SpreadElement'){
+        // A spread creates data properties and may replace an earlier accessor.
         // Literal spreads, isolated const aliases, and a proven current exports snapshot are traceable.
         if(exportsSnapshot!==null&&property.argument.type==='Identifier'&&property.argument.name==='exports'&&isUnboundGlobal(property.argument)){
-          for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
+          for(const [name,local] of exportsSnapshot)setCopiedObjectProperty(name,local,assignSource);
         }else{
           const argument=property.argument;
           const staticAlias=argument.type==='Identifier'?resolveStaticObjectSpread(argument):null;
@@ -194,11 +339,11 @@ function collectExportsAndImports(ast,file){
             &&!(argument.type==='CallExpression'&&argument.callee.type==='MemberExpression'
               &&argument.callee.object.type==='Identifier'&&argument.callee.object.name==='Object'
               &&isUnboundGlobal(argument.callee.object)
-              &&['assign','fromEntries','create','freeze','seal','preventExtensions','setPrototypeOf'].includes(memberName(argument.callee)))){
+              &&['assign','fromEntries','create','defineProperty','defineProperties','freeze','seal','preventExtensions','setPrototypeOf'].includes(memberName(argument.callee)))){
             // An unknown spread can overwrite any previously observed static key.
             clearCommonJsExportOwners();
           }
-          recordObjectProperties(argument,exportsSnapshot,activeAliases);
+          recordObjectProperties(argument,exportsSnapshot,activeAliases,true,assignSource);
         }
         continue;
       }
@@ -210,14 +355,22 @@ function collectExportsAndImports(ast,file){
         continue;
       }
       if(property.kind==='get'){
-        setCommonJsExport(String(key),staticGetterLocal(property.value));
+        getterKeys.add(String(key));
+        setCopiedObjectProperty(key,staticGetterLocal(property.value),assignSource);
+        continue;
+      }
+      if(property.kind==='set'){
+        // A setter-only accessor is still an enumerable own property, but spreading
+        // or assigning it reads an undefined value rather than preserving an earlier owner.
+        if(!getterKeys.has(String(key)))setCopiedObjectProperty(key,null,assignSource);
         continue;
       }
       if(property.kind!=='init')continue;
-      setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
+      getterKeys.delete(String(key));
+      setCopiedObjectProperty(key,property.value.type==='Identifier'?property.value.name:null,assignSource);
     }
   };
-  const recordObjectDefineProperties=call=>{
+  const recordObjectDefineProperties=(call,enumerableOnly=false,baseline=null,assignSource=false,existingTarget=null)=>{
     const method=memberName(call.callee);
     if(method==='defineProperty'){
       const key=staticPropertyKey(call.arguments[1]);
@@ -226,7 +379,13 @@ function collectExportsAndImports(ast,file){
         clearCommonJsExportOwners();
         return false;
       }
-      setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
+      const defaultState=enumerableOnly?existingObjectPropertyEnumerableState(existingTarget,key):false;
+      const state=descriptorEnumerableState(call.arguments[2],defaultState);
+      if(enumerableOnly&&state===null){clearCommonJsExportOwners();return false;}
+      if(enumerableOnly&&!state){
+        if(baseline)restoreExportState(key,baseline);
+        else{exports.delete(key);commonJsExportNames.delete(key);}
+      }else setCopiedObjectProperty(key,descriptorExportLocal(call.arguments[2]),assignSource);
       return true;
     }
     if(method==='defineProperties'){
@@ -235,19 +394,31 @@ function collectExportsAndImports(ast,file){
         clearCommonJsExportOwners();
         return false;
       }
-      const properties=call.arguments[1].properties||[];
+      const properties=(call.arguments[1].properties||[]).filter(property=>!isObjectLiteralPrototypeSetter(property));
       const resolved=properties.map(property=>({
         property,
         key:property.type==='Property'?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null
       }));
-      if(resolved.some(item=>item.key===null)){
-        // A dynamic key or spread can overwrite any previously inferred owner.
+      if(resolved.some(item=>item.key===null||item.property.kind!=='init')){
+        // A dynamic key, spread, or accessor can supply/overwrite arbitrary descriptors.
         clearCommonJsExportOwners();
         return false;
       }
-      for(const item of resolved){
+      const lastIndexByKey=new Map();
+      for(let index=0;index<resolved.length;index++)lastIndexByKey.set(String(resolved[index].key),index);
+      const finalResolved=resolved.filter((item,index)=>lastIndexByKey.get(String(item.key))===index);
+      const states=finalResolved.map(item=>descriptorEnumerableState(item.property.value,
+        enumerableOnly?existingObjectPropertyEnumerableState(existingTarget,String(item.key)):false));
+      if(enumerableOnly&&states.some(state=>state===null)){clearCommonJsExportOwners();return false;}
+      for(let index=0;index<finalResolved.length;index++){
+        const item=finalResolved[index];
         if(item.property.kind!=='init')continue;
-        setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
+        if(enumerableOnly&&!states[index]){
+          if(baseline)restoreExportState(String(item.key),baseline);
+          else{exports.delete(String(item.key));commonJsExportNames.delete(String(item.key));}
+          continue;
+        }
+        setCopiedObjectProperty(item.key,descriptorExportLocal(item.property.value),assignSource);
       }
       return true;
     }
@@ -266,10 +437,11 @@ function collectExportsAndImports(ast,file){
       return;
     }
     if(method==='assign'){
-      for(const argument of value.arguments){
+      for(let index=0;index<value.arguments.length;index++){
+        const argument=value.arguments[index];
         if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
           for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
-        }else recordObjectProperties(argument,exportsSnapshot);
+        }else recordObjectProperties(argument,exportsSnapshot,new Set(),index>0,index>0);
       }
       return;
     }
@@ -323,7 +495,7 @@ function collectExportsAndImports(ast,file){
       &&isUnboundGlobal(n.callee.object)){
       const method=memberName(n.callee);
       if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])&&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
-        for(const argument of n.arguments.slice(1))recordObjectProperties(argument);
+        for(const argument of n.arguments.slice(1))recordObjectProperties(argument,null,new Set(),true);
       }
       if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
@@ -335,6 +507,30 @@ function collectExportsAndImports(ast,file){
         // Reuse the conservative returned-object parser so mutation and factory
         // forms apply identical uncertainty rules.
         recordObjectDefineProperties(n);
+      }
+    }
+    if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
+      &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Reflect'
+      &&isUnboundGlobal(n.callee.object)){
+      const method=memberName(n.callee),target=n.arguments[0];
+      const liveTarget=isCommonJsExportsTarget(target)
+        &&!(target?.type==='Identifier'&&target.name==='exports'&&exportsAliasDetached);
+      if(liveTarget&&method==='defineProperty')recordObjectDefineProperties(n);
+      if(liveTarget&&method==='set'){
+        // A fourth receiver argument can redirect the write away from the target;
+        // retain no named-owner assumptions when that receiver is not proven.
+        if(n.arguments.length>3){clearCommonJsExportOwners();}
+        else{
+          const key=staticPropertyKey(n.arguments[1]);
+          if(key===null)clearCommonJsExportOwners();
+          else if(key==='__proto__'){if(exports.has(key))setCommonJsExport(key,null);}
+          else setCommonJsExport(key,n.arguments[2]?.type==='Identifier'?n.arguments[2].name:null);
+        }
+      }
+      if(liveTarget&&method==='deleteProperty'){
+        const key=staticPropertyKey(n.arguments[1]);
+        if(key===null)clearCommonJsExportOwners();
+        else{exports.delete(key);commonJsExportNames.delete(key);}
       }
     }
     if(n.type==='ExportNamedDeclaration'){
