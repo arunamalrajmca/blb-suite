@@ -87,7 +87,14 @@ function collectExportsAndImports(ast,file){
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(n.id.name);
   });
   visit(ast,(n,parent)=>{
-    if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
+    if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='Identifier'
+      &&n.left.name==='exports'&&isUnboundGlobal(n.left)){
+      const right=n.right;
+      const directModuleExports=right.type==='MemberExpression'&&right.object.type==='Identifier'
+        &&right.object.name==='module'&&isUnboundGlobal(right.object)&&memberName(right)==='exports';
+      if(directModuleExports)exportsAliasDetached=false;
+    }
+    if(n.type==='ImportDeclaration'for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true});
     if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
@@ -137,6 +144,9 @@ function collectExportsAndImports(ast,file){
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
         replaceCommonJsExportObject();
+        // In a chained assignment, exports is rebound to the newly assigned module.exports object.
+        if(parent?.type==='AssignmentExpression'&&parent.left.type==='Identifier'
+          &&parent.left.name==='exports'&&isUnboundGlobal(parent.left))exportsAliasDetached=false;
         const defaultLocal=n.right.type==='Identifier'?n.right.name:
           ((n.right.type==='FunctionExpression'||n.right.type==='ClassExpression')&&n.right.id?n.right.id.name:null);
         setCommonJsExport('default',defaultLocal);
