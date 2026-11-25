@@ -327,7 +327,8 @@ jobs:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
           restore-keys: |
-            blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}      - name: Prepare complete browser test list and concurrency compatibility
+            blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-
+      - name: Prepare complete browser test list and concurrency compatibility
         id: browser_prepare
         continue-on-error: true
         shell: bash
@@ -491,6 +492,7 @@ jobs:
             echo "BLB_CI_CHECKPOINT_SOURCE_SHA=$BLB_CI_CHECKPOINT_SOURCE_SHA" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_FINGERPRINT=$BLB_CI_CHECKPOINT_FINGERPRINT" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT=$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT" >> "$GITHUB_ENV"
+
       - name: Run browser shard 1/8
         id: browser_shard_1
         if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
