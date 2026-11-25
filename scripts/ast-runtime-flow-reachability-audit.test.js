@@ -1520,6 +1520,35 @@ test('propagates values yielded by a custom Symbol.asyncIterator method', () => 
     edge.to === 'callback@8' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces object-method async generators through for-await-of bindings', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const sources = {',
+    '  async *handlers() { yield callback; }',
+    '};',
+    'async function run() {',
+    '  for await (const handler of sources.handlers()) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@6'));
+});
+
+test('traces factory-returned class async generators through for-await-of bindings', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class CallbackIterable {',
+    '  async *[Symbol.asyncIterator]() { yield callback; }',
+    '}',
+    'function makeIterable() { return new CallbackIterable(); }',
+    'async function run() {',
+    '  for await (const handler of makeIterable()) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@7'));
+});
+
 test('traces async-generator yielded callbacks through for-await-of bindings', () => {
   const result = audit([
     'const callback = () => start();',
