@@ -247,11 +247,15 @@ export function runCheckpointedBrowserAudit({
   let failures = 0;
   for (const shard of manifest.shards) {
     shard.passedTests ||= shard.status === 'passed' ? [...shard.tests] : [];
-    const remaining = shard.tests.filter(entry => !shard.passedTests.includes(entry));
+    let remaining = shard.tests.filter(entry => !shard.passedTests.includes(entry));
     if (!remaining.length && shard.exitCode === 0 && shard.reportValid === true) {
       shard.status = 'passed';
       console.log('Reusing passed browser shard [' + shard.index + '/' + shardCount + '] (' + shard.tests.length + ' tests).');
       continue;
+    }
+    if (!remaining.length) {
+      shard.passedTests = [];
+      remaining = [...shard.tests];
     }
     console.log('Running browser shard [' + shard.index + '/' + shardCount + '] (' + remaining.length + ' remaining tests; ' + shard.passedTests.length + ' already passed).');
     const result = executeShard(remaining, shard.index, directory, workers);
