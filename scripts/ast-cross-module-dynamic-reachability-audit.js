@@ -39,10 +39,30 @@ function collectExportsAndImports(ast,file){
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed&&member.property.type==='Literal'?String(member.property.value):(!member.computed?member.property.name:null))
     :null;
-  const isCommonJsExportsTarget=node=>{
+  const isNativeCommonJsExportsTarget=node=>{
     if(node?.type==='Identifier'&&node.name==='exports')return isUnboundGlobal(node);
     return node?.type==='MemberExpression'&&node.object.type==='Identifier'
       &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
+  };
+  // A const alias is safe to follow because its binding cannot be reassigned.
+  // Resolve references to eslint-scope variables, not names, so nested shadowing
+  // cannot accidentally inherit another scope's CommonJS alias.
+  const commonJsAliasVariables=new Set();
+  for(const scope of scopeManager.scopes){
+    for(const variable of scope.variables){
+      const definition=variable.defs?.[0];
+      const declaration=definition?.parent;
+      const initializer=definition?.node?.init;
+      if(definition?.type==='Variable'&&declaration?.kind==='const'
+        &&isNativeCommonJsExportsTarget(initializer))commonJsAliasVariables.add(variable);
+    }
+  }
+  const isCommonJsExportsTarget=node=>{
+    if(isNativeCommonJsExportsTarget(node))return true;
+    if(node?.type!=='Identifier')return false;
+    return scopeManager.scopes.some(scope=>scope.references.some(reference=>
+      reference.identifier===node&&reference.resolved
+      &&commonJsAliasVariables.has(reference.resolved)));
   };
   const recordObjectProperties=object=>{
     if(object?.type!=='ObjectExpression')return;
