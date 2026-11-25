@@ -1328,7 +1328,7 @@ test('binds stored callback values to Map.groupBy mapper parameters', () => {
     'const cleanup = () => work();',
     'const callbacks = [cleanup];',
     'const groups = Map.groupBy(callbacks, callback => callback());'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument' &&
     edge.method === 'Map.groupBy'));
@@ -1340,7 +1340,7 @@ test('supports a separately declared Object.groupBy mapper callback', () => {
     'const callbacks = [cleanup];',
     'function identity(callback) { return callback; }',
     'const groups = Object.groupBy(callbacks, identity);'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument' &&
     edge.method === 'Object.groupBy'));
