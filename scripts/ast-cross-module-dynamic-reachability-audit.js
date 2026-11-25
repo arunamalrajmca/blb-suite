@@ -343,6 +343,23 @@ function collectExportsAndImports(ast,file){
     }
     if(n.type==='ExportDefaultDeclaration')exports.set('default',n.declaration.type==='Identifier'?n.declaration.name:((n.declaration.type==='FunctionDeclaration'||n.declaration.type==='ClassDeclaration')&&n.declaration.id?n.declaration.id.name:null));
     if(n.type==='ExportAllDeclaration'&&n.source){if(n.exported)imports.push({source:n.source.value,imported:'*',exported:n.exported.name||n.exported.value,reexportNamespace:true});else imports.push({source:n.source.value,reexportAll:true});}
+    if(n.type==='UnaryExpression'&&n.operator==='delete'&&n.argument.type==='MemberExpression'){
+      const target=n.argument;
+      const targetObject=target.object.type==='Identifier'?target.object.name:null;
+      const targetKey=memberName(target);
+      const moduleExportsTarget=target.object.type==='MemberExpression'
+        &&target.object.object.type==='Identifier'&&target.object.object.name==='module'
+        &&isUnboundGlobal(target.object.object)&&memberName(target.object)==='exports';
+      const liveExportsTarget=targetObject==='exports'&&isUnboundGlobal(target.object)&&!exportsAliasDetached;
+      const aliasTarget=target.object.type==='Identifier'&&isCurrentCommonJsExportAlias(target.object,n);
+      if(moduleExportsTarget||liveExportsTarget||aliasTarget){
+        if(targetKey===null)clearCommonJsExportOwners();
+        else {
+          exports.delete(targetKey);
+          commonJsExportNames.delete(targetKey);
+        }
+      }
+    }
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='MemberExpression'){
       const obj=n.left.object.type==='Identifier'?n.left.object.name:null;
       const key=memberName(n.left);
@@ -387,14 +404,19 @@ function collectExportsAndImports(ast,file){
           setCommonJsExport('default',defaultLocal);
           recordCommonJsAssignmentValue(n.right,exportsSnapshot);
         }
+      } else if(moduleExportsObject&&!key) {
+        // A computed module.exports key may collide with any previously inferred name.
+        clearCommonJsExportOwners();
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
         setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached) {
-        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(n.left.object.type==='Identifier'&&key&&isCurrentCommonJsExportAlias(n.left.object,n)) {
-        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+      } else if(obj==='exports'&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached) {
+        if(key)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+        else clearCommonJsExportOwners();
+      } else if(n.left.object.type==='Identifier'&&isCurrentCommonJsExportAlias(n.left.object,n)) {
+        if(key)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+        else clearCommonJsExportOwners();
       }
     }
   });

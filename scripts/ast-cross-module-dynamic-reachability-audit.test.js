@@ -1353,3 +1353,62 @@ test('invalidates prior CommonJS export owners when Object.assign has an unknown
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('invalidates prior CommonJS export owners after dynamic named-property assignments',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-dynamic-property-assignment-overwrite-'));
+ try{
+  fs.writeFileSync(path.join(root,'module-exports.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'module.exports[key] = createService();'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'exports-alias.cjs'),[
+   'function service() {}',
+   'exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'exports[key] = createService();'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: moduleService } = require('./module-exports.cjs');",
+   "const { service: aliasService } = require('./exports-alias.cjs');"
+  ].join('\n'));
+  const files=['module-exports.cjs','exports-alias.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['module-exports.cjs','exports-alias.cjs']) {
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport),target+' should not retain a stale service owner');
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('does not retain CommonJS export owners after deleting named properties',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-delete-property-overwrite-'));
+ try{
+  fs.writeFileSync(path.join(root,'module-exports.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'delete module.exports.service;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'exports-alias.cjs'),[
+   'function service() {}',
+   'exports.service = service;',
+   'delete exports.service;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'dynamic-delete.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'delete module.exports[key];'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: moduleService } = require('./module-exports.cjs');",
+   "const { service: aliasService } = require('./exports-alias.cjs');",
+   "const { service: dynamicService } = require('./dynamic-delete.cjs');"
+  ].join('\n'));
+  const files=['module-exports.cjs','exports-alias.cjs','dynamic-delete.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['module-exports.cjs','exports-alias.cjs','dynamic-delete.cjs']) {
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport),target+' should not retain a deleted or uncertain service owner');
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
