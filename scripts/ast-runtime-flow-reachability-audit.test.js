@@ -1368,6 +1368,33 @@ test('propagates delegated async-generator yields through a local iterator alias
     edge.to === 'callback@9' && edge.kind === 'container-callback-argument'));
 });
 
+test('propagates delegated yields from an object-method async generator', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const sources = { async *base() { yield cleanup; } };',
+    'async function* tasks() { yield* sources.base(); }',
+    'async function run() {',
+    '  await Array.fromAsync(tasks(), callback => callback());',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@5' && edge.kind === 'container-callback-argument'));
+});
+
+test('propagates delegated yields from an instantiated class async-generator method', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'class Sources { async *base() { yield cleanup; } }',
+    'const sources = new Sources();',
+    'async function* tasks() { yield* sources.base(); }',
+    'async function run() {',
+    '  await Array.fromAsync(tasks(), callback => callback());',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
 test('propagates values yielded by a custom Symbol.asyncIterator method', () => {
   const result = audit([
     'const cleanup = () => work();',
