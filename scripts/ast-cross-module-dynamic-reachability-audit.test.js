@@ -1182,3 +1182,47 @@ test('does not infer Object.fromEntries exports when a key is dynamic',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces returned Object.defineProperty and Object.defineProperties export objects',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-returned-define-properties-'));
+ try{
+  fs.writeFileSync(path.join(root,'single.cjs'),[
+   'function singleService() {}',
+   "module.exports = Object.defineProperty({}, 'single', { enumerable: true, value: singleService });"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'multiple.cjs'),[
+   'function service() {}',
+   'function lazyService() {}',
+   'module.exports = Object.defineProperties({}, {',
+   '  service: { enumerable: true, value: service },',
+   '  lazy: { get: () => lazyService }',
+   '});'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { single } = require('./single.cjs');",
+   "const { service, lazy } = require('./multiple.cjs');"
+  ].join('\\n'));
+  const files=['single.cjs','multiple.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='single'&&x.exportedLocal==='singleService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='lazy'&&x.exportedLocal==='lazyService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not infer returned defineProperties exports with dynamic descriptor keys',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-returned-define-dynamic-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   "const key = process.env.EXPORT_NAME;",
+   'module.exports = Object.defineProperties({}, {',
+   '  service: { value: service },',
+   '  [key]: { value: createService() }',
+   '});'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
