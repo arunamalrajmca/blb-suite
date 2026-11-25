@@ -321,11 +321,16 @@ jobs:
       # Each shard runs in its own step and is uploaded to an immutable cache key
       # immediately afterward. A later shard failure or job interruption therefore
       # leaves the newest cache containing every earlier shard checkpoint.
+      - name: Prepare browser checkpoint directories
+        if: ${{ steps.browser_gate.outcome == 'success' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix" "$RUNNER_TEMP/blb-browser-shard-checkpoints"
+          touch "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"
       - name: Restore browser-matrix performance checkpoint
         id: browser_matrix_restore
         uses: actions/cache/restore@v5
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
           restore-keys: |
             blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-
@@ -517,7 +522,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Run browser shard 2/8
         id: browser_shard_2
@@ -536,7 +541,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Run browser shard 3/8
         id: browser_shard_3
@@ -555,7 +560,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Run browser shard 4/8
         id: browser_shard_4
@@ -574,7 +579,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Run browser shard 5/8
         id: browser_shard_5
@@ -593,7 +598,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Run browser shard 6/8
         id: browser_shard_6
@@ -612,7 +617,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Run browser shard 7/8
         id: browser_shard_7
@@ -631,7 +636,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Run browser shard 8/8
         id: browser_shard_8
@@ -650,7 +655,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Validate all browser shard checkpoints
         id: browser
@@ -680,7 +685,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: blb-full-audit-checkpoints-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl/
           if-no-files-found: ignore
           retention-days: 30
 
@@ -698,7 +703,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: blb-corpus-ab-full-audit
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl/blb-performance.jsonl
           if-no-files-found: warn
           retention-days: 14
 
