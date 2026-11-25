@@ -334,6 +334,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+            set -euo pipefail
             export BLB_CI_CHECKPOINT_DIR="$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix"
             export BLB_CI_CHECKPOINT_SOURCE_SHA="${{ github.sha }}"
             export BLB_CI_CHECKPOINT_FINGERPRINT="${{ steps.fingerprints.outputs.browser }}"
@@ -349,12 +350,6 @@ jobs:
             image="${ImageOS:-unknown}-${ImageVersion:-unknown}"
             environment_fingerprint=$(printf '%s' "${{ runner.os }}|${{ runner.arch }}|$image|$(node --version)|$npm_version|$python_version|$playwright_version" | sha256sum | cut -d' ' -f1)
             export BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT="$environment_fingerprint"
-            export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
-            export BLB_BROWSER_SHARD_CHECKPOINT_DIR="$RUNNER_TEMP/blb-browser-shard-checkpoints"
-            export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"
-            export NO_COLOR=1 FORCE_COLOR=0
-            mkdir -p "$(dirname "$BLB_PERF_OUTPUT")"
-            touch "$BLB_PERF_OUTPUT"
             list_output="$RUNNER_TEMP/blb-playwright-list.txt"
             test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
             if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
