@@ -343,7 +343,7 @@ function collectExportsAndImports(ast,file){
       &&isUnboundGlobal(n.callee.object)){
       const method=memberName(n.callee);
       if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])&&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
-        for(const argument of n.arguments.slice(1))recordObjectProperties(argument);
+        for(const argument of n.arguments.slice(1))recordObjectProperties(argument,null,new Set(),true);
       }
       if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
