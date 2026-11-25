@@ -138,7 +138,7 @@ function readManifest(directory, expected) {
     if (diff.status !== 0) return reject('source history unavailable for cross-commit validation');
     compatibleExpected = {
       ...expected,
-      changedFiles: diff.stdout.split(/\\r?\\n/).map(value => value.trim()).filter(Boolean)
+      changedFiles: diff.stdout.split(/\r?\n/).map(value => value.trim()).filter(Boolean)
     };
   } else if (candidate.fingerprint !== expected.fingerprint) {
     return reject('committed input fingerprint changed');
@@ -161,6 +161,7 @@ function readManifest(directory, expected) {
     console.log('Restored compatible browser shard checkpoint for the exact committed inputs and environment.');
   }
   return manifest;
+}
 
 function collectTestRecords(report) {
   const found = [];
