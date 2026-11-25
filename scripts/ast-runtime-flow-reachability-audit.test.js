@@ -1418,6 +1418,30 @@ test('traces both async iterable branches of a conditional factory return', () =
     edge.to === 'callback@9' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces callback arrays returned by factories into Array.fromAsync mappers', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeCallbacks() { return [cleanup]; }',
+    'async function run() {',
+    '  await Array.fromAsync(makeCallbacks(), callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces callback arrays returned by factories through for-await loops', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeCallbacks() { return [cleanup]; }',
+    'async function run() {',
+    '  for await (const callback of makeCallbacks()) callback();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@4' && edge.kind === 'container-value-read'));
+});
+
 test('traces every async-generator iterable returned by a branching factory', () => {
   const result = audit([
     'const first = () => startFirst();',
