@@ -198,7 +198,7 @@ function collectExportsAndImports(ast,file){
         return;
       }
       if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method)){
-        recordObjectProperties(object.arguments[0],exportsSnapshot);
+        recordObjectProperties(object.arguments[0],exportsSnapshot,new Set(),enumerableOnly);
         return;
       }
       // Unknown Object.* factories may produce an arbitrary set of own keys.
