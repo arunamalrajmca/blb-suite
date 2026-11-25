@@ -536,11 +536,11 @@ test('tracks immutable local aliases of CommonJS exports by lexical binding iden
    'const publicApi = exports;',
    'api.start = startService;',
    "Object.assign(publicApi, { stop: stopService });"
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),[
    "import { start, stop } from './service.cjs';",
    'start(); stop();'
-  ].join('\\n'));
+  ].join('\n'));
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
@@ -554,7 +554,7 @@ test('does not transfer CommonJS export alias identity to shadowed parameters',(
    'function service() {}',
    'const api = module.exports;',
    'function shadow(api) { api.fake = service; }'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),"import { fake } from './service.cjs';");
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='fake'&&x.unresolvedExport));
