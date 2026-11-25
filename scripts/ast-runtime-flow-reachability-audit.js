@@ -660,6 +660,21 @@ function analyzeFile(root, file) {
     if (expression.type === 'AwaitExpression') {
       return resolveAsyncIterableExpressions(expression.argument, seen);
     }
+    if (expression.type === 'ConditionalExpression') {
+      return [
+        ...resolveAsyncIterableExpressions(expression.consequent, new Set(seen)),
+        ...resolveAsyncIterableExpressions(expression.alternate, new Set(seen))
+      ];
+    }
+    if (expression.type === 'LogicalExpression') {
+      return [
+        ...resolveAsyncIterableExpressions(expression.left, new Set(seen)),
+        ...resolveAsyncIterableExpressions(expression.right, new Set(seen))
+      ];
+    }
+    if (expression.type === 'SequenceExpression') {
+      return resolveAsyncIterableExpressions(expression.expressions.at(-1), seen);
+    }
     if (expression.type === 'ObjectExpression') {
       const iterator = asyncIteratorMethod(expression);
       return iterator ? [{iterator, iteratorObject:expression}] : [];
