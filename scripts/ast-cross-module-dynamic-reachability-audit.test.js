@@ -588,3 +588,53 @@ test('keeps dynamic Object.defineProperties keys unresolved',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='startService'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('drops stale named exports when module.exports is replaced later',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-replaced-export-object-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function staleService() {}',
+   'function currentService() {}',
+   'module.exports = { stale: staleService };',
+   'module.exports = { current: currentService };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { stale, current } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='current'&&x.exportedLocal==='currentService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stale'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not treat writes through detached exports alias as current named exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-detached-exports-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function staleService() {}',
+   'function currentService() {}',
+   'module.exports = {};',
+   'exports.stale = staleService;',
+   'module.exports.current = currentService;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { stale, current } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='current'&&x.exportedLocal==='currentService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stale'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('keeps Object.assign and defineProperty writes through detached exports alias unresolved',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-detached-exports-methods-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function staleAssign() {}',
+   'function staleDefine() {}',
+   'module.exports = {};',
+   'Object.assign(exports, { staleAssign });',
+   "Object.defineProperty(exports, 'staleDefine', { value: staleDefine });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { staleAssign, staleDefine } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const name of ['staleAssign','staleDefine']) assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported===name&&x.unresolvedExport),name);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
