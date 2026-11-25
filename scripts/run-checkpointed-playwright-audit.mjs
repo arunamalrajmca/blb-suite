@@ -85,6 +85,22 @@ export function isCompatibleShardManifest(candidate, expected) {
   }
 }
 
+export function invalidateChangedSpecShards(manifest, changedFiles) {
+  const changed = new Set(changedFiles || []);
+  for (const shard of manifest.shards) {
+    const shardSpecs = new Set(shard.tests.map(entry =>
+      entry.match(/(?:^|›\\s*)(tests\\/browser\\/[^:]+\\.spec\\.js)(?=:\\d+)/)?.[1]
+    ).filter(Boolean));
+    if (Array.from(changed).some(file => shardSpecs.has(file))) {
+      shard.status = 'pending';
+      shard.exitCode = null;
+      shard.reportValid = false;
+      delete shard.error;
+    }
+  }
+  return manifest;
+}
+
 function writeManifest(directory, manifest) {
   const target = path.join(directory, 'browser-shards.json');
   const temporary = target + '.tmp';
