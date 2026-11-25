@@ -494,11 +494,11 @@ test('resolves Object.assign and Object.defineProperty CommonJS export surfaces'
    'function stopService() {}',
    'Object.assign(exports, { start: startService });',
    "Object.defineProperty(module.exports, 'stop', { enumerable: true, value: stopService });"
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),[
    "import { start, stop } from './service.cjs';",
    'start(); stop();'
-  ].join('\\n'));
+  ].join('\n'));
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
@@ -518,7 +518,7 @@ test('does not treat shadowed Object or exports bindings as CommonJS export APIs
    '  module.exports.fake = service;',
    '  exports.fakeAgain = service;',
    '}'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
