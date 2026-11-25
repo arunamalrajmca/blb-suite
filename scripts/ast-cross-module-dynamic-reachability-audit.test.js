@@ -1604,3 +1604,26 @@ test('does not infer defineProperties factory exports from accessor descriptor m
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('uses the final static descriptor value and rejects descriptor spreads',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-descriptor-value-overrides-'));
+ try{
+  fs.writeFileSync(path.join(root,'overridden.cjs'),[
+   'function original() {}',
+   'function replacement() {}',
+   'module.exports = Object.create(null, { service: { value: original, value: replacement } });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function service() {}',
+   'const descriptor = loadDescriptor();',
+   'module.exports = Object.create(null, { service: { ...descriptor, value: service } });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: overriddenService } = require('./overridden.cjs');",
+   "const { service: spreadService } = require('./spread.cjs');"
+  ].join('\n'));
+  const files=['overridden.cjs','spread.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='overridden.cjs'&&x.imported==='service'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='spread.cjs'&&x.imported==='service'&&x.exportedLocal===null&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
