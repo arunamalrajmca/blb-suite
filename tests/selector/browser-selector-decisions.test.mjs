@@ -1258,6 +1258,7 @@ test("full audit delegates performance and physical-input tests to workflows tri
 
   assert.ok(
     audit.includes('export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"') &&
+    audit.includes('echo "BLB_PERF_OUTPUT=$BLB_PERF_OUTPUT" >> "$GITHUB_ENV"') &&
     audit.includes('touch "$BLB_PERF_OUTPUT"') &&
     !audit.includes(': > "$BLB_PERF_OUTPUT"'),
     "full-audit corpus A/B samples must survive browser-shard retries without truncation"
