@@ -855,8 +855,8 @@ function analyzeFile(root, file) {
           asyncIteratorInstanceSources.set(assigned, source);
         }
       }
-      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier') {
-        const generator = resolveFunctionReference(node.init.callee);
+      if (node.init?.type === 'CallExpression') {
+        const generator = resolveGeneratorExpression(node.init);
         if (generator?.generator) {
           const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
           asyncIterableSources.set(assigned, source);
@@ -1262,8 +1262,8 @@ function analyzeFile(root, file) {
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
           }
-        } else if (iterable?.type === 'CallExpression' && iterable.callee.type === 'Identifier') {
-          const generator = resolveFunctionReference(iterable.callee);
+        } else if (iterable?.type === 'CallExpression') {
+          const generator = resolveGeneratorExpression(iterable);
           if (generator?.generator) {
             source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
             registerAsyncIteratorValues(generator, source, iterable);
