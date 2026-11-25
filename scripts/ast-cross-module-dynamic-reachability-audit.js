@@ -143,14 +143,18 @@ function collectExportsAndImports(ast,file){
         &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'&&isUnboundGlobal(n.left.object.object)
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
-        replaceCommonJsExportObject();
-        // In a chained assignment, exports is rebound to the newly assigned module.exports object.
-        if(parent?.type==='AssignmentExpression'&&parent.left.type==='Identifier'
-          &&parent.left.name==='exports'&&isUnboundGlobal(parent.left))exportsAliasDetached=false;
-        const defaultLocal=n.right.type==='Identifier'?n.right.name:
-          ((n.right.type==='FunctionExpression'||n.right.type==='ClassExpression')&&n.right.id?n.right.id.name:null);
-        setCommonJsExport('default',defaultLocal);
-        recordCommonJsAssignmentValue(n.right);
+        const isSelfAssignment=n.right.type==='MemberExpression'&&n.right.object.type==='Identifier'
+          &&n.right.object.name==='module'&&isUnboundGlobal(n.right.object)&&memberName(n.right)==='exports';
+        if(!isSelfAssignment){
+          replaceCommonJsExportObject();
+          // In a chained assignment, exports is rebound to the newly assigned module.exports object.
+          if(parent?.type==='AssignmentExpression'&&parent.left.type==='Identifier'
+            &&parent.left.name==='exports'&&isUnboundGlobal(parent.left))exportsAliasDetached=false;
+          const defaultLocal=n.right.type==='Identifier'?n.right.name:
+            ((n.right.type==='FunctionExpression'||n.right.type==='ClassExpression')&&n.right.id?n.right.id.name:null);
+          setCommonJsExport('default',defaultLocal);
+          recordCommonJsAssignmentValue(n.right);
+        }
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
