@@ -688,3 +688,40 @@ test('tracks named CommonJS function expressions as default exports',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='default'&&x.exportedLocal==='Service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves named exports wrapped by native Object.freeze and Object.seal',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-frozen-export-object-'));
+ try{
+  fs.writeFileSync(path.join(root,'frozen.cjs'),[
+   'function startService() {}',
+   'module.exports = Object.freeze({ start: startService });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'sealed.cjs'),[
+   'function stopService() {}',
+   'module.exports = Object.seal({ stop: stopService });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import frozenApi from './frozen.cjs';",
+   "import sealedApi from './sealed.cjs';",
+   'frozenApi.start(); sealedApi.stop();'
+  ].join('\n'));
+  const files=['frozen.cjs','sealed.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='frozen.cjs'&&x.imported==='default'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='sealed.cjs'&&x.imported==='default'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not treat shadowed Object.freeze as a native export wrapper',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-shadowed-freeze-wrapper-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'function factory(Object) { return Object.freeze({ service }); }',
+   'module.exports = factory({});'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import service from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='default'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
