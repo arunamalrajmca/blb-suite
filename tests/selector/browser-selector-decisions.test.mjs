@@ -1266,6 +1266,14 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "full-audit corpus A/B samples must be restored before browser shards");
   assert.equal((audit.match(/name: Save browser-matrix performance checkpoint after shard/g) || []).length, 8,
     "full-audit corpus A/B samples must be checkpointed after every browser shard");
+  const guardedShardCondition = "if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}";
+  assert.equal(audit.split(guardedShardCondition).length - 1, 25,
+    "browser shard progression must stop after a failed durable checkpoint upload");
+  const manifestSaveBlocks = audit.split("- name: Save browser-shard checkpoint after shard ").slice(1)
+    .map(block => block.split("\n      - name:")[0]);
+  assert.equal(manifestSaveBlocks.length, 8, "every browser shard must have its own durable checkpoint save");
+  assert.ok(manifestSaveBlocks.every(block => !block.includes("continue-on-error: true")),
+    "durable browser-shard checkpoint uploads must not be silently ignored");
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
     "native Chromium _self prerender activation initializes the activated document without tab replacement",
