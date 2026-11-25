@@ -743,3 +743,29 @@ test('clears incremental module.exports properties after later object replacemen
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stale'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('recognizes exports alias reattachment after module.exports replacement',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-exports-reattach-'));
+ try{
+  fs.writeFileSync(path.join(root,'direct.cjs'),[
+   'function directService() {}',
+   'module.exports = {};',
+   'exports = module.exports;',
+   'exports.direct = directService;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'chained.cjs'),[
+   'function chainedService() {}',
+   'module.exports = {};',
+   'exports = module.exports = {};',
+   'exports.chained = chainedService;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { direct } from './direct.cjs';",
+   "import { chained } from './chained.cjs';"
+  ].join('\n'));
+  const files=['direct.cjs','chained.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='direct'&&x.exportedLocal==='directService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='chained'&&x.exportedLocal==='chainedService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
