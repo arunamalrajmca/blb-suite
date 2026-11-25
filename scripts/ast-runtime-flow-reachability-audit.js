@@ -662,6 +662,39 @@ function analyzeFile(root, file) {
     }
     return null;
   };
+  const resolveAsyncIterableExpression = (expression, seen = new Set()) => {
+    if (!expression) return null;
+    if (expression.type === 'AwaitExpression') {
+      return resolveAsyncIterableExpression(expression.argument, seen);
+    }
+    if (expression.type === 'ObjectExpression') {
+      const iterator = asyncIteratorMethod(expression);
+      return iterator ? {iterator} : null;
+    }
+    if (expression.type === 'Identifier') {
+      const variable = variableForNode.get(expression);
+      if (!variable || seen.has(variable)) return null;
+      seen.add(variable);
+      const definitions = (variable.defs || []).filter(def =>
+        def.type === 'Variable' && def.node?.type === 'VariableDeclarator' && def.node.init);
+      if (definitions.length === 1) {
+        return resolveAsyncIterableExpression(definitions[0].node.init, seen);
+      }
+      return null;
+    }
+    if (expression.type === 'CallExpression') {
+      const generator = resolveGeneratorExpression(expression);
+      if (generator?.generator) return {generator};
+      const called = resolveCalledFunction(expression);
+      if (!called || seen.has(called)) return null;
+      seen.add(called);
+      for (const returned of returnedValues(called)) {
+        const iterable = resolveAsyncIterableExpression(returned, seen);
+        if (iterable) return iterable;
+      }
+    }
+    return null;
+  };
   const resolveObjectExpression = expression => {
     if (expression?.type === 'AwaitExpression') return resolveObjectExpression(expression.argument);
     if (expression?.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
@@ -855,20 +888,12 @@ function analyzeFile(root, file) {
           asyncIteratorInstanceSources.set(assigned, source);
         }
       }
-      if (node.init?.type === 'CallExpression') {
-        const generator = resolveGeneratorExpression(node.init);
-        if (generator?.generator) {
-          const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-          asyncIterableSources.set(assigned, source);
-          registerAsyncIteratorValues(generator, source, node.init);
-        }
-      } else if (node.init?.type === 'ObjectExpression') {
-        const iterator = asyncIteratorMethod(node.init);
-        if (iterator) {
-          const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-          asyncIterableSources.set(assigned, source);
-          registerAsyncIteratorValues(iterator, source, node.init);
-        }
+      const asyncIterable = resolveAsyncIterableExpression(node.init);
+      if (asyncIterable) {
+        const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
+        asyncIterableSources.set(assigned, source);
+        if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
+        else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init);
       }
     }
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
@@ -1262,12 +1287,11 @@ function analyzeFile(root, file) {
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
           }
-        } else if (iterable?.type === 'CallExpression' && resolveGeneratorExpression(iterable)) {
-          const generator = resolveGeneratorExpression(iterable);
-          if (generator?.generator) {
-            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-            registerAsyncIteratorValues(generator, source, iterable);
-          }
+        } else if (iterable?.type === 'CallExpression' && resolveAsyncIterableExpression(iterable)) {
+          const asyncIterable = resolveAsyncIterableExpression(iterable);
+          source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
+          else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable);
         } else if (classForInstanceExpression(iterable)) {
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           registerClassAsyncIterator(classForInstanceExpression(iterable), source, iterable);
