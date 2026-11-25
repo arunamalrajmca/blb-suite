@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { computeSectionFingerprints, fingerprintTreeEntries } from './ci-checkpoint-fingerprints.mjs';
+
+test('checkpoint fingerprints are deterministic and scoped to committed tree entries', () => {
+  const entries = [
+    { path: 'extension/background.js', sha: 'a'.repeat(40) },
+    { path: 'tests/selector/decision.test.mjs', sha: 'b'.repeat(40) },
+    { path: 'tests/browser/example.spec.js', sha: 'c'.repeat(40) },
+    { path: 'README.md', sha: 'd'.repeat(40) }
+  ];
+  const selector = entry => entry.path.startsWith('extension/') || entry.path.startsWith('tests/selector/');
+  assert.equal(fingerprintTreeEntries(entries, selector), fingerprintTreeEntries([...entries].reverse(), selector));
+  assert.notEqual(
+    fingerprintTreeEntries(entries, selector),
+    fingerprintTreeEntries(entries.map(entry => entry.path === 'extension/background.js' ? { ...entry, sha: 'e'.repeat(40) } : entry), selector)
+  );
+  assert.throws(() => fingerprintTreeEntries(entries, entry => entry.path === 'missing'), /No tracked source files/);
+});
+
+test('working-tree mutations do not change fingerprints for the same committed tree', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-ci-fingerprint-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: directory });
+    execFileSync('git', ['config', 'user.email', 'ci@example.invalid'], { cwd: directory });
+    execFileSync('git', ['config', 'user.name', 'CI Test'], { cwd: directory });
+    fs.mkdirSync(path.join(directory, 'extension'));
+    fs.mkdirSync(path.join(directory, 'tests', 'browser'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'extension', 'manifest.json'), '{"version":"1"}\n');
+    fs.writeFileSync(path.join(directory, 'tests', 'browser', 'sample.spec.js'), 'test("sample", () => {});\n');
+    fs.writeFileSync(path.join(directory, 'package.json'), '{"name":"fixture"}\n');
+    execFileSync('git', ['add', '.'], { cwd: directory });
+    execFileSync('git', ['commit', '-qm', 'fixture'], { cwd: directory });
+    const before = computeSectionFingerprints(directory);
+    fs.writeFileSync(path.join(directory, 'extension', 'manifest.json'), '{"version":"1","host_permissions":["https://example.com/*"]}\n');
+    const after = computeSectionFingerprints(directory);
+    assert.deepEqual(after, before);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
