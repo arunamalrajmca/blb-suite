@@ -67,7 +67,22 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Classify repository-wide AST audit scope
+        id: audit-scope
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/classify-ast-audit-scope.mjs "$BASE_SHA"
+      - name: Select all repository-wide AST audits for manual full run
+        id: audit-scope-manual
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          for name in symbol repository owner cross_module runtime unified computed; do
+            echo "run_$name=true" >> "$GITHUB_OUTPUT"
+          done
+          echo "run_any=true" >> "$GITHUB_OUTPUT"
       - name: Install pinned AST audit dependencies
+        if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test reusable CI section checkpoint helper
         run: node --test scripts/ci-section-checkpoint.test.mjs
@@ -79,6 +94,7 @@ jobs:
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: node scripts/test-suite-inventory.mjs
       - name: Test and run conservative AST symbol audit
+        if: ${{ steps.audit-scope.outputs.run_symbol == 'true' || steps.audit-scope-manual.outputs.run_symbol == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-symbol-audit
@@ -88,6 +104,7 @@ jobs:
             node --test scripts/ast-symbol-reference-audit.test.js
             node scripts/ast-symbol-reference-audit.js
       - name: Test and run context-aware repository reachability audit
+        if: ${{ steps.audit-scope.outputs.run_repository == 'true' || steps.audit-scope-manual.outputs.run_repository == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-repository-reachability
@@ -97,6 +114,7 @@ jobs:
             node --test scripts/ast-repository-reachability-audit.test.js
             node scripts/ast-repository-reachability-audit.js
       - name: Test and run owner-aware AST and Node module reachability audit
+        if: ${{ steps.audit-scope.outputs.run_owner == 'true' || steps.audit-scope-manual.outputs.run_owner == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-owner-aware-node
@@ -106,6 +124,7 @@ jobs:
             node --test scripts/ast-owner-aware-node-reachability-audit.test.js
             node scripts/ast-owner-aware-node-reachability-audit.js
       - name: Test and run cross-module and dynamic execution reachability audit
+        if: ${{ steps.audit-scope.outputs.run_cross_module == 'true' || steps.audit-scope-manual.outputs.run_cross_module == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-cross-module-dynamic
@@ -115,6 +134,7 @@ jobs:
             node --test scripts/ast-cross-module-dynamic-reachability-audit.test.js
             node scripts/ast-cross-module-dynamic-reachability-audit.js
       - name: Test and run conservative runtime-flow reachability audit
+        if: ${{ steps.audit-scope.outputs.run_runtime == 'true' || steps.audit-scope-manual.outputs.run_runtime == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-runtime-flow
@@ -124,6 +144,7 @@ jobs:
             node --test scripts/ast-runtime-flow-reachability-audit.test.js
             node scripts/ast-runtime-flow-reachability-audit.js
       - name: Test and run unified dynamic/runtime reachability audit
+        if: ${{ steps.audit-scope.outputs.run_unified == 'true' || steps.audit-scope-manual.outputs.run_unified == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-unified-dynamic-runtime
@@ -133,6 +154,7 @@ jobs:
             node --test scripts/ast-unified-dynamic-runtime-reachability-audit.test.js
             node scripts/ast-unified-dynamic-runtime-reachability-audit.js
       - name: Test and run computed-property candidate audit
+        if: ${{ steps.audit-scope.outputs.run_computed == 'true' || steps.audit-scope-manual.outputs.run_computed == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: ast-computed-property
