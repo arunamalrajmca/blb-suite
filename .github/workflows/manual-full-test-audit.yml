@@ -496,12 +496,12 @@ jobs:
 
       - name: Run browser shard 1/8
         id: browser_shard_1
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 1
       - name: Save browser-shard checkpoint after shard 1/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -509,12 +509,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Run browser shard 2/8
         id: browser_shard_2
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 2
       - name: Save browser-shard checkpoint after shard 2/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -522,12 +522,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Run browser shard 3/8
         id: browser_shard_3
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 3
       - name: Save browser-shard checkpoint after shard 3/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -535,12 +535,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Run browser shard 4/8
         id: browser_shard_4
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 4
       - name: Save browser-shard checkpoint after shard 4/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -548,12 +548,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Run browser shard 5/8
         id: browser_shard_5
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 5
       - name: Save browser-shard checkpoint after shard 5/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -561,12 +561,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Run browser shard 6/8
         id: browser_shard_6
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 6
       - name: Save browser-shard checkpoint after shard 6/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -574,12 +574,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Run browser shard 7/8
         id: browser_shard_7
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 7
       - name: Save browser-shard checkpoint after shard 7/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -587,12 +587,12 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Run browser shard 8/8
         id: browser_shard_8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 8
       - name: Save browser-shard checkpoint after shard 8/8
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
@@ -600,7 +600,7 @@ jobs:
           key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Validate all browser shard checkpoints
         id: browser
-        if: ${{ always() && steps.browser_prepare.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
         continue-on-error: true
         shell: bash
         run: |
