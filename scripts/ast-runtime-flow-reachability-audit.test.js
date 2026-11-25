@@ -1323,6 +1323,50 @@ test('supports a separately declared Array.fromAsync mapper callback', () => {
 });
 
 
+test('propagates async-generator yielded callback values into Array.fromAsync mapper parameters', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'async function* tasks() {',
+    '  yield cleanup;',
+    '}',
+    'async function run() {',
+    '  await Array.fromAsync(tasks(), callback => callback());',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
+test('propagates delegated async-generator yields through an assigned async iterable', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'async function* base() { yield cleanup; }',
+    'async function* tasks() { yield* base(); }',
+    'async function run() {',
+    '  const iterable = tasks();',
+    '  await Array.fromAsync(iterable, callback => callback());',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
+test('propagates values yielded by a custom Symbol.asyncIterator method', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'const iterable = {',
+    '  async *[Symbol.asyncIterator]() {',
+    '    yield cleanup;',
+    '  }',
+    '};',
+    'async function run() {',
+    '  await Array.fromAsync(iterable, callback => callback());',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@8' && edge.kind === 'container-callback-argument'));
+});
+
 test('binds stored callback values to Map.groupBy mapper parameters', () => {
   const result = audit([
     'const cleanup = () => work();',
