@@ -636,26 +636,22 @@ function analyzeFile(root, file) {
       if (!root && isFunction(node)) return;
       if (node.type === 'YieldExpression' && node.argument) {
         if (node.delegate) {
-          const delegated = resolveGeneratorExpression(node.argument);
-          if (delegated) values.push(...yieldedValues(delegated, seen));
-          else {
-            const asyncIterables = resolveAsyncIterableExpressions(node.argument);
-            if (!asyncIterables.length) values.push(node.argument);
-            for (const asyncIterable of asyncIterables) {
-              if (asyncIterable.generator) {
-                values.push(...yieldedValues(asyncIterable.generator, seen));
-              } else if (asyncIterable.classNode) {
-                const methods = classAsyncIteratorMethods(asyncIterable.classNode);
-                if (methods?.iterator?.generator) {
-                  values.push(...yieldedValues(methods.iterator, seen));
-                } else if (methods?.next) {
-                  values.push(...asyncIteratorStepValues(methods.next));
-                }
-              } else if (asyncIterable.iterator?.generator) {
-                values.push(...yieldedValues(asyncIterable.iterator, seen));
-              } else if (asyncIterable.iterator) {
-                values.push(...asyncIteratorResultValues(asyncIterable.iterator));
+          const asyncIterables = resolveAsyncIterableExpressions(node.argument);
+          if (!asyncIterables.length) values.push(node.argument);
+          for (const asyncIterable of asyncIterables) {
+            if (asyncIterable.generator) {
+              values.push(...yieldedValues(asyncIterable.generator, seen));
+            } else if (asyncIterable.classNode) {
+              const methods = classAsyncIteratorMethods(asyncIterable.classNode);
+              if (methods?.iterator?.generator) {
+                values.push(...yieldedValues(methods.iterator, seen));
+              } else if (methods?.next) {
+                values.push(...asyncIteratorStepValues(methods.next));
               }
+            } else if (asyncIterable.iterator?.generator) {
+              values.push(...yieldedValues(asyncIterable.iterator, seen));
+            } else if (asyncIterable.iterator) {
+              values.push(...asyncIteratorResultValues(asyncIterable.iterator));
             }
           }
         } else values.push(node.argument);
