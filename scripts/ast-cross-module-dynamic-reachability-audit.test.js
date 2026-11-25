@@ -986,24 +986,24 @@ test('resolves isolated const object aliases used as CommonJS spreads and assign
    'function service() {}',
    'const base = { service };',
    'module.exports = { ...base };'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'assign.cjs'),[
    'function assignedService() {}',
    'const base = { assigned: assignedService };',
    'module.exports = Object.assign({}, base);'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'mutated.cjs'),[
    'function service() {}',
    'function replacement() {}',
    'const base = { service };',
    'base.service = replacement;',
    'module.exports = { ...base };'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),[
    "import { service } from './spread.cjs';",
    "import { assigned } from './assign.cjs';",
    "import { service as mutated } from './mutated.cjs';"
-  ].join('\\n'));
+  ].join('\n'));
   const files=['spread.cjs','assign.cjs','mutated.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='spread.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='assign.cjs'&&x.imported==='assigned'&&x.exportedLocal==='assignedService'&&!x.unresolvedExport));
