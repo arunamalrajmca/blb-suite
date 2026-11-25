@@ -89,7 +89,7 @@ export function invalidateChangedSpecShards(manifest, changedFiles) {
   const changed = new Set(changedFiles || []);
   for (const shard of manifest.shards) {
     const shardSpecs = new Set(shard.tests.map(entry =>
-      entry.match(/(?:^|›\\s*)(tests\\/browser\\/[^:]+\\.spec\\.js)(?=:\\d+)/)?.[1]
+      entry.match(/(?:^|›\s*)(tests\/browser\/[^:]+\.spec\.js)(?=:\d+)/)?.[1]
     ).filter(Boolean));
     if (Array.from(changed).some(file => shardSpecs.has(file))) {
       shard.status = 'pending';
