@@ -387,14 +387,19 @@ function collectExportsAndImports(ast,file){
           setCommonJsExport('default',defaultLocal);
           recordCommonJsAssignmentValue(n.right,exportsSnapshot);
         }
+      } else if(moduleExportsObject&&!key) {
+        // A computed module.exports key may collide with any previously inferred name.
+        clearCommonJsExportOwners();
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
         setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached) {
-        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(n.left.object.type==='Identifier'&&key&&isCurrentCommonJsExportAlias(n.left.object,n)) {
-        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+      } else if(obj==='exports'&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached) {
+        if(key)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+        else clearCommonJsExportOwners();
+      } else if(n.left.object.type==='Identifier'&&isCurrentCommonJsExportAlias(n.left.object,n)) {
+        if(key)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+        else clearCommonJsExportOwners();
       }
     }
   });
