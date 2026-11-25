@@ -17,7 +17,7 @@ const expected = { section: 'package-regressions', sourceSha, fingerprint, envir
 
 test('completion markers require a stable section, full source SHA, and SHA-256 fingerprint', () => {
   assert.deepEqual(createCompletionMarker(expected), {
-    schemaVersion: 1,
+    schemaVersion: 2,
     ...expected,
     status: 'passed'
   });
@@ -36,7 +36,7 @@ test('a checkpoint is reusable across commits only for the exact section, finger
   assert.equal(isCompatibleCompletionMarker(marker, { ...expected, fingerprint: 'd'.repeat(64) }), false);
   assert.equal(isCompatibleCompletionMarker(marker, { ...expected, environmentFingerprint: 'd'.repeat(64) }), false);
   assert.equal(isCompatibleCompletionMarker({ ...marker, status: 'failed' }, expected), false);
-  assert.equal(isCompatibleCompletionMarker({ ...marker, schemaVersion: 2 }, expected), false);
+  assert.equal(isCompatibleCompletionMarker({ ...marker, schemaVersion: 1 }, expected), false);
   assert.equal(isCompatibleCompletionMarker(null, expected), false);
 });
 
