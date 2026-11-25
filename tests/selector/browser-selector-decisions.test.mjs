@@ -1288,7 +1288,7 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.ok(audit.includes("path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"),
     "the reusable performance checkpoint artifact must upload the JSONL file, not treat it as a directory");
   assert.ok(!audit.includes("blb-performance.jsonl/blb-performance.jsonl") &&
-    !/blb-performance\\.jsonl\\/\\s*\\n/.test(audit),
+    !/blb-performance\.jsonl\/\s*\n/.test(audit),
     "corpus performance artifact paths must not append a directory suffix to the output file");
 
   assert.ok(audit.includes("name: Restore browser-matrix performance checkpoint"),
