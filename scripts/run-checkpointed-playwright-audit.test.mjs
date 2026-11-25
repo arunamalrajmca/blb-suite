@@ -95,6 +95,39 @@ test('only passed shards are reused; failed and pending shards execute again', (
   }
 });
 
+
+test('passed tests inside a failed shard are retained and excluded from the next attempt', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-browser-test-resume-'));
+  const list = path.join(directory, 'test-list.txt');
+  const checkpoint = path.join(directory, 'checkpoints');
+  fs.writeFileSync(list, entries.join('\n') + '\n');
+  const firstCalls = [];
+  const secondCalls = [];
+  let firstAttempt = true;
+  const executeShard = (tests, index) => {
+    if (firstAttempt) {
+      firstCalls.push({ index, tests: [...tests] });
+      if (index === 1) return {
+        passed: false, exitCode: 1, validReport: true, passedEntries: [tests[0]]
+      };
+      return { passed: true, exitCode: 0, validReport: true };
+    }
+    secondCalls.push({ index, tests: [...tests] });
+    return { passed: true, exitCode: 0, validReport: true };
+  };
+  const args = { testListPath: list, directory: checkpoint, sourceSha, fingerprint, shardCount: 4, executeShard };
+  try {
+    assert.throws(() => runCheckpointedBrowserAudit(args), /shards failed/);
+    firstAttempt = false;
+    const resumed = runCheckpointedBrowserAudit(args);
+    assert.equal(firstCalls.length, 4);
+    assert.deepEqual(secondCalls, [{ index: 1, tests: [entries[1]] }]);
+    assert.equal(resumed.shards.every(shard => shard.passedTests.length === shard.tests.length), true);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a changed inventory invalidates every old shard result', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-browser-shard-invalidate-'));
   const list = path.join(directory, 'test-list.txt');
