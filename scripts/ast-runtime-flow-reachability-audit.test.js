@@ -1470,6 +1470,25 @@ test('traces values and cleanup methods on custom async iterator protocol object
     edge.kind === 'async-iterator-protocol-callback'));
 });
 
+test('traces custom async iterator next result values through awaited step.value reads', () => {
+  const result = audit([
+    'const cleanup = () => start();',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() {',
+    '    return { async next() { return { value: cleanup, done: false }; } };',
+    '  }',
+    '};',
+    'async function run() {',
+    '  const iterator = iterable[Symbol.asyncIterator]();',
+    '  const step = await iterator.next();',
+    '  const selected = step.value;',
+    '  selected();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@10'));
+});
+
 test('traces a custom async iterator returned through a local identifier', () => {
   const result = audit([
     'const cleanup = () => start();',
