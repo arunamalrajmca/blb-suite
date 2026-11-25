@@ -32,7 +32,17 @@ function literalString(n,file,pathIdentifiers=null) {
 }
 function resolveLocal(from,spec,files){if(!spec||(!path.isAbsolute(spec)&&!spec.startsWith('.')))return null;const b=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
 function collectExportsAndImports(ast,file){
-  const exports=new Map(),imports=[],pathIdentifiers=new Set();
+  const exports=new Map(),imports=[],pathIdentifiers=new Set(),commonJsExportNames=new Set();
+  let exportsAliasDetached=false;
+  const setCommonJsExport=(name,local)=>{
+    exports.set(String(name),local);
+    commonJsExportNames.add(String(name));
+  };
+  const replaceCommonJsExportObject=()=>{
+    for(const name of commonJsExportNames)exports.delete(name);
+    commonJsExportNames.clear();
+    exportsAliasDetached=true;
+  };
   const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
   const isUnboundGlobal=node=>!!node&&node.type==='Identifier'
     &&(scopeManager.globalScope?.through||[]).some(reference=>reference.identifier===node);
@@ -52,7 +62,7 @@ function collectExportsAndImports(ast,file){
         ?(property.key.type==='Literal'?String(property.key.value):null)
         :(property.key.name??property.key.value);
       if(key===null||key===undefined)continue;
-      exports.set(String(key),property.value.type==='Identifier'?property.value.name:null);
+      setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
   };
   const recordCommonJsAssignmentValue=value=>{
@@ -76,19 +86,21 @@ function collectExportsAndImports(ast,file){
       &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
       &&isUnboundGlobal(n.callee.object)){
       const method=memberName(n.callee);
-      if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])){
+      if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])&&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
         for(const argument of n.arguments.slice(1))recordObjectProperties(argument);
       }
       if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
+        &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
         &&n.arguments[1]?.type==='Literal'&&typeof n.arguments[1].value==='string'){
         const descriptor=n.arguments[2];
         const value=descriptor?.type==='ObjectExpression'
           ?descriptor.properties.find(property=>property.type==='Property'&&!property.computed
             &&property.key.type==='Identifier'&&property.key.name==='value')?.value
           :null;
-        exports.set(n.arguments[1].value,value?.type==='Identifier'?value.name:null);
+        setCommonJsExport(n.arguments[1].value,value?.type==='Identifier'?value.name:null);
       }
       if(method==='defineProperties'&&isCommonJsExportsTarget(n.arguments[0])
+        &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
         &&n.arguments[1]?.type==='ObjectExpression'){
         for(const property of n.arguments[1].properties||[]){
           if(property.type!=='Property'||property.kind!=='init')continue;
@@ -101,7 +113,7 @@ function collectExportsAndImports(ast,file){
             ?descriptor.properties.find(item=>item.type==='Property'&&!item.computed
               &&item.key.type==='Identifier'&&item.key.name==='value')?.value
             :null;
-          exports.set(String(key),value?.type==='Identifier'?value.name:null);
+          setCommonJsExport(String(key),value?.type==='Identifier'?value.name:null);
         }
       }
     }
@@ -118,13 +130,14 @@ function collectExportsAndImports(ast,file){
         &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'&&isUnboundGlobal(n.left.object.object)
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
-        if(n.right.type==='Identifier')exports.set('default',n.right.name);
+        replaceCommonJsExportObject();
+        if(n.right.type==='Identifier')setCommonJsExport('default',n.right.name);
         recordCommonJsAssignmentValue(n.right);
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
         exports.set(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object))exports.set(key,n.right.type==='Identifier'?n.right.name:null);
+      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
     }
   });
   return {exports,imports};
