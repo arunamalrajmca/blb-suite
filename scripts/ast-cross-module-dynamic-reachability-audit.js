@@ -94,14 +94,14 @@ function collectExportsAndImports(ast,file){
       const moduleExportsObject=n.left.object.type==='MemberExpression'
         &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'
         &&memberName(n.left.object)==='exports';
-      if(obj==='module'&&key==='exports'){
+      if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
         if(n.right.type==='Identifier')exports.set('default',n.right.name);
         recordObjectProperties(n.right);
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
         exports.set(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(obj==='exports'&&key)exports.set(key,n.right.type==='Identifier'?n.right.name:null);
+      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object))exports.set(key,n.right.type==='Identifier'?n.right.name:null);
     }
   });
   return {exports,imports};

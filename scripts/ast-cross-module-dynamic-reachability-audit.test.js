@@ -513,6 +513,10 @@ test('does not treat shadowed Object or exports bindings as CommonJS export APIs
    'function configure(Object, exports) {',
    "  Object.assign(exports, { service });",
    "  Object.defineProperty(exports, 'service', { value: service });",
+   '}',
+   'function shadowed(module, exports) {',
+   '  module.exports.fake = service;',
+   '  exports.fakeAgain = service;',
    '}'
   ].join('\\n'));
   fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
