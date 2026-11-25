@@ -682,8 +682,22 @@ function analyzeFile(root, file) {
       if (method) addEdge('function@' + method.loc.start.line, source,
         'async-iterator-protocol-callback', origin, 'class async iterator protocol method');
     }
-    if (methods.next) registerAsyncIteratorValues(methods.next, source, origin);
+    if (methods.next) registerAsyncIteratorValues(methods.next, source, origin, true);
     return true;
+  };
+  const asyncIteratorStepValues = nextMethod => {
+    const values = [];
+    for (const step of returnedValues(nextMethod)) {
+      const stepObject = resolveObjectExpression(step);
+      if (!stepObject) continue;
+      for (const resultProperty of stepObject.properties) {
+        if (resultProperty.type === 'Property' &&
+            propertyKey(resultProperty.key, resultProperty.computed) === 'value') {
+          values.push(resultProperty.value);
+        }
+      }
+    }
+    return values;
   };
   const asyncIteratorResultValues = iteratorMethod => {
     const values = [];
@@ -691,24 +705,15 @@ function analyzeFile(root, file) {
       const iteratorObject = resolveObjectExpression(returned);
       if (!iteratorObject) continue;
       for (const property of iteratorObject.properties) {
-        if (property.type !== 'Property' || propertyKey(property.key, property.computed) !== 'next' ||
-            !isFunction(property.value)) continue;
-        for (const step of returnedValues(property.value)) {
-          const stepObject = resolveObjectExpression(step);
-          if (!stepObject) continue;
-          for (const resultProperty of stepObject.properties) {
-            if (resultProperty.type === 'Property' &&
-                propertyKey(resultProperty.key, resultProperty.computed) === 'value') {
-              values.push(resultProperty.value);
-            }
-          }
-        }
+        if (property.type === 'Property' && propertyKey(property.key, property.computed) === 'next' &&
+            isFunction(property.value)) values.push(...asyncIteratorStepValues(property.value));
       }
     }
     return values;
   };
-  const registerAsyncIteratorValues = (fn, source, origin) => {
-    const values = fn?.generator ? yieldedValues(fn) : asyncIteratorResultValues(fn);
+  const registerAsyncIteratorValues = (fn, source, origin, directNextMethod = false) => {
+    const values = fn?.generator ? yieldedValues(fn) :
+      directNextMethod ? asyncIteratorStepValues(fn) : asyncIteratorResultValues(fn);
     if (!fn?.generator) {
       for (const returned of returnedValues(fn)) {
         const iteratorObject = resolveObjectExpression(returned);
