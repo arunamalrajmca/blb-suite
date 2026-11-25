@@ -16,6 +16,7 @@ on:
       - '.github/workflows/browser-e2e-focused-regressions.yml'
       - 'scripts/ci-section-checkpoint.*'
       - 'scripts/ci-checkpoint-fingerprints.*'
+      - 'scripts/detect-end-user-production-changes.*'
       - 'scripts/run-checkpointed-playwright-*.mjs'
       - 'scripts/test-suite-inventory.*'
       - 'scripts/validate-build.js'
@@ -67,6 +68,7 @@ jobs:
           set -euo pipefail
           node scripts/validate-build.js
           node --test tests/selector/browser-selector-decisions.test.mjs
+          node --test scripts/detect-end-user-production-changes.test.mjs
 
           # Exercise the exact test-list extraction and delegation checks used by
           # the expensive full audit, without launching a browser.
@@ -127,5 +129,6 @@ jobs:
           node --test \
             scripts/ci-section-checkpoint.test.mjs \
             scripts/ci-checkpoint-fingerprints.test.mjs \
+            scripts/detect-end-user-production-changes.test.mjs \
             scripts/run-checkpointed-playwright-audit.test.mjs \
             scripts/run-checkpointed-playwright-repeats.test.mjs
