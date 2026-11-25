@@ -8,16 +8,20 @@ import { computeSectionFingerprints, fingerprintTreeEntries } from './ci-checkpo
 
 test('checkpoint fingerprints are deterministic and scoped to committed tree entries', () => {
   const entries = [
-    { path: 'extension/background.js', sha: 'a'.repeat(40) },
-    { path: 'tests/selector/decision.test.mjs', sha: 'b'.repeat(40) },
-    { path: 'tests/browser/example.spec.js', sha: 'c'.repeat(40) },
-    { path: 'README.md', sha: 'd'.repeat(40) }
+    { path: 'extension/background.js', mode: '100644', sha: 'a'.repeat(40) },
+    { path: 'tests/selector/decision.test.mjs', mode: '100644', sha: 'b'.repeat(40) },
+    { path: 'tests/browser/example.spec.js', mode: '100644', sha: 'c'.repeat(40) },
+    { path: 'README.md', mode: '100644', sha: 'd'.repeat(40) }
   ];
   const selector = entry => entry.path.startsWith('extension/') || entry.path.startsWith('tests/selector/');
   assert.equal(fingerprintTreeEntries(entries, selector), fingerprintTreeEntries([...entries].reverse(), selector));
   assert.notEqual(
     fingerprintTreeEntries(entries, selector),
     fingerprintTreeEntries(entries.map(entry => entry.path === 'extension/background.js' ? { ...entry, sha: 'e'.repeat(40) } : entry), selector)
+  );
+  assert.notEqual(
+    fingerprintTreeEntries(entries, selector),
+    fingerprintTreeEntries(entries.map(entry => entry.path === 'extension/background.js' ? { ...entry, mode: '100755' } : entry), selector)
   );
   assert.throws(() => fingerprintTreeEntries(entries, entry => entry.path === 'missing'), /No tracked source files/);
 });
