@@ -393,8 +393,15 @@ function analyzeFile(root, file) {
     if (!name) return null;
     return method.static ? 'class-static@' + name : 'class-instance@' + name;
   };
+  const returnedValuesCache = new WeakMap();
   const returnedValues = fn => {
-    if (fn && fn.body && fn.body.type !== 'BlockStatement') return [fn.body];
+    if (!fn || typeof fn !== 'object') return [];
+    if (returnedValuesCache.has(fn)) return returnedValuesCache.get(fn);
+    if (fn.body && fn.body.type !== 'BlockStatement') {
+      const values = [fn.body];
+      returnedValuesCache.set(fn, values);
+      return values;
+    }
     const returned = [];
     const scan = (node, isRoot = false) => {
       if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
@@ -407,6 +414,7 @@ function analyzeFile(root, file) {
       }
     };
     scan(fn.body, true);
+    returnedValuesCache.set(fn, returned);
     return returned;
   };
   const functionNodes = [];
@@ -671,7 +679,7 @@ function analyzeFile(root, file) {
     }
     return null;
   };
-  const resolveAsyncIterableExpressions = (expression, seen = new Set()) => {
+  const resolveAsyncIterableExpressionsUncached = (expression, seen = new Set()) => {
     if (!expression) return [];
     if (expression.type === 'AwaitExpression') {
       return resolveAsyncIterableExpressions(expression.argument, seen);
@@ -738,6 +746,15 @@ function analyzeFile(root, file) {
         resolveAsyncIterableExpressions(returned, nextSeen));
     }
     return [];
+  };
+  const iterableExpressionCache = new WeakMap();
+  const resolveAsyncIterableExpressions = (expression, seen = new Set()) => {
+    if (!expression) return [];
+    if (seen.size) return resolveAsyncIterableExpressionsUncached(expression, seen);
+    if (iterableExpressionCache.has(expression)) return iterableExpressionCache.get(expression);
+    const resolved = resolveAsyncIterableExpressionsUncached(expression, new Set());
+    iterableExpressionCache.set(expression, resolved);
+    return resolved;
   };
   const resolveObjectExpression = expression => {
     if (expression?.type === 'AwaitExpression') return resolveObjectExpression(expression.argument);
