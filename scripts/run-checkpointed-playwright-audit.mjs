@@ -55,9 +55,17 @@ export function createShardManifest({ sourceSha, fingerprint, tests, shardCount 
 export function isCompatibleShardManifest(candidate, expected) {
   try {
     const base = createShardManifest(expected);
+    const crossCommit = candidate?.sourceSha !== base.sourceSha;
+    const changedFiles = expected.changedFiles;
+    if (crossCommit && !Array.isArray(changedFiles)) return false;
+    if (!crossCommit && candidate?.fingerprint !== base.fingerprint) return false;
+    if (crossCommit) {
+      const referencedSpecs = new Set(base.shards.flatMap(shard => shard.tests.map(entry =>
+        entry.match(/(?:^|›\\s*)(tests\\/browser\\/[^:]+\\.spec\\.js)(?=:\\d+)/)?.[1]
+      ).filter(Boolean)));
+      if (changedFiles.some(file => !referencedSpecs.has(file))) return false;
+    }
     return candidate?.schemaVersion === 1 &&
-      candidate.sourceSha === base.sourceSha &&
-      candidate.fingerprint === base.fingerprint &&
       candidate.inventoryDigest === base.inventoryDigest &&
       candidate.scheduledTests === base.scheduledTests &&
       candidate.shardCount === base.shardCount &&
@@ -87,7 +95,37 @@ function writeManifest(directory, manifest) {
 function readManifest(directory, expected) {
   try {
     const candidate = JSON.parse(fs.readFileSync(path.join(directory, 'browser-shards.json'), 'utf8'));
-    return isCompatibleShardManifest(candidate, expected) ? candidate : null;
+    let compatibleExpected = expected;
+    if (candidate.sourceSha !== expected.sourceSha) {
+      const diff = spawnSync('git', ['diff', '--name-only', candidate.sourceSha, expected.sourceSha], {
+        cwd: process.cwd(), encoding: 'utf8'
+      });
+      if (diff.status !== 0) return null;
+      compatibleExpected = {
+        ...expected,
+        changedFiles: diff.stdout.split(/\\r?\\n/).map(value => value.trim()).filter(Boolean)
+      };
+    }
+    if (!isCompatibleShardManifest(candidate, compatibleExpected)) return null;
+    const manifest = structuredClone(candidate);
+    if (candidate.sourceSha !== expected.sourceSha) {
+      for (const shard of manifest.shards) {
+        const shardSpecs = new Set(shard.tests.map(entry =>
+          entry.match(/(?:^|›\\s*)(tests\\/browser\\/[^:]+\\.spec\\.js)(?=:\\d+)/)?.[1]
+        ).filter(Boolean));
+        if (compatibleExpected.changedFiles.some(file => shardSpecs.has(file))) {
+          shard.status = 'pending';
+          shard.exitCode = null;
+          shard.reportValid = false;
+          delete shard.error;
+        }
+      }
+      manifest.sourceSha = expected.sourceSha;
+      manifest.fingerprint = expected.fingerprint;
+      writeManifest(directory, manifest);
+      console.log('Restored compatible browser shards across commits; only shards containing changed spec files will rerun.');
+    }
+    return manifest;
   } catch {
     return null;
   }
