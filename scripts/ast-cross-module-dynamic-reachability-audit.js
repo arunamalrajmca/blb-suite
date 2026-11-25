@@ -47,14 +47,28 @@ function collectExportsAndImports(ast,file){
   // A const alias is safe to follow because its binding cannot be reassigned.
   // Resolve references to eslint-scope variables, not names, so nested shadowing
   // cannot accidentally inherit another scope's CommonJS alias.
+  const moduleExportsReassignments=[],exportsReassignments=[];
+  visit(ast,node=>{
+    if(node.type!=='AssignmentExpression'||node.operator!=='='||node.left.type!=='MemberExpression')return;
+    if(node.left.object.type==='Identifier'&&node.left.object.name==='module'
+      &&isUnboundGlobal(node.left.object)&&memberName(node.left)==='exports')moduleExportsReassignments.push(node.start);
+    if(node.left.object.type==='Identifier'&&node.left.object.name==='exports'
+      &&isUnboundGlobal(node.left.object))exportsReassignments.push(node.start);
+  });
   const commonJsAliasVariables=new Set();
   for(const scope of scopeManager.scopes){
     for(const variable of scope.variables){
       const definition=variable.defs?.[0];
       const declaration=definition?.parent;
       const initializer=definition?.node?.init;
-      if(definition?.type==='Variable'&&declaration?.kind==='const'
-        &&isNativeCommonJsExportsTarget(initializer))commonJsAliasVariables.add(variable);
+      if(definition?.type!=='Variable'||declaration?.kind!=='const'
+        ||!isNativeCommonJsExportsTarget(initializer))continue;
+      // Reject aliases if static reassignment can detach them from the live
+      // CommonJS export object before or after the alias is established.
+      const aliasesExports=initializer.type==='Identifier';
+      const detachedBefore=aliasesExports&&exportsReassignments.some(position=>position<initializer.start);
+      const detachedAfter=moduleExportsReassignments.some(position=>position>initializer.end);
+      if(!detachedBefore&&!detachedAfter)commonJsAliasVariables.add(variable);
     }
   }
   const isCommonJsExportsTarget=node=>{
