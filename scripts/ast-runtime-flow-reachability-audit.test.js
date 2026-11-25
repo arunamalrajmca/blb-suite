@@ -1418,6 +1418,30 @@ test('traces both async iterable branches of a conditional factory return', () =
     edge.to === 'callback@9' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces callback values in factory-returned Sets into Array.fromAsync', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeCallbacks() { return new Set([cleanup]); }',
+    'async function run() {',
+    '  await Array.fromAsync(makeCallbacks(), callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces Map entry values returned by iterable factories into Array.fromAsync', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeEntries() { return new Map([["cleanup", cleanup]]); }',
+    'async function run() {',
+    '  await Array.fromAsync(makeEntries(), ([key, callback]) => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
+});
+
 test('traces callback arrays returned by factories into Array.fromAsync mappers', () => {
   const result = audit([
     'const cleanup = () => work();',
