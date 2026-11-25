@@ -682,7 +682,17 @@ function analyzeFile(root, file) {
       }
       return null;
     }
+    if (expression.type === 'NewExpression') {
+      const classNode = classForInstanceExpression(expression);
+      return classNode ? {classNode} : null;
+    }
     if (expression.type === 'CallExpression') {
+      if (expression.callee.type === 'MemberExpression' &&
+          expression.callee.object.type === 'Identifier' &&
+          expression.callee.object.name === 'Promise' &&
+          propertyName(expression.callee) === 'resolve') {
+        return resolveAsyncIterableExpression(expression.arguments[0], seen);
+      }
       const generator = resolveGeneratorExpression(expression);
       if (generator?.generator) return {generator};
       const called = resolveCalledFunction(expression);
@@ -893,6 +903,7 @@ function analyzeFile(root, file) {
         const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
         asyncIterableSources.set(assigned, source);
         if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
+        else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, node.init);
         else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init);
       }
     }
@@ -1291,6 +1302,7 @@ function analyzeFile(root, file) {
           const asyncIterable = resolveAsyncIterableExpression(iterable);
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
+          else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, iterable);
           else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable);
         } else if (classForInstanceExpression(iterable)) {
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
