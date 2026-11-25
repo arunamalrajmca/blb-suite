@@ -1317,7 +1317,7 @@ test('supports a separately declared Array.fromAsync mapper callback', () => {
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
-  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@4' &&
+    edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'callback@3' &&
     edge.to === 'selected@6' && edge.kind === 'container-value-read'));
 });
