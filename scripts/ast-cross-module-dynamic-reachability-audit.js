@@ -204,8 +204,11 @@ function collectExportsAndImports(ast,file){
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
         setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
-      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
-      else if(n.left.object.type==='Identifier'&&key&&isCurrentCommonJsExportAlias(n.left.object,n))setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+      } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached) {
+        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+      } else if(n.left.object.type==='Identifier'&&key&&isCurrentCommonJsExportAlias(n.left.object,n)) {
+        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+      }
     }
   });
   return {exports,imports};
