@@ -1028,3 +1028,32 @@ test('recursively traces isolated const spread aliases and preserves override or
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='overrideService'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces side-effect-free identifier-returning CommonJS accessor exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-static-accessor-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'define-property.cjs'),[
+   'function service() {}',
+   "Object.defineProperty(module.exports, 'service', { get: () => service });"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'define-properties.cjs'),[
+   'function assignedService() {}',
+   'Object.defineProperties(module.exports, { assigned: { get() { return assignedService; } } });'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'dynamic.cjs'),[
+   'function service() {}',
+   'function resolveService() { return service; }',
+   "Object.defineProperty(module.exports, 'service', { get: () => resolveService() });"
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { service } from './define-property.cjs';",
+   "import { assigned } from './define-properties.cjs';",
+   "import { service as dynamic } from './dynamic.cjs';"
+  ].join('\\n'));
+  const files=['define-property.cjs','define-properties.cjs','dynamic.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='define-property.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='define-properties.cjs'&&x.imported==='assigned'&&x.exportedLocal==='assignedService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='dynamic.cjs'&&x.imported==='service'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
