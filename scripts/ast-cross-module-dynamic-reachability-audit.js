@@ -104,14 +104,18 @@ function collectExportsAndImports(ast,file){
       setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
   };
-  const recordCommonJsAssignmentValue=value=>{
+  const recordCommonJsAssignmentValue=(value,exportsSnapshot=null)=>{
     if(value?.type==='ObjectExpression'){recordObjectProperties(value);return;}
     if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
       ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
       ||!isUnboundGlobal(value.callee.object))return;
     const method=memberName(value.callee);
     if(method==='assign'){
-      for(const argument of value.arguments)recordObjectProperties(argument);
+      for(const argument of value.arguments){
+        if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
+          for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
+        }else recordObjectProperties(argument);
+      }
       return;
     }
     if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
@@ -200,16 +204,27 @@ function collectExportsAndImports(ast,file){
             ||(assignmentValue.arguments[0].type==='Identifier'&&assignmentValue.arguments[0].name==='exports'
               &&isUnboundGlobal(assignmentValue.arguments[0])&&!exportsAliasDetached)
             ||(assignmentValue.arguments[0].type==='Identifier'&&isCurrentCommonJsExportAlias(assignmentValue.arguments[0],n)));
+        const copiesCurrentExports=assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
+          &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
+          &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
+          &&assignmentValue.arguments.some(argument=>argument.type==='Identifier'&&argument.name==='exports'
+            &&isUnboundGlobal(argument)&&!exportsAliasDetached);
+        const exportsSnapshot=copiesCurrentExports?[...exports.entries()].filter(([name])=>name!=='default'):null;
         const isSelfAssignment=isDirectSelfAssignment||isCurrentExportsObjectIdentity||isAssignMutation;
         if(!isSelfAssignment){
-          replaceCommonJsExportObject();
+          if(copiesCurrentExports){
+            exports.delete('default');
+            commonJsExportNames.delete('default');
+            exportsAliasDetached=true;
+            setCommonJsExport('default',null);
+          }else replaceCommonJsExportObject();
           // In a chained assignment, exports is rebound to the newly assigned module.exports object.
           if(parent?.type==='AssignmentExpression'&&parent.left.type==='Identifier'
             &&parent.left.name==='exports'&&isUnboundGlobal(parent.left))exportsAliasDetached=false;
           const defaultLocal=n.right.type==='Identifier'?n.right.name:
             ((n.right.type==='FunctionExpression'||n.right.type==='ClassExpression')&&n.right.id?n.right.id.name:null);
           setCommonJsExport('default',defaultLocal);
-          recordCommonJsAssignmentValue(n.right);
+          recordCommonJsAssignmentValue(n.right,exportsSnapshot);
         }
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
