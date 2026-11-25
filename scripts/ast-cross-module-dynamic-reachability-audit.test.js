@@ -1157,12 +1157,12 @@ test('traces literal Object.fromEntries CommonJS export tuples',()=>{
    "  ['service', replacement],",
    "  ['computedValue', createService()]",
    ']);'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service, numeric, computedValue } = require('./service.cjs');");
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='numeric'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
-  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='computedValue'&&x.exportedLocal===null&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='computedValue'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
@@ -1176,7 +1176,7 @@ test('does not infer Object.fromEntries exports when a key is dynamic',()=>{
    "  ['service', service],",
    '  [key, createService()]',
    ']);'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&!x.unresolvedExport));
