@@ -1627,6 +1627,29 @@ test('traces self-returning object Symbol.iterator protocols in Array.fromAsync'
     edge.to === 'handler@7' && edge.kind === 'container-callback-argument'));
 });
 
+test('does not treat async-only generators as Array.from sync iterables', () => {
+  const result = audit([
+    'const cleanup = () => start();',
+    'async function* callbacks() { yield cleanup; }',
+    'const mapped = Array.from(callbacks(), callback => callback());'
+  ].join('\n'));
+  assert.ok(!result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@3' && edge.kind === 'container-callback-argument'));
+});
+
+test('selects the sync iterator for Array.from when both iterator protocols exist', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = {',
+    '  async *[Symbol.asyncIterator]() { yield () => ignored(); },',
+    '  *[Symbol.iterator]() { yield callback; }',
+    '};',
+    'const mapped = Array.from(iterable, handler => handler());'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@6' && edge.kind === 'container-callback-argument'));
+});
+
 test('traces class sync-generator iterables through Array.fromAsync', () => {
   const result = audit([
     'const callback = () => start();',
