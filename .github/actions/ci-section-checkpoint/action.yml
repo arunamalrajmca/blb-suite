@@ -7,6 +7,10 @@ inputs:
   cache_prefix:
     description: Fingerprint-scoped cache prefix; include the workflow and all relevant source/test inputs.
     required: true
+  restore_prefix:
+    description: Stable legacy-compatible prefix used to restore checkpoints from earlier commits.
+    required: false
+    default: ''
   fingerprint:
     description: Exact source and environment fingerprint recorded in the completion marker.
     required: true
@@ -54,6 +58,7 @@ runs:
         key: ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
           ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
+          ${{ inputs.restore_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
     - name: Validate the restored completion marker
       id: check
       shell: bash
