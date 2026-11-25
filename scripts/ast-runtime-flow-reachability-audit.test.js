@@ -1367,6 +1367,51 @@ test('propagates values yielded by a custom Symbol.asyncIterator method', () => 
     edge.to === 'callback@8' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces async-generator yielded callbacks through for-await-of bindings', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'async function* handlers() {',
+    '  yield callback;',
+    '}',
+    'async function run() {',
+    '  const iterable = handlers();',
+    '  for await (const handler of iterable) {',
+    '    handler();',
+    '  }',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@7'));
+});
+
+test('traces direct async-generator calls through for-await-of bindings', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'async function* handlers() { yield callback; }',
+    'async function run() {',
+    '  for await (const handler of handlers()) handler();',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@4'));
+});
+
+test('traces awaited async-iterator next values through the step value property', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'async function* handlers() { yield callback; }',
+    'async function run() {',
+    '  const iterable = handlers();',
+    '  const iterator = iterable[Symbol.asyncIterator]();',
+    '  const step = await iterator.next();',
+    '  const selected = step.value;',
+    '  selected();',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@7'));
+});
+
 test('binds stored callback values to Map.groupBy mapper parameters', () => {
   const result = audit([
     'const cleanup = () => work();',
