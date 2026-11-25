@@ -258,6 +258,19 @@
       "owner": ".github/workflows/manual-full-test-audit.yml",
       "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
       "executionEnvironment": "node"
+    },
+    {
+      "id": "end-user-production-impact-tests",
+      "pattern": "scripts/detect-end-user-production-changes.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "scripts/detect-end-user-production-changes.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/ci-checkpoint-contract-validation.yml",
+          "requiredText": "node --test scripts/detect-end-user-production-changes.test.mjs"
+        }
+      ]
     }
   ],
   "manualOnly": [
