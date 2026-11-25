@@ -776,7 +776,7 @@ jobs:
             echo "| Suite | Result |"
             echo "|---|---|"
             if [[ "$HAS_PRODUCTION_CHANGES" == "true" ]]; then
-              echo "| End-user Performance qualification | Delegated — production changes detected |"
+              echo "| End-user Performance qualification | REQUIRED — production changes detected; use dedicated workflow |"
             else
               echo "| End-user Performance qualification | SKIPPED — no relevant production changes |"
             fi
