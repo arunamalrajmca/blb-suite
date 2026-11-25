@@ -560,3 +560,24 @@ test('does not transfer CommonJS export alias identity to shadowed parameters',(
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='fake'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('does not follow CommonJS aliases across static export-object replacement',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-export-alias-reassigned-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function stale() {}',
+   'function current() {}',
+   'const api = module.exports;',
+   'module.exports = {};',
+   'api.stale = stale;',
+   'exports = {};',
+   'const detached = exports;',
+   'detached.notCurrent = current;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { stale, notCurrent } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stale'&&x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='notCurrent'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
