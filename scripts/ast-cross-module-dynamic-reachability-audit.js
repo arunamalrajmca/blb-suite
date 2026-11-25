@@ -262,11 +262,10 @@ function collectExportsAndImports(ast,file){
         clearCommonJsExportOwners();
         return false;
       }
-      if(enumerableOnly){
-        const state=descriptorEnumerableState(call.arguments[2]);
-        if(state===null){clearCommonJsExportOwners();return false;}
-        if(state)setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
-      }else setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
+      const state=descriptorEnumerableState(call.arguments[2]);
+      if(enumerableOnly&&state===null){clearCommonJsExportOwners();return false;}
+      if(enumerableOnly&&!state){exports.delete(key);commonJsExportNames.delete(key);}
+      else setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
       return true;
     }
     if(method==='defineProperties'){
@@ -285,11 +284,12 @@ function collectExportsAndImports(ast,file){
         clearCommonJsExportOwners();
         return false;
       }
-      const states=enumerableOnly?resolved.map(item=>descriptorEnumerableState(item.property.value)):null;
-      if(states?.some(state=>state===null)){clearCommonJsExportOwners();return false;}
+      const states=resolved.map(item=>descriptorEnumerableState(item.property.value));
+      if(enumerableOnly&&states.some(state=>state===null)){clearCommonJsExportOwners();return false;}
       for(let index=0;index<resolved.length;index++){
         const item=resolved[index];
-        if(item.property.kind!=='init'||(enumerableOnly&&!states[index]))continue;
+        if(item.property.kind!=='init')continue;
+        if(enumerableOnly&&!states[index]){exports.delete(String(item.key));commonJsExportNames.delete(String(item.key));continue;}
         setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
       }
       return true;
