@@ -334,7 +334,7 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
   }
   const candidates=new Map();
   for(const item of data.imports){
-    if(!item.reexportAll)continue;
+    if(!item.reexportAll&&!item.commonjsReexportAll)continue;
     if(name==='default')continue;
     const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
     const origin=resolveExportOrigin(target,name,meta,files,next);
@@ -352,7 +352,7 @@ function exportedNames(file,meta,files,seen=new Set()){
     const target=resolveLocal(file,item.source,new Set(files));
     if(!target)continue;
     if(item.reexport||item.reexportNamespace)names.add(item.exported);
-    if(item.reexportAll)for(const name of exportedNames(target,meta,files,next))if(name!=='default')names.add(name);
+    if(item.reexportAll||item.commonjsReexportAll)for(const name of exportedNames(target,meta,files,next))if(name!=='default')names.add(name);
   }
   return names;
 }
