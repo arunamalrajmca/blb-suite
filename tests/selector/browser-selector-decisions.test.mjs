@@ -1163,7 +1163,7 @@ test("full audit compares legacy per-test process isolation with four-worker sch
     "legacy compatibility cases must run one test per Playwright process");
   assert.ok(audit.includes('npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=1'),
     "the same compatibility cases must also run together with four workers");
-  assert.ok(audit.includes('node scripts/run-checkpointed-playwright-audit.mjs "$test_list"'),
+  assert.ok(audit.includes('node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 1'),
     "the complete browser inventory must use the resumable shard runner after comparison");
   assert.ok(runner.includes("shardCount = 8") && runner.includes("workers = 4"),
     "the complete browser inventory must use eight four-worker shards");
