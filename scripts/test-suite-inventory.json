@@ -215,7 +215,7 @@
       "id": "checkpointed-browser-audit-runner-tests",
       "pattern": "scripts/run-checkpointed-playwright-audit.test.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
       "executionEnvironment": "node",
       "runnerChecks": [
         {
@@ -250,6 +250,13 @@
       "pattern": "scripts/classify-ast-audit-scope.test.mjs",
       "owner": ".github/workflows/browser-tests.yml",
       "requiredText": "node --test scripts/classify-ast-audit-scope.test.mjs",
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "ci-checkpoint-fingerprint-tests",
+      "pattern": "scripts/ci-checkpoint-fingerprints.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
       "executionEnvironment": "node"
     }
   ],
