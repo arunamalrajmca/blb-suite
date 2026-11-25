@@ -1425,7 +1425,7 @@ test('preserves async iterable and iterator instances through local aliases', ()
     '  const selected = step.value;',
     '  selected();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'selected@9'));
 });
@@ -1439,7 +1439,7 @@ test('preserves async iterator yielded values through an aliased iterable in for
     '  const alias = iterable;',
     '  for await (const selected of alias) selected();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'selected@6'));
 });
