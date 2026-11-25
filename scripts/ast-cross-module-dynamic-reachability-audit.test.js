@@ -1256,7 +1256,7 @@ test('does not retain static Object.create descriptor owners when a dynamic key 
    '  service: { enumerable: true, value: service },',
    '  [key]: { enumerable: true, value: createService() }',
    '});'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
