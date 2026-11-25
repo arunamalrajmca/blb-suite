@@ -598,6 +598,27 @@ function analyzeFile(root, file) {
   // as the elements consumed by Array.fromAsync. Keep this deliberately
   // syntactic and conservative: nested functions are not part of the iterator.
   const asyncIterableSources = new Map();
+  const resolveGeneratorExpression = (expression, seen = new Set()) => {
+    if (!expression) return null;
+    if (expression.type === 'AwaitExpression') {
+      return resolveGeneratorExpression(expression.argument, seen);
+    }
+    if (expression.type === 'CallExpression' && expression.callee.type === 'Identifier') {
+      const resolved = resolveFunctionReference(expression.callee);
+      return resolved?.generator ? resolved : null;
+    }
+    if (expression.type === 'Identifier') {
+      const variable = variableForNode.get(expression);
+      if (!variable || seen.has(variable)) return null;
+      seen.add(variable);
+      const definitions = (variable.defs || []).filter(def =>
+        def.type === 'Variable' && def.node?.type === 'VariableDeclarator' && def.node.init);
+      if (definitions.length === 1) {
+        return resolveGeneratorExpression(definitions[0].node.init, seen);
+      }
+    }
+    return null;
+  };
   const yieldedValues = (fn, seen = new Set()) => {
     if (!fn || !fn.generator || seen.has(fn)) return [];
     seen.add(fn);
@@ -606,10 +627,9 @@ function analyzeFile(root, file) {
       if (!node || typeof node !== 'object' || typeof node.type !== 'string') return;
       if (!root && isFunction(node)) return;
       if (node.type === 'YieldExpression' && node.argument) {
-        if (node.delegate && node.argument.type === 'CallExpression' &&
-            node.argument.callee.type === 'Identifier') {
-          const delegated = resolveFunctionReference(node.argument.callee);
-          if (delegated && delegated.generator) values.push(...yieldedValues(delegated, seen));
+        if (node.delegate) {
+          const delegated = resolveGeneratorExpression(node.argument);
+          if (delegated) values.push(...yieldedValues(delegated, seen));
           else values.push(node.argument);
         } else values.push(node.argument);
         return;
