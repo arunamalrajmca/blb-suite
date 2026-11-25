@@ -141,17 +141,7 @@ function readManifest(directory, expected) {
       }
     }
     if (candidate.sourceSha !== expected.sourceSha) {
-      for (const shard of manifest.shards) {
-        const shardSpecs = new Set(shard.tests.map(entry =>
-          entry.match(/(?:^|›\s*)(tests\/browser\/[^:]+\.spec\.js)(?=:\d+)/)?.[1]
-        ).filter(Boolean));
-        if (compatibleExpected.changedFiles.some(file => shardSpecs.has(file))) {
-          shard.status = 'pending';
-          shard.exitCode = null;
-          shard.reportValid = false;
-          delete shard.error;
-        }
-      }
+      invalidateChangedSpecShards(manifest, compatibleExpected.changedFiles);
       manifest.sourceSha = expected.sourceSha;
       manifest.fingerprint = expected.fingerprint;
       writeManifest(directory, manifest);
