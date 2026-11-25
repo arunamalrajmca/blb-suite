@@ -64,11 +64,17 @@ function collectExportsAndImports(ast,file){
   };
   const descriptorExportLocal=descriptor=>{
     if(descriptor?.type!=='ObjectExpression')return null;
-    const valueProperty=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
-      &&property.key.type==='Identifier'&&property.key.name==='value');
-    if(valueProperty?.value.type==='Identifier')return valueProperty.value.name;
-    const getter=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
-      &&property.key.type==='Identifier'&&property.key.name==='get')?.value;
+    let valueProperty=null,getter=null;
+    for(const property of descriptor.properties||[]){
+      if(property.type!=='Property')return null;
+      const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+      if(key===null||key===undefined)return null;
+      if(key==='value')valueProperty=property.value;
+      if(key==='get')getter=property.value;
+    }
+    // A descriptor cannot validly specify both data and accessor fields.
+    if(valueProperty&&getter)return null;
+    if(valueProperty)return valueProperty.type==='Identifier'?valueProperty.name:null;
     return staticGetterLocal(getter);
   };
   const descriptorEnumerableState=descriptor=>{
