@@ -88,6 +88,22 @@ function collectExportsAndImports(ast,file){
           :null;
         exports.set(n.arguments[1].value,value?.type==='Identifier'?value.name:null);
       }
+      if(method==='defineProperties'&&isCommonJsExportsTarget(n.arguments[0])
+        &&n.arguments[1]?.type==='ObjectExpression'){
+        for(const property of n.arguments[1].properties||[]){
+          if(property.type!=='Property'||property.kind!=='init')continue;
+          const key=property.computed
+            ?(property.key.type==='Literal'?String(property.key.value):null)
+            :(property.key.name??property.key.value);
+          if(key===null||key===undefined)continue;
+          const descriptor=property.value;
+          const value=descriptor?.type==='ObjectExpression'
+            ?descriptor.properties.find(item=>item.type==='Property'&&!item.computed
+              &&item.key.type==='Identifier'&&item.key.name==='value')?.value
+            :null;
+          exports.set(String(key),value?.type==='Identifier'?value.name:null);
+        }
+      }
     }
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
