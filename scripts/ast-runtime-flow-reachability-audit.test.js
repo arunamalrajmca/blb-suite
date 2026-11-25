@@ -1412,6 +1412,38 @@ test('traces awaited async-iterator next values through the step value property'
     edge.from === 'function@1' && edge.to === 'selected@7'));
 });
 
+test('preserves async iterable and iterator instances through local aliases', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'async function* handlers() { yield callback; }',
+    'async function run() {',
+    '  const iterable = handlers();',
+    '  const iterableAlias = iterable;',
+    '  const iterator = iterableAlias[Symbol.asyncIterator]();',
+    '  const iteratorAlias = iterator;',
+    '  const step = await iteratorAlias.next();',
+    '  const selected = step.value;',
+    '  selected();',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@9'));
+});
+
+test('preserves async iterator yielded values through an aliased iterable in for-await-of', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'async function* handlers() { yield callback; }',
+    'async function run() {',
+    '  const iterable = handlers();',
+    '  const alias = iterable;',
+    '  for await (const selected of alias) selected();',
+    '}'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@6'));
+});
+
 test('binds stored callback values to Map.groupBy mapper parameters', () => {
   const result = audit([
     'const cleanup = () => work();',
