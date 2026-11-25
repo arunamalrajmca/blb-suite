@@ -1566,13 +1566,13 @@ test('preserves defineProperty factory targets and applies enumerability overrid
   fs.writeFileSync(path.join(root,'hidden.cjs'),[
    'function service() {}',
    'function hidden() {}',
-   "module.exports = Object.assign({}, Object.defineProperty({ service }, 'service', { value: hidden }));"
+   "module.exports = Object.assign({}, Object.defineProperty({ service }, 'service', { enumerable: false, value: hidden }));"
   ].join('\n'));
   fs.writeFileSync(path.join(root,'multiple.cjs'),[
    'function service() {}',
    'function extra() {}',
    'module.exports = { ...Object.defineProperties({ service }, {',
-   '  service: { value: createService() },',
+   '  service: { enumerable: false, value: createService() },',
    '  extra: { enumerable: true, value: extra }',
    '}) };'
   ].join('\n'));
@@ -1625,5 +1625,297 @@ test('uses the final static descriptor value and rejects descriptor spreads',()=
   const files=['overridden.cjs','spread.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='overridden.cjs'&&x.imported==='service'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='spread.cjs'&&x.imported==='service'&&x.exportedLocal===null&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('uses only the final duplicate Object.create descriptor when copying sources',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-object-create-duplicate-descriptors-'));
+ try{
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function original() {}',
+   'function replacement() {}',
+   'module.exports = { service: original, ...Object.create(null, {',
+   '  service: { enumerable: true, value: replacement },',
+   '  service: { value: replacement }',
+   '}) };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'assigned.cjs'),[
+   'function original() {}',
+   'function replacement() {}',
+   'module.exports = Object.assign({ service: original }, Object.create(null, {',
+   '  service: { enumerable: true, value: replacement },',
+   '  service: { value: replacement }',
+   '}));'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: spreadService } = require('./spread.cjs');",
+   "const { service: assignedService } = require('./assigned.cjs');"
+  ].join('\n'));
+  const files=['spread.cjs','assigned.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['spread.cjs','assigned.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='original'&&!x.unresolvedExport),'final non-enumerable descriptor must leave the target property intact for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not infer object-literal prototype setters as own CommonJS exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-prototype-setter-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'literal.cjs'),[
+   'function service() {}',
+   'module.exports = { __proto__: service };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'created.cjs'),[
+   'function service() {}',
+   'module.exports = Object.create(null, { __proto__: { enumerable: true, value: service } });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'defined.cjs'),[
+   'function service() {}',
+   'module.exports = Object.defineProperties({}, { __proto__: { enumerable: true, value: service } });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { __proto__: literalProto } = require('./literal.cjs');",
+   "const { __proto__: createdProto } = require('./created.cjs');",
+   "const { __proto__: definedProto } = require('./defined.cjs');"
+  ].join('\n'));
+  const files=['literal.cjs','created.cjs','defined.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['literal.cjs','created.cjs','defined.cjs']){
+   assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='__proto__'
+    &&x.exportedLocal==='service'),'prototype setter must not be reported as an own export for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('models setter-only object properties and preserves paired getter ownership',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-object-setter-properties-'));
+ try{
+  fs.writeFileSync(path.join(root,'direct.cjs'),[
+   'function service() {}',
+   'module.exports = { service, set service(value) {} };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function original() {}',
+   'module.exports = { service: original, ...{ set service(value) {} } };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'assigned.cjs'),[
+   'function original() {}',
+   'module.exports = Object.assign({ service: original }, { set service(value) {} });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'paired.cjs'),[
+   'function service() {}',
+   'module.exports = { get service() { return service; }, set service(value) {} };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: directService } = require('./direct.cjs');",
+   "const { service: spreadService } = require('./spread.cjs');",
+   "const { service: assignedService } = require('./assigned.cjs');",
+   "const { service: pairedService } = require('./paired.cjs');"
+  ].join('\n'));
+  const files=['direct.cjs','spread.cjs','assigned.cjs','paired.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['direct.cjs','spread.cjs','assigned.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal===null&&!x.unresolvedExport),'setter-only accessor must replace any earlier owner for '+target);
+  }
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='paired.cjs'&&x.imported==='service'
+   &&x.exportedLocal==='service'&&!x.unresolvedExport),'a setter paired with a getter must preserve the getter value owner');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('distinguishes prototype setters from computed own __proto__ properties',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-computed-proto-own-property-'));
+ try{
+  fs.writeFileSync(path.join(root,'quoted.cjs'),[
+   'function service() {}',
+   'module.exports = { "__proto__": service };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'computed.cjs'),[
+   'function service() {}',
+   "module.exports = { ['__proto__']: service };"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { __proto__: quotedProto } = require('./quoted.cjs');",
+   "const { __proto__: computedProto } = require('./computed.cjs');"
+  ].join('\n'));
+  const files=['quoted.cjs','computed.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to==='quoted.cjs'&&x.imported==='__proto__'&&x.exportedLocal==='service'));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='computed.cjs'&&x.imported==='__proto__'
+   &&x.exportedLocal==='service'&&!x.unresolvedExport),'computed __proto__ is an own property and must remain traceable');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('tracks Reflect CommonJS property mutations and invalidates uncertain keys',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-reflect-mutations-'));
+ try{
+  fs.writeFileSync(path.join(root,'set.cjs'),[
+   'function service() {}',
+   "Reflect.set(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'define.cjs'),[
+   'function service() {}',
+   "Reflect.defineProperty(module.exports, 'service', { enumerable: true, value: service });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'deleted.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   "Reflect.deleteProperty(module.exports, 'service');"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'dynamic.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'Reflect.deleteProperty(module.exports, key);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'dynamic-set.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const key = process.env.EXPORT_NAME;',
+   'Reflect.set(module.exports, key, service);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'receiver.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   "Reflect.set(module.exports, 'service', createService(), receiver);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'shadowed.cjs'),[
+   'function service() {}',
+   'const Reflect = { set() {} };',
+   "Reflect.set(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: setService } = require('./set.cjs');",
+   "const { service: defineService } = require('./define.cjs');",
+   "const { service: deletedService } = require('./deleted.cjs');",
+   "const { service: dynamicService } = require('./dynamic.cjs');",
+   "const { service: dynamicSetService } = require('./dynamic-set.cjs');",
+   "const { service: receiverService } = require('./receiver.cjs');",
+   "const { service: shadowedService } = require('./shadowed.cjs');"
+  ].join('\n'));
+  const files=['set.cjs','define.cjs','deleted.cjs','dynamic.cjs','dynamic-set.cjs','receiver.cjs','shadowed.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['set.cjs','define.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='service'&&!x.unresolvedExport),'static Reflect mutation should resolve '+target);
+  }
+  for(const target of ['deleted.cjs','dynamic.cjs','dynamic-set.cjs','receiver.cjs','shadowed.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal===null&&x.unresolvedExport),'Reflect mutation uncertainty must not retain a stale owner for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('preserves outer target owners when non-enumerable descriptor factories are copied',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-nonenumerable-factory-source-collision-'));
+ try{
+  fs.writeFileSync(path.join(root,'single.cjs'),[
+   'function original() {}',
+   'function hidden() {}',
+   "module.exports = Object.assign({ service: original }, Object.defineProperty({ service: hidden }, 'service', { enumerable: false, value: hidden }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'multiple.cjs'),[
+   'function original() {}',
+   'function hidden() {}',
+   'module.exports = { service: original, ...Object.defineProperties({ service: hidden }, {',
+   '  service: { enumerable: false, value: hidden }',
+   '}) };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'existing.cjs'),[
+   'function original() {}',
+   'function hidden() {}',
+   "module.exports = Object.assign({ service: original }, Object.defineProperty({ service: hidden }, 'service', { value: hidden }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'uncertain.cjs'),[
+   'function original() {}',
+   'function hidden() {}',
+   "module.exports = Object.assign({ service: original }, Object.defineProperty(loadSource(), 'service', { value: hidden }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: singleService } = require('./single.cjs');",
+   "const { service: multipleService } = require('./multiple.cjs');",
+   "const { service: uncertainService } = require('./uncertain.cjs');",
+   "const { service: existingService } = require('./existing.cjs');"
+  ].join('\n'));
+  const files=['single.cjs','multiple.cjs','existing.cjs','uncertain.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['single.cjs','multiple.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='original'&&!x.unresolvedExport),'non-enumerable factory source must leave outer target intact for '+target);
+  }
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='existing.cjs'&&x.imported==='service'
+   &&x.exportedLocal==='hidden'&&!x.unresolvedExport),'omitted enumerable preserves an existing target property attribute');
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='uncertain.cjs'&&x.imported==='service'
+   &&x.exportedLocal===null&&x.unresolvedExport),'unknown factory target must not restore an unproven outer owner');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not treat Object.assign __proto__ writes as ordinary own exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-object-assign-proto-key-'));
+ try{
+  fs.writeFileSync(path.join(root,'new.cjs'),[
+   'function service() {}',
+   "module.exports = Object.assign({}, { ['__proto__']: service });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'overwritten.cjs'),[
+   'function original() {}',
+   'function replacement() {}',
+   "module.exports = Object.assign({ ['__proto__']: original }, { ['__proto__']: replacement });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function service() {}',
+   "module.exports = { ...{ ['__proto__']: service } };"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { __proto__: newProto } = require('./new.cjs');",
+   "const { __proto__: overwrittenProto } = require('./overwritten.cjs');",
+   "const { __proto__: spreadProto } = require('./spread.cjs');"
+  ].join('\n'));
+  const files=['new.cjs','overwritten.cjs','spread.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to==='new.cjs'&&x.imported==='__proto__'&&x.exportedLocal==='service'));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='overwritten.cjs'&&x.imported==='__proto__'
+   &&x.exportedLocal===null&&!x.unresolvedExport),'an existing own __proto__ property must lose its proven owner after an uncertain [[Set]]');
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='spread.cjs'&&x.imported==='__proto__'
+   &&x.exportedLocal==='service'&&!x.unresolvedExport),'object spread uses CreateDataProperty and preserves computed own __proto__');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not infer Reflect.set of __proto__ as a new own export',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-reflect-proto-set-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   "Reflect.set(module.exports, '__proto__', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { __proto__: service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='__proto__'&&x.exportedLocal==='service'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('preserves existing enumerability through nested duplicate descriptor factories',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-nested-duplicate-enumerability-'));
+ try{
+  fs.writeFileSync(path.join(root,'created.cjs'),[
+   'function original() {}',
+   'function hidden() {}',
+   'module.exports = Object.assign({ service: original }, Object.defineProperty(Object.create(null, {',
+   '  service: { enumerable: true, value: hidden },',
+   '  service: { value: hidden }',
+   "}), 'service', { value: hidden }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'defined.cjs'),[
+   'function original() {}',
+   'function hidden() {}',
+   'module.exports = Object.assign({ service: original }, Object.defineProperty(Object.defineProperties({}, {',
+   '  service: { enumerable: true, value: hidden },',
+   '  service: { value: hidden }',
+   "}), 'service', { value: hidden }));"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: createdService } = require('./created.cjs');",
+   "const { service: definedService } = require('./defined.cjs');"
+  ].join('\n'));
+  const files=['created.cjs','defined.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['created.cjs','defined.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='original'&&!x.unresolvedExport),'the final duplicate descriptor leaves the source property non-enumerable for '+target);
+  }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
