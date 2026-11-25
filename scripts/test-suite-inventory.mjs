@@ -7,6 +7,9 @@ const manifest = JSON.parse(fs.readFileSync(path.join(here, 'test-suite-inventor
 const errors = [];
 const counts = [];
 function fail(message) { errors.push(message); }
+function hasAssertionCall(source) {
+  return /\bexpect\s*\(|\bassert(?:\.[A-Za-z_$][\w$]*)?\s*\(/.test(source);
+}
 function readRepoFile(relativePath) {
   const absolute = path.join(root, relativePath);
   if (!fs.existsSync(absolute)) { fail('Missing inventory-owned file: ' + relativePath); return ''; }
@@ -97,6 +100,7 @@ for (const area of productionCoverage) {
     const testFile = evidence.path;
     if (!testFile || !classified.has(testFile)) fail('Production coverage evidence is not owned by an automated suite: ' + area.id + ' -> ' + testFile);
     const testContent = readRepoFile(testFile);
+    if (!hasAssertionCall(testContent)) fail("Production coverage evidence file contains no assertion call: " + area.id + " -> " + testFile);
     for (const requiredText of evidence.requiredText || []) {
       if (!testContent.includes(requiredText)) fail('Production coverage evidence no longer matches its regression test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
     }
@@ -137,6 +141,7 @@ for (const module of productionModuleCoverage) {
       continue;
     }
     const testContent = readRepoFile(evidence.path);
+    if (!hasAssertionCall(testContent)) fail("Production module evidence file contains no assertion call: " + module.path + " -> " + evidence.path);
     for (const requiredText of evidence.requiredText || []) {
       if (!testContent.includes(requiredText)) fail('Production module evidence no longer matches its regression assertion: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
     }
