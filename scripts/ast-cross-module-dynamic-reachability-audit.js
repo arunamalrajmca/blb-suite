@@ -58,7 +58,7 @@ function collectExportsAndImports(ast,file){
     if(valueProperty?.value.type==='Identifier')return valueProperty.value.name;
     const getter=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
       &&property.key.type==='Identifier'&&property.key.name==='get')?.value;
-    if(!getter||getter.params.length!==0)return null;
+    if(!getter||!['ArrowFunctionExpression','FunctionExpression'].includes(getter.type)||getter.params.length!==0)return null;
     if(getter.type==='ArrowFunctionExpression'&&getter.body.type==='Identifier')return getter.body.name;
     if(getter.type==='FunctionExpression'&&getter.body.type==='BlockStatement'
       &&getter.body.body.length===1&&getter.body.body[0].type==='ReturnStatement'
