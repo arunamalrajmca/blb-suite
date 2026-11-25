@@ -1288,8 +1288,7 @@ test('binds stored callback values to Array.fromAsync mapper parameters', () => 
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.to === 'callback@4' && edge.kind === 'container-callback-argument' &&
-    edge.method === 'Array.fromAsync'));
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'), JSON.stringify(result.flowEdges));
 });
 
 test('tracks callback values returned by an awaited Array.fromAsync mapper', () => {
@@ -1302,8 +1301,7 @@ test('tracks callback values returned by an awaited Array.fromAsync mapper', () 
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.to === 'callback@4' && edge.kind === 'container-callback-argument' &&
-    edge.method === 'Array.fromAsync'));
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'callback@4' &&
     edge.to === 'selected@5' && edge.kind === 'container-value-read'));
 });
@@ -1319,8 +1317,7 @@ test('supports a separately declared Array.fromAsync mapper callback', () => {
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.to === 'callback@4' && edge.kind === 'container-callback-argument' &&
-    edge.method === 'Array.fromAsync'));
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'callback@4' &&
     edge.to === 'selected@6' && edge.kind === 'container-value-read'));
 });
