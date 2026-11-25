@@ -1507,17 +1507,17 @@ test('respects non-enumerable descriptors when wrapped sources are copied',()=>{
    'module.exports = { ...Object.freeze(Object.create(null, {',
    '  service: { value: createService() }',
    '})) };'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'assigned.cjs'),[
    'function service() {}',
    'module.exports = Object.assign({}, Object.seal(Object.create(null, {',
    '  service: { value: createService() }',
    '})));'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),[
    "const { service: spreadService } = require('./spread.cjs');",
    "const { service: assignedService } = require('./assigned.cjs');"
-  ].join('\\n'));
+  ].join('\n'));
   const files=['spread.cjs','assigned.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   for(const target of ['spread.cjs','assigned.cjs']){
    assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
