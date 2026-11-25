@@ -1118,3 +1118,28 @@ test('traces a sole-spread CommonJS re-export object to named export owners',()=
     &&x.originFile==='dependency.cjs'&&x.exportedLocal==='service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces literal CommonJS properties created with Object.create descriptors',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-object-create-descriptors-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'function lazyService() {}',
+   'function resolveService() { return service; }',
+   'module.exports = Object.create(null, {',
+   '  service: { enumerable: true, value: service },',
+   '  lazy: { get: () => lazyService },',
+   '  dynamic: { get: () => resolveService() }',
+   '});'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service, lazy, dynamic } = require('./service.cjs');",
+   'service(); lazy(); dynamic();'
+  ].join('\\n'));
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='lazy'&&x.exportedLocal==='lazyService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='dynamic'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
