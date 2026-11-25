@@ -291,10 +291,11 @@ function collectExportsAndImports(ast,file){
       return;
     }
     if(method==='assign'){
-      for(const argument of value.arguments){
+      for(let index=0;index<value.arguments.length;index++){
+        const argument=value.arguments[index];
         if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
           for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
-        }else recordObjectProperties(argument,exportsSnapshot,new Set(),true);
+        }else recordObjectProperties(argument,exportsSnapshot,new Set(),index>0);
       }
       return;
     }
