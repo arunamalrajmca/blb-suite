@@ -605,7 +605,15 @@ function analyzeFile(root, file) {
     }
     if (expression.type === 'CallExpression') {
       const resolved = resolveCalledFunction(expression);
-      return resolved?.generator ? resolved : null;
+      if (resolved?.generator) return resolved;
+      if (resolved && !seen.has(resolved)) {
+        seen.add(resolved);
+        for (const returned of returnedValues(resolved)) {
+          const generator = resolveGeneratorExpression(returned, seen);
+          if (generator) return generator;
+        }
+      }
+      return null;
     }
     if (expression.type === 'Identifier') {
       const variable = variableForNode.get(expression);
