@@ -168,6 +168,10 @@ function collectExportsAndImports(ast,file){
         return;
       }
       if(method==='fromEntries'){recordObjectFromEntries(object);return;}
+      if(method==='defineProperty'||method==='defineProperties'){
+        recordObjectDefineProperties(object,enumerableOnly);
+        return;
+      }
       if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
         // Object.create(proto, descriptors) defines the literal descriptor keys
         // as own properties. Trace only descriptor values/getters already proven
@@ -246,7 +250,7 @@ function collectExportsAndImports(ast,file){
       setCommonJsExport(String(key),property.value.type==='Identifier'?property.value.name:null);
     }
   };
-  const recordObjectDefineProperties=call=>{
+  const recordObjectDefineProperties=(call,enumerableOnly=false)=>{
     const method=memberName(call.callee);
     if(method==='defineProperty'){
       const key=staticPropertyKey(call.arguments[1]);
@@ -255,7 +259,11 @@ function collectExportsAndImports(ast,file){
         clearCommonJsExportOwners();
         return false;
       }
-      setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
+      if(enumerableOnly){
+        const state=descriptorEnumerableState(call.arguments[2]);
+        if(state===null){clearCommonJsExportOwners();return false;}
+        if(state)setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
+      }else setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
       return true;
     }
     if(method==='defineProperties'){
@@ -274,8 +282,11 @@ function collectExportsAndImports(ast,file){
         clearCommonJsExportOwners();
         return false;
       }
-      for(const item of resolved){
-        if(item.property.kind!=='init')continue;
+      const states=enumerableOnly?resolved.map(item=>descriptorEnumerableState(item.property.value)):null;
+      if(states?.some(state=>state===null)){clearCommonJsExportOwners();return false;}
+      for(let index=0;index<resolved.length;index++){
+        const item=resolved[index];
+        if(item.property.kind!=='init'||(enumerableOnly&&!states[index]))continue;
         setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
       }
       return true;
