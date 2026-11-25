@@ -124,7 +124,7 @@ jobs:
       - name: Prepare browser-shard cache roundtrip fixture
         run: |
           mkdir -p "$RUNNER_TEMP/blb-cache-roundtrip"
-          printf '{"shard":1,"status":"passed"}\\n' > "$RUNNER_TEMP/blb-cache-roundtrip/browser-shards.json"
+          printf '{"shard":1,"status":"passed"}\n' > "$RUNNER_TEMP/blb-cache-roundtrip/browser-shards.json"
       - name: Save browser-shard cache roundtrip fixture
         uses: actions/cache/save@v5
         with:
