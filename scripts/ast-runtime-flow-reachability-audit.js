@@ -1403,7 +1403,13 @@ function analyzeFile(root, file) {
             : 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           for (const iterableCandidate of compatibleIterables) {
             if (iterableCandidate.collection) {
-              if (iterableCandidate.collectionKind === 'Map') { entries = true; includeObjectValues = true; }
+              if (iterableCandidate.collectionKind === 'Map') {
+                entries = true;
+                includeObjectValues = true;
+                mapContainers.add(source);
+              } else if (iterableCandidate.collectionKind === 'Set') {
+                setContainers.add(source);
+              }
               if (iterableCandidate.collection.arguments[0]) {
                 addContainedReferences(iterableCandidate.collection.arguments[0], source, 'iterable-collection-source', node);
                 addObjectPropertySlots(iterableCandidate.collection.arguments[0], source);
@@ -1929,6 +1935,15 @@ function analyzeFile(root, file) {
       if (node.init?.type === 'Identifier' && node.id.type === 'Identifier') {
         if (mapContainers.has(bindingId(node.init))) mapContainers.add(bindingId(node.id));
         if (setContainers.has(bindingId(node.init))) setContainers.add(bindingId(node.id));
+      }
+      // A factory may return a fresh Map/Set. Preserve its collection kind
+      // on the receiving binding so later .set/.add mutations and iterator
+      // consumers are modeled just like direct construction.
+      if (node.id.type === 'Identifier' && node.init?.type === 'CallExpression') {
+        for (const iterable of resolveAsyncIterableExpressions(node.init)) {
+          if (iterable.collectionKind === 'Map') mapContainers.add(bindingId(node.id));
+          else if (iterable.collectionKind === 'Set') setContainers.add(bindingId(node.id));
+        }
       }
       if (node.init && node.init.type === 'MemberExpression' &&
           node.init.object.type === 'Identifier') {
