@@ -925,3 +925,29 @@ test('preserves named exports when current exports object becomes module.exports
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('copies current exports through Object.assign replacement in argument order',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-assign-copy-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'exports-last.cjs'),[
+   'function originalService() {}',
+   'function overrideService() {}',
+   'exports.service = originalService;',
+   'module.exports = Object.assign({ service: overrideService }, exports);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'exports-before-last.cjs'),[
+   'function originalService() {}',
+   'function overrideService() {}',
+   'exports.service = originalService;',
+   'module.exports = Object.assign({}, exports, { service: overrideService });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { service as exportsLast } from './exports-last.cjs';",
+   "import { service as overrideLast } from './exports-before-last.cjs';"
+  ].join('\n'));
+  const files=['exports-last.cjs','exports-before-last.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='exports-last.cjs'&&x.imported==='service'&&x.exportedLocal==='originalService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='exports-before-last.cjs'&&x.imported==='service'&&x.exportedLocal==='overrideService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
