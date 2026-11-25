@@ -17,6 +17,11 @@ on:
       - 'scripts/ci-section-checkpoint.*'
       - 'scripts/run-checkpointed-playwright-*.mjs'
       - 'scripts/test-suite-inventory.*'
+      - 'scripts/validate-build.js'
+      - 'scripts/test-ci-routing-selector.js'
+      - 'scripts/run-validation-tests.js'
+      - 'scripts/validation-test-manifest.json'
+      - 'tests/selector/**'
       - 'tests/browser/performance*.spec.js'
       - 'tests/browser/kjv-corpus-lazy-loading.spec.js'
   workflow_dispatch:
@@ -55,6 +60,10 @@ jobs:
           ruby -e 'require "yaml"; ARGV.each { |file| YAML.parse_file(file) }' .github/actions/ci-section-checkpoint/action.yml .github/workflows/browser-tests.yml .github/workflows/manual-full-test-audit.yml .github/workflows/browser-native-shortcut.yml .github/workflows/browser-e2e-performance.yml .github/workflows/experimental-master-toggle-registration-diagnostics.yml .github/workflows/browser-e2e-reference.yml .github/workflows/browser-e2e-groups.yml .github/workflows/browser-e2e-focused-regressions.yml
       - name: Validate complete test ownership and production-module coverage
         run: node scripts/test-suite-inventory.mjs
+      - name: Run short full-audit preflight contracts
+        run: |
+          node scripts/validate-build.js
+          node --test tests/selector/browser-selector-decisions.test.mjs
       - name: Test checkpoint marker, browser shard, and concurrent repeat recovery
         run: |
           node --test \
