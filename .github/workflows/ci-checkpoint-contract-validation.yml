@@ -61,9 +61,65 @@ jobs:
       - name: Validate complete test ownership and production-module coverage
         run: node scripts/test-suite-inventory.mjs
       - name: Run short full-audit preflight contracts
+        shell: bash
         run: |
+          set -euo pipefail
           node scripts/validate-build.js
           node --test tests/selector/browser-selector-decisions.test.mjs
+
+          # Exercise the exact test-list extraction and delegation checks used by
+          # the expensive full audit, without launching a browser.
+          full_list="$RUNNER_TEMP/blb-preflight-full-list.txt"
+          test_list="$RUNNER_TEMP/blb-preflight-test-list.txt"
+          npx playwright test --list --reporter=list > "$full_list"
+          sed -nE 's/^[[:space:]]*(\\[[^]]+\\] › [^[:space:]]+\\.spec\\.js:[0-9]+:[0-9]+ › .*)$/\\1/p' "$full_list" > "$test_list"
+          expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
+          listed_specs=$(sed -nE 's/^[[:space:]]*\\[[^]]+\\] › ([^[:space:]]+\\.spec\\.js):[0-9]+:[0-9]+ › .*/\\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
+          test_count=$(wc -l < "$test_list" | tr -d ' ')
+          echo "Preflight browser inventory: $test_count tests across $listed_specs/$expected_specs spec files."
+          [[ "$test_count" -gt 0 && "$listed_specs" -eq "$expected_specs" ]]
+
+          delegated_titles=(
+            "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut"
+            "native Chromium _self prerender activation initializes the activated document without tab replacement"
+            "native Chromium _blank prerender activation initializes the activated document without tab replacement"
+            "Show on BLB performance benchmark"
+            "Interleaved baseline/candidate performance batch preserves isolated samples"
+          )
+          for title in "${delegated_titles[@]}"; do
+            [[ $(grep -F -c "› $title" "$test_list" || true) -eq 1 ]]
+          done
+          awk '
+            index($0, "› a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut") == 0 &&
+            index($0, "› native Chromium _self prerender activation initializes the activated document without tab replacement") == 0 &&
+            index($0, "› native Chromium _blank prerender activation initializes the activated document without tab replacement") == 0 &&
+            index($0, "› Show on BLB performance benchmark") == 0 &&
+            index($0, "› Interleaved baseline/candidate performance batch preserves isolated samples") == 0
+          ' "$test_list" > "$test_list.filtered"
+          [[ $(($(wc -l < "$test_list") - $(wc -l < "$test_list.filtered"))) -eq 5 ]]
+
+          compatibility_titles=(
+            "a real MV3 service-worker termination is recovered by the Alt+B command message"
+            "Suite master opt-out removes both registered worlds for guarded source hosts and re-enable restores them"
+            "repeated global master toggles disable and restore exactly one double-click listener"
+            "reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging"
+          )
+          compatibility_list="$RUNNER_TEMP/blb-preflight-compatibility.txt"
+          : > "$compatibility_list"
+          for title in "${compatibility_titles[@]}"; do
+            matches=$(grep -F "› $title" "$test_list.filtered" || true)
+            [[ $(printf '%s\\n' "$matches" | sed '/^$/d' | wc -l | tr -d ' ') -eq 1 ]]
+            printf '%s\\n' "$matches" >> "$compatibility_list"
+          done
+          [[ $(wc -l < "$compatibility_list" | tr -d ' ') -eq 4 ]]
+
+          single_test="$RUNNER_TEMP/blb-preflight-single-test.txt"
+          single_output="$RUNNER_TEMP/blb-preflight-single-output.txt"
+          head -n 1 "$test_list.filtered" > "$single_test"
+          npx playwright test --list --test-list "$single_test" --reporter=list > "$single_output"
+          selected_count=$(grep -Ec '^[[:space:]]*\\[[^]]+\\] › [^[:space:]]+\\.spec\\.js:[0-9]+:[0-9]+ › ' "$single_output" || true)
+          [[ "$selected_count" -eq 1 ]]
+          echo "PASS: Playwright list parsing, all spec coverage, five delegations, four compatibility tests, and one-test selection."
       - name: Test checkpoint marker, browser shard, and concurrent repeat recovery
         run: |
           node --test \
