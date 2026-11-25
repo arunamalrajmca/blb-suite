@@ -655,3 +655,36 @@ test('resolves statically known template-literal CommonJS export keys',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves default imports from CommonJS function and object replacements',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-default-export-replacements-'));
+ try{
+  fs.writeFileSync(path.join(root,'function-service.cjs'),[
+   'function Service() {}',
+   'module.exports = Service;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'object-service.cjs'),[
+   'function startService() {}',
+   'module.exports = { start: startService };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import FunctionService from './function-service.cjs';",
+   "import objectApi from './object-service.cjs';",
+   'FunctionService(); objectApi.start();'
+  ].join('\n'));
+  const files=['function-service.cjs','object-service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='function-service.cjs'&&x.imported==='default'&&x.exportedLocal==='Service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='object-service.cjs'&&x.imported==='default'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('tracks named CommonJS function expressions as default exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-default-named-function-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),'module.exports = function Service() {};');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import Service from './service.cjs'; Service();");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='default'&&x.exportedLocal==='Service'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
