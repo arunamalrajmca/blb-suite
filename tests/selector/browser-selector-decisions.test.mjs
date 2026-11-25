@@ -1270,6 +1270,14 @@ test("full audit delegates performance and physical-input tests to workflows tri
   assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint") &&
     audit.includes("node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-"),
     "browser-shard restore keys must be scoped to the exact runner/toolchain environment");
+  assert.equal((audit.match(/key: blb-browser-shards-v1-.*steps\\.browser_prepare\\.outputs\\.environment_fingerprint/g) || []).length, 8,
+    "all eight saved shard checkpoints must use the same environment-scoped key scheme");
+  const preflight = readFileSync(
+    new URL("../../.github/workflows/ci-checkpoint-contract-validation.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(preflight.includes("'scripts/ci-checkpoint-fingerprints.*'"),
+    "fingerprint implementation and tests must trigger the short checkpoint contract preflight");
   for (let shard = 1; shard <= 8; shard++) {
     const suffix = String(shard).padStart(2, "0");
     assert.equal((audit.match(new RegExp("run-checkpointed-playwright-audit\\\\.mjs.* " + shard + "(?:\\\\s|$)", "g")) || []).length, 1,
