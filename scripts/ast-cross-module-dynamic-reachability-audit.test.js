@@ -834,7 +834,7 @@ test('traces CommonJS module.exports require re-exports to their source module',
   fs.writeFileSync(path.join(root,'consumer.js'),[
    "import api from './barrel.cjs';",
    'api.service();'
-  ].join('\\n'));
+  ].join('\n'));
   const files=['dependency.cjs','barrel.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.cjs'&&x.imported==='default'
     &&x.originFile==='dependency.cjs'&&x.namespace&&!x.unresolvedExport));
