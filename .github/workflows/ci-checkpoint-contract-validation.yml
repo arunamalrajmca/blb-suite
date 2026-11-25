@@ -121,6 +121,26 @@ jobs:
           selected_count=$(grep -Ec '^[[:space:]]*\[[^]]+\] › [^[:space:]]+\.spec\.js:[0-9]+:[0-9]+ › ' "$single_output" || true)
           [[ "$selected_count" -eq 1 ]]
           echo "PASS: Playwright list parsing, all spec coverage, five delegations, four compatibility tests, and one-test selection."
+      - name: Prepare browser-shard cache roundtrip fixture
+        run: |
+          mkdir -p "$RUNNER_TEMP/blb-cache-roundtrip"
+          printf '{"shard":1,"status":"passed"}\\n' > "$RUNNER_TEMP/blb-cache-roundtrip/browser-shards.json"
+      - name: Save browser-shard cache roundtrip fixture
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-cache-roundtrip
+          key: blb-ci-browser-shard-roundtrip-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
+      - name: Clear browser-shard cache roundtrip fixture
+        run: rm "$RUNNER_TEMP/blb-cache-roundtrip/browser-shards.json"
+      - name: Restore browser-shard cache roundtrip fixture by prefix
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/blb-cache-roundtrip
+          key: blb-ci-browser-shard-roundtrip-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          restore-keys: |
+            blb-ci-browser-shard-roundtrip-${{ github.run_id }}-${{ github.run_attempt }}-
+      - name: Verify browser-shard cache roundtrip
+        run: node -e "const m=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/blb-cache-roundtrip/browser-shards.json','utf8')); if(m.shard!==1||m.status!=='passed') process.exit(1); console.log('PASS: browser-shard cache save and prefix restore.');"
       - name: Test checkpoint marker, browser shard, and concurrent repeat recovery
         run: |
           node --test \
