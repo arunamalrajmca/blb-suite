@@ -1418,6 +1418,48 @@ test('traces both async iterable branches of a conditional factory return', () =
     edge.to === 'callback@9' && edge.kind === 'container-callback-argument'));
 });
 
+test('preserves post-factory array mutations for Array.fromAsync', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeCallbacks() { return []; }',
+    'const callbacks = makeCallbacks();',
+    'callbacks.push(cleanup);',
+    'async function run() {',
+    '  await Array.fromAsync(callbacks, callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
+test('preserves post-factory Set mutations for Array.fromAsync', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeCallbacks() { return new Set(); }',
+    'const callbacks = makeCallbacks();',
+    'callbacks.add(cleanup);',
+    'async function run() {',
+    '  await Array.fromAsync(callbacks, callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
+test('preserves post-factory Map mutations for Array.fromAsync entry mappers', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'function makeEntries() { return new Map(); }',
+    'const entries = makeEntries();',
+    'entries.set("cleanup", cleanup);',
+    'async function run() {',
+    '  await Array.fromAsync(entries, ([key, callback]) => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
 test('traces callback values in factory-returned Sets into Array.fromAsync', () => {
   const result = audit([
     'const cleanup = () => work();',
