@@ -587,49 +587,36 @@ test("extension reference-coverage matrix skips unrelated mapped features", () =
   }
 });
 
-test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
-  for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-reference.yml",
-    "../../.github/workflows/browser-e2e-performance.yml"
+test("optional E2E workflows route performance only for production changes", () => {
+  const reference = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8"
+  );
+  const performance = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url), "utf8"
+  );
+  assert.match(reference, /^\s*-\s*['"]scripts\/\*\*['"]/m);
+  for (const script of [
+    "classify-ci-changes.mjs",
+    "select-reference-matrix.mjs",
+    "test-ci-routing-selector.js",
+    "verify-store-assets.py",
+    "verify-store-branding.py",
+    "verify-store-package.py",
+    "verify-store-submission-assets.py"
   ]) {
-    const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
-    assert.match(workflow, /^\s*-\s*['"]scripts\/\*\*['"]/m);
-    for (const script of [
-      "classify-ci-changes.mjs",
-      "select-reference-matrix.mjs",
-      "test-ci-routing-selector.js",
-      "verify-store-assets.py",
-      "verify-store-branding.py",
-      "verify-store-package.py",
-      "verify-store-submission-assets.py"
-    ]) {
-      assert.ok(workflow.includes("- '!scripts/" + script + "'"), workflowPath + " must exclude " + script);
-    }
-    if (/^\s*-\s*['"]tests\/\*\*['"]/m.test(workflow)) {
-      for (const testFile of [
-        "test_verify_store_package.py",
-        "test_verify_store_submission_assets.py"
-      ]) {
-        assert.ok(workflow.includes("- '!tests/" + testFile + "'"), workflowPath + " must exclude " + testFile);
-      }
-    } else {
-      assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
-    }
-    if (workflowPath.endsWith("browser-e2e-performance.yml")) {
-      assert.ok(workflow.includes("- '!scripts/select-browser-specs.mjs'"),
-        "performance-only workflow may ignore browser selector edits");
-      assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "performance-only workflow may ignore reference matrix edits");
-    } else {
-      assert.ok(!workflow.includes("- '!scripts/select-browser-specs.mjs'"),
-        "References workflow must run when browser selector changes");
-      assert.ok(workflow.includes("- '.github/workflows/browser-e2e-reference.yml'"));
-      assert.ok(workflow.includes("- '.github/workflows/browser-e2e-groups.yml'"));
-      assert.ok(!workflow.includes("- '!scripts/reference-e2e-matrix.json'"),
-        "reference matrix edits must trigger the References workflow so full coverage can be verified");
-    }
+    assert.ok(reference.includes("- '!scripts/" + script + "'"), "References workflow must exclude " + script);
   }
+  assert.ok(reference.includes("- '.github/workflows/browser-e2e-reference.yml'"));
+  assert.ok(reference.includes("- '.github/workflows/browser-e2e-groups.yml'"));
+  assert.ok(!reference.includes("- '!scripts/select-browser-specs.mjs'"),
+    "References workflow must run when browser selector changes");
+  assert.ok(!reference.includes("- '!scripts/reference-e2e-matrix.json'"),
+    "reference matrix edits must trigger the References workflow so full coverage can be verified");
+  assert.doesNotMatch(performance, /^\s*-\s*['"]scripts\/\*\*['"]/m,
+    "performance workflow must not run for broad tooling changes");
+  assert.doesNotMatch(performance, /^\s*-\s*['"]tests\/\*\*['"]/m,
+    "performance workflow must not run for test-only changes");
 });
-
 test("reusable feature groups consume the caller's single browser classification", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
@@ -1336,7 +1323,7 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "full-audit changes must trigger the native shortcut workflow");
   assert.ok(performance.includes("tests/browser/performance-batch.spec.js --workers=1"),
     "the batched benchmark must have a dedicated performance-workflow owner");
-  const performancePathFilters = performance.split("    paths:\\n")[1]?.split("\\n  workflow_dispatch:")[0] || "";
+  const performancePathFilters = performance.split("    paths:\n")[1]?.split("\n  workflow_dispatch:")[0] || "";
   assert.ok(performancePathFilters.includes("'extension/**'") &&
     performancePathFilters.includes("'package.json'") &&
     performancePathFilters.includes("'package-lock.json'"),
