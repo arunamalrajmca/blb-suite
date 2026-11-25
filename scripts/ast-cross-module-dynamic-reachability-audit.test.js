@@ -1132,11 +1132,11 @@ test('traces literal CommonJS properties created with Object.create descriptors'
    '  lazy: { get: () => lazyService },',
    '  dynamic: { get: () => resolveService() }',
    '});'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),[
    "const { service, lazy, dynamic } = require('./service.cjs');",
    'service(); lazy(); dynamic();'
-  ].join('\\n'));
+  ].join('\n'));
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='lazy'&&x.exportedLocal==='lazyService'&&!x.unresolvedExport));
