@@ -132,7 +132,9 @@ function collectExportsAndImports(ast,file){
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
         replaceCommonJsExportObject();
-        if(n.right.type==='Identifier')setCommonJsExport('default',n.right.name);
+        const defaultLocal=n.right.type==='Identifier'?n.right.name:
+          ((n.right.type==='FunctionExpression'||n.right.type==='ClassExpression')&&n.right.id?n.right.id.name:null);
+        setCommonJsExport('default',defaultLocal);
         recordCommonJsAssignmentValue(n.right);
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
