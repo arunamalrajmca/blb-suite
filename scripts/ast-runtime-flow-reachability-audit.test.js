@@ -1521,7 +1521,9 @@ test('traces class-based async iterator values and cleanup protocol methods', ()
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
-    edge.from === 'function@1' && edge.to === 'handler@10'));
+    edge.from === 'function@1' && edge.to === 'handler@10'),
+    JSON.stringify(result.flowEdges.filter(edge => edge.kind.includes('async-iterator') ||
+      edge.from === 'function@1' || edge.to === 'handler@10')));
   for (const line of [3, 4, 5, 6]) {
     assert.ok(result.flowEdges.some(edge => edge.from === 'function@' + line &&
       edge.kind === 'async-iterator-protocol-callback'));
