@@ -1106,3 +1106,15 @@ test('traces Object.assign CommonJS require re-exports to named export owners',(
     &&x.originFile==='dependency.cjs'&&x.exportedLocal==='service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('traces a sole-spread CommonJS re-export object to named export owners',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-spread-require-reexport-'));
+ try{
+  fs.writeFileSync(path.join(root,'dependency.cjs'),'function service() {}\\nmodule.exports = { service };');
+  fs.writeFileSync(path.join(root,'barrel.cjs'),"module.exports = { ...require('./dependency.cjs') };");
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./barrel.cjs');");
+  const files=['dependency.cjs','barrel.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='barrel.cjs'&&x.imported==='service'
+    &&x.originFile==='dependency.cjs'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
