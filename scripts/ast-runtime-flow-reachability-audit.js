@@ -710,6 +710,12 @@ function analyzeFile(root, file) {
         const source = asyncIterableSources.get(bindingId(node.init.callee.object));
         if (source) asyncIteratorInstanceSources.set(assigned, source);
       }
+      if (node.init?.type === 'Identifier') {
+        const iterableSource = asyncIterableSources.get(bindingId(node.init));
+        if (iterableSource) asyncIterableSources.set(assigned, iterableSource);
+        const iteratorSource = asyncIteratorInstanceSources.get(bindingId(node.init));
+        if (iteratorSource) asyncIteratorInstanceSources.set(assigned, iteratorSource);
+      }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier') {
         const generator = resolveFunctionReference(node.init.callee);
         if (generator?.generator) {
