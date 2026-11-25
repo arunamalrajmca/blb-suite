@@ -638,7 +638,23 @@ function analyzeFile(root, file) {
         if (node.delegate) {
           const delegated = resolveGeneratorExpression(node.argument);
           if (delegated) values.push(...yieldedValues(delegated, seen));
-          else values.push(node.argument);
+          else {
+            const asyncIterable = resolveAsyncIterableExpression(node.argument);
+            if (asyncIterable?.generator) {
+              values.push(...yieldedValues(asyncIterable.generator, seen));
+            } else if (asyncIterable?.classNode) {
+              const methods = classAsyncIteratorMethods(asyncIterable.classNode);
+              if (methods?.iterator?.generator) {
+                values.push(...yieldedValues(methods.iterator, seen));
+              } else if (methods?.next) {
+                values.push(...asyncIteratorStepValues(methods.next));
+              }
+            } else if (asyncIterable?.iterator?.generator) {
+              values.push(...yieldedValues(asyncIterable.iterator, seen));
+            } else if (asyncIterable?.iterator) {
+              values.push(...asyncIteratorResultValues(asyncIterable.iterator));
+            } else values.push(node.argument);
+          }
         } else values.push(node.argument);
         return;
       }
