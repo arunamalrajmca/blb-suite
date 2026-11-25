@@ -1581,7 +1581,7 @@ test('traces async iterator protocol implemented by an assigned class expression
     '};',
     'const iterable = new CallbackIterator();',
     'async function run() { for await (const handler of iterable) handler(); }'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@7'));
 });
@@ -1596,7 +1596,7 @@ test('inherits async iterator and next methods from a base class', () => {
     'class DerivedIterator extends BaseIterator {}',
     'const iterable = new DerivedIterator();',
     'async function run() { for await (const handler of iterable) handler(); }'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@8'));
 });
@@ -1613,7 +1613,7 @@ test('binds destructured values from an awaited async iterator next result', () 
     '  const { value: selected } = await iterator.next();',
     '  selected();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
     edge.from === 'function@1' && edge.to === 'selected@8'));
 });
@@ -1626,7 +1626,7 @@ test('supports a directly instantiated anonymous async iterator class expression
     '  async next() { return { value: callback, done: false }; }',
     '})();',
     'async function run() { for await (const handler of iterable) handler(); }'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@6'));
 });
