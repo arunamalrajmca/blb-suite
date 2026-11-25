@@ -720,8 +720,8 @@ test('does not treat shadowed Object.freeze as a native export wrapper',()=>{
    'function factory(Object) { return Object.freeze({ service }); }',
    'module.exports = factory({});'
   ].join('\n'));
-  fs.writeFileSync(path.join(root,'consumer.js'),"import service from './service.cjs';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
   const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='default'&&x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
