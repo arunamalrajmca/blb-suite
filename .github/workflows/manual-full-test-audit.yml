@@ -321,6 +321,8 @@ jobs:
       # Each shard runs in its own step and is uploaded to an immutable cache key
       # immediately afterward. A later shard failure or job interruption therefore
       # leaves the newest cache containing every earlier shard checkpoint.
+      # The reusable shard cache contains only the manifest; Playwright diagnostics
+      # and corpus performance samples are stored separately.
       - name: Prepare browser checkpoint directories
         if: ${{ steps.browser_gate.outcome == 'success' }}
         run: |
