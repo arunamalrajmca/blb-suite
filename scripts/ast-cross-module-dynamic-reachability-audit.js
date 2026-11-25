@@ -188,8 +188,17 @@ function collectExportsAndImports(ast,file){
         &&n.left.object.object.type==='Identifier'&&n.left.object.object.name==='module'&&isUnboundGlobal(n.left.object.object)
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
-        const isSelfAssignment=n.right.type==='MemberExpression'&&n.right.object.type==='Identifier'
-          &&n.right.object.name==='module'&&isUnboundGlobal(n.right.object)&&memberName(n.right)==='exports';
+        const isDirectSelfAssignment=isModuleExportsReference(n.right);
+        const assignmentValue=n.right;
+        const isAssignMutation=assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
+          &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
+          &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
+          &&assignmentValue.arguments.length>0
+          &&(isModuleExportsReference(assignmentValue.arguments[0])
+            ||(assignmentValue.arguments[0].type==='Identifier'&&assignmentValue.arguments[0].name==='exports'
+              &&isUnboundGlobal(assignmentValue.arguments[0])&&!exportsAliasDetached)
+            ||(assignmentValue.arguments[0].type==='Identifier'&&isCurrentCommonJsExportAlias(assignmentValue.arguments[0],n)));
+        const isSelfAssignment=isDirectSelfAssignment||isAssignMutation;
         if(!isSelfAssignment){
           replaceCommonJsExportObject();
           // In a chained assignment, exports is rebound to the newly assigned module.exports object.
