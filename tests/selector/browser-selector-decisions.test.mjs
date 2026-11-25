@@ -1264,6 +1264,10 @@ test("full audit delegates performance and physical-input tests to workflows tri
   );
   assert.ok(audit.includes("name: Restore browser-matrix performance checkpoint"),
     "full-audit corpus A/B samples must be restored before browser shards");
+  assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint"),
+    "corpus A/B checkpoints must match the exact runner and toolchain environment");
+  assert.ok(audit.indexOf("Restore browser-matrix performance checkpoint") > audit.indexOf("Prepare complete browser test list"),
+    "corpus A/B checkpoints must be restored after the runner environment is fingerprinted");
   assert.equal((audit.match(/name: Save browser-matrix performance checkpoint after shard/g) || []).length, 8,
     "full-audit corpus A/B samples must be checkpointed after every browser shard");
   const guardedShardCondition = "if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}";
