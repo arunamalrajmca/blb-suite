@@ -233,6 +233,7 @@ export function runCheckpointedBrowserAudit({
   fingerprint = process.env.BLB_CI_CHECKPOINT_FINGERPRINT,
   environmentFingerprint = process.env.BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT || '0'.repeat(64),
   shardCount = 8,
+  shardIndex = null,
   workers = 4,
   executeShard = runShard
 }) {
@@ -243,10 +244,14 @@ export function runCheckpointedBrowserAudit({
   const expected = { sourceSha, fingerprint, environmentFingerprint, tests, shardCount };
   const fresh = createShardManifest(expected);
   fs.mkdirSync(directory, { recursive: true });
+  if (shardIndex !== null && (!Number.isInteger(shardIndex) || shardIndex < 1 || shardIndex > shardCount)) {
+    throw new RangeError('Shard index must be between one and the configured shard count.');
+  }
   const manifest = readManifest(directory, expected) || fresh;
   if (manifest === fresh) writeManifest(directory, manifest);
   let failures = 0;
-  for (const shard of manifest.shards) {
+  const selectedShards = shardIndex === null ? manifest.shards : manifest.shards.filter(shard => shard.index === shardIndex);
+  for (const shard of selectedShards) {
     shard.passedTests ||= shard.status === 'passed' ? [...shard.tests] : [];
     let remaining = shard.tests.filter(entry => !shard.passedTests.includes(entry));
     if (!remaining.length && shard.exitCode === 0 && shard.reportValid === true) {
@@ -274,9 +279,15 @@ export function runCheckpointedBrowserAudit({
       console.error('Browser shard [' + shard.index + '/' + shardCount + '] failed (exit=' + result.exitCode + ', validReport=' + result.validReport + '; ' + shard.passedTests.length + '/' + shard.tests.length + ' tests retained).');
     }
   }
-  const passed = manifest.shards.filter(shard => shard.status === 'passed' && shard.exitCode === 0).length;
-  console.log('Checkpointed browser audit: ' + passed + '/' + shardCount + ' shards passed; ' + tests.length + ' tests scheduled.');
-  if (failures || passed !== shardCount) throw new Error('One or more browser audit shards failed; successful shards have been checkpointed.');
+  const passed = manifest.shards.filter(shard => shard.status === 'passed' && shard.exitCode === 0 && shard.reportValid === true && shard.passedTests.length === shard.tests.length).length;
+  if (shardIndex !== null) {
+    const selected = selectedShards[0];
+    console.log('Browser shard checkpoint: [' + shardIndex + '/' + shardCount + '] ' + selected.status + ' (' + selected.passedTests.length + '/' + selected.tests.length + ' tests passed).');
+    if (failures || selected.status !== 'passed') throw new Error('Browser shard [' + shardIndex + '/' + shardCount + '] failed; its validated passing tests were checkpointed.');
+  } else {
+    console.log('Checkpointed browser audit: ' + passed + '/' + shardCount + ' shards passed; ' + tests.length + ' tests scheduled.');
+    if (failures || passed !== shardCount) throw new Error('One or more browser audit shards failed; successful shards have been checkpointed.');
+  }
   return manifest;
 }
 
@@ -284,7 +295,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   try {
     const testListPath = process.argv[2];
     if (!testListPath) throw new Error('Usage: node scripts/run-checkpointed-playwright-audit.mjs <filtered-test-list>');
-    runCheckpointedBrowserAudit({ testListPath });
+    const shardIndex = process.argv[3] === undefined ? null : Number(process.argv[3]);
+    runCheckpointedBrowserAudit({ testListPath, shardIndex });
   } catch (error) {
     console.error(error.stack || error.message);
     process.exitCode = 1;
