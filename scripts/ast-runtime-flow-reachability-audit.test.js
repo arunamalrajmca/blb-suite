@@ -1332,7 +1332,7 @@ test('propagates async-generator yielded callback values into Array.fromAsync ma
     'async function run() {',
     '  await Array.fromAsync(tasks(), callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
@@ -1346,7 +1346,7 @@ test('propagates delegated async-generator yields through an assigned async iter
     '  const iterable = tasks();',
     '  await Array.fromAsync(iterable, callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
@@ -1362,7 +1362,7 @@ test('propagates values yielded by a custom Symbol.asyncIterator method', () => 
     'async function run() {',
     '  await Array.fromAsync(iterable, callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@8' && edge.kind === 'container-callback-argument'));
 });
