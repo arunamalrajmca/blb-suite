@@ -1471,7 +1471,7 @@ test('preserves post-factory Map mutations for Array.fromAsync entry mappers', (
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'cleanup@1' &&
-    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'), JSON.stringify(result.flowEdges.filter(edge => edge.to?.includes('callback') || edge.from?.includes('cleanup') || edge.from === 'function@1')));
 });
 
 test('traces callback values in factory-returned Sets into Array.fromAsync', () => {
@@ -1495,7 +1495,7 @@ test('traces Map entry values returned by iterable factories into Array.fromAsyn
     '}'
   ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
-    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'));
+    edge.to === 'callback@4' && edge.kind === 'container-callback-argument'), JSON.stringify(result.flowEdges.filter(edge => edge.to?.includes('callback') || edge.from?.includes('cleanup') || edge.from === 'function@1')));
 });
 
 test('traces callback arrays returned by factories into Array.fromAsync mappers', () => {
