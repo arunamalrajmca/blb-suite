@@ -63,6 +63,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
@@ -86,6 +88,8 @@ jobs:
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test reusable CI section checkpoint helper
         run: node --test scripts/ci-section-checkpoint.test.mjs
+      - name: Test AST audit scope selector
+        run: node --test scripts/classify-ast-audit-scope.test.mjs
       - name: Verify repository-wide test inventory and production-module coverage
         uses: ./.github/actions/ci-section-checkpoint
         with:
