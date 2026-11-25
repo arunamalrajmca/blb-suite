@@ -107,6 +107,17 @@ function collectExportsAndImports(ast,file){
     if(node?.type==='Identifier'&&isCurrentCommonJsExportAlias(node))return true;
     return isModuleExportsReference(node);
   };
+  const recordObjectFromEntries=call=>{
+    const entries=call.arguments[0];
+    if(entries?.type!=='ArrayExpression'||entries.elements.some(entry=>entry?.type!=='ArrayExpression'
+      ||entry.elements.length!==2||entry.elements.some(element=>!element||element.type==='SpreadElement')))return false;
+    const resolved=entries.elements.map(entry=>({key:staticPropertyKey(entry.elements[0]),value:entry.elements[1]}));
+    // A dynamic key could overwrite any statically named property, so reject the
+    // entire inference rather than report potentially stale export owners.
+    if(resolved.some(entry=>entry.key===null))return false;
+    for(const entry of resolved)setCommonJsExport(entry.key,entry.value.type==='Identifier'?entry.value.name:null);
+    return true;
+  };
   const recordObjectProperties=(object,exportsSnapshot=null,activeAliases=new Set())=>{
     if(object?.type==='Identifier'){
       const variable=resolveVariable(object);
@@ -127,6 +138,7 @@ function collectExportsAndImports(ast,file){
         for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot);
         return;
       }
+      if(method==='fromEntries'){recordObjectFromEntries(object);return;}
       if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
         // Object.create(proto, descriptors) defines the literal descriptor keys
         // as own properties. Trace only descriptor values/getters already proven
@@ -170,6 +182,7 @@ function collectExportsAndImports(ast,file){
       ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
       ||!isUnboundGlobal(value.callee.object))return;
     const method=memberName(value.callee);
+    if(method==='fromEntries'){recordObjectFromEntries(value);return;}
     if(method==='assign'){
       for(const argument of value.arguments){
         if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
