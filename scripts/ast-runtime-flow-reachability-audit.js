@@ -659,6 +659,17 @@ function analyzeFile(root, file) {
     }
     return null;
   };
+  const syncIteratorMethod = objectExpression => {
+    if (!objectExpression || objectExpression.type !== 'ObjectExpression') return null;
+    for (const property of objectExpression.properties) {
+      if (property.type !== 'Property' || !isFunction(property.value) ||
+          !property.computed || property.key.type !== 'MemberExpression' ||
+          property.key.object.type !== 'Identifier' || property.key.object.name !== 'Symbol' ||
+          property.key.property.type !== 'Identifier' || property.key.property.name !== 'iterator') continue;
+      return property.value;
+    }
+    return null;
+  };
   const resolveAsyncIterableExpressions = (expression, seen = new Set()) => {
     if (!expression) return [];
     if (expression.type === 'AwaitExpression') {
@@ -689,7 +700,7 @@ function analyzeFile(root, file) {
       return [{array:expression}];
     }
     if (expression.type === 'ObjectExpression') {
-      const iterator = asyncIteratorMethod(expression);
+      const iterator = asyncIteratorMethod(expression) || syncIteratorMethod(expression);
       return iterator ? [{iterator, iteratorObject:expression}] : [];
     }
     if (expression.type === 'NewExpression') {
@@ -756,7 +767,7 @@ function analyzeFile(root, file) {
     }
     return null;
   };
-  const classAsyncIteratorMethods = classNode => {
+  const classIteratorMethods = (classNode, symbolName) => {
     if (!classNode) return null;
     const methods = {iterator:null,next:null,return:null,throw:null};
     const seenClasses = new Set();
@@ -764,15 +775,15 @@ function analyzeFile(root, file) {
     while (currentClass && !seenClasses.has(currentClass)) {
       seenClasses.add(currentClass);
       for (const element of currentClass.body?.body || []) {
-      if (element.type !== 'MethodDefinition') continue;
-      let key = propertyKey(element.key, element.computed);
-      if (element.computed && element.key?.type === 'MemberExpression' &&
-          element.key.object.type === 'Identifier' && element.key.object.name === 'Symbol' &&
-          element.key.property.type === 'Identifier' && element.key.property.name === 'asyncIterator') {
-        key = 'Symbol.asyncIterator';
-      }
-      if (key === 'Symbol.asyncIterator') methods.iterator = element.value;
-      else if (['next','return','throw'].includes(key) && !methods[key]) methods[key] = element.value;
+        if (element.type !== 'MethodDefinition') continue;
+        let key = propertyKey(element.key, element.computed);
+        if (element.computed && element.key?.type === 'MemberExpression' &&
+            element.key.object.type === 'Identifier' && element.key.object.name === 'Symbol' &&
+            element.key.property.type === 'Identifier' && element.key.property.name === symbolName) {
+          key = 'Symbol.' + symbolName;
+        }
+        if (key === 'Symbol.' + symbolName) methods.iterator = element.value;
+        else if (['next','return','throw'].includes(key) && !methods[key]) methods[key] = element.value;
       }
       const parentName = currentClass.superClass?.type === 'Identifier' ? currentClass.superClass.name : null;
       const parents = parentName ? classDeclarationsByName.get(parentName) || [] : [];
@@ -780,12 +791,28 @@ function analyzeFile(root, file) {
     }
     return methods.iterator ? methods : null;
   };
+  const classAsyncIteratorMethods = classNode => classIteratorMethods(classNode, 'asyncIterator');
+  const classSyncIteratorMethods = classNode => classIteratorMethods(classNode, 'iterator');
   const registerClassAsyncIterator = (classNode, source, origin) => {
     const methods = classAsyncIteratorMethods(classNode);
     if (!methods) return false;
     for (const method of Object.values(methods)) {
       if (method) addEdge('function@' + method.loc.start.line, source,
         'async-iterator-protocol-callback', origin, 'class async iterator protocol method');
+    }
+    if (methods.iterator?.generator) {
+      registerAsyncIteratorValues(methods.iterator, source, origin);
+    } else if (methods.next) {
+      registerAsyncIteratorValues(methods.next, source, origin, true);
+    }
+    return true;
+  };
+  const registerClassSyncIterator = (classNode, source, origin) => {
+    const methods = classSyncIteratorMethods(classNode);
+    if (!methods) return false;
+    for (const method of Object.values(methods)) {
+      if (method) addEdge('function@' + method.loc.start.line, source,
+        'sync-iterator-protocol-callback', origin, 'class sync iterator protocol method');
     }
     if (methods.iterator?.generator) {
       registerAsyncIteratorValues(methods.iterator, source, origin);
