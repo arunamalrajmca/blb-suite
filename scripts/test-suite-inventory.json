@@ -215,12 +215,12 @@
       "id": "checkpointed-browser-audit-runner-tests",
       "pattern": "scripts/run-checkpointed-playwright-audit.test.mjs",
       "owner": ".github/workflows/manual-full-test-audit.yml",
-      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
       "executionEnvironment": "node",
       "runnerChecks": [
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
-          "requiredText": "node scripts/run-checkpointed-playwright-audit.mjs \"$test_list\""
+          "requiredText": "node scripts/run-checkpointed-playwright-audit.mjs \"$RUNNER_TEMP/blb-playwright-test-list.txt\" 1"
         },
         {
           "file": ".github/actions/ci-section-checkpoint/action.yml",
@@ -251,6 +251,26 @@
       "owner": ".github/workflows/browser-tests.yml",
       "requiredText": "node --test scripts/classify-ast-audit-scope.test.mjs",
       "executionEnvironment": "node"
+    },
+    {
+      "id": "ci-checkpoint-fingerprint-tests",
+      "pattern": "scripts/ci-checkpoint-fingerprints.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs",
+      "executionEnvironment": "node"
+    },
+    {
+      "id": "end-user-production-impact-tests",
+      "pattern": "scripts/detect-end-user-production-changes.test.mjs",
+      "owner": ".github/workflows/manual-full-test-audit.yml",
+      "requiredText": "scripts/detect-end-user-production-changes.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/ci-checkpoint-contract-validation.yml",
+          "requiredText": "node --test scripts/detect-end-user-production-changes.test.mjs"
+        }
+      ]
     }
   ],
   "manualOnly": [

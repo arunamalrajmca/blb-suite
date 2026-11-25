@@ -29,7 +29,27 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
-          fetch-depth: 1
+          fetch-depth: 0
+
+      - name: Detect end-user production changes for performance qualification
+        id: production_impact
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            git fetch origin "$PR_BASE_SHA" --depth=1
+            base_ref="$PR_BASE_SHA"
+          else
+            git fetch origin main --depth=1
+            base_ref=FETCH_HEAD
+          fi
+          node scripts/detect-end-user-production-changes.mjs "$base_ref"
+
+      - name: Fingerprint committed audit inputs
+        id: fingerprints
+        run: node scripts/ci-checkpoint-fingerprints.mjs >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -59,7 +79,7 @@ jobs:
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test reusable CI checkpoint and browser shard recovery
         run: |
-          node --test scripts/ci-section-checkpoint.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs
+          node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs scripts/detect-end-user-production-changes.test.mjs
 
       - name: Verify repository-wide test inventory and ownership
         id: inventory
@@ -67,8 +87,9 @@ jobs:
         continue-on-error: true
         with:
           section: inventory
-          cache_prefix: blb-ci-v1-full-audit-inventory-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-inventory-${{ steps.fingerprints.outputs.inventory }}
+          restore_prefix: blb-ci-v1-full-audit-inventory-
+          fingerprint: ${{ steps.fingerprints.outputs.inventory }}
           run: node scripts/test-suite-inventory.mjs
       - name: Run every AST reachability audit test and analysis
         id: ast
@@ -76,8 +97,9 @@ jobs:
         continue-on-error: true
         with:
           section: ast-audits
-          cache_prefix: blb-ci-v1-full-audit-ast-audits-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-ast-audits-${{ steps.fingerprints.outputs.ast }}
+          restore_prefix: blb-ci-v1-full-audit-ast-audits-
+          fingerprint: ${{ steps.fingerprints.outputs.ast }}
           run: |
             set -euo pipefail
             for test_file in scripts/ast-*-audit.test.js; do
@@ -107,8 +129,9 @@ jobs:
         continue-on-error: true
         with:
           section: ast-concurrency
-          cache_prefix: blb-ci-v1-full-audit-ast-concurrency-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-ast-concurrency-${{ steps.fingerprints.outputs.astConcurrency }}
+          restore_prefix: blb-ci-v1-full-audit-ast-concurrency-
+          fingerprint: ${{ steps.fingerprints.outputs.astConcurrency }}
           run: node scripts/verify-ast-audit-concurrency-equivalence.mjs --workers=4
       - name: Read manifest version
         id: version
@@ -129,8 +152,9 @@ jobs:
         continue-on-error: true
         with:
           section: build-validation
-          cache_prefix: blb-ci-v1-full-audit-build-validation-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-build-validation-${{ steps.fingerprints.outputs.build }}
+          restore_prefix: blb-ci-v1-full-audit-build-validation-
+          fingerprint: ${{ steps.fingerprints.outputs.build }}
           run: node scripts/validate-build.js
       - name: Run browser selector decision tests
         id: selector
@@ -138,8 +162,9 @@ jobs:
         continue-on-error: true
         with:
           section: selector-tests
-          cache_prefix: blb-ci-v1-full-audit-selector-tests-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-selector-tests-${{ steps.fingerprints.outputs.selector }}
+          restore_prefix: blb-ci-v1-full-audit-selector-tests-
+          fingerprint: ${{ steps.fingerprints.outputs.selector }}
           run: node --test tests/selector/*.test.mjs
       - name: Run standalone JavaScript test scripts
         id: scripts
@@ -147,8 +172,9 @@ jobs:
         continue-on-error: true
         with:
           section: standalone-scripts
-          cache_prefix: blb-ci-v1-full-audit-standalone-scripts-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-standalone-scripts-${{ steps.fingerprints.outputs.scripts }}
+          restore_prefix: blb-ci-v1-full-audit-standalone-scripts-
+          fingerprint: ${{ steps.fingerprints.outputs.scripts }}
           run: |
             set -euo pipefail
             # validate-build.js already executes the scripts in this manifest.
@@ -175,8 +201,9 @@ jobs:
         continue-on-error: true
         with:
           section: python-unittests
-          cache_prefix: blb-ci-v1-full-audit-python-unittests-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-python-unittests-${{ steps.fingerprints.outputs.python }}
+          restore_prefix: blb-ci-v1-full-audit-python-unittests-
+          fingerprint: ${{ steps.fingerprints.outputs.python }}
           run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Install Playwright Chromium
         run: npx playwright install chromium
@@ -190,8 +217,9 @@ jobs:
         continue-on-error: true
         with:
           section: isolated-browser-regressions
-          cache_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-${{ steps.fingerprints.outputs.isolatedBrowser }}
+          restore_prefix: blb-ci-v1-full-audit-isolated-browser-regressions-
+          fingerprint: ${{ steps.fingerprints.outputs.isolatedBrowser }}
           run: |
             set -euo pipefail
             rerun_log="$RUNNER_TEMP/blb-prior-audit-failures.log"
@@ -216,7 +244,7 @@ jobs:
             fi
       - name: Restore production manifest before package checks
         if: always()
-        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
+        run: if [ -f "$RUNNER_TEMP/blb-manifest-original.json" ]; then cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json; fi
 
       - name: Run KJV corpus and search-index integrity tests
         id: corpus
@@ -224,8 +252,9 @@ jobs:
         continue-on-error: true
         with:
           section: kjv-corpus-integrity
-          cache_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-${{ steps.fingerprints.outputs.corpus }}
+          restore_prefix: blb-ci-v1-full-audit-kjv-corpus-integrity-
+          fingerprint: ${{ steps.fingerprints.outputs.corpus }}
           run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
       - name: Run package regression group
         id: package
@@ -233,8 +262,9 @@ jobs:
         continue-on-error: true
         with:
           section: package-regression
-          cache_prefix: blb-ci-v1-full-audit-package-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-package-regression-${{ steps.fingerprints.outputs.regression }}
+          restore_prefix: blb-ci-v1-full-audit-package-regression-
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Run resolver regression group
         id: resolver
@@ -242,8 +272,9 @@ jobs:
         continue-on-error: true
         with:
           section: resolver-regression
-          cache_prefix: blb-ci-v1-full-audit-resolver-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-resolver-regression-${{ steps.fingerprints.outputs.regression }}
+          restore_prefix: blb-ci-v1-full-audit-resolver-regression-
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=resolver
       - name: Run selection regression group
         id: selection
@@ -251,8 +282,9 @@ jobs:
         continue-on-error: true
         with:
           section: selection-regression
-          cache_prefix: blb-ci-v1-full-audit-selection-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-selection-regression-${{ steps.fingerprints.outputs.regression }}
+          restore_prefix: blb-ci-v1-full-audit-selection-regression-
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=selection
       - name: Run features regression group
         id: features
@@ -260,8 +292,9 @@ jobs:
         continue-on-error: true
         with:
           section: features-regression
-          cache_prefix: blb-ci-v1-full-audit-features-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-features-regression-${{ steps.fingerprints.outputs.regression }}
+          restore_prefix: blb-ci-v1-full-audit-features-regression-
+          fingerprint: ${{ steps.fingerprints.outputs.regression }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=features
       - name: Gate full browser audit on all other suites
         id: browser_gate
@@ -301,23 +334,40 @@ jobs:
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
       # complete test list, then execute it in eight resumable shards of four workers.
-      # Each shard fails fast after one unexpected result; successful shards are retained
-      # so a retry cannot force already-passed shards to execute again.
-      - name: Run complete browser test list in resumable four-worker shards
-        id: browser
-        uses: ./.github/actions/ci-section-checkpoint
+      # Each shard runs in its own step and is uploaded to an immutable cache key
+      # immediately afterward. A later shard failure or job interruption therefore
+      # leaves the newest cache containing every earlier shard checkpoint.
+      # The reusable shard cache contains only the manifest; Playwright diagnostics
+      # and corpus performance samples are stored separately.
+      - name: Prepare browser checkpoint directories
+        if: ${{ steps.browser_gate.outcome == 'success' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix" "$RUNNER_TEMP/blb-browser-shard-checkpoints"
+          touch "$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"
+
+      - name: Prepare complete browser test list and concurrency compatibility
+        id: browser_prepare
         continue-on-error: true
-        with:
-          section: browser-matrix
-          always_run: 'true'
-          cache_prefix: blb-ci-v1-full-audit-browser-matrix-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
+        shell: bash
+        run: |
+            set -euo pipefail
+            export BLB_CI_CHECKPOINT_DIR="$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix"
+            export BLB_CI_CHECKPOINT_SOURCE_SHA="${{ github.sha }}"
+            export BLB_CI_CHECKPOINT_FINGERPRINT="${{ steps.fingerprints.outputs.browser }}"
             export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
+            export BLB_BROWSER_SHARD_CHECKPOINT_DIR="$RUNNER_TEMP/blb-browser-shard-checkpoints"
+            export BLB_BROWSER_SHARD_DIAGNOSTICS_DIR="$RUNNER_TEMP/blb-browser-shard-diagnostics"
             export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"
             export NO_COLOR=1 FORCE_COLOR=0
-            mkdir -p "$(dirname "$BLB_PERF_OUTPUT")"
+            mkdir -p "$BLB_CI_CHECKPOINT_DIR" "$(dirname "$BLB_PERF_OUTPUT")" "$BLB_BROWSER_SHARD_CHECKPOINT_DIR"
             touch "$BLB_PERF_OUTPUT"
+            npm_version=$(npm --version 2>/dev/null || printf 'unavailable')
+            python_version=$(python --version 2>/dev/null || printf 'unavailable')
+            playwright_version=$(npx playwright --version 2>/dev/null || printf 'unavailable')
+            image="${ImageOS:-unknown}-${ImageVersion:-unknown}"
+            environment_fingerprint=$(printf '%s' "${{ runner.os }}|${{ runner.arch }}|$image|$(node --version)|$npm_version|$python_version|$playwright_version" | sha256sum | cut -d' ' -f1)
+            export BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT="$environment_fingerprint"
+            echo "environment_fingerprint=$environment_fingerprint" >> "$GITHUB_OUTPUT"
             list_output="$RUNNER_TEMP/blb-playwright-list.txt"
             test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
             if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
@@ -450,15 +500,228 @@ jobs:
               exit 1
             fi
             echo "Running all $total browser test cases in eight resumable shards, each with four workers."
-            node scripts/run-checkpointed-playwright-audit.mjs "$test_list"
+            echo "Prepared complete browser inventory and concurrency compatibility checks."
+            echo "BLB_EXPECTED_VERSION=$BLB_EXPECTED_VERSION" >> "$GITHUB_ENV"
+            echo "BLB_CI_CHECKPOINT_DIR=$BLB_CI_CHECKPOINT_DIR" >> "$GITHUB_ENV"
+            echo "BLB_PERF_OUTPUT=$BLB_PERF_OUTPUT" >> "$GITHUB_ENV"
+            echo "BLB_BROWSER_SHARD_CHECKPOINT_DIR=$BLB_BROWSER_SHARD_CHECKPOINT_DIR" >> "$GITHUB_ENV"
+            echo "BLB_BROWSER_SHARD_DIAGNOSTICS_DIR=$BLB_BROWSER_SHARD_DIAGNOSTICS_DIR" >> "$GITHUB_ENV"
+            echo "BLB_CI_CHECKPOINT_SOURCE_SHA=$BLB_CI_CHECKPOINT_SOURCE_SHA" >> "$GITHUB_ENV"
+            echo "BLB_CI_CHECKPOINT_FINGERPRINT=$BLB_CI_CHECKPOINT_FINGERPRINT" >> "$GITHUB_ENV"
+            echo "BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT=$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT" >> "$GITHUB_ENV"
+
+      - name: Restore dedicated browser-shard checkpoint
+        id: browser_shard_restore
+        if: ${{ steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          restore-keys: |
+            blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-
+
+      - name: Restore browser-matrix performance checkpoint
+        id: browser_matrix_restore
+        if: ${{ steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          restore-keys: |
+            blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-
+      - name: Run browser shard 1/8
+        id: browser_shard_1
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 1
+      - name: Save browser-shard checkpoint after shard 1/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_1.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
+      - name: Save browser-matrix performance checkpoint after shard 1/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_1.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
+      - name: Run browser shard 2/8
+        id: browser_shard_2
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 2
+      - name: Save browser-shard checkpoint after shard 2/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_2.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
+      - name: Save browser-matrix performance checkpoint after shard 2/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_2.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
+      - name: Run browser shard 3/8
+        id: browser_shard_3
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 3
+      - name: Save browser-shard checkpoint after shard 3/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_3.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
+      - name: Save browser-matrix performance checkpoint after shard 3/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_3.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
+      - name: Run browser shard 4/8
+        id: browser_shard_4
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 4
+      - name: Save browser-shard checkpoint after shard 4/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_4.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
+      - name: Save browser-matrix performance checkpoint after shard 4/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_4.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
+      - name: Run browser shard 5/8
+        id: browser_shard_5
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 5
+      - name: Save browser-shard checkpoint after shard 5/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_5.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
+      - name: Save browser-matrix performance checkpoint after shard 5/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_5.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
+      - name: Run browser shard 6/8
+        id: browser_shard_6
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 6
+      - name: Save browser-shard checkpoint after shard 6/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_6.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
+      - name: Save browser-matrix performance checkpoint after shard 6/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_6.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
+      - name: Run browser shard 7/8
+        id: browser_shard_7
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 7
+      - name: Save browser-shard checkpoint after shard 7/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_7.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
+      - name: Save browser-matrix performance checkpoint after shard 7/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_7.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
+      - name: Run browser shard 8/8
+        id: browser_shard_8
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 8
+      - name: Save browser-shard checkpoint after shard 8/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_8.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+      - name: Save browser-matrix performance checkpoint after shard 8/8
+        if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_8.outcome != 'skipped' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+      - name: Validate all browser shard checkpoints
+        id: browser
+        if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const file = process.env.RUNNER_TEMP + '/blb-browser-shard-checkpoints/browser-shards.json';
+          const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const bad = manifest.shards.filter(shard =>
+            shard.status !== 'passed' || shard.exitCode !== 0 || shard.reportValid !== true ||
+            shard.passedTests.length !== shard.tests.length
+          );
+          for (const shard of manifest.shards) {
+            console.log(`Shard [${shard.index}/${manifest.shardCount}]: ${shard.status}, ${shard.passedTests.length}/${shard.tests.length} passed`);
+          }
+          if (bad.length) {
+            console.error(`Browser audit incomplete: ${bad.length} shard(s) failed or remain unverified.`);
+            process.exit(1);
+          }
+          console.log(`All ${manifest.shardCount} browser shards passed and were checkpointed.`);
+          NODE
       - name: Upload reusable browser-audit checkpoint diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: blb-full-audit-checkpoints-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Upload browser-shard diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-browser-shard-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/blb-browser-shard-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload corpus A/B measurements
         if: always()
@@ -491,12 +754,18 @@ jobs:
           RESOLVER: ${{ steps.resolver.outcome }}
           SELECTION: ${{ steps.selection.outcome }}
           FEATURES: ${{ steps.features.outcome }}
+          HAS_PRODUCTION_CHANGES: ${{ steps.production_impact.outputs.has_production_changes }}
         run: |
           {
             echo "## Manual full-test audit"
             echo
             echo "| Suite | Result |"
             echo "|---|---|"
+            if [[ "$HAS_PRODUCTION_CHANGES" == "true" ]]; then
+              echo "| End-user Performance qualification | REQUIRED — production changes detected; use dedicated workflow |"
+            else
+              echo "| End-user Performance qualification | SKIPPED — no relevant production changes |"
+            fi
             echo "| Repository test inventory | $INVENTORY |"
             echo "| AST reachability audit tests and analysis | $AST |"
             echo "| AST serial-parallel equivalence | $AST_CONCURRENCY |"

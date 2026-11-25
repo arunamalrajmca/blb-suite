@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   createShardManifest,
   isCompatibleShardManifest,
+  invalidateChangedSpecShards,
   partitionTests,
   runCheckpointedBrowserAudit
 } from './run-checkpointed-playwright-audit.mjs';
@@ -27,7 +28,21 @@ test('shard manifests are bound to exact source, fingerprint, inventory, order, 
   const manifest = createShardManifest(expected);
   assert.equal(isCompatibleShardManifest(manifest, expected), true);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, sourceSha: 'c'.repeat(40) }), false);
+  assert.equal(isCompatibleShardManifest(manifest, {
+    ...expected,
+    sourceSha: 'c'.repeat(40),
+    fingerprint: 'd'.repeat(64),
+    changedFiles: ['tests/browser/audit.spec.js']
+  }), true);
+  assert.equal(isCompatibleShardManifest(manifest, {
+    ...expected,
+    sourceSha: 'c'.repeat(40),
+    fingerprint: 'd'.repeat(64),
+    changedFiles: ['extension/background.js']
+  }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, fingerprint: 'd'.repeat(64) }), false);
+  assert.equal(isCompatibleShardManifest(manifest, { ...expected, environmentFingerprint: 'e'.repeat(64) }), false);
+  assert.equal(isCompatibleShardManifest({ ...manifest, schemaVersion: 2 }, expected), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, tests: [...entries].reverse() }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, shardCount: 3 }), false);
   const malformed = structuredClone(manifest);
@@ -37,6 +52,22 @@ test('shard manifests are bound to exact source, fingerprint, inventory, order, 
   malformed.shards[0].exitCode = 0;
   malformed.shards[0].reportValid = false;
   assert.equal(isCompatibleShardManifest(malformed, expected), false);
+});
+
+
+test('only shards containing changed browser spec files are invalidated across commits', () => {
+  const groupedEntries = [
+    ...Array.from({ length: 4 }, (_, index) => '[chromium] › tests/browser/alpha.spec.js:' + (index + 1) + ':1 › alpha ' + (index + 1)),
+    ...Array.from({ length: 4 }, (_, index) => '[chromium] › tests/browser/beta.spec.js:' + (index + 1) + ':1 › beta ' + (index + 1))
+  ];
+  const manifest = createShardManifest({ sourceSha, fingerprint, tests: groupedEntries, shardCount: 4 });
+  for (const shard of manifest.shards) {
+    shard.status = 'passed';
+    shard.exitCode = 0;
+    shard.reportValid = true;
+  }
+  invalidateChangedSpecShards(manifest, ['tests/browser/alpha.spec.js']);
+  assert.deepEqual(manifest.shards.map(shard => shard.status), ['pending', 'pending', 'passed', 'passed']);
 });
 
 test('only passed shards are reused; failed and pending shards execute again', () => {
@@ -61,6 +92,67 @@ test('only passed shards are reused; failed and pending shards execute again', (
     const resumed = runCheckpointedBrowserAudit(args);
     assert.deepEqual(calls, [2]);
     assert.equal(resumed.shards.filter(shard => shard.status === 'passed').length, 4);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test('passed tests inside a failed shard are retained and excluded from the next attempt', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-browser-test-resume-'));
+  const list = path.join(directory, 'test-list.txt');
+  const checkpoint = path.join(directory, 'checkpoints');
+  fs.writeFileSync(list, entries.join('\n') + '\n');
+  const firstCalls = [];
+  const secondCalls = [];
+  let firstAttempt = true;
+  const executeShard = (tests, index) => {
+    if (firstAttempt) {
+      firstCalls.push({ index, tests: [...tests] });
+      if (index === 1) return {
+        passed: false, exitCode: 1, validReport: true, passedEntries: [tests[0]]
+      };
+      return { passed: true, exitCode: 0, validReport: true };
+    }
+    secondCalls.push({ index, tests: [...tests] });
+    return { passed: true, exitCode: 0, validReport: true };
+  };
+  const args = { testListPath: list, directory: checkpoint, sourceSha, fingerprint, shardCount: 4, executeShard };
+  try {
+    assert.throws(() => runCheckpointedBrowserAudit(args), /shards failed/);
+    firstAttempt = false;
+    const resumed = runCheckpointedBrowserAudit(args);
+    assert.equal(firstCalls.length, 4);
+    assert.deepEqual(secondCalls, [{ index: 1, tests: [entries[1]] }]);
+    assert.equal(resumed.shards.every(shard => shard.passedTests.length === shard.tests.length), true);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test('a single-shard invocation checkpoints immediately and later invocations reuse it', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-browser-single-shard-'));
+  const list = path.join(directory, 'test-list.txt');
+  const checkpoint = path.join(directory, 'checkpoints');
+  const separator = String.fromCharCode(10);
+  fs.writeFileSync(list, entries.join(separator) + separator);
+  const calls = [];
+  const executeShard = (_tests, index) => {
+    calls.push(index);
+    return { passed: true, exitCode: 0, validReport: true };
+  };
+  const args = { testListPath: list, directory: checkpoint, sourceSha, fingerprint, shardCount: 4, executeShard };
+  try {
+    runCheckpointedBrowserAudit({ ...args, shardIndex: 1 });
+    assert.deepEqual(calls, [1]);
+    const persisted = JSON.parse(fs.readFileSync(path.join(checkpoint, 'browser-shards.json'), 'utf8'));
+    assert.equal(persisted.shards[0].status, 'passed');
+    calls.length = 0;
+    runCheckpointedBrowserAudit({ ...args, shardIndex: 1 });
+    assert.deepEqual(calls, []);
+    runCheckpointedBrowserAudit({ ...args, shardIndex: 2 });
+    assert.deepEqual(calls, [2]);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

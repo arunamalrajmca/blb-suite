@@ -587,49 +587,36 @@ test("extension reference-coverage matrix skips unrelated mapped features", () =
   }
 });
 
-test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
-  for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-reference.yml",
-    "../../.github/workflows/browser-e2e-performance.yml"
+test("optional E2E workflows route performance only for production changes", () => {
+  const reference = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8"
+  );
+  const performance = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url), "utf8"
+  );
+  assert.match(reference, /^\s*-\s*['"]scripts\/\*\*['"]/m);
+  for (const script of [
+    "classify-ci-changes.mjs",
+    "select-reference-matrix.mjs",
+    "test-ci-routing-selector.js",
+    "verify-store-assets.py",
+    "verify-store-branding.py",
+    "verify-store-package.py",
+    "verify-store-submission-assets.py"
   ]) {
-    const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
-    assert.match(workflow, /^\s*-\s*['"]scripts\/\*\*['"]/m);
-    for (const script of [
-      "classify-ci-changes.mjs",
-      "select-reference-matrix.mjs",
-      "test-ci-routing-selector.js",
-      "verify-store-assets.py",
-      "verify-store-branding.py",
-      "verify-store-package.py",
-      "verify-store-submission-assets.py"
-    ]) {
-      assert.ok(workflow.includes("- '!scripts/" + script + "'"), workflowPath + " must exclude " + script);
-    }
-    if (/^\s*-\s*['"]tests\/\*\*['"]/m.test(workflow)) {
-      for (const testFile of [
-        "test_verify_store_package.py",
-        "test_verify_store_submission_assets.py"
-      ]) {
-        assert.ok(workflow.includes("- '!tests/" + testFile + "'"), workflowPath + " must exclude " + testFile);
-      }
-    } else {
-      assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
-    }
-    if (workflowPath.endsWith("browser-e2e-performance.yml")) {
-      assert.ok(workflow.includes("- '!scripts/select-browser-specs.mjs'"),
-        "performance-only workflow may ignore browser selector edits");
-      assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "performance-only workflow may ignore reference matrix edits");
-    } else {
-      assert.ok(!workflow.includes("- '!scripts/select-browser-specs.mjs'"),
-        "References workflow must run when browser selector changes");
-      assert.ok(workflow.includes("- '.github/workflows/browser-e2e-reference.yml'"));
-      assert.ok(workflow.includes("- '.github/workflows/browser-e2e-groups.yml'"));
-      assert.ok(!workflow.includes("- '!scripts/reference-e2e-matrix.json'"),
-        "reference matrix edits must trigger the References workflow so full coverage can be verified");
-    }
+    assert.ok(reference.includes("- '!scripts/" + script + "'"), "References workflow must exclude " + script);
   }
+  assert.ok(reference.includes("- '.github/workflows/browser-e2e-reference.yml'"));
+  assert.ok(reference.includes("- '.github/workflows/browser-e2e-groups.yml'"));
+  assert.ok(!reference.includes("- '!scripts/select-browser-specs.mjs'"),
+    "References workflow must run when browser selector changes");
+  assert.ok(!reference.includes("- '!scripts/reference-e2e-matrix.json'"),
+    "reference matrix edits must trigger the References workflow so full coverage can be verified");
+  assert.doesNotMatch(performance, /^\s*-\s*['"]scripts\/\*\*['"]/m,
+    "performance workflow must not run for broad tooling changes");
+  assert.doesNotMatch(performance, /^\s*-\s*['"]tests\/\*\*['"]/m,
+    "performance workflow must not run for test-only changes");
 });
-
 test("reusable feature groups consume the caller's single browser classification", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
@@ -1163,7 +1150,7 @@ test("full audit compares legacy per-test process isolation with four-worker sch
     "legacy compatibility cases must run one test per Playwright process");
   assert.ok(audit.includes('npx playwright test --test-list "$compatibility_list" --workers=4 --max-failures=1'),
     "the same compatibility cases must also run together with four workers");
-  assert.ok(audit.includes('node scripts/run-checkpointed-playwright-audit.mjs "$test_list"'),
+  assert.ok(audit.includes('node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" 1'),
     "the complete browser inventory must use the resumable shard runner after comparison");
   assert.ok(runner.includes("shardCount = 8") && runner.includes("workers = 4"),
     "the complete browser inventory must use eight four-worker shards");
@@ -1258,10 +1245,63 @@ test("full audit delegates performance and physical-input tests to workflows tri
 
   assert.ok(
     audit.includes('export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"') &&
+    audit.includes('echo "BLB_PERF_OUTPUT=$BLB_PERF_OUTPUT" >> "$GITHUB_ENV"') &&
     audit.includes('touch "$BLB_PERF_OUTPUT"') &&
     !audit.includes(': > "$BLB_PERF_OUTPUT"'),
     "full-audit corpus A/B samples must survive browser-shard retries without truncation"
   );
+  const shardRestoreIndex = audit.indexOf("Restore dedicated browser-shard checkpoint");
+  const prepareIndex = audit.indexOf("Prepare complete browser test list and concurrency compatibility");
+  assert.ok(shardRestoreIndex > prepareIndex,
+    "browser-shard cache restore must wait until the runner environment fingerprint is known");
+  assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint") &&
+    audit.includes("node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-"),
+    "browser-shard restore keys must be scoped to the exact runner/toolchain environment");
+  const preflight = readFileSync(
+    new URL("../../.github/workflows/ci-checkpoint-contract-validation.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(preflight.includes("'scripts/ci-checkpoint-fingerprints.*'"),
+    "fingerprint implementation and tests must trigger the short checkpoint contract preflight");
+  for (let shard = 1; shard <= 8; shard++) {
+    const suffix = String(shard).padStart(2, "0");
+    const command = 'run: node scripts/run-checkpointed-playwright-audit.mjs "$RUNNER_TEMP/blb-playwright-test-list.txt" ' + shard;
+    assert.equal(audit.split(command).length - 1, 1,
+      "browser shard " + shard + " must be invoked exactly once with its matching index");
+    assert.ok(audit.includes("shard-" + suffix),
+      "browser shard " + shard + " must have its own immutable checkpoint key");
+  }
+  assert.ok(audit.includes("path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"),
+    "the reusable performance checkpoint artifact must upload the JSONL file, not treat it as a directory");
+  assert.ok(!audit.includes("blb-performance.jsonl/blb-performance.jsonl") &&
+    !/blb-performance\.jsonl\/\s*\n/.test(audit),
+    "corpus performance artifact paths must not append a directory suffix to the output file");
+
+  assert.ok(audit.includes("name: Restore browser-matrix performance checkpoint"),
+    "full-audit corpus A/B samples must be restored before browser shards");
+  assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint"),
+    "corpus A/B checkpoints must match the exact runner and toolchain environment");
+  assert.ok(audit.indexOf("Restore browser-matrix performance checkpoint") > audit.indexOf("Prepare complete browser test list"),
+    "corpus A/B checkpoints must be restored after the runner environment is fingerprinted");
+  assert.equal((audit.match(/name: Save browser-matrix performance checkpoint after shard/g) || []).length, 8,
+    "full-audit corpus A/B samples must be checkpointed after every browser shard");
+  const guardedShardCondition = "if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}";
+  assert.equal(audit.split(guardedShardCondition).length - 1, 9,
+    "browser shard progression must stop after a failed durable checkpoint upload");
+  const cancellationSafeSaveConditions = audit.split("\n").filter(line =>
+    line.includes("if: ${{ always() && steps.browser_prepare.outcome == 'success' && steps.browser_shard_")
+  );
+  assert.equal(cancellationSafeSaveConditions.length, 16,
+    "each completed or cancelled shard must have two checkpoint uploads");
+  assert.equal(new Set(cancellationSafeSaveConditions).size, 8,
+    "checkpoint uploads must be tied to their own shard and skip shards that never started");
+  const manifestSaveBlocks = audit.split("- name: Save browser-shard checkpoint after shard ").slice(1)
+    .map(block => block.split("\n      - name:")[0]);
+  assert.equal(manifestSaveBlocks.length, 8, "every browser shard must have its own durable checkpoint save");
+  assert.ok(manifestSaveBlocks.every(block => !block.includes("continue-on-error: true")),
+    "durable browser-shard checkpoint uploads must not be silently ignored");
+  assert.ok(manifestSaveBlocks.every(block => block.includes("steps.browser_prepare.outputs.environment_fingerprint")),
+    "all eight saved shard checkpoints must use the environment-scoped cache key scheme");
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
     "native Chromium _self prerender activation initializes the activated document without tab replacement",
@@ -1283,8 +1323,27 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "full-audit changes must trigger the native shortcut workflow");
   assert.ok(performance.includes("tests/browser/performance-batch.spec.js --workers=1"),
     "the batched benchmark must have a dedicated performance-workflow owner");
-  assert.ok(performance.includes(".github/workflows/manual-full-test-audit.yml"),
-    "full-audit changes must trigger the performance workflow");
+  const performancePathFilters = performance.split("    paths:\n")[1]?.split("\n  workflow_dispatch:")[0] || "";
+  assert.ok(performancePathFilters.includes("'extension/**'") &&
+    performancePathFilters.includes("'package.json'") &&
+    performancePathFilters.includes("'package-lock.json'"),
+    "measured performance must run for shipped extension or production dependency changes");
+  assert.ok(!performancePathFilters.includes("'tests/**'") &&
+    !performancePathFilters.includes("'scripts/**'") &&
+    !performancePathFilters.includes(".github/workflows/") &&
+    !performancePathFilters.includes(".github/actions/"),
+    "test, CI, workflow, and developer-tooling changes alone must not trigger end-user performance runs");
+  assert.ok(!performancePathFilters.includes(".github/workflows/manual-full-test-audit.yml"),
+    "full-audit workflow changes alone must not trigger measured performance");
+  const productionImpact = readFileSync(
+    new URL("../../scripts/detect-end-user-production-changes.mjs", import.meta.url),
+    "utf8"
+  );
+  assert.ok(audit.includes("Detect end-user production changes for performance qualification") &&
+    audit.includes('node scripts/detect-end-user-production-changes.mjs "$base_ref"') &&
+    productionImpact.includes("has_production_changes=${result.hasProductionChanges}") &&
+    audit.includes("SKIPPED — no relevant production changes"),
+    "the full-audit summary must use the tested production-impact detector and explicitly skip Performance when shipped production code is unchanged");
   assert.ok(reference.includes("!contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
     "the References workflow must suppress its browser matrix when the full audit owns the suite");
   assert.ok(performance.includes("'ci-full-test-audit'"),

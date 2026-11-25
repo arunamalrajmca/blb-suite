@@ -19,14 +19,12 @@ export function isNonRuntimePath(path) {
     || path === "scripts/run-validation-tests.js"
     || path === "scripts/validation-test-manifest.json"
     || path === "scripts/test-suite-inventory.json"
-    || path === "scripts/test-suite-inventory.json"
     || path === "regression-suite/Run-BLB-Regression.ps1"
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
     || path === "scripts/test-popup-cross-browser-rendering.js"
     || path === "tests/browser/extension-test-helpers.js"
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
-    || path === "tests/browser/extension-test-helpers.js"
     || /^(?:scripts\/(?:verify-store-assets|verify-store-branding|verify-store-package|verify-store-submission-assets)\.py|tests\/test_verify_store_(?:package|submission_assets)\.py)$/i.test(path)
     || /^(store-assets\/|assets\/store\/|extension\/(icons|store-assets)\/)/i.test(path);
 }

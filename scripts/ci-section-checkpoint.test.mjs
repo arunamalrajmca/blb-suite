@@ -6,33 +6,38 @@ import path from 'node:path';
 import {
   createCompletionMarker,
   isCompatibleCompletionMarker,
+  inspectCompletionMarker,
   readCompletionMarker,
   writeCompletionMarker
 } from './ci-section-checkpoint.mjs';
 
 const sourceSha = 'a'.repeat(40);
 const fingerprint = 'b'.repeat(64);
-const expected = { section: 'package-regressions', sourceSha, fingerprint };
+const environmentFingerprint = 'c'.repeat(64);
+const expected = { section: 'package-regressions', sourceSha, fingerprint, environmentFingerprint };
 
 test('completion markers require a stable section, full source SHA, and SHA-256 fingerprint', () => {
   assert.deepEqual(createCompletionMarker(expected), {
-    schemaVersion: 1,
+    schemaVersion: 2,
     ...expected,
     status: 'passed'
   });
   assert.throws(() => createCompletionMarker({ ...expected, sourceSha: 'abc' }), /full 40-character/);
   assert.throws(() => createCompletionMarker({ ...expected, fingerprint: 'not-a-digest' }), /SHA-256/);
+  assert.throws(() => createCompletionMarker({ ...expected, environmentFingerprint: 'invalid' }), /environment fingerprint/);
   assert.throws(() => createCompletionMarker({ ...expected, section: '../escape' }), /stable identifier/);
 });
 
-test('a checkpoint is reusable only for the exact section, commit, fingerprint, schema, and passed status', () => {
+test('a checkpoint is reusable across commits only for the exact section, fingerprint, schema, and passed status', () => {
   const marker = createCompletionMarker(expected);
   assert.equal(isCompatibleCompletionMarker(marker, expected), true);
   assert.equal(isCompatibleCompletionMarker(marker, { ...expected, section: 'other-section' }), false);
-  assert.equal(isCompatibleCompletionMarker(marker, { ...expected, sourceSha: 'c'.repeat(40) }), false);
+  assert.equal(isCompatibleCompletionMarker(marker, { ...expected, sourceSha: 'c'.repeat(40) }), true);
+  assert.equal(isCompatibleCompletionMarker({ ...marker, sourceSha: 'invalid' }, expected), false);
   assert.equal(isCompatibleCompletionMarker(marker, { ...expected, fingerprint: 'd'.repeat(64) }), false);
+  assert.equal(isCompatibleCompletionMarker(marker, { ...expected, environmentFingerprint: 'd'.repeat(64) }), false);
   assert.equal(isCompatibleCompletionMarker({ ...marker, status: 'failed' }, expected), false);
-  assert.equal(isCompatibleCompletionMarker({ ...marker, schemaVersion: 2 }, expected), false);
+  assert.equal(isCompatibleCompletionMarker({ ...marker, schemaVersion: 1 }, expected), false);
   assert.equal(isCompatibleCompletionMarker(null, expected), false);
 });
 
@@ -56,6 +61,21 @@ test('malformed or partial cached state is never treated as a passed section', (
     assert.equal(readCompletionMarker(directory, expected), null);
     fs.writeFileSync(path.join(directory, 'complete.json'), JSON.stringify({ ...createCompletionMarker(expected), status: 'in_progress' }));
     assert.equal(readCompletionMarker(directory, expected), null);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('checkpoint inspection reports precise invalidation reasons', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-ci-checkpoint-reasons-'));
+  try {
+    assert.deepEqual(inspectCompletionMarker(directory, expected), { compatible: false, reason: 'missing-marker' });
+    writeCompletionMarker(directory, expected);
+    assert.equal(inspectCompletionMarker(directory, expected).reason, 'compatible');
+    assert.equal(inspectCompletionMarker(directory, { ...expected, fingerprint: 'd'.repeat(64) }).reason, 'input-fingerprint-mismatch');
+    assert.equal(inspectCompletionMarker(directory, { ...expected, environmentFingerprint: 'd'.repeat(64) }).reason, 'environment-fingerprint-mismatch');
+    fs.writeFileSync(path.join(directory, 'complete.json'), '{"schemaVersion":1}');
+    assert.equal(inspectCompletionMarker(directory, expected).reason, 'schema-mismatch');
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

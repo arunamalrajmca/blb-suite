@@ -87,7 +87,7 @@ function auditRepositoryTestInventory() {
   const auditCoverage = [
     ['all browser test cases are collected with Playwright list output', /npx playwright test --list --reporter=list/],
     ['full audit starts only on an explicit label event after prerequisite qualification', /types: \[labeled\]/],
-    ['all remaining browser test cases run through the resumable browser shard runner', /node scripts\/run-checkpointed-playwright-audit\.mjs "\$test_list"/],
+    ['all remaining browser test cases run through the resumable browser shard runner', /node scripts\/run-checkpointed-playwright-audit\.mjs "\$RUNNER_TEMP\/blb-playwright-test-list\.txt" [1-8]/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
     ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
     ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],

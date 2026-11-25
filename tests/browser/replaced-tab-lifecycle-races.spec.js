@@ -2,16 +2,16 @@ const { test, expect } = require('./fixtures');
 
 async function installReplacementActivationGate(extensionWorker, tabId) {
   await extensionWorker.evaluate(id => {
-    const original = ensureContentScriptInTab;
+    const original = ensureContentScriptInTabWithRetry;
     let release, entered;
     const gate = new Promise(resolve => { release = resolve; });
     const started = new Promise(resolve => { entered = resolve; });
     globalThis.__replacementActivationGate = {
       started,
       release:() => release(),
-      restore:() => { ensureContentScriptInTab = original; }
+      restore:() => { ensureContentScriptInTabWithRetry = original; }
     };
-    ensureContentScriptInTab = async currentTabId => {
+    ensureContentScriptInTabWithRetry = async currentTabId => {
       if (currentTabId !== id) return original(currentTabId);
       entered();
       await gate;

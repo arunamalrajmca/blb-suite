@@ -7,8 +7,12 @@ inputs:
   cache_prefix:
     description: Fingerprint-scoped cache prefix; include the workflow and all relevant source/test inputs.
     required: true
+  restore_prefix:
+    description: Stable legacy-compatible prefix used to restore checkpoints from earlier commits.
+    required: false
+    default: ''
   fingerprint:
-    description: Exact source and environment fingerprint recorded in the completion marker.
+    description: Exact source/test-input fingerprint; the action records the runner and toolchain environment separately.
     required: true
   run:
     description: Shell command to execute when no compatible completed checkpoint exists.
@@ -45,6 +49,21 @@ runs:
         set -euo pipefail
         echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
         echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+    - name: Fingerprint the test environment
+      id: environment
+      shell: bash
+      env:
+        IMAGE: ${{ steps.runtime.outputs.image }}
+        NODE_VERSION: ${{ steps.runtime.outputs.node }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: |
+        set -euo pipefail
+        npm_version=$(npm --version 2>/dev/null || printf 'unavailable')
+        python_version=$(python --version 2>/dev/null || printf 'unavailable')
+        playwright_version=$(npx playwright --version 2>/dev/null || printf 'unavailable')
+        value=$(printf '%s' "$RUNNER_OS|$RUNNER_ARCH|$IMAGE|$NODE_VERSION|$npm_version|$python_version|$playwright_version" | sha256sum | cut -d' ' -f1)
+        echo "value=$value" >> "$GITHUB_OUTPUT"
     - name: Restore the newest compatible section checkpoint
       id: restore
       uses: actions/cache/restore@v5
@@ -54,6 +73,7 @@ runs:
         key: ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
           ${{ inputs.cache_prefix }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.runtime.outputs.image }}-${{ steps.runtime.outputs.node }}-
+          ${{ inputs.restore_prefix }}
     - name: Validate the restored completion marker
       id: check
       shell: bash
@@ -61,11 +81,29 @@ runs:
         SECTION: ${{ inputs.section }}
         SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
+        ENVIRONMENT_FINGERPRINT: ${{ steps.environment.outputs.value }}
       run: |
         set -euo pipefail
         node scripts/ci-section-checkpoint.mjs check \
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
-          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" >> "$GITHUB_OUTPUT"
+          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" "$ENVIRONMENT_FINGERPRINT" >> "$GITHUB_OUTPUT"
+    - name: Report checkpoint reuse decision
+      shell: bash
+      env:
+        SECTION: ${{ inputs.section }}
+        COMPLETE: ${{ steps.check.outputs.complete }}
+        REASON: ${{ steps.check.outputs.reason }}
+        ALWAYS_RUN: ${{ inputs.always_run }}
+      run: |
+        if [[ "$COMPLETE" == "true" ]]; then
+          if [[ "$ALWAYS_RUN" == "true" ]]; then
+            echo "::notice::Checkpoint accepted for $SECTION; the section runner will validate and reuse its internal saved results."
+          else
+            echo "::notice::Checkpoint accepted for $SECTION; skipping the section execution."
+          fi
+        else
+          echo "::notice::Checkpoint not reusable for $SECTION (reason: ${REASON:-unknown}); executing the section."
+        fi
     - name: Remove completion marker before validating resumable internal state
       if: ${{ inputs.always_run == 'true' && steps.check.outputs.complete == 'true' }}
       shell: bash
@@ -80,6 +118,7 @@ runs:
         BLB_CI_CHECKPOINT_DIR: ${{ runner.temp }}/blb-ci-checkpoints/${{ inputs.section }}
         BLB_CI_CHECKPOINT_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         BLB_CI_CHECKPOINT_FINGERPRINT: ${{ inputs.fingerprint }}
+        BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT: ${{ steps.environment.outputs.value }}
       run: ${{ inputs.run }}
     - name: Record successful section completion
       if: ${{ success() && (steps.check.outputs.complete != 'true' || inputs.always_run == 'true') }}
@@ -88,11 +127,12 @@ runs:
         SECTION: ${{ inputs.section }}
         SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         FINGERPRINT: ${{ inputs.fingerprint }}
+        ENVIRONMENT_FINGERPRINT: ${{ steps.environment.outputs.value }}
       run: |
         set -euo pipefail
         node scripts/ci-section-checkpoint.mjs write \
           "$RUNNER_TEMP/blb-ci-checkpoints/$SECTION" \
-          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT"
+          "$SECTION" "$SOURCE_SHA" "$FINGERPRINT" "$ENVIRONMENT_FINGERPRINT"
     - name: Preserve completed or partial checkpoint after this attempt
       if: ${{ always() && (steps.check.outputs.complete != 'true' || inputs.always_run == 'true') }}
       uses: actions/cache/save@v5

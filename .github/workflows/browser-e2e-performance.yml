@@ -5,36 +5,17 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
+    # Run measured end-user performance qualification only when shipped
+    # extension code or its production dependency manifest changes. Test,
+    # CI, workflow, and developer-tooling changes alone are not performance
+    # changes under the suite's end-user performance definition.
     paths:
       - 'extension/**'
       - '!extension/icons/**'
       - '!extension/store-assets/**'
       - '!extension/THIRD-PARTY-NOTICES.txt'
-      - 'tests/**'
-      - '!tests/selector/**'
-      - '!tests/test_verify_store_package.py'
-      - '!tests/test_verify_store_submission_assets.py'
-      - 'scripts/**'
-      - '!scripts/classify-ci-changes.mjs'
-      - '!scripts/select-browser-specs.mjs'
-      - '!scripts/select-reference-matrix.mjs'
-      - '!scripts/reference-e2e-matrix.json'
-      - '!scripts/test-ci-routing-selector.js'
-      - '!scripts/validate-build.js'
-      - '!scripts/package-release.sh'
-      - '!scripts/verify-store-assets.py'
-      - '!scripts/verify-store-branding.py'
-      - '!scripts/verify-store-package.py'
-      - '!scripts/verify-store-submission-assets.py'
-      - '!scripts/test-*.js'
       - 'package.json'
       - 'package-lock.json'
-      - 'scripts/test-suite-inventory.json'
-      - 'playwright.config.js'
-      - 'playwright.config.ts'
-      - '.github/workflows/manual-full-test-audit.yml'
-      - '.github/workflows/browser-e2e-performance.yml'
-      - '.github/actions/ci-section-checkpoint/action.yml'
   workflow_dispatch:
 
 concurrency:
