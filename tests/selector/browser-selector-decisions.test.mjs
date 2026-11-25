@@ -1263,6 +1263,26 @@ test("full audit delegates performance and physical-input tests to workflows tri
     !audit.includes(': > "$BLB_PERF_OUTPUT"'),
     "full-audit corpus A/B samples must survive browser-shard retries without truncation"
   );
+  const shardRestoreIndex = audit.indexOf("Restore dedicated browser-shard checkpoint");
+  const prepareIndex = audit.indexOf("Prepare complete browser test list and concurrency compatibility");
+  assert.ok(shardRestoreIndex > prepareIndex,
+    "browser-shard cache restore must wait until the runner environment fingerprint is known");
+  assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint") &&
+    audit.includes("node22-${{ steps.browser_prepare.outputs.environment_fingerprint }}-"),
+    "browser-shard restore keys must be scoped to the exact runner/toolchain environment");
+  for (let shard = 1; shard <= 8; shard++) {
+    const suffix = String(shard).padStart(2, "0");
+    assert.equal((audit.match(new RegExp("run-checkpointed-playwright-audit\\\\.mjs.* " + shard + "(?:\\\\s|$)", "g")) || []).length, 1,
+      "browser shard " + shard + " must be invoked exactly once with its matching index");
+    assert.ok(audit.includes("shard-" + suffix),
+      "browser shard " + shard + " must have its own immutable checkpoint key");
+  }
+  assert.ok(audit.includes("path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl\\n"),
+    "the reusable performance checkpoint artifact must upload the JSONL file, not treat it as a directory");
+  assert.ok(!audit.includes("blb-performance.jsonl/blb-performance.jsonl") &&
+    !audit.includes("blb-performance.jsonl/\\n"),
+    "corpus performance artifact paths must not append a directory suffix to the output file");
+
   assert.ok(audit.includes("name: Restore browser-matrix performance checkpoint"),
     "full-audit corpus A/B samples must be restored before browser shards");
   assert.ok(audit.includes("steps.browser_prepare.outputs.environment_fingerprint"),
