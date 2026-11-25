@@ -840,3 +840,42 @@ test('traces CommonJS module.exports require re-exports to their source module',
     &&x.originFile==='dependency.cjs'&&x.namespace&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces scope-owned aliases of the current CommonJS exports object',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-export-object-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'function assignedService() {}',
+   'module.exports = {};',
+   'const api = module.exports;',
+   'api.service = service;',
+   'Object.assign(api, { assigned: assignedService });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service, assigned } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='assigned'&&x.exportedLocal==='assignedService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not trace stale or shadowed aliases as current CommonJS exports',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-export-stale-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function staleService() {}',
+   'function currentService() {}',
+   'function shadowedService() {}',
+   'module.exports = {};',
+   'const api = module.exports;',
+   'module.exports = { current: currentService };',
+   'api.stale = staleService;',
+   'function mutate(api) { api.shadowed = shadowedService; }'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { stale, current, shadowed } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='current'&&x.exportedLocal==='currentService'&&!x.unresolvedExport));
+  for(const name of ['stale','shadowed'])assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported===name&&x.unresolvedExport),name);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
