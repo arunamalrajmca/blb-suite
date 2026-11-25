@@ -113,11 +113,17 @@ function collectExportsAndImports(ast,file){
   const recordObjectFromEntries=call=>{
     const entries=call.arguments[0];
     if(entries?.type!=='ArrayExpression'||entries.elements.some(entry=>entry?.type!=='ArrayExpression'
-      ||entry.elements.length!==2||entry.elements.some(element=>!element||element.type==='SpreadElement')))return false;
+      ||entry.elements.length!==2||entry.elements.some(element=>!element||element.type==='SpreadElement'))){
+      clearCommonJsExportOwners();
+      return false;
+    }
     const resolved=entries.elements.map(entry=>({key:staticPropertyKey(entry.elements[0]),value:entry.elements[1]}));
     // A dynamic key could overwrite any statically named property, so reject the
     // entire inference rather than report potentially stale export owners.
-    if(resolved.some(entry=>entry.key===null))return false;
+    if(resolved.some(entry=>entry.key===null)){
+      clearCommonJsExportOwners();
+      return false;
+    }
     for(const entry of resolved)setCommonJsExport(entry.key,entry.value.type==='Identifier'?entry.value.name:null);
     return true;
   };
@@ -130,6 +136,9 @@ function collectExportsAndImports(ast,file){
         activeAliases.add(declarator);
         recordObjectProperties(staticObject,exportsSnapshot,activeAliases);
         activeAliases.delete(declarator);
+      }else{
+        // An unknown assignment source may overwrite any previously inferred key.
+        clearCommonJsExportOwners();
       }
       return;
     }
@@ -163,6 +172,14 @@ function collectExportsAndImports(ast,file){
         recordObjectProperties(object.arguments[0],exportsSnapshot);
         return;
       }
+      // Unknown Object.* factories may produce an arbitrary set of own keys.
+      clearCommonJsExportOwners();
+      return;
+    }
+    if(object?.type==='CallExpression'){
+      // An opaque call used as an assignment source may overwrite any named export.
+      clearCommonJsExportOwners();
+      return;
     }
     if(object?.type!=='ObjectExpression')return;
     for(const property of object.properties||[]){
