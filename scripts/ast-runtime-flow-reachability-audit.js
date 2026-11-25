@@ -418,7 +418,7 @@ function analyzeFile(root, file) {
       const declaration = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier' ? parent : null;
       const className = node.id?.name || declaration?.id.name;
       if (!className) return;
-      if (!classDeclarationsByName.has(node.id.name)) classDeclarationsByName.set(node.id.name, []);
+      if (!classDeclarationsByName.has(className)) classDeclarationsByName.set(className, []);
       classDeclarationsByName.get(className).push(node);
     }
     if (isFunction(node)) {
