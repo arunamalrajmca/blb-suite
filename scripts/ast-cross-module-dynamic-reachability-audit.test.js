@@ -1490,7 +1490,7 @@ test('preserves non-enumerable Object.assign target properties through object wr
    'module.exports = Object.freeze(Object.assign(Object.create(null, {',
    '  service: { value: service }',
    '}), {}));'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./target.cjs');");
   const files=['target.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='target.cjs'&&x.imported==='service'
