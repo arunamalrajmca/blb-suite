@@ -767,7 +767,11 @@ function analyzeFile(root, file) {
       if (method) addEdge('function@' + method.loc.start.line, source,
         'async-iterator-protocol-callback', origin, 'class async iterator protocol method');
     }
-    if (methods.next) registerAsyncIteratorValues(methods.next, source, origin, true);
+    if (methods.iterator?.generator) {
+      registerAsyncIteratorValues(methods.iterator, source, origin);
+    } else if (methods.next) {
+      registerAsyncIteratorValues(methods.next, source, origin, true);
+    }
     return true;
   };
   const asyncIteratorStepValues = nextMethod => {
