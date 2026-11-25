@@ -1075,3 +1075,22 @@ test('traces direct identifier-returning getters in CommonJS object exports',()=
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='dynamic'&&x.exportedLocal!=='resolveService'));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('maps destructured CommonJS require bindings to named export owners',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-destructured-import-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'function stopService() {}',
+   'module.exports = { start: startService, stop: stopService };'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { start: begin, stop } = require('./service.cjs');",
+   'begin(); stop();'
+  ].join('\\n'));
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='start'&&x.local==='begin'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='stop'&&x.local==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
+  assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='default'&&x.local===null));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
