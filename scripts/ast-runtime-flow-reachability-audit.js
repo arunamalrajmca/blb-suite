@@ -1358,9 +1358,33 @@ function analyzeFile(root, file) {
           mapperArgument?.type === 'Identifier'
             ? resolveFunctionReference(mapperArgument) : null;
         let source = null, includeObjectValues = false, entries = false, role = null;
-        if (iterable?.type === 'Identifier') {
+        const resolvedIterables = resolveAsyncIterableExpressions(iterable);
+        const compatibleIterables = name === 'from' ? resolvedIterables.flatMap(candidate => {
+          if (candidate.iteratorKind === 'async') {
+            const syncIterator = candidate.iteratorObject && syncIteratorMethod(candidate.iteratorObject);
+            return syncIterator ? [{...candidate, iterator:syncIterator, iteratorKind:'sync'}] : [];
+          }
+          if (candidate.classNode && !classSyncIteratorMethods(candidate.classNode)) return [];
+          return [candidate];
+        }) : resolvedIterables;
+        if (compatibleIterables.length) {
+          source = 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          for (const iterableCandidate of compatibleIterables) {
+            if (iterableCandidate.array) {
+              addContainedReferences(iterableCandidate.array, source, 'array-from-source', node);
+              addObjectPropertySlots(iterableCandidate.array, source);
+            } else if (iterableCandidate.generator) registerAsyncIteratorValues(iterableCandidate.generator, source, iterable);
+            else if (iterableCandidate.classNode) {
+              if (name === 'from') registerClassSyncIterator(iterableCandidate.classNode, source, iterable);
+              else if (!registerClassAsyncIterator(iterableCandidate.classNode, source, iterable)) {
+                registerClassSyncIterator(iterableCandidate.classNode, source, iterable);
+              }
+            } else registerAsyncIteratorValues(iterableCandidate.iterator, source, iterable, false, iterableCandidate.iteratorObject);
+          }
+        } else if (iterable?.type === 'Identifier') {
           const asyncSource = asyncIterableSources.get(bindingId(iterable));
-          if (asyncSource) source = asyncSource;
+          if (asyncSource && name !== 'from') source = asyncSource;
+          else if (asyncSource && name === 'from') source = null;
           else {
             const iterator = iteratorSources.get(bindingId(iterable));
             if (iterator?.entries) source = null;
@@ -1368,31 +1392,6 @@ function analyzeFile(root, file) {
               source = iterator.container;
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
-          }
-        } else if (resolveAsyncIterableExpressions(iterable).length) {
-          const resolvedIterables = resolveAsyncIterableExpressions(iterable);
-          const asyncIterables = name === 'from' ? resolvedIterables.flatMap(candidate => {
-            if (candidate.iteratorKind === 'async') {
-              const syncIterator = candidate.iteratorObject && syncIteratorMethod(candidate.iteratorObject);
-              return syncIterator ? [{...candidate, iterator:syncIterator, iteratorKind:'sync'}] : [];
-            }
-            if (candidate.classNode && !classSyncIteratorMethods(candidate.classNode)) return [];
-            return [candidate];
-          }) : resolvedIterables;
-          if (asyncIterables.length) {
-            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-            for (const asyncIterable of asyncIterables) {
-              if (asyncIterable.array) {
-                addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
-                addObjectPropertySlots(asyncIterable.array, source);
-              } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
-              else if (asyncIterable.classNode) {
-                if (name === 'from') registerClassSyncIterator(asyncIterable.classNode, source, iterable);
-                else if (!registerClassAsyncIterator(asyncIterable.classNode, source, iterable)) {
-                  registerClassSyncIterator(asyncIterable.classNode, source, iterable);
-                }
-              } else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable, false, asyncIterable.iteratorObject);
-            }
           }
         } else if (classForInstanceExpression(iterable)) {
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
