@@ -39,41 +39,10 @@ function collectExportsAndImports(ast,file){
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed&&member.property.type==='Literal'?String(member.property.value):(!member.computed?member.property.name:null))
     :null;
-  const isNativeCommonJsExportsTarget=node=>{
+  const isCommonJsExportsTarget=node=>{
     if(node?.type==='Identifier'&&node.name==='exports')return isUnboundGlobal(node);
     return node?.type==='MemberExpression'&&node.object.type==='Identifier'
       &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
-  };
-  // A const alias is safe to follow because its binding cannot be reassigned.
-  // Resolve references to eslint-scope variables, not names, so nested shadowing
-  // cannot accidentally inherit another scope's CommonJS alias.
-  const moduleExportsReassignments=[],exportsReassignments=[];
-  visit(ast,node=>{
-    if(node.type!=='AssignmentExpression'||node.operator!=='='||node.left.type!=='MemberExpression')return;
-    if(node.left.object.type==='Identifier'&&node.left.object.name==='module'
-      &&isUnboundGlobal(node.left.object)&&memberName(node.left)==='exports')moduleExportsReassignments.push(node.start);
-    if(node.left.object.type==='Identifier'&&node.left.object.name==='exports'
-      &&isUnboundGlobal(node.left.object))exportsReassignments.push(node.start);
-  });
-  const commonJsAliasVariables=new Set();
-  visit(ast,(node,parent)=>{
-    if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'
-      ||parent?.type!=='VariableDeclaration'||parent.kind!=='const'
-      ||!isNativeCommonJsExportsTarget(node.init))return;
-    const variable=scopeManager.scopes.flatMap(scope=>scope.variables)
-      .find(candidate=>candidate.identifiers.includes(node.id));
-    if(!variable)return;
-    const aliasesExports=node.init.type==='Identifier';
-    const detachedBefore=aliasesExports&&exportsReassignments.some(position=>position<node.init.start);
-    const detachedAfter=moduleExportsReassignments.some(position=>position>node.init.end);
-    if(!detachedBefore&&!detachedAfter)commonJsAliasVariables.add(variable);
-  });
-  const isCommonJsExportsTarget=node=>{
-    if(isNativeCommonJsExportsTarget(node))return true;
-    if(node?.type!=='Identifier')return false;
-    return scopeManager.scopes.some(scope=>scope.references.some(reference=>
-      reference.identifier===node&&reference.resolved
-      &&commonJsAliasVariables.has(reference.resolved)));
   };
   const recordObjectProperties=object=>{
     if(object?.type!=='ObjectExpression')return;
