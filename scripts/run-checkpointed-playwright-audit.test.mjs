@@ -27,6 +27,18 @@ test('shard manifests are bound to exact source, fingerprint, inventory, order, 
   const manifest = createShardManifest(expected);
   assert.equal(isCompatibleShardManifest(manifest, expected), true);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, sourceSha: 'c'.repeat(40) }), false);
+  assert.equal(isCompatibleShardManifest(manifest, {
+    ...expected,
+    sourceSha: 'c'.repeat(40),
+    fingerprint: 'd'.repeat(64),
+    changedFiles: ['tests/browser/audit.spec.js']
+  }), true);
+  assert.equal(isCompatibleShardManifest(manifest, {
+    ...expected,
+    sourceSha: 'c'.repeat(40),
+    fingerprint: 'd'.repeat(64),
+    changedFiles: ['extension/background.js']
+  }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, fingerprint: 'd'.repeat(64) }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, tests: [...entries].reverse() }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, shardCount: 3 }), false);
