@@ -1459,7 +1459,7 @@ test('traces values and cleanup methods on custom async iterator protocol object
     'async function run() {',
     '  for await (const handler of iterable) handler();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'handler@12' && edge.kind === 'container-value-read'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@5' &&
@@ -1482,7 +1482,7 @@ test('traces a custom async iterator returned through a local identifier', () =>
     'async function run() {',
     '  for await (const handler of iterable) handler();',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'handler@9' && edge.kind === 'container-value-read'));
 });
