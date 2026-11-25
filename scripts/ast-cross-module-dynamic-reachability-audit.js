@@ -73,11 +73,16 @@ function collectExportsAndImports(ast,file){
   };
   const descriptorEnumerableState=descriptor=>{
     if(descriptor?.type!=='ObjectExpression')return null;
-    const enumerableProperties=(descriptor.properties||[]).filter(property=>property.type==='Property'
-      &&(property.computed?staticPropertyKey(property.key):property.key.name??property.key.value)==='enumerable');
-    if(!enumerableProperties.length)return false;
-    const value=enumerableProperties[enumerableProperties.length-1].value;
-    return value.type==='Literal'&&typeof value.value==='boolean'?value.value:null;
+    let state=false;
+    for(const property of descriptor.properties||[]){
+      if(property.type==='SpreadElement'){state=null;continue;}
+      if(property.type!=='Property')continue;
+      const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+      if(key===null||key===undefined){state=null;continue;}
+      if(key!=='enumerable')continue;
+      state=property.value.type==='Literal'&&typeof property.value.value==='boolean'?property.value.value:null;
+    }
+    return state;
   };
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed?staticPropertyKey(member.property):member.property.name)
