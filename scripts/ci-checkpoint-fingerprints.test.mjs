@@ -13,7 +13,7 @@ test('checkpoint fingerprints are deterministic and scoped to committed tree ent
     { path: 'tests/browser/example.spec.js', mode: '100644', sha: 'c'.repeat(40) },
     { path: 'README.md', mode: '100644', sha: 'd'.repeat(40) }
   ];
-  const selector = entry => entry.path.startsWith('extension/') || entry.path.startsWith('tests/selector/');
+  const selector = file => file.startsWith('extension/') || file.startsWith('tests/selector/');
   assert.equal(fingerprintTreeEntries(entries, selector), fingerprintTreeEntries([...entries].reverse(), selector));
   assert.notEqual(
     fingerprintTreeEntries(entries, selector),
@@ -23,7 +23,7 @@ test('checkpoint fingerprints are deterministic and scoped to committed tree ent
     fingerprintTreeEntries(entries, selector),
     fingerprintTreeEntries(entries.map(entry => entry.path === 'extension/background.js' ? { ...entry, mode: '100755' } : entry), selector)
   );
-  assert.throws(() => fingerprintTreeEntries(entries, entry => entry.path === 'missing'), /No tracked source files/);
+  assert.throws(() => fingerprintTreeEntries(entries, file => file === 'missing'), /No tracked source files/);
 });
 
 test('working-tree mutations do not change fingerprints for the same committed tree', () => {
