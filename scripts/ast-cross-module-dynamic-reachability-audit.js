@@ -77,25 +77,27 @@ function collectExportsAndImports(ast,file){
     if(node?.type==='Identifier'&&isCurrentCommonJsExportAlias(node))return true;
     return isModuleExportsReference(node);
   };
-  const recordObjectProperties=object=>{
+  const recordObjectProperties=(object,exportsSnapshot=null)=>{
     if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
       &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
       &&isUnboundGlobal(object.callee.object)){
       const method=memberName(object.callee);
       if(method==='assign'){
-        for(const argument of object.arguments)recordObjectProperties(argument);
+        for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot);
         return;
       }
       if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method)){
-        recordObjectProperties(object.arguments[0]);
+        recordObjectProperties(object.arguments[0],exportsSnapshot);
         return;
       }
     }
     if(object?.type!=='ObjectExpression')return;
     for(const property of object.properties||[]){
       if(property.type==='SpreadElement'){
-        // Only recurse into literal spread sources; identifier spreads require alias/dataflow proof.
-        recordObjectProperties(property.argument);
+        // Literal spreads and a proven current CommonJS exports snapshot are safe; other identifiers remain unknown.
+        if(exportsSnapshot!==null&&property.argument.type==='Identifier'&&property.argument.name==='exports'&&isUnboundGlobal(property.argument)){
+          for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
+        }else recordObjectProperties(property.argument,exportsSnapshot);
         continue;
       }
       if(property.type!=='Property'||property.kind!=='init')continue;
@@ -105,7 +107,7 @@ function collectExportsAndImports(ast,file){
     }
   };
   const recordCommonJsAssignmentValue=(value,exportsSnapshot=null)=>{
-    if(value?.type==='ObjectExpression'){recordObjectProperties(value);return;}
+    if(value?.type==='ObjectExpression'){recordObjectProperties(value,exportsSnapshot);return;}
     if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
       ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
       ||!isUnboundGlobal(value.callee.object))return;
@@ -114,7 +116,7 @@ function collectExportsAndImports(ast,file){
       for(const argument of value.arguments){
         if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
           for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
-        }else recordObjectProperties(argument);
+        }else recordObjectProperties(argument,exportsSnapshot);
       }
       return;
     }
@@ -204,11 +206,14 @@ function collectExportsAndImports(ast,file){
             ||(assignmentValue.arguments[0].type==='Identifier'&&assignmentValue.arguments[0].name==='exports'
               &&isUnboundGlobal(assignmentValue.arguments[0])&&!exportsAliasDetached)
             ||(assignmentValue.arguments[0].type==='Identifier'&&isCurrentCommonJsExportAlias(assignmentValue.arguments[0],n)));
-        const copiesCurrentExports=assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
+        const copiesCurrentExports=(assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
           &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
           &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
           &&assignmentValue.arguments.some(argument=>argument.type==='Identifier'&&argument.name==='exports'
-            &&isUnboundGlobal(argument)&&!exportsAliasDetached);
+            &&isUnboundGlobal(argument)&&!exportsAliasDetached))
+          ||(assignmentValue.type==='ObjectExpression'&&assignmentValue.properties.some(property=>property.type==='SpreadElement'
+            &&property.argument.type==='Identifier'&&property.argument.name==='exports'
+            &&isUnboundGlobal(property.argument)&&!exportsAliasDetached));
         const exportsSnapshot=copiesCurrentExports?[...exports.entries()].filter(([name])=>name!=='default'):null;
         const isSelfAssignment=isDirectSelfAssignment||isCurrentExportsObjectIdentity||isAssignMutation;
         if(!isSelfAssignment){
