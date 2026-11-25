@@ -69,9 +69,10 @@ function collectExportsAndImports(ast,file){
   const resolveStaticObjectSpread=identifier=>{
     if(identifier?.type!=='Identifier')return null;
     const variable=resolveVariable(identifier);
-    const declarator=variable?.defs?.find(item=>item.type==='Variable')?.node;
+    const definition=variable?.defs?.find(item=>item.type==='Variable');
+    const declarator=definition?.node;
     if(declarator?.type!=='VariableDeclarator'||declarator.init?.type!=='ObjectExpression'
-      ||declarator.parent?.type==='VariableDeclaration'&&declarator.parent.kind!=='const')return null;
+      ||definition.parent?.type!=='VariableDeclaration'||definition.parent.kind!=='const')return null;
     const references=(variable.references||[]).filter(reference=>reference.identifier!==declarator.id);
     // The binding must be read only at this spread site; any additional use could
     // mutate the object or make its runtime contents differ from the initializer.
