@@ -821,3 +821,22 @@ test('resolves literal object spreads but leaves identifier spreads unproven',()
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces CommonJS module.exports require re-exports to their source module',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-require-reexport-'));
+ try{
+  fs.writeFileSync(path.join(root,'dependency.cjs'),[
+   'function service() {}',
+   'module.exports = { service };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'barrel.cjs'),"module.exports = require('./dependency.cjs');");
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import api from './barrel.cjs';",
+   'api.service();'
+  ].join('\\n'));
+  const files=['dependency.cjs','barrel.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='barrel.cjs'&&x.imported==='default'
+    &&x.originFile==='dependency.cjs'&&x.namespace&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
