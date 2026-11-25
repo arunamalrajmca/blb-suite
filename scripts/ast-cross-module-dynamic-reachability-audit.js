@@ -169,6 +169,9 @@ function collectExportsAndImports(ast,file){
       }
       if(method==='fromEntries'){recordObjectFromEntries(object);return;}
       if(method==='defineProperty'||method==='defineProperties'){
+        // These APIs mutate and return their first argument; retain its existing
+        // own properties before applying the descriptor changes.
+        recordObjectProperties(object.arguments[0],exportsSnapshot,new Set(),enumerableOnly);
         recordObjectDefineProperties(object,enumerableOnly);
         return;
       }
