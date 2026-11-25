@@ -1395,6 +1395,20 @@ test('propagates delegated yields from an instantiated class async-generator met
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
 
+test('propagates delegated yields through an async factory returning a generator', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'async function* base() { yield cleanup; }',
+    'async function makeSource() { return base(); }',
+    'async function* tasks() { yield* await makeSource(); }',
+    'async function run() {',
+    '  await Array.fromAsync(tasks(), callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
+});
+
 test('propagates values yielded by a custom Symbol.asyncIterator method', () => {
   const result = audit([
     'const cleanup = () => work();',
