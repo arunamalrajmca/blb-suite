@@ -640,6 +640,15 @@ function collectExportsAndImports(ast,file){
         else{exports.delete(key);commonJsExportNames.delete(key);}
       }
     }
+    if(n.type==='CallExpression'&&!nativeCall&&!reflectCall){
+      const possibleInfo=nativeMethodInfo(n);
+      const method=possibleInfo?.method??(n.callee.type==='MemberExpression'?memberName(n.callee):null);
+      const target=n.arguments[0];
+      const liveTarget=isCommonJsExportsTarget(target)
+        &&!(target?.type==='Identifier'&&target.name==='exports'&&exportsAliasDetached);
+      if(liveTarget&&['assign','defineProperty','defineProperties','set','deleteProperty'].includes(method))
+        clearCommonJsExportOwners();
+    }
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
       for(const s of n.specifiers||[]){if(n.source)imports.push({source:n.source.value,imported:s.local.name||s.local.value,exported:s.exported.name||s.exported.value,reexport:true});else exports.set(s.exported.name||s.exported.value,s.local.name||s.local.value);}

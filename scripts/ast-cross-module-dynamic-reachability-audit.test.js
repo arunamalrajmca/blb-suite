@@ -1950,28 +1950,38 @@ test('traces immutable native Object and Reflect aliases but rejects shadowed or
    "write(module.exports, 'service', service);"
   ].join('\n'));
   fs.writeFileSync(path.join(root,'shadowed-object.cjs'),[
+   'function original() {}',
    'function service() {}',
+   'module.exports.service = original;',
    'const Object = { assign() {} };',
    'Object.assign(module.exports, { service });'
   ].join('\n'));
   fs.writeFileSync(path.join(root,'shadowed-reflect.cjs'),[
+   'function original() {}',
    'function service() {}',
+   'module.exports.service = original;',
    'const Reflect = { set() {} };',
    "Reflect.set(module.exports, 'service', service);"
   ].join('\n'));
   fs.writeFileSync(path.join(root,'patched-object.cjs'),[
+   'function original() {}',
    'function service() {}',
+   'module.exports.service = original;',
    'Object.assign = function customAssign() {};',
    'Object.assign(module.exports, { service });'
   ].join('\n'));
   fs.writeFileSync(path.join(root,'patched-alias.cjs'),[
+   'function original() {}',
    'function service() {}',
+   'module.exports.service = original;',
    'const assign = Object.assign;',
    'Object.assign = function customAssign() {};',
    'assign(module.exports, { service });'
   ].join('\n'));
   fs.writeFileSync(path.join(root,'reassigned-object-alias.cjs'),[
+   'function original() {}',
    'function service() {}',
+   'module.exports.service = original;',
    'let NativeObject = Object;',
    'NativeObject = customObject;',
    'NativeObject.assign(module.exports, { service });'
