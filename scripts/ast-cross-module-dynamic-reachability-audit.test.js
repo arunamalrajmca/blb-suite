@@ -556,3 +556,35 @@ test('does not treat a shadowed Object.assign as a CommonJS export factory',()=>
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves named exports installed through Object.defineProperties',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-define-properties-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'function stopService() {}',
+   'Object.defineProperties(module.exports, {',
+   '  start: { enumerable: true, value: startService },',
+   "  ['stop']: { configurable: true, value: stopService }",
+   '});'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { start, stop } from './service.cjs'; start(); stop();");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='start'&&x.exportedLocal==='startService'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='stop'&&x.exportedLocal==='stopService'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('keeps dynamic Object.defineProperties keys unresolved',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-define-properties-dynamic-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function startService() {}',
+   'Object.defineProperties(module.exports, { [runtimeName]: { value: startService } });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { startService } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='startService'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
