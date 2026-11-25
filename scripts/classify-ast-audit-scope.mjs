@@ -51,18 +51,20 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
   return all.filter(name => selected.has(name));
 }
 
-const base = process.argv[2];
-if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
-  console.error("Usage: node scripts/classify-ast-audit-scope.mjs <base-sha>");
-  process.exit(2);
+if (process.argv[1]?.endsWith("classify-ast-audit-scope.mjs")) {
+  const base = process.argv[2];
+  if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
+    console.error("Usage: node scripts/classify-ast-audit-scope.mjs <base-sha>");
+    process.exit(2);
+  }
+  const changed = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...HEAD`], { encoding: "utf8" })
+    .split("\n").filter(Boolean);
+  const selected = selectAstAudits(changed);
+  const output = process.env.GITHUB_OUTPUT;
+  if (output) {
+    for (const name of all) appendFileSync(output, `run_${name}=${selected.includes(name)}\n`);
+    appendFileSync(output, `run_any=${selected.length > 0}\n`);
+  }
+  console.log(`changed_files=${changed.length}`);
+  console.log(`selected_ast_audits=${selected.length ? selected.join(",") : "none"}`);
 }
-const changed = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...HEAD`], { encoding: "utf8" })
-  .split("\n").filter(Boolean);
-const selected = selectAstAudits(changed);
-const output = process.env.GITHUB_OUTPUT;
-if (output) {
-  for (const name of all) appendFileSync(output, `run_${name}=${selected.includes(name)}\n`);
-  appendFileSync(output, `run_any=${selected.length > 0}\n`);
-}
-console.log(`changed_files=${changed.length}`);
-console.log(`selected_ast_audits=${selected.length ? selected.join(",") : "none"}`);
