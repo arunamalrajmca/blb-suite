@@ -1394,14 +1394,19 @@ function analyzeFile(root, file) {
             } else source = bindingId(iterable);
           }
         } else if (classForInstanceExpression(iterable)) {
-          source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-          if (!registerClassAsyncIterator(classForInstanceExpression(iterable), source, iterable)) {
-            registerClassSyncIterator(classForInstanceExpression(iterable), source, iterable);
-          }
+          const classNode = classForInstanceExpression(iterable);
+          const candidateSource = 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+          const registered = name === 'from'
+            ? registerClassSyncIterator(classNode, candidateSource, iterable)
+            : registerClassAsyncIterator(classNode, candidateSource, iterable) ||
+              registerClassSyncIterator(classNode, candidateSource, iterable);
+          if (registered) source = candidateSource;
         } else if (iterable?.type === 'ObjectExpression') {
-          const iterator = asyncIteratorMethod(iterable);
+          const iterator = name === 'from'
+            ? syncIteratorMethod(iterable)
+            : asyncIteratorMethod(iterable) || syncIteratorMethod(iterable);
           if (iterator) {
-            source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
+            source = 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
             registerAsyncIteratorValues(iterator, source, iterable, false, iterable);
           }
         } else if (iterable?.type === 'ArrayExpression') {
