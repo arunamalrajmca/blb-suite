@@ -33,6 +33,28 @@ function literalString(n,file,pathIdentifiers=null) {
 function resolveLocal(from,spec,files){if(!spec||(!path.isAbsolute(spec)&&!spec.startsWith('.')))return null;const b=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
 function collectExportsAndImports(ast,file){
   const exports=new Map(),imports=[],pathIdentifiers=new Set();
+  const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
+  const isUnboundGlobal=node=>!!node&&node.type==='Identifier'
+    &&(scopeManager.globalScope?.through||[]).some(reference=>reference.identifier===node);
+  const memberName=member=>member?.type==='MemberExpression'
+    ?(member.computed&&member.property.type==='Literal'?String(member.property.value):(!member.computed?member.property.name:null))
+    :null;
+  const isCommonJsExportsTarget=node=>{
+    if(node?.type==='Identifier'&&node.name==='exports')return isUnboundGlobal(node);
+    return node?.type==='MemberExpression'&&node.object.type==='Identifier'
+      &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
+  };
+  const recordObjectProperties=object=>{
+    if(object?.type!=='ObjectExpression')return;
+    for(const property of object.properties||[]){
+      if(property.type!=='Property'||property.kind!=='init')continue;
+      const key=property.computed
+        ?(property.key.type==='Literal'?String(property.key.value):null)
+        :(property.key.name??property.key.value);
+      if(key===null||key===undefined)continue;
+      exports.set(String(key),property.value.type==='Identifier'?property.value.name:null);
+    }
+  };
   visit(ast,n=>{
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
       for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(specifier.local.name);
@@ -43,6 +65,23 @@ function collectExportsAndImports(ast,file){
     if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string')imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true});
+    if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
+      &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
+      &&isUnboundGlobal(n.callee.object)){
+      const method=memberName(n.callee);
+      if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])){
+        for(const argument of n.arguments.slice(1))recordObjectProperties(argument);
+      }
+      if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
+        &&n.arguments[1]?.type==='Literal'&&typeof n.arguments[1].value==='string'){
+        const descriptor=n.arguments[2];
+        const value=descriptor?.type==='ObjectExpression'
+          ?descriptor.properties.find(property=>property.type==='Property'&&!property.computed
+            &&property.key.type==='Identifier'&&property.key.name==='value')?.value
+          :null;
+        exports.set(n.arguments[1].value,value?.type==='Identifier'?value.name:null);
+      }
+    }
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
       for(const s of n.specifiers||[]){if(n.source)imports.push({source:n.source.value,imported:s.local.name||s.local.value,exported:s.exported.name||s.exported.value,reexport:true});else exports.set(s.exported.name||s.exported.value,s.local.name||s.local.value);}
@@ -50,9 +89,6 @@ function collectExportsAndImports(ast,file){
     if(n.type==='ExportDefaultDeclaration')exports.set('default',n.declaration.type==='Identifier'?n.declaration.name:((n.declaration.type==='FunctionDeclaration'||n.declaration.type==='ClassDeclaration')&&n.declaration.id?n.declaration.id.name:null));
     if(n.type==='ExportAllDeclaration'&&n.source){if(n.exported)imports.push({source:n.source.value,imported:'*',exported:n.exported.name||n.exported.value,reexportNamespace:true});else imports.push({source:n.source.value,reexportAll:true});}
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='MemberExpression'){
-      const memberName=member=>member?.type==='MemberExpression'
-        ?(member.computed&&member.property.type==='Literal'?String(member.property.value):(!member.computed?member.property.name:null))
-        :null;
       const obj=n.left.object.type==='Identifier'?n.left.object.name:null;
       const key=memberName(n.left);
       const moduleExportsObject=n.left.object.type==='MemberExpression'
@@ -60,7 +96,7 @@ function collectExportsAndImports(ast,file){
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'){
         if(n.right.type==='Identifier')exports.set('default',n.right.name);
-        if(n.right.type==='ObjectExpression')for(const p of n.right.properties)if(p.type==='Property')exports.set(String(p.key.name||p.key.value),p.value.type==='Identifier'?p.value.name:null);
+        recordObjectProperties(n.right);
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
