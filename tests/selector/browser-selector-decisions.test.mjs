@@ -1335,11 +1335,16 @@ test("full audit delegates performance and physical-input tests to workflows tri
     "test, CI, workflow, and developer-tooling changes alone must not trigger end-user performance runs");
   assert.ok(!performancePathFilters.includes(".github/workflows/manual-full-test-audit.yml"),
     "full-audit workflow changes alone must not trigger measured performance");
+  const productionImpact = readFileSync(
+    new URL("../../scripts/detect-end-user-production-changes.mjs", import.meta.url),
+    "utf8"
+  );
   assert.ok(audit.includes("Detect end-user production changes for performance qualification") &&
-    audit.includes("has_production_changes=true") &&
-    audit.includes("has_production_changes=false") &&
+    audit.includes('node scripts/detect-end-user-production-changes.mjs "$base_ref"') &&
+    productionImpact.includes("has_production_changes=true") &&
+    productionImpact.includes("has_production_changes=false") &&
     audit.includes("SKIPPED — no relevant production changes"),
-    "the full-audit summary must explicitly skip performance when shipped production code is unchanged");
+    "the full-audit summary must use the tested production-impact detector and explicitly skip Performance when shipped production code is unchanged");
   assert.ok(reference.includes("!contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')"),
     "the References workflow must suppress its browser matrix when the full audit owns the suite");
   assert.ok(performance.includes("'ci-full-test-audit'"),
