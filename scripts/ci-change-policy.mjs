@@ -4,11 +4,13 @@
  */
 
 function isAstAuditToolingPath(path) {
-  return /^scripts\/ast-(?:symbol-reference|repository-reachability|owner-aware-node-reachability|cross-module-dynamic-reachability|runtime-flow-reachability|unified-dynamic-runtime-reachability)-audit(?:\.test)?\.js$/i.test(path);
+  return /^scripts\/ast-(?:symbol-reference|repository-reachability|owner-aware-node-reachability|cross-module-dynamic-reachability|runtime-flow-reachability|unified-dynamic-runtime-reachability|computed-property-reachability)-audit(?:\.test)?\.js$/i.test(path);
 }
 
 export function isNonRuntimePath(path) {
   return isAstAuditToolingPath(path)
+    || path === "scripts/classify-ast-audit-scope.mjs"
+    || path === "scripts/classify-ast-audit-scope.test.mjs"
     || /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
     || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
     || path === "scripts/package-release.sh"
@@ -16,6 +18,8 @@ export function isNonRuntimePath(path) {
     || path === "scripts/validate-build.js"
     || path === "scripts/run-validation-tests.js"
     || path === "scripts/validation-test-manifest.json"
+    || path === "scripts/test-suite-inventory.json"
+    || path === "scripts/test-suite-inventory.json"
     || path === "regression-suite/Run-BLB-Regression.ps1"
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
@@ -32,6 +36,8 @@ export function requiresPackageValidation(path) {
     || path.startsWith("tests/selector/")
     || path.startsWith("regression-suite/")
     || path === "scripts/classify-ci-changes.mjs"
+    || path === "scripts/classify-ast-audit-scope.mjs"
+    || path === "scripts/classify-ast-audit-scope.test.mjs"
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/ci-routing-registry.mjs"

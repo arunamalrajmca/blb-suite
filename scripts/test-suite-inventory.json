@@ -244,6 +244,13 @@
           "requiredText": "always_run"
         }
       ]
+    },
+    {
+      "id": "ci-ast-audit-scope-selector-tests",
+      "pattern": "scripts/classify-ast-audit-scope.test.mjs",
+      "owner": ".github/workflows/browser-tests.yml",
+      "requiredText": "node --test scripts/classify-ast-audit-scope.test.mjs",
+      "executionEnvironment": "node"
     }
   ],
   "manualOnly": [
