@@ -228,7 +228,7 @@ jobs:
             fi
       - name: Restore production manifest before package checks
         if: always()
-        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
+        run: if [ -f "$RUNNER_TEMP/blb-manifest-original.json" ]; then cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json; fi
 
       - name: Run KJV corpus and search-index integrity tests
         id: corpus
