@@ -1444,6 +1444,68 @@ test('preserves async iterator yielded values through an aliased iterable in for
     edge.from === 'function@1' && edge.to === 'selected@6'));
 });
 
+test('traces values and cleanup methods on custom async iterator protocol objects', () => {
+  const result = audit([
+    'const cleanup = () => start();',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() {',
+    '    return {',
+    '      async next() { return { value: cleanup, done: false }; },',
+    '      async return() { return { done: true }; },',
+    '      async throw(error) { throw error; }',
+    '    };',
+    '  }',
+    '};',
+    'async function run() {',
+    '  for await (const handler of iterable) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@12' && edge.kind === 'container-value-read'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@5' &&
+    edge.kind === 'async-iterator-protocol-callback'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@6' &&
+    edge.kind === 'async-iterator-protocol-callback'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@7' &&
+    edge.kind === 'async-iterator-protocol-callback'));
+});
+
+test('traces custom async iterator next result values through awaited step.value reads', () => {
+  const result = audit([
+    'const cleanup = () => start();',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() {',
+    '    return { async next() { return { value: cleanup, done: false }; } };',
+    '  }',
+    '};',
+    'async function run() {',
+    '  const iterator = iterable[Symbol.asyncIterator]();',
+    '  const step = await iterator.next();',
+    '  const selected = step.value;',
+    '  selected();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@10'));
+});
+
+test('traces a custom async iterator returned through a local identifier', () => {
+  const result = audit([
+    'const cleanup = () => start();',
+    'const iterator = {',
+    '  async next() { return { value: cleanup, done: false }; }',
+    '};',
+    'const iterable = {',
+    '  [Symbol.asyncIterator]() { return iterator; }',
+    '};',
+    'async function run() {',
+    '  for await (const handler of iterable) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@9' && edge.kind === 'container-value-read'));
+});
+
 test('binds stored callback values to Map.groupBy mapper parameters', () => {
   const result = audit([
     'const cleanup = () => work();',
