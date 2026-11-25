@@ -61,7 +61,7 @@ export function isCompatibleShardManifest(candidate, expected) {
     if (!crossCommit && candidate?.fingerprint !== base.fingerprint) return false;
     if (crossCommit) {
       const referencedSpecs = new Set(base.shards.flatMap(shard => shard.tests.map(entry =>
-        entry.match(/(?:^|›\\s*)(tests\\/browser\\/[^:]+\\.spec\\.js)(?=:\\d+)/)?.[1]
+        entry.match(/(?:^|›\s*)(tests\/browser\/[^:]+\.spec\.js)(?=:\d+)/)?.[1]
       ).filter(Boolean)));
       if (changedFiles.some(file => !referencedSpecs.has(file))) return false;
     }
@@ -111,7 +111,7 @@ function readManifest(directory, expected) {
     if (candidate.sourceSha !== expected.sourceSha) {
       for (const shard of manifest.shards) {
         const shardSpecs = new Set(shard.tests.map(entry =>
-          entry.match(/(?:^|›\\s*)(tests\\/browser\\/[^:]+\\.spec\\.js)(?=:\\d+)/)?.[1]
+          entry.match(/(?:^|›\s*)(tests\/browser\/[^:]+\.spec\.js)(?=:\d+)/)?.[1]
         ).filter(Boolean));
         if (compatibleExpected.changedFiles.some(file => shardSpecs.has(file))) {
           shard.status = 'pending';
