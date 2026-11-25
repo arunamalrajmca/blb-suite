@@ -523,6 +523,45 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
     return objectKey && objectMethodDefsByFile.get(file)?.get(objectKey + '::' + property) || null;
   };
+  // Resolve callback factories whose direct return values are functions.
+  // This covers factories imported from another module as well as local ones,
+  // while refusing to guess when distinct return paths produce different owners.
+  const resolveReturnedCallbackOwner = (file, expression, seen = new Set()) => {
+    if (!expression) return null;
+    if (expression.type === 'Identifier') return resolveFunctionOwner(file, expression);
+    if (expression.type === 'ArrowFunctionExpression' || expression.type === 'FunctionExpression') {
+      return { file, key: 'function@' + expression.loc.start.line, node: expression };
+    }
+    if (expression.type !== 'CallExpression') return null;
+    const target = resolveCallableOwner(file, expression.callee);
+    if (!target) return null;
+    const identity = target.file + '::' + target.key;
+    if (seen.has(identity)) return null;
+    const nextSeen = new Set(seen);
+    nextSeen.add(identity);
+    const returned = [];
+    const collectReturns = (node, root = false) => {
+      if (!node || typeof node !== 'object') return;
+      if (!root && ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+      if (node.type === 'ReturnStatement' && node.argument) {
+        const owner = resolveReturnedCallbackOwner(target.file, node.argument, nextSeen);
+        if (owner) returned.push(owner);
+        else returned.push({ unresolved: true });
+        return;
+      }
+      for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+        if (Array.isArray(value)) value.forEach(child => collectReturns(child));
+        else if (value && typeof value.type === 'string') collectReturns(value);
+      }
+    };
+    if (target.node.body?.type === 'BlockStatement') collectReturns(target.node.body, true);
+    else if (target.node.body) returned.push(resolveReturnedCallbackOwner(target.file, target.node.body, nextSeen) || { unresolved: true });
+    if (!returned.length || returned.some(owner => owner.unresolved)) return null;
+    const unique = new Map(returned.map(owner => [owner.file + '::' + owner.key, owner]));
+    return unique.size === 1 ? [...unique.values()][0] : null;
+  };
+
   const callbackParameterOwners = new Map();
   const callbackParameterFlows = new Map();
   const parameterSlots = new Set();
@@ -732,6 +771,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
         callbackName = '[inline callback]';
         callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
         certainty = 'resolved-inline-callback';
+      } else if (callback?.type === 'CallExpression') {
+        const owner = resolveReturnedCallbackOwner(file, callback);
+        if (owner && !owner.unresolved) {
+          callbackName = '[factory callback]';
+          callbackTarget = rel(root, owner.file) + '::' + owner.key;
+          certainty = 'resolved-factory-return';
+        } else {
+          callbackName = '[factory callback]';
+        }
       }
       sites.push({
         file: rel(root, file), line, kind: 'external-callback-registration',
