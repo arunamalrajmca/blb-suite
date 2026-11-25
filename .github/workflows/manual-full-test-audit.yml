@@ -321,6 +321,15 @@ jobs:
       # Each shard runs in its own step and is uploaded to an immutable cache key
       # immediately afterward. A later shard failure or job interruption therefore
       # leaves the newest cache containing every earlier shard checkpoint.
+      - name: Restore browser-matrix performance checkpoint
+        id: browser_matrix_restore
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          restore-keys: |
+            blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-
+
       - name: Restore dedicated browser-shard checkpoint
         id: browser_shard_restore
         uses: actions/cache/restore@v5
@@ -503,6 +512,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
+      - name: Save browser-matrix performance checkpoint after shard 1/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Run browser shard 2/8
         id: browser_shard_2
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -515,6 +531,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
+      - name: Save browser-matrix performance checkpoint after shard 2/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Run browser shard 3/8
         id: browser_shard_3
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -527,6 +550,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
+      - name: Save browser-matrix performance checkpoint after shard 3/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Run browser shard 4/8
         id: browser_shard_4
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -539,6 +569,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
+      - name: Save browser-matrix performance checkpoint after shard 4/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Run browser shard 5/8
         id: browser_shard_5
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -551,6 +588,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
+      - name: Save browser-matrix performance checkpoint after shard 5/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Run browser shard 6/8
         id: browser_shard_6
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -563,6 +607,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
+      - name: Save browser-matrix performance checkpoint after shard 6/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Run browser shard 7/8
         id: browser_shard_7
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -575,6 +626,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
+      - name: Save browser-matrix performance checkpoint after shard 7/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Run browser shard 8/8
         id: browser_shard_8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -587,6 +645,13 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+      - name: Save browser-matrix performance checkpoint after shard 8/8
+        if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix
+          key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Validate all browser shard checkpoints
         id: browser
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
