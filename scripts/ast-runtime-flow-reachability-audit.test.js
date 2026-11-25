@@ -1612,6 +1612,49 @@ test('traces custom async iterable class instances returned by a factory', () =>
     edge.to === 'callback@7' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces self-returning object Symbol.iterator protocols in Array.fromAsync', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = {',
+    '  [Symbol.iterator]() { return this; },',
+    '  next() { return { value: callback, done: false }; }',
+    '};',
+    'async function run() {',
+    '  await Array.fromAsync(iterable, handler => handler());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@7' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces class sync-generator iterables through Array.fromAsync', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class CallbackIterable {',
+    '  *[Symbol.iterator]() { yield callback; }',
+    '}',
+    'async function run() {',
+    '  await Array.fromAsync(new CallbackIterable(), handler => handler());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@6' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces factory-returned sync iterables through for-await loops', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'function makeIterable() {',
+    '  return { *[Symbol.iterator]() { yield callback; } };',
+    '}',
+    'async function run() {',
+    '  for await (const handler of makeIterable()) handler();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@6' && edge.kind === 'container-value-read'));
+});
+
 test('traces object async iterators that return this from Symbol.asyncIterator', () => {
   const result = audit([
     'const callback = () => start();',
