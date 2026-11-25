@@ -414,9 +414,12 @@ function analyzeFile(root, file) {
   const functionDeclarationsByName = new Map();
   const classDeclarationsByName = new Map();
   visit(ast, (node, parent) => {
-    if (node.type === 'ClassDeclaration' && node.id) {
-      if (!classDeclarationsByName.has(node.id.name)) classDeclarationsByName.set(node.id.name, []);
-      classDeclarationsByName.get(node.id.name).push(node);
+    if ((node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && (node.id || parent?.type === 'VariableDeclarator')) {
+      const declaration = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier' ? parent : null;
+      const className = node.id?.name || declaration?.id.name;
+      if (!className) return;
+      if (!classDeclarationsByName.has(className)) classDeclarationsByName.set(className, []);
+      classDeclarationsByName.get(className).push(node);
     }
     if (isFunction(node)) {
       functionNodes.push(node);
@@ -651,6 +654,9 @@ function analyzeFile(root, file) {
       const matches = classDeclarationsByName.get(expression.callee.name) || [];
       return matches.length === 1 ? matches[0] : null;
     }
+    if (expression?.type === 'NewExpression' && expression.callee.type === 'ClassExpression') {
+      return expression.callee;
+    }
     if (expression?.type === 'Identifier') {
       const variable = variableForNode.get(expression);
       const definition = variable?.defs?.find(def => def.type === 'Variable' &&
@@ -662,7 +668,11 @@ function analyzeFile(root, file) {
   const classAsyncIteratorMethods = classNode => {
     if (!classNode) return null;
     const methods = {iterator:null,next:null,return:null,throw:null};
-    for (const element of classNode.body?.body || []) {
+    const seenClasses = new Set();
+    let currentClass = classNode;
+    while (currentClass && !seenClasses.has(currentClass)) {
+      seenClasses.add(currentClass);
+      for (const element of currentClass.body?.body || []) {
       if (element.type !== 'MethodDefinition') continue;
       let key = propertyKey(element.key, element.computed);
       if (element.computed && element.key?.type === 'MemberExpression' &&
@@ -671,7 +681,11 @@ function analyzeFile(root, file) {
         key = 'Symbol.asyncIterator';
       }
       if (key === 'Symbol.asyncIterator') methods.iterator = element.value;
-      else if (['next','return','throw'].includes(key)) methods[key] = element.value;
+      else if (['next','return','throw'].includes(key) && !methods[key]) methods[key] = element.value;
+      }
+      const parentName = currentClass.superClass?.type === 'Identifier' ? currentClass.superClass.name : null;
+      const parents = parentName ? classDeclarationsByName.get(parentName) || [] : [];
+      currentClass = parents.length === 1 ? parents[0] : null;
     }
     return methods.iterator ? methods : null;
   };
@@ -1729,6 +1743,17 @@ function analyzeFile(root, file) {
       if (node.id.type === 'ObjectPattern' && node.init) {
         add('indirect-methods', 'destructured-property-alias', node,
           'destructuring may retain method references');
+        if (node.init.type === 'AwaitExpression' && node.init.argument?.type === 'CallExpression' &&
+            node.init.argument.callee.type === 'MemberExpression' &&
+            propertyKey(node.init.argument.callee.property, node.init.argument.callee.computed) === 'next' &&
+            node.init.argument.callee.object.type === 'Identifier') {
+          const source = asyncIteratorInstanceSources.get(bindingId(node.init.argument.callee.object));
+          if (source) {
+            const step = 'async-step@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
+            asyncIteratorNextRequests.push({source,assigned:step,node:node.init.argument});
+            addDestructuredPropertyReads(node.id, step);
+          }
+        }
         if (node.init.type === 'Identifier') {
           addDestructuredPropertyReads(node.id, bindingId(node.init));
         }

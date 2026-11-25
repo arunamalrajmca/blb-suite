@@ -1570,3 +1570,63 @@ test('supports a separately declared Object.groupBy mapper callback', () => {
     edge.to === 'callback@3' && edge.kind === 'container-callback-argument' &&
     edge.detail === 'Object.groupBy'));
 });
+
+
+test('traces async iterator protocol implemented by an assigned class expression', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const CallbackIterator = class {',
+    '  [Symbol.asyncIterator]() { return this; }',
+    '  async next() { return { value: callback, done: false }; }',
+    '};',
+    'const iterable = new CallbackIterator();',
+    'async function run() { for await (const handler of iterable) handler(); }'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@7'));
+});
+
+test('inherits async iterator and next methods from a base class', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class BaseIterator {',
+    '  [Symbol.asyncIterator]() { return this; }',
+    '  async next() { return { value: callback, done: false }; }',
+    '}',
+    'class DerivedIterator extends BaseIterator {}',
+    'const iterable = new DerivedIterator();',
+    'async function run() { for await (const handler of iterable) handler(); }'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@8'));
+});
+
+test('binds destructured values from an awaited async iterator next result', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class CallbackIterator {',
+    '  [Symbol.asyncIterator]() { return this; }',
+    '  async next() { return { value: callback, done: false }; }',
+    '}',
+    'async function run() {',
+    '  const iterator = new CallbackIterator();',
+    '  const { value: selected } = await iterator.next();',
+    '  selected();',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-read' &&
+    edge.from === 'function@1' && edge.to === 'selected@8'));
+});
+
+test('supports a directly instantiated anonymous async iterator class expression', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = new (class {',
+    '  [Symbol.asyncIterator]() { return this; }',
+    '  async next() { return { value: callback, done: false }; }',
+    '})();',
+    'async function run() { for await (const handler of iterable) handler(); }'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
+    edge.from === 'function@1' && edge.to === 'handler@6'));
+});
