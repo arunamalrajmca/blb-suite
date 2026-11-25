@@ -143,12 +143,17 @@ function collectExportsAndImports(ast,file){
         // Object.create(proto, descriptors) defines the literal descriptor keys
         // as own properties. Trace only descriptor values/getters already proven
         // to be direct local bindings; dynamic descriptor construction stays unknown.
-        for(const property of object.arguments[1].properties||[]){
-          if(property.type!=='Property'||property.kind!=='init')continue;
-          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
-          if(key===null||key===undefined)continue;
-          setCommonJsExport(String(key),descriptorExportLocal(property.value));
-        }
+        const descriptors=object.arguments[1].properties||[];
+        const resolved=descriptors.map(property=>({
+          property,
+          key:property.type==='Property'&&property.kind==='init'
+            ?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value))
+            :null
+        }));
+        // A dynamic key or spread can overwrite any literal descriptor name.
+        // Reject the complete descriptor map instead of retaining stale owners.
+        if(resolved.some(item=>item.key===null||item.key===undefined))return;
+        for(const item of resolved)setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
         return;
       }
       if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method)){
