@@ -325,7 +325,7 @@ jobs:
         id: browser_shard_restore
         uses: actions/cache/restore@v5
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
           restore-keys: |
             blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-
@@ -340,6 +340,7 @@ jobs:
             export BLB_CI_CHECKPOINT_FINGERPRINT="${{ steps.fingerprints.outputs.browser }}"
             export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
             export BLB_BROWSER_SHARD_CHECKPOINT_DIR="$RUNNER_TEMP/blb-browser-shard-checkpoints"
+            export BLB_BROWSER_SHARD_DIAGNOSTICS_DIR="$RUNNER_TEMP/blb-browser-shard-diagnostics"
             export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"
             export NO_COLOR=1 FORCE_COLOR=0
             mkdir -p "$BLB_CI_CHECKPOINT_DIR" "$(dirname "$BLB_PERF_OUTPUT")" "$BLB_BROWSER_SHARD_CHECKPOINT_DIR"
@@ -485,6 +486,7 @@ jobs:
             echo "Prepared complete browser inventory and concurrency compatibility checks."
             echo "BLB_EXPECTED_VERSION=$BLB_EXPECTED_VERSION" >> "$GITHUB_ENV"
             echo "BLB_BROWSER_SHARD_CHECKPOINT_DIR=$BLB_BROWSER_SHARD_CHECKPOINT_DIR" >> "$GITHUB_ENV"
+            echo "BLB_BROWSER_SHARD_DIAGNOSTICS_DIR=$BLB_BROWSER_SHARD_DIAGNOSTICS_DIR" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_SOURCE_SHA=$BLB_CI_CHECKPOINT_SOURCE_SHA" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_FINGERPRINT=$BLB_CI_CHECKPOINT_FINGERPRINT" >> "$GITHUB_ENV"
             echo "BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT=$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT" >> "$GITHUB_ENV"
@@ -500,7 +502,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Run browser shard 2/8
         id: browser_shard_2
@@ -513,7 +515,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Run browser shard 3/8
         id: browser_shard_3
@@ -526,7 +528,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Run browser shard 4/8
         id: browser_shard_4
@@ -539,7 +541,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Run browser shard 5/8
         id: browser_shard_5
@@ -552,7 +554,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Run browser shard 6/8
         id: browser_shard_6
@@ -565,7 +567,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Run browser shard 7/8
         id: browser_shard_7
@@ -578,7 +580,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Run browser shard 8/8
         id: browser_shard_8
@@ -591,7 +593,7 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
           key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Validate all browser shard checkpoints
         id: browser
@@ -624,6 +626,15 @@ jobs:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/
           if-no-files-found: ignore
           retention-days: 30
+
+      - name: Upload browser-shard diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-browser-shard-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/blb-browser-shard-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload corpus A/B measurements
         if: always()
