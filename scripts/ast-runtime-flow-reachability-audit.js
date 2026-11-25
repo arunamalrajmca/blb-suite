@@ -1262,7 +1262,7 @@ function analyzeFile(root, file) {
               if (iterator.keys && mapContainers.has(source)) role = 'map-key';
             } else source = bindingId(iterable);
           }
-        } else if (iterable?.type === 'CallExpression') {
+        } else if (iterable?.type === 'CallExpression' && resolveGeneratorExpression(iterable)) {
           const generator = resolveGeneratorExpression(iterable);
           if (generator?.generator) {
             source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
