@@ -1370,9 +1370,15 @@ function analyzeFile(root, file) {
             } else source = bindingId(iterable);
           }
         } else if (resolveAsyncIterableExpressions(iterable).length) {
-          const asyncIterables = resolveAsyncIterableExpressions(iterable).filter(candidate =>
-            name !== 'from' || candidate.iteratorKind !== 'async' &&
-              (!candidate.classNode || !!classSyncIteratorMethods(candidate.classNode)));
+          const resolvedIterables = resolveAsyncIterableExpressions(iterable);
+          const asyncIterables = name === 'from' ? resolvedIterables.flatMap(candidate => {
+            if (candidate.iteratorKind === 'async') {
+              const syncIterator = candidate.iteratorObject && syncIteratorMethod(candidate.iteratorObject);
+              return syncIterator ? [{...candidate, iterator:syncIterator, iteratorKind:'sync'}] : [];
+            }
+            if (candidate.classNode && !classSyncIteratorMethods(candidate.classNode)) return [];
+            return [candidate];
+          }) : resolvedIterables;
           if (asyncIterables.length) {
             source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
             for (const asyncIterable of asyncIterables) {
