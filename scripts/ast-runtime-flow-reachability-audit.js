@@ -2039,6 +2039,10 @@ function analyzeFile(root, file) {
             source = iterator.container; entries = iterator.entries; keys = iterator.keys;
           } else source = bindingId(right);
         }
+        if (source && mapContainers.has(source)) {
+          entries = true;
+          includeObjectValues = true;
+        }
       } else if (resolveAsyncIterableExpressions(right).length) {
         const asyncIterables = resolveAsyncIterableExpressions(right);
         source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
