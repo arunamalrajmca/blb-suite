@@ -192,7 +192,15 @@ function collectExportsAndImports(ast,file){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
-      imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports});
+      const destructuredRequire=parent?.type==='VariableDeclarator'&&parent.init===n&&parent.id.type==='ObjectPattern';
+      if(destructuredRequire){
+        for(const property of parent.id.properties||[]){
+          if(property.type!=='Property'||property.kind!=='init'||property.value.type!=='Identifier')continue;
+          const imported=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+          if(imported===null||imported===undefined)continue;
+          imports.push({source:n.arguments[0].value,imported:String(imported),local:property.value.name,commonjs:true});
+        }
+      }else imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports});
     }
     if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
       &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
