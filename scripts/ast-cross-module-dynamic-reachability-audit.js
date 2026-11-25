@@ -196,6 +196,10 @@ function collectExportsAndImports(ast,file){
         &&parent.callee.type==='MemberExpression'&&parent.callee.object.type==='Identifier'
         &&parent.callee.object.name==='Object'&&isUnboundGlobal(parent.callee.object)
         &&memberName(parent.callee)==='assign'&&isCommonJsExportsTarget(parent.arguments[0]);
+      const spreadAsWholeModuleExports=parent?.type==='SpreadElement'
+        &&parent.parent?.type==='ObjectExpression'&&parent.parent.properties.length===1
+        &&parent.parent.parent?.type==='AssignmentExpression'&&parent.parent.parent.right===parent.parent
+        &&isModuleExportsAssignment(parent.parent.parent);
       const destructuredRequire=parent?.type==='VariableDeclarator'&&parent.init===n&&parent.id.type==='ObjectPattern';
       if(destructuredRequire){
         for(const property of parent.id.properties||[]){
@@ -204,7 +208,7 @@ function collectExportsAndImports(ast,file){
           if(imported===null||imported===undefined)continue;
           imports.push({source:n.arguments[0].value,imported:String(imported),local:property.value.name,commonjs:true});
         }
-      }else imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports||assignedThroughObjectAssign});
+      }else imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports||assignedThroughObjectAssign||spreadAsWholeModuleExports});
     }
     if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
       &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
