@@ -1471,6 +1471,39 @@ test('traces an assigned factory-returned custom async iterable into Array.fromA
     edge.to === 'callback@11' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces Promise.resolve-wrapped custom async iterables through a factory', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'async function makeIterable() {',
+    '  return Promise.resolve({',
+    '    [Symbol.asyncIterator]() {',
+    '      return { async next() { return { value: cleanup, done: false }; } };',
+    '    }',
+    '  });',
+    '}',
+    'async function run() {',
+    '  await Array.fromAsync(await makeIterable(), callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@10' && edge.kind === 'container-callback-argument'));
+});
+
+test('traces custom async iterable class instances returned by a factory', () => {
+  const result = audit([
+    'const cleanup = () => work();',
+    'class CleanupIterable {',
+    '  async *[Symbol.asyncIterator]() { yield cleanup; }',
+    '}',
+    'function makeIterable() { return new CleanupIterable(); }',
+    'async function run() {',
+    '  await Array.fromAsync(makeIterable(), callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@7' && edge.kind === 'container-callback-argument'));
+});
+
 test('propagates values yielded by a custom Symbol.asyncIterator method', () => {
   const result = audit([
     'const cleanup = () => work();',
