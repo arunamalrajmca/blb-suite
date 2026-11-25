@@ -318,8 +318,9 @@ jobs:
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
       # complete test list, then execute it in eight resumable shards of four workers.
-      # Each shard fails fast after one unexpected result; successful shards are retained
-      # so a retry cannot force already-passed shards to execute again.
+      # Each shard runs in its own step and is uploaded to an immutable cache key
+      # immediately afterward. A later shard failure or job interruption therefore
+      # leaves the newest cache containing every earlier shard checkpoint.
       - name: Restore dedicated browser-shard checkpoint
         id: browser_shard_restore
         uses: actions/cache/restore@v5
