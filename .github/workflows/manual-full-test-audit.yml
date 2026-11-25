@@ -568,6 +568,12 @@ jobs:
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
           key: blb-ci-v1-full-audit-browser-matrix-${{ steps.fingerprints.outputs.browser }}-${{ steps.browser_prepare.outputs.environment_fingerprint }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
+      - name: Deliberately stop the first audit attempt after durable shard 2 checkpoint
+        if: ${{ github.event_name == 'pull_request' && github.event.label.name == 'ci-full-test-audit' && github.run_attempt == 1 }}
+        shell: bash
+        run: |
+          echo "Intentional checkpoint-recovery test: shard 2 has been saved; stop this first attempt so the next attempt must restore shards 1 and 2."
+          exit 86
       - name: Run browser shard 3/8
         id: browser_shard_3
         if: ${{ success() && !cancelled() && steps.browser_prepare.outcome == 'success' }}
