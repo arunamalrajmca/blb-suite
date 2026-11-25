@@ -1447,7 +1447,7 @@ test('traces Array.fromAsync over a custom async iterable returned by a factory'
     'async function run() {',
     '  await Array.fromAsync(makeIterable(), callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@10' && edge.kind === 'container-callback-argument'));
 });
@@ -1466,7 +1466,7 @@ test('traces an assigned factory-returned custom async iterable into Array.fromA
     'async function run() {',
     '  await Array.fromAsync(iterable, callback => callback());',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
     edge.to === 'callback@11' && edge.kind === 'container-callback-argument'));
 });
