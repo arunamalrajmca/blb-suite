@@ -26,6 +26,32 @@ test('checkpoint fingerprints are deterministic and scoped to committed tree ent
   assert.throws(() => fingerprintTreeEntries(entries, file => file === 'missing'), /No tracked source files/);
 });
 
+test('workflow changes invalidate inventory and selector checkpoints', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-ci-workflow-fingerprint-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: directory });
+    execFileSync('git', ['config', 'user.email', 'ci@example.invalid'], { cwd: directory });
+    execFileSync('git', ['config', 'user.name', 'CI Test'], { cwd: directory });
+    fs.mkdirSync(path.join(directory, 'extension'), { recursive: true });
+    fs.mkdirSync(path.join(directory, '.github', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'extension', 'manifest.json'), '{"version":"1"}\\n');
+    fs.writeFileSync(path.join(directory, '.github', 'workflows', 'browser-tests.yml'), 'name: first\\n');
+    execFileSync('git', ['add', '.'], { cwd: directory });
+    execFileSync('git', ['commit', '-qm', 'initial'], { cwd: directory });
+    const before = computeSectionFingerprints(directory);
+    fs.writeFileSync(path.join(directory, '.github', 'workflows', 'browser-tests.yml'), 'name: changed\\n');
+    execFileSync('git', ['add', '.'], { cwd: directory });
+    execFileSync('git', ['commit', '-qm', 'change workflow'], { cwd: directory });
+    const after = computeSectionFingerprints(directory);
+    assert.notEqual(after.inventory, before.inventory);
+    assert.notEqual(after.selector, before.selector);
+    assert.equal(after.ast, before.ast);
+    assert.equal(after.browser, before.browser);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('working-tree mutations do not change fingerprints for the same committed tree', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-ci-fingerprint-'));
   try {
