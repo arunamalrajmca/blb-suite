@@ -1909,15 +1909,13 @@ function analyzeFile(root, file) {
             source = iterator.container; entries = iterator.entries; keys = iterator.keys;
           } else source = bindingId(right);
         }
-      } else if (right.type === 'CallExpression' || right.type === 'AwaitExpression' ||
-          right.type === 'NewExpression') {
+      } else if ((right.type === 'CallExpression' || right.type === 'AwaitExpression' ||
+          right.type === 'NewExpression') && resolveAsyncIterableExpression(right)) {
         const asyncIterable = resolveAsyncIterableExpression(right);
-        if (asyncIterable) {
-          source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
-          if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
-          else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, right);
-          else registerAsyncIteratorValues(asyncIterable.iterator, source, right);
-        }
+        source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
+        if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
+        else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, right);
+        else registerAsyncIteratorValues(asyncIterable.iterator, source, right);
       } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
         const method = propertyKey(right.callee.property, right.callee.computed);
         const receiverNode = right.callee.object;
