@@ -1919,3 +1919,85 @@ test('preserves existing enumerability through nested duplicate descriptor facto
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('traces immutable native Object and Reflect aliases but rejects shadowed or patched methods',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-native-method-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'object-alias.cjs'),[
+   'const NativeObject = Object;',
+   'function service() {}',
+   'NativeObject.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'method-alias.cjs'),[
+   'const assign = Object.assign;',
+   'function service() {}',
+   'assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'destructured-alias.cjs'),[
+   'const { assign: copy } = Object;',
+   'function service() {}',
+   'copy(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'define-alias.cjs'),[
+   'const { defineProperty: define } = Object;',
+   'function service() {}',
+   "define(module.exports, 'service', { value: service });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'reflect-alias.cjs'),[
+   'const NativeReflect = Reflect;',
+   'const { set: write } = NativeReflect;',
+   'function service() {}',
+   "write(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'shadowed-object.cjs'),[
+   'function service() {}',
+   'const Object = { assign() {} };',
+   'Object.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'shadowed-reflect.cjs'),[
+   'function service() {}',
+   'const Reflect = { set() {} };',
+   "Reflect.set(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'patched-object.cjs'),[
+   'function service() {}',
+   'Object.assign = function customAssign() {};',
+   'Object.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'patched-alias.cjs'),[
+   'function service() {}',
+   'const assign = Object.assign;',
+   'Object.assign = function customAssign() {};',
+   'assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'reassigned-object-alias.cjs'),[
+   'function service() {}',
+   'let NativeObject = Object;',
+   'NativeObject = customObject;',
+   'NativeObject.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: objectAlias } = require('./object-alias.cjs');",
+   "const { service: methodAlias } = require('./method-alias.cjs');",
+   "const { service: destructuredAlias } = require('./destructured-alias.cjs');",
+   "const { service: defineAlias } = require('./define-alias.cjs');",
+   "const { service: reflectAlias } = require('./reflect-alias.cjs');",
+   "const { service: shadowedObject } = require('./shadowed-object.cjs');",
+   "const { service: shadowedReflect } = require('./shadowed-reflect.cjs');",
+   "const { service: patchedObject } = require('./patched-object.cjs');",
+   "const { service: patchedAlias } = require('./patched-alias.cjs');",
+   "const { service: reassignedAlias } = require('./reassigned-object-alias.cjs');"
+  ].join('\n'));
+  const targets=['object-alias.cjs','method-alias.cjs','destructured-alias.cjs','define-alias.cjs','reflect-alias.cjs',
+   'shadowed-object.cjs','shadowed-reflect.cjs','patched-object.cjs','patched-alias.cjs','reassigned-object-alias.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets.slice(0,5)){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='service'&&!x.unresolvedExport),'immutable native method alias should be traced for '+target);
+  }
+  for(const target of targets.slice(5)){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal===null&&x.unresolvedExport),'shadowed, patched, or reassigned method must not be trusted for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
