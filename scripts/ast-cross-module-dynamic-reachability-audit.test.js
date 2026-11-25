@@ -1098,7 +1098,7 @@ test('maps destructured CommonJS require bindings to named export owners',()=>{
 test('traces Object.assign CommonJS require re-exports to named export owners',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-assign-require-reexport-'));
  try{
-  fs.writeFileSync(path.join(root,'dependency.cjs'),'function service() {}\\nmodule.exports = { service };');
+  fs.writeFileSync(path.join(root,'dependency.cjs'),'function service() {}\nmodule.exports = { service };');
   fs.writeFileSync(path.join(root,'barrel.cjs'),"Object.assign(module.exports, require('./dependency.cjs'));");
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./barrel.cjs');");
   const files=['dependency.cjs','barrel.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
