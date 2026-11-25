@@ -1412,3 +1412,23 @@ test('does not retain CommonJS export owners after deleting named properties',()
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('invalidates CommonJS export owners when Object.assign receives Object.create with dynamic descriptors',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-assign-object-create-dynamic-descriptors-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   "const key = process.env.EXPORT_NAME;",
+   'Object.assign(module.exports, Object.create(null, {',
+   '  service: { enumerable: true, value: service },',
+   '  [key]: { enumerable: true, value: createService() }',
+   '}));'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='service.cjs'&&x.imported==='service'
+    &&x.exportedLocal===null&&x.unresolvedExport),'dynamic Object.create descriptor keys may overwrite service');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
