@@ -45,21 +45,7 @@ jobs:
             git fetch origin main --depth=1
             base_ref=FETCH_HEAD
           fi
-          changed_files=$(git diff --name-only "$base_ref...HEAD")
-          production_files=$(printf '%s\\n' "$changed_files" | awk '
-            /^extension\\// &&
-            $0 !~ /^extension\\/(icons|store-assets)\\// &&
-            $0 != "extension/THIRD-PARTY-NOTICES.txt" { print; next }
-            $0 == "package.json" || $0 == "package-lock.json" { print }
-          ')
-          if [[ -n "$production_files" ]]; then
-            echo "has_production_changes=true" >> "$GITHUB_OUTPUT"
-            echo "End-user production changes detected:"
-            printf '%s\\n' "$production_files"
-          else
-            echo "has_production_changes=false" >> "$GITHUB_OUTPUT"
-            echo "No shipped extension or production dependency changes; performance qualification will be skipped."
-          fi
+          node scripts/detect-end-user-production-changes.mjs "$base_ref"
 
       - name: Fingerprint committed audit inputs
         id: fingerprints
@@ -93,7 +79,7 @@ jobs:
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test reusable CI checkpoint and browser shard recovery
         run: |
-          node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs
+          node --test scripts/ci-section-checkpoint.test.mjs scripts/ci-checkpoint-fingerprints.test.mjs scripts/run-checkpointed-playwright-audit.test.mjs scripts/detect-end-user-production-changes.test.mjs
 
       - name: Verify repository-wide test inventory and ownership
         id: inventory
