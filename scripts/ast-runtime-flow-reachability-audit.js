@@ -598,35 +598,6 @@ function analyzeFile(root, file) {
   // as the elements consumed by Array.fromAsync. Keep this deliberately
   // syntactic and conservative: nested functions are not part of the iterator.
   const asyncIterableSources = new Map();
-  const resolveGeneratorExpression = (expression, seen = new Set()) => {
-    if (!expression) return null;
-    if (expression.type === 'AwaitExpression') {
-      return resolveGeneratorExpression(expression.argument, seen);
-    }
-    if (expression.type === 'CallExpression') {
-      const resolved = resolveCalledFunction(expression);
-      if (resolved?.generator) return resolved;
-      if (resolved && !seen.has(resolved)) {
-        seen.add(resolved);
-        for (const returned of returnedValues(resolved)) {
-          const generator = resolveGeneratorExpression(returned, seen);
-          if (generator) return generator;
-        }
-      }
-      return null;
-    }
-    if (expression.type === 'Identifier') {
-      const variable = variableForNode.get(expression);
-      if (!variable || seen.has(variable)) return null;
-      seen.add(variable);
-      const definitions = (variable.defs || []).filter(def =>
-        def.type === 'Variable' && def.node?.type === 'VariableDeclarator' && def.node.init);
-      if (definitions.length === 1) {
-        return resolveGeneratorExpression(definitions[0].node.init, seen);
-      }
-    }
-    return null;
-  };
   const yieldedValues = (fn, seen = new Set()) => {
     if (!fn || !fn.generator || seen.has(fn)) return [];
     seen.add(fn);
@@ -719,8 +690,6 @@ function analyzeFile(root, file) {
     }
     return [];
   };
-  const resolveAsyncIterableExpression = (expression, seen = new Set()) =>
-    resolveAsyncIterableExpressions(expression, seen)[0] || null;
   const resolveObjectExpression = expression => {
     if (expression?.type === 'AwaitExpression') return resolveObjectExpression(expression.argument);
     if (expression?.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
