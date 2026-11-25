@@ -1337,6 +1337,37 @@ test('propagates async-generator yielded callback values into Array.fromAsync ma
     edge.to === 'callback@6' && edge.kind === 'container-callback-argument'));
 });
 
+test('propagates yield-star values delegated to a custom async iterable', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const iterable = {',
+    '  async *[Symbol.asyncIterator]() { yield callback; }',
+    '};',
+    'async function* handlers() { yield* iterable; }',
+    'async function run() {',
+    '  await Array.fromAsync(handlers(), handler => handler());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@7' && edge.kind === 'container-callback-argument'));
+});
+
+test('propagates yield-star values delegated to a class async iterable', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'class CallbackIterable {',
+    '  async *[Symbol.asyncIterator]() { yield callback; }',
+    '}',
+    'const iterable = new CallbackIterable();',
+    'async function* handlers() { yield* iterable; }',
+    'async function run() {',
+    '  await Array.fromAsync(handlers(), handler => handler());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'handler@8' && edge.kind === 'container-callback-argument'));
+});
+
 test('propagates delegated async-generator yields through an assigned async iterable', () => {
   const result = audit([
     'const cleanup = () => work();',
