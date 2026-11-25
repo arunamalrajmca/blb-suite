@@ -503,6 +503,7 @@ jobs:
       - name: Restore browser-matrix performance checkpoint
         id: browser_matrix_restore
         if: ${{ steps.browser_prepare.outcome == 'success' }}
+        continue-on-error: true
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl
