@@ -27,18 +27,20 @@ export function partitionTests(tests, shardCount = 4) {
   return shards;
 }
 
-export function createShardManifest({ sourceSha, fingerprint, tests, shardCount = 4 }) {
+export function createShardManifest({ sourceSha, fingerprint, environmentFingerprint = process.env.BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT || '0'.repeat(64), tests, shardCount = 4 }) {
   if (!/^[a-f0-9]{40}$/.test(sourceSha || '')) throw new TypeError('A full source commit SHA is required.');
   if (!/^[a-f0-9]{64}$/.test(fingerprint || '')) throw new TypeError('A SHA-256 input fingerprint is required.');
+  if (!/^[a-f0-9]{64}$/.test(environmentFingerprint || '')) throw new TypeError('A SHA-256 environment fingerprint is required.');
   if (!Array.isArray(tests) || !tests.length || tests.some(item => typeof item !== 'string' || !item.trim())) {
     throw new TypeError('Browser test inventory must contain non-empty test-list entries.');
   }
   if (new Set(tests).size !== tests.length) throw new Error('Browser test inventory contains duplicate entries.');
   const shards = partitionTests(tests, shardCount);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     sourceSha,
     fingerprint,
+    environmentFingerprint,
     inventoryDigest: digest(tests),
     scheduledTests: tests.length,
     shardCount,
@@ -59,6 +61,7 @@ export function isCompatibleShardManifest(candidate, expected) {
     const crossCommit = candidate?.sourceSha !== base.sourceSha;
     const changedFiles = expected.changedFiles;
     if (crossCommit && !Array.isArray(changedFiles)) return false;
+    if (candidate?.environmentFingerprint !== base.environmentFingerprint) return false;
     if (!crossCommit && candidate?.fingerprint !== base.fingerprint) return false;
     if (crossCommit) {
       const referencedSpecs = new Set(base.shards.flatMap(shard => shard.tests.map(entry =>
@@ -66,7 +69,7 @@ export function isCompatibleShardManifest(candidate, expected) {
       ).filter(Boolean)));
       if (changedFiles.some(file => !referencedSpecs.has(file))) return false;
     }
-    return [1, 2].includes(candidate?.schemaVersion) &&
+    return candidate?.schemaVersion === 3 &&
       candidate.inventoryDigest === base.inventoryDigest &&
       candidate.scheduledTests === base.scheduledTests &&
       candidate.shardCount === base.shardCount &&
@@ -78,15 +81,13 @@ export function isCompatibleShardManifest(candidate, expected) {
         Array.isArray(shard.tests) &&
         shard.tests.length === base.shards[index].tests.length &&
         shard.tests.every((entry, testIndex) => entry === base.shards[index].tests[testIndex]) &&
-        (candidate.schemaVersion === 1 || (
-          Array.isArray(shard.passedTests) &&
-          new Set(shard.passedTests).size === shard.passedTests.length &&
-          shard.passedTests.every(entry => shard.tests.includes(entry))
-        )) &&
+        Array.isArray(shard.passedTests) &&
+        new Set(shard.passedTests).size === shard.passedTests.length &&
+        shard.passedTests.every(entry => shard.tests.includes(entry)) &&
         ['pending', 'failed', 'passed'].includes(shard.status) &&
         (shard.status !== 'passed' || (
           shard.exitCode === 0 && shard.reportValid === true &&
-          (candidate.schemaVersion === 1 || shard.passedTests.length === shard.tests.length)
+          shard.passedTests.length === shard.tests.length
         ))
       );
   } catch {
@@ -134,12 +135,6 @@ function readManifest(directory, expected) {
     }
     if (!isCompatibleShardManifest(candidate, compatibleExpected)) return null;
     const manifest = structuredClone(candidate);
-    if (manifest.schemaVersion === 1) {
-      manifest.schemaVersion = 2;
-      for (const shard of manifest.shards) {
-        shard.passedTests = shard.status === 'passed' ? [...shard.tests] : [];
-      }
-    }
     if (candidate.sourceSha !== expected.sourceSha) {
       invalidateChangedSpecShards(manifest, compatibleExpected.changedFiles);
       manifest.sourceSha = expected.sourceSha;
@@ -221,6 +216,7 @@ export function runCheckpointedBrowserAudit({
   directory = process.env.BLB_CI_CHECKPOINT_DIR,
   sourceSha = process.env.BLB_CI_CHECKPOINT_SOURCE_SHA,
   fingerprint = process.env.BLB_CI_CHECKPOINT_FINGERPRINT,
+  environmentFingerprint = process.env.BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT || '0'.repeat(64),
   shardCount = 8,
   workers = 4,
   executeShard = runShard
@@ -229,7 +225,7 @@ export function runCheckpointedBrowserAudit({
   const tests = fs.readFileSync(testListPath, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   if (!tests.length) throw new Error('The filtered browser test list is empty.');
   if (new Set(tests).size !== tests.length) throw new Error('The filtered browser test list contains duplicates.');
-  const expected = { sourceSha, fingerprint, tests, shardCount };
+  const expected = { sourceSha, fingerprint, environmentFingerprint, tests, shardCount };
   const fresh = createShardManifest(expected);
   fs.mkdirSync(directory, { recursive: true });
   const manifest = readManifest(directory, expected) || fresh;
