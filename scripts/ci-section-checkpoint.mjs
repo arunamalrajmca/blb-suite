@@ -24,6 +24,7 @@ export function isCompatibleCompletionMarker(marker, expected) {
   try {
     const valid = createCompletionMarker(expected);
     return marker?.schemaVersion === 1 &&
+      SHA.test(marker.sourceSha || '') &&
       marker.section === valid.section &&
       marker.fingerprint === valid.fingerprint &&
       marker.status === 'passed';
