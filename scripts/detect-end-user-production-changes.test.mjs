@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { detectEndUserProductionChanges } from './detect-end-user-production-changes.mjs';
 
-function fixture() {
+function fixture({ runtimeDependency = false } = {}) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-production-impact-'));
   const git = (...args) => execFileSync('git', args, { cwd, stdio: 'ignore' });
   git('init', '-q');
@@ -15,7 +15,13 @@ function fixture() {
   fs.mkdirSync(path.join(cwd, 'extension'), { recursive: true });
   fs.mkdirSync(path.join(cwd, 'extension', 'icons'), { recursive: true });
   fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({
-    name: 'fixture', private: true, devDependencies: { playwright: '1.0.0' }
+    name: 'fixture', private: true,
+    ...(runtimeDependency ? { dependencies: { runtime: '1.0.0' } } : {}),
+    devDependencies: { playwright: '1.0.0' }
+  }, null, 2));
+  if (runtimeDependency) fs.writeFileSync(path.join(cwd, 'package-lock.json'), JSON.stringify({
+    name: 'fixture', lockfileVersion: 3,
+    packages: { '': { name: 'fixture', dependencies: { runtime: '1.0.0' } }, 'node_modules/runtime': { version: '1.0.0' } }
   }, null, 2));
   fs.writeFileSync(path.join(cwd, 'extension', 'background.js'), 'export {};');
   fs.writeFileSync(path.join(cwd, 'extension', 'icons', 'icon.svg'), '<svg/>');
@@ -70,22 +76,17 @@ test('production dependency declaration changes trigger qualification', () => {
   } finally { f.cleanup(); }
 });
 
-test('lockfile changes with declared production dependencies trigger conservatively', () => {
-  const f = fixture();
+test('lockfile-only changes with declared production dependencies trigger conservatively', () => {
+  const f = fixture({ runtimeDependency: true });
   try {
-    fs.writeFileSync(path.join(f.cwd, 'package.json'), JSON.stringify({
-      name: 'fixture', private: true, dependencies: { runtime: '1.0.0' }
-    }, null, 2));
-    fs.writeFileSync(path.join(f.cwd, 'package-lock.json'), JSON.stringify({
-      name: 'fixture', lockfileVersion: 3,
-      packages: { '': { name: 'fixture', dependencies: { runtime: '1.0.0' } }, 'node_modules/runtime': { version: '1.0.0' } }
-    }, null, 2));
-    f.finish();
     fs.writeFileSync(path.join(f.cwd, 'package-lock.json'), JSON.stringify({
       name: 'fixture', lockfileVersion: 3,
       packages: { '': { name: 'fixture', dependencies: { runtime: '1.0.0' } }, 'node_modules/runtime': { version: '1.0.1' } }
     }, null, 2));
     f.finish();
-    assert.equal(detectEndUserProductionChanges(f).hasProductionChanges, true);
+    assert.deepEqual(
+      detectEndUserProductionChanges(f),
+      { hasProductionChanges: true, files: ['package-lock.json'] }
+    );
   } finally { f.cleanup(); }
 });
