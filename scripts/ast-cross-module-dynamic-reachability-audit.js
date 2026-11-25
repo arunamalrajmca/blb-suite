@@ -113,11 +113,17 @@ function collectExportsAndImports(ast,file){
   const recordObjectFromEntries=call=>{
     const entries=call.arguments[0];
     if(entries?.type!=='ArrayExpression'||entries.elements.some(entry=>entry?.type!=='ArrayExpression'
-      ||entry.elements.length!==2||entry.elements.some(element=>!element||element.type==='SpreadElement')))return false;
+      ||entry.elements.length!==2||entry.elements.some(element=>!element||element.type==='SpreadElement'))){
+      clearCommonJsExportOwners();
+      return false;
+    }
     const resolved=entries.elements.map(entry=>({key:staticPropertyKey(entry.elements[0]),value:entry.elements[1]}));
     // A dynamic key could overwrite any statically named property, so reject the
     // entire inference rather than report potentially stale export owners.
-    if(resolved.some(entry=>entry.key===null))return false;
+    if(resolved.some(entry=>entry.key===null)){
+      clearCommonJsExportOwners();
+      return false;
+    }
     for(const entry of resolved)setCommonJsExport(entry.key,entry.value.type==='Identifier'?entry.value.name:null);
     return true;
   };
@@ -130,6 +136,9 @@ function collectExportsAndImports(ast,file){
         activeAliases.add(declarator);
         recordObjectProperties(staticObject,exportsSnapshot,activeAliases);
         activeAliases.delete(declarator);
+      }else{
+        // An unknown assignment source may overwrite any previously inferred key.
+        clearCommonJsExportOwners();
       }
       return;
     }
@@ -163,6 +172,14 @@ function collectExportsAndImports(ast,file){
         recordObjectProperties(object.arguments[0],exportsSnapshot);
         return;
       }
+      // Unknown Object.* factories may produce an arbitrary set of own keys.
+      clearCommonJsExportOwners();
+      return;
+    }
+    if(object?.type==='CallExpression'){
+      // An opaque call used as an assignment source may overwrite any named export.
+      clearCommonJsExportOwners();
+      return;
     }
     if(object?.type!=='ObjectExpression')return;
     for(const property of object.properties||[]){
@@ -202,20 +219,32 @@ function collectExportsAndImports(ast,file){
   };
   const recordObjectDefineProperties=call=>{
     const method=memberName(call.callee);
-    const target=call.arguments[0];
     if(method==='defineProperty'){
       const key=staticPropertyKey(call.arguments[1]);
-      if(key===null)return false;
+      if(key===null){
+        // A dynamic key may overwrite any previously inferred named export.
+        clearCommonJsExportOwners();
+        return false;
+      }
       setCommonJsExport(key,descriptorExportLocal(call.arguments[2]));
       return true;
     }
-    if(method==='defineProperties'&&call.arguments[1]?.type==='ObjectExpression'){
+    if(method==='defineProperties'){
+      if(call.arguments[1]?.type!=='ObjectExpression'){
+        // An unknown descriptor object may replace any existing named export.
+        clearCommonJsExportOwners();
+        return false;
+      }
       const properties=call.arguments[1].properties||[];
       const resolved=properties.map(property=>({
         property,
         key:property.type==='Property'?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null
       }));
-      if(resolved.some(item=>item.key===null))return false;
+      if(resolved.some(item=>item.key===null)){
+        // A dynamic key or spread can overwrite any previously inferred owner.
+        clearCommonJsExportOwners();
+        return false;
+      }
       for(const item of resolved){
         if(item.property.kind!=='init')continue;
         setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
@@ -297,10 +326,8 @@ function collectExportsAndImports(ast,file){
         for(const argument of n.arguments.slice(1))recordObjectProperties(argument);
       }
       if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
-        &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
-        &&staticPropertyKey(n.arguments[1])!==null){
-        const local=descriptorExportLocal(n.arguments[2]);
-        setCommonJsExport(staticPropertyKey(n.arguments[1]),local);
+        &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
+        recordObjectDefineProperties(n);
       }
       if(method==='defineProperties'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
