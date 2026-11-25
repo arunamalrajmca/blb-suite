@@ -60,6 +60,19 @@ function collectExportsAndImports(ast,file){
       &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
   };
   const recordObjectProperties=object=>{
+    if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
+      &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
+      &&isUnboundGlobal(object.callee.object)){
+      const method=memberName(object.callee);
+      if(method==='assign'){
+        for(const argument of object.arguments)recordObjectProperties(argument);
+        return;
+      }
+      if(['freeze','seal','preventExtensions'].includes(method)){
+        recordObjectProperties(object.arguments[0]);
+        return;
+      }
+    }
     if(object?.type!=='ObjectExpression')return;
     for(const property of object.properties||[]){
       if(property.type!=='Property'||property.kind!=='init')continue;
