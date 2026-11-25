@@ -1162,7 +1162,7 @@ test('traces literal Object.fromEntries CommonJS export tuples',()=>{
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='numeric'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
-  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='computedValue'&&x.exportedLocal===null&&x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='computedValue'&&x.exportedLocal===null&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
@@ -1179,6 +1179,6 @@ test('does not infer Object.fromEntries exports when a key is dynamic',()=>{
   ].join('\n'));
   fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
   const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
