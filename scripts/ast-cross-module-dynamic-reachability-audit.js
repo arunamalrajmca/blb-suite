@@ -279,15 +279,11 @@ function collectExportsAndImports(ast,file){
         setCommonJsExport(staticPropertyKey(n.arguments[1]),local);
       }
       if(method==='defineProperties'&&isCommonJsExportsTarget(n.arguments[0])
-        &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
-        &&n.arguments[1]?.type==='ObjectExpression'){
-        for(const property of n.arguments[1].properties||[]){
-          if(property.type!=='Property'||property.kind!=='init')continue;
-          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
-          if(key===null||key===undefined)continue;
-          const local=descriptorExportLocal(property.value);
-          setCommonJsExport(String(key),local);
-        }
+        &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
+        // A dynamic descriptor key (or spread) could overwrite any static key.
+        // Reuse the conservative returned-object parser so mutation and factory
+        // forms apply identical uncertainty rules.
+        recordObjectDefineProperties(n);
       }
     }
     if(n.type==='ExportNamedDeclaration'){
