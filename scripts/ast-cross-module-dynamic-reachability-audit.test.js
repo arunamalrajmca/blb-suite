@@ -1497,3 +1497,31 @@ test('preserves non-enumerable Object.assign target properties through object wr
    &&x.exportedLocal==='service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('respects non-enumerable descriptors when wrapped sources are copied',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-wrapped-nonenumerable-object-create-'));
+ try{
+  fs.writeFileSync(path.join(root,'spread.cjs'),[
+   'function service() {}',
+   'module.exports = { ...Object.freeze(Object.create(null, {',
+   '  service: { value: createService() }',
+   '})) };'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'assigned.cjs'),[
+   'function service() {}',
+   'module.exports = Object.assign({}, Object.seal(Object.create(null, {',
+   '  service: { value: createService() }',
+   '})));'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: spreadService } = require('./spread.cjs');",
+   "const { service: assignedService } = require('./assigned.cjs');"
+  ].join('\\n'));
+  const files=['spread.cjs','assigned.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['spread.cjs','assigned.cjs']){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal===null&&x.unresolvedExport),'wrapped non-enumerable descriptor must not be copied from '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
