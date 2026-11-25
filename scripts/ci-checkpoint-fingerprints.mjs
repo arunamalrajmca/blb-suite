@@ -34,7 +34,7 @@ export function fingerprintTreeEntries(entries, predicate) {
   const selected = entries.filter(entry => predicate(entry.path)).sort((a, b) => a.path.localeCompare(b.path));
   if (!selected.length) throw new Error('No tracked source files matched the checkpoint fingerprint scope.');
   const hash = crypto.createHash('sha256');
-  for (const entry of selected) hash.update(entry.path + '\0' + entry.sha + '\n');
+  for (const entry of selected) hash.update(entry.path + '\0' + (entry.mode || '100644') + '\0' + entry.sha + '\n');
   return hash.digest('hex');
 }
 
@@ -44,7 +44,7 @@ export function readHeadTree(cwd = process.cwd()) {
   return result.stdout.toString('utf8').split('\0').filter(Boolean).map(record => {
     const tab = record.indexOf('\t');
     const metadata = record.slice(0, tab).split(' ');
-    return { type: metadata[1], sha: metadata[2], path: record.slice(tab + 1) };
+    return { mode: metadata[0], type: metadata[1], sha: metadata[2], path: record.slice(tab + 1) };
   }).filter(entry => entry.type === 'blob');
 }
 
