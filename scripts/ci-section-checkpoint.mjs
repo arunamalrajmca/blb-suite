@@ -36,13 +36,30 @@ export function isCompatibleCompletionMarker(marker, expected) {
   }
 }
 
-export function readCompletionMarker(directory, expected) {
+export function inspectCompletionMarker(directory, expected) {
+  let marker;
   try {
-    const marker = JSON.parse(fs.readFileSync(path.join(directory, 'complete.json'), 'utf8'));
-    return isCompatibleCompletionMarker(marker, expected) ? marker : null;
-  } catch {
-    return null;
+    marker = JSON.parse(fs.readFileSync(path.join(directory, 'complete.json'), 'utf8'));
+  } catch (error) {
+    return { compatible: false, reason: error.code === 'ENOENT' ? 'missing-marker' : 'invalid-marker-json' };
   }
+  try {
+    const valid = createCompletionMarker(expected);
+    if (marker?.schemaVersion !== 2) return { compatible: false, reason: 'schema-mismatch' };
+    if (!SHA.test(marker.sourceSha || '')) return { compatible: false, reason: 'invalid-source-sha' };
+    if (marker.section !== valid.section) return { compatible: false, reason: 'section-mismatch' };
+    if (marker.fingerprint !== valid.fingerprint) return { compatible: false, reason: 'input-fingerprint-mismatch' };
+    if (marker.environmentFingerprint !== valid.environmentFingerprint) return { compatible: false, reason: 'environment-fingerprint-mismatch' };
+    if (marker.status !== 'passed') return { compatible: false, reason: 'checkpoint-not-passed' };
+    return { compatible: true, reason: 'compatible', marker };
+  } catch {
+    return { compatible: false, reason: 'invalid-expected-checkpoint' };
+  }
+}
+
+export function readCompletionMarker(directory, expected) {
+  const result = inspectCompletionMarker(directory, expected);
+  return result.compatible ? result.marker : null;
 }
 
 export function writeCompletionMarker(directory, expected) {
@@ -67,8 +84,9 @@ function main(argv) {
     console.log('Recorded passed checkpoint for ' + section + '.');
     return;
   }
-  const compatible = !!readCompletionMarker(directory, expected);
-  console.log('complete=' + (compatible ? 'true' : 'false'));
+  const result = inspectCompletionMarker(directory, expected);
+  console.log('complete=' + (result.compatible ? 'true' : 'false'));
+  console.log('reason=' + result.reason);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
