@@ -51,6 +51,20 @@ function collectExportsAndImports(ast,file){
     if(node?.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked;
     return null;
   };
+  const descriptorExportLocal=descriptor=>{
+    if(descriptor?.type!=='ObjectExpression')return null;
+    const valueProperty=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
+      &&property.key.type==='Identifier'&&property.key.name==='value');
+    if(valueProperty?.value.type==='Identifier')return valueProperty.value.name;
+    const getter=descriptor.properties.find(property=>property.type==='Property'&&!property.computed
+      &&property.key.type==='Identifier'&&property.key.name==='get')?.value;
+    if(!getter||getter.params.length!==0)return null;
+    if(getter.type==='ArrowFunctionExpression'&&getter.body.type==='Identifier')return getter.body.name;
+    if(getter.type==='FunctionExpression'&&getter.body.type==='BlockStatement'
+      &&getter.body.body.length===1&&getter.body.body[0].type==='ReturnStatement'
+      &&getter.body.body[0].argument?.type==='Identifier')return getter.body.body[0].argument.name;
+    return null;
+  };
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed?staticPropertyKey(member.property):member.property.name)
     :null;
@@ -182,12 +196,8 @@ function collectExportsAndImports(ast,file){
       if(method==='defineProperty'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
         &&staticPropertyKey(n.arguments[1])!==null){
-        const descriptor=n.arguments[2];
-        const value=descriptor?.type==='ObjectExpression'
-          ?descriptor.properties.find(property=>property.type==='Property'&&!property.computed
-            &&property.key.type==='Identifier'&&property.key.name==='value')?.value
-          :null;
-        setCommonJsExport(staticPropertyKey(n.arguments[1]),value?.type==='Identifier'?value.name:null);
+        const local=descriptorExportLocal(n.arguments[2]);
+        setCommonJsExport(staticPropertyKey(n.arguments[1]),local);
       }
       if(method==='defineProperties'&&isCommonJsExportsTarget(n.arguments[0])
         &&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)
@@ -196,12 +206,8 @@ function collectExportsAndImports(ast,file){
           if(property.type!=='Property'||property.kind!=='init')continue;
           const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
           if(key===null||key===undefined)continue;
-          const descriptor=property.value;
-          const value=descriptor?.type==='ObjectExpression'
-            ?descriptor.properties.find(item=>item.type==='Property'&&!item.computed
-              &&item.key.type==='Identifier'&&item.key.name==='value')?.value
-            :null;
-          setCommonJsExport(String(key),value?.type==='Identifier'?value.name:null);
+          const local=descriptorExportLocal(property.value);
+          setCommonJsExport(String(key),local);
         }
       }
     }
