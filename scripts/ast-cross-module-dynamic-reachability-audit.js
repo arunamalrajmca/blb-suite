@@ -164,7 +164,10 @@ function collectExportsAndImports(ast,file){
         }));
         // A dynamic key or spread can overwrite any literal descriptor name.
         // Reject the complete descriptor map instead of retaining stale owners.
-        if(resolved.some(item=>item.key===null||item.key===undefined))return;
+        if(resolved.some(item=>item.key===null||item.key===undefined)){
+          clearCommonJsExportOwners();
+          return;
+        }
         for(const item of resolved)setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
         return;
       }
