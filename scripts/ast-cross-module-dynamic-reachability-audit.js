@@ -54,10 +54,28 @@ function collectExportsAndImports(ast,file){
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed?staticPropertyKey(member.property):member.property.name)
     :null;
+  const isModuleExportsAssignment=node=>node?.type==='AssignmentExpression'&&node.operator==='='
+    &&node.left.type==='MemberExpression'&&node.left.object.type==='Identifier'
+    &&node.left.object.name==='module'&&isUnboundGlobal(node.left.object)&&memberName(node.left)==='exports';
+  const isModuleExportsReference=node=>node?.type==='MemberExpression'&&node.object.type==='Identifier'
+    &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
+  const moduleExportsReplacements=[];
+  const resolveVariableDeclarator=identifier=>{
+    const reference=(scopeManager.scopes||[]).flatMap(scope=>scope.references||[])
+      .find(item=>item.identifier===identifier);
+    const definition=reference?.resolved?.defs?.find(item=>item.type==='Variable');
+    return definition?.node?.type==='VariableDeclarator'?definition.node:null;
+  };
+  const isCurrentCommonJsExportAlias=(identifier,atNode=identifier)=>{
+    if(identifier?.type!=='Identifier')return false;
+    const declarator=resolveVariableDeclarator(identifier);
+    if(!declarator||!isModuleExportsReference(declarator.init))return false;
+    return !moduleExportsReplacements.some(replacement=>replacement.start>declarator.end&&replacement.start<atNode.start);
+  };
   const isCommonJsExportsTarget=node=>{
     if(node?.type==='Identifier'&&node.name==='exports')return isUnboundGlobal(node);
-    return node?.type==='MemberExpression'&&node.object.type==='Identifier'
-      &&node.object.name==='module'&&isUnboundGlobal(node.object)&&memberName(node)==='exports';
+    if(node?.type==='Identifier'&&isCurrentCommonJsExportAlias(node))return true;
+    return isModuleExportsReference(node);
   };
   const recordObjectProperties=object=>{
     if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
@@ -99,6 +117,10 @@ function collectExportsAndImports(ast,file){
     if(['freeze','seal','preventExtensions'].includes(method))recordObjectProperties(value.arguments[0]);
   };
   visit(ast,n=>{
+    if(isModuleExportsAssignment(n)){
+      const selfAssignment=isModuleExportsReference(n.right);
+      if(!selfAssignment)moduleExportsReplacements.push(n);
+    }
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
       for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(specifier.local.name);
     }
@@ -183,6 +205,7 @@ function collectExportsAndImports(ast,file){
         // Record only literal property names; dynamic names remain outside this proof.
         setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
       } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
+      else if(n.left.object.type==='Identifier'&&key&&isCurrentCommonJsExportAlias(n.left.object,n))setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
     }
   });
   return {exports,imports};
