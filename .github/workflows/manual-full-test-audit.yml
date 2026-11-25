@@ -772,14 +772,14 @@ jobs:
         run: |
           {
             echo "## Manual full-test audit"
+            echo
+            echo "| Suite | Result |"
+            echo "|---|---|"
             if [[ "$HAS_PRODUCTION_CHANGES" == "true" ]]; then
               echo "| End-user Performance qualification | Delegated — production changes detected |"
             else
               echo "| End-user Performance qualification | SKIPPED — no relevant production changes |"
             fi
-            echo
-            echo "| Suite | Result |"
-            echo "|---|---|"
             echo "| Repository test inventory | $INVENTORY |"
             echo "| AST reachability audit tests and analysis | $AST |"
             echo "| AST serial-parallel equivalence | $AST_CONCURRENCY |"
