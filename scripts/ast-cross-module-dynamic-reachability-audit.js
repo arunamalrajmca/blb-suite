@@ -189,6 +189,8 @@ function collectExportsAndImports(ast,file){
         &&memberName(n.left.object)==='exports';
       if(obj==='module'&&key==='exports'&&isUnboundGlobal(n.left.object)){
         const isDirectSelfAssignment=isModuleExportsReference(n.right);
+        const isCurrentExportsObjectIdentity=n.right.type==='Identifier'&&n.right.name==='exports'
+          &&isUnboundGlobal(n.right)&&!exportsAliasDetached;
         const assignmentValue=n.right;
         const isAssignMutation=assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
           &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
@@ -198,7 +200,7 @@ function collectExportsAndImports(ast,file){
             ||(assignmentValue.arguments[0].type==='Identifier'&&assignmentValue.arguments[0].name==='exports'
               &&isUnboundGlobal(assignmentValue.arguments[0])&&!exportsAliasDetached)
             ||(assignmentValue.arguments[0].type==='Identifier'&&isCurrentCommonJsExportAlias(assignmentValue.arguments[0],n)));
-        const isSelfAssignment=isDirectSelfAssignment||isAssignMutation;
+        const isSelfAssignment=isDirectSelfAssignment||isCurrentExportsObjectIdentity||isAssignMutation;
         if(!isSelfAssignment){
           replaceCommonJsExportObject();
           // In a chained assignment, exports is rebound to the newly assigned module.exports object.
