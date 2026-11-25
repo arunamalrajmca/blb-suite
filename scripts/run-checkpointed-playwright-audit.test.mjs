@@ -41,6 +41,8 @@ test('shard manifests are bound to exact source, fingerprint, inventory, order, 
     changedFiles: ['extension/background.js']
   }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, fingerprint: 'd'.repeat(64) }), false);
+  assert.equal(isCompatibleShardManifest(manifest, { ...expected, environmentFingerprint: 'e'.repeat(64) }), false);
+  assert.equal(isCompatibleShardManifest({ ...manifest, schemaVersion: 2 }, expected), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, tests: [...entries].reverse() }), false);
   assert.equal(isCompatibleShardManifest(manifest, { ...expected, shardCount: 3 }), false);
   const malformed = structuredClone(manifest);
