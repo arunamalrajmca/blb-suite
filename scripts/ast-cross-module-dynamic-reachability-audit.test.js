@@ -798,3 +798,26 @@ test('resolves nested frozen object literals copied into CommonJS exports',()=>{
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves literal object spreads but leaves identifier spreads unproven',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-literal-spread-exports-'));
+ try{
+  fs.writeFileSync(path.join(root,'literal.cjs'),[
+   'function service() {}',
+   'module.exports = { ...{ service } };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'dynamic.cjs'),[
+   'function service() {}',
+   'const source = { service };',
+   'module.exports = { ...source };'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { service as literalService } from './literal.cjs';",
+   "import { service as dynamicService } from './dynamic.cjs';"
+  ].join('\n'));
+  const files=['literal.cjs','dynamic.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
