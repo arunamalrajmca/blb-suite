@@ -325,10 +325,10 @@ jobs:
         id: browser_shard_restore
         uses: actions/cache/restore@v5
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
           restore-keys: |
-            blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-
+            blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-
       - name: Prepare complete browser test list and concurrency compatibility
         id: browser_prepare
         continue-on-error: true
@@ -500,8 +500,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-01
       - name: Run browser shard 2/8
         id: browser_shard_2
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -513,8 +513,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-02
       - name: Run browser shard 3/8
         id: browser_shard_3
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -526,8 +526,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-03
       - name: Run browser shard 4/8
         id: browser_shard_4
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -539,8 +539,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-04
       - name: Run browser shard 5/8
         id: browser_shard_5
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -552,8 +552,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-05
       - name: Run browser shard 6/8
         id: browser_shard_6
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -565,8 +565,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-06
       - name: Run browser shard 7/8
         id: browser_shard_7
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -578,8 +578,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-07
       - name: Run browser shard 8/8
         id: browser_shard_8
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
@@ -591,8 +591,8 @@ jobs:
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
-          path: ${{ runner.temp }}/blb-browser-shard-checkpoints
-          key: blb-browser-shards-v1-${{ steps.fingerprints.outputs.browser }}-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-node22-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
+          path: ${{ runner.temp }}/blb-browser-shard-checkpoints/browser-shards.json
+          key: blb-browser-shards-v1-${{ runner.os }}-${{ runner.arch }}-node22-${{ steps.fingerprints.outputs.browser }}-${{ github.run_id }}-${{ github.run_attempt }}-shard-08
       - name: Validate all browser shard checkpoints
         id: browser
         if: ${{ !cancelled() && steps.browser_prepare.outcome == 'success' }}
