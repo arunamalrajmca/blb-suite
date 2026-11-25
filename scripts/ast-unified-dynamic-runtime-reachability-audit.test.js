@@ -1129,3 +1129,64 @@ test('reports dynamic computed API names on Reflect, Object, and Proxy namespace
   assert.ok(dynamicNames.some(item => item.expression.includes('objectApi[methodName]')));
   assert.ok(dynamicNames.some(item => item.expression.includes('proxyApi[methodName]')));
 });
+
+
+test('resolves callbacks returned by local higher-order factories at external registration sites', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(message) { return message; }',
+      'function makeHandler() { return onMessage; }',
+      'chrome.runtime.onMessage.addListener(makeHandler());'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-factory-return', JSON.stringify(registration));
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'), registration.callbackTarget);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves callbacks returned by imported factories across module boundaries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { makeHandler } from './handlers.js';",
+      'chrome.runtime.onMessage.addListener(makeHandler());'
+    ].join(' '),
+    'scripts/handlers.js': [
+      'function onMessage(message) { return message; }',
+      'export function makeHandler() { return onMessage; }'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-factory-return', JSON.stringify(registration));
+  assert.ok(registration.callbackTarget.startsWith('scripts/handlers.js::onMessage@'), registration.callbackTarget);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps callback factories uncertain when return paths produce different functions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function first(message) { return message; }',
+      'function second(message) { return message; }',
+      'function makeHandler(flag) { if (flag) return first; return second; }',
+      'chrome.runtime.onMessage.addListener(makeHandler(runtimeFlag));'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
