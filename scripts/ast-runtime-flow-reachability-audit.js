@@ -617,7 +617,8 @@ function analyzeFile(root, file) {
             } else if (asyncIterable.generator) {
               values.push(...yieldedValues(asyncIterable.generator, seen));
             } else if (asyncIterable.classNode) {
-              const methods = classAsyncIteratorMethods(asyncIterable.classNode);
+              const methods = classAsyncIteratorMethods(asyncIterable.classNode) ||
+                classSyncIteratorMethods(asyncIterable.classNode);
               if (methods?.iterator?.generator) {
                 values.push(...yieldedValues(methods.iterator, seen));
               } else if (methods?.next) {
@@ -951,7 +952,8 @@ function analyzeFile(root, file) {
       const iteratorClass = classForInstanceExpression(node.init);
       if (iteratorClass) {
         const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
-        if (registerClassAsyncIterator(iteratorClass, source, node.init)) {
+        if (registerClassAsyncIterator(iteratorClass, source, node.init) ||
+            registerClassSyncIterator(iteratorClass, source, node.init)) {
           asyncIterableSources.set(assigned, source);
           asyncIteratorInstanceSources.set(assigned, source);
         }
@@ -965,7 +967,11 @@ function analyzeFile(root, file) {
             addContainedReferences(asyncIterable.array, source, 'array-from-source', node.init);
             addObjectPropertySlots(asyncIterable.array, source);
           } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
-          else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, node.init);
+          else if (asyncIterable.classNode) {
+            if (!registerClassAsyncIterator(asyncIterable.classNode, source, node.init)) {
+              registerClassSyncIterator(asyncIterable.classNode, source, node.init);
+            }
+          }
           else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init, false, asyncIterable.iteratorObject);
         }
       }
@@ -1369,12 +1375,18 @@ function analyzeFile(root, file) {
               addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
               addObjectPropertySlots(asyncIterable.array, source);
             } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
-            else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, iterable);
+            else if (asyncIterable.classNode) {
+              if (!registerClassAsyncIterator(asyncIterable.classNode, source, iterable)) {
+                registerClassSyncIterator(asyncIterable.classNode, source, iterable);
+              }
+            }
             else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable, false, asyncIterable.iteratorObject);
           }
         } else if (classForInstanceExpression(iterable)) {
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-          registerClassAsyncIterator(classForInstanceExpression(iterable), source, iterable);
+          if (!registerClassAsyncIterator(classForInstanceExpression(iterable), source, iterable)) {
+            registerClassSyncIterator(classForInstanceExpression(iterable), source, iterable);
+          }
         } else if (iterable?.type === 'ObjectExpression') {
           const iterator = asyncIteratorMethod(iterable);
           if (iterator) {
@@ -1981,7 +1993,11 @@ function analyzeFile(root, file) {
             addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
             addObjectPropertySlots(asyncIterable.array, source);
           } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
-          else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, right);
+          else if (asyncIterable.classNode) {
+            if (!registerClassAsyncIterator(asyncIterable.classNode, source, right)) {
+              registerClassSyncIterator(asyncIterable.classNode, source, right);
+            }
+          }
           else registerAsyncIteratorValues(asyncIterable.iterator, source, right, false, asyncIterable.iteratorObject);
         }
       } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
