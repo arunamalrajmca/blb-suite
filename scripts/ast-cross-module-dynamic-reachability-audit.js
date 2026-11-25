@@ -71,6 +71,14 @@ function collectExportsAndImports(ast,file){
       &&property.key.type==='Identifier'&&property.key.name==='get')?.value;
     return staticGetterLocal(getter);
   };
+  const descriptorEnumerableState=descriptor=>{
+    if(descriptor?.type!=='ObjectExpression')return null;
+    const enumerableProperties=(descriptor.properties||[]).filter(property=>property.type==='Property'
+      &&(property.computed?staticPropertyKey(property.key):property.key.name??property.key.value)==='enumerable');
+    if(!enumerableProperties.length)return false;
+    const value=enumerableProperties[enumerableProperties.length-1].value;
+    return value.type==='Literal'&&typeof value.value==='boolean'?value.value:null;
+  };
   const memberName=member=>member?.type==='MemberExpression'
     ?(member.computed?staticPropertyKey(member.property):member.property.name)
     :null;
@@ -127,14 +135,14 @@ function collectExportsAndImports(ast,file){
     for(const entry of resolved)setCommonJsExport(entry.key,entry.value.type==='Identifier'?entry.value.name:null);
     return true;
   };
-  const recordObjectProperties=(object,exportsSnapshot=null,activeAliases=new Set())=>{
+  const recordObjectProperties=(object,exportsSnapshot=null,activeAliases=new Set(),enumerableOnly=false)=>{
     if(object?.type==='Identifier'){
       const variable=resolveVariable(object);
       const declarator=variable?.defs?.find(item=>item.type==='Variable')?.node;
       const staticObject=resolveStaticObjectSpread(object);
       if(staticObject&&declarator&&!activeAliases.has(declarator)){
         activeAliases.add(declarator);
-        recordObjectProperties(staticObject,exportsSnapshot,activeAliases);
+        recordObjectProperties(staticObject,exportsSnapshot,activeAliases,enumerableOnly);
         activeAliases.delete(declarator);
       }else{
         // An unknown assignment source may overwrite any previously inferred key.
@@ -147,7 +155,7 @@ function collectExportsAndImports(ast,file){
       &&isUnboundGlobal(object.callee.object)){
       const method=memberName(object.callee);
       if(method==='assign'){
-        for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot);
+        for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot,new Set(),true);
         return;
       }
       if(method==='fromEntries'){recordObjectFromEntries(object);return;}
@@ -166,6 +174,15 @@ function collectExportsAndImports(ast,file){
         // Reject the complete descriptor map instead of retaining stale owners.
         if(resolved.some(item=>item.key===null||item.key===undefined)){
           clearCommonJsExportOwners();
+          return;
+        }
+        if(enumerableOnly){
+          const states=resolved.map(item=>descriptorEnumerableState(item.property.value));
+          if(states.some(state=>state===null)){
+            clearCommonJsExportOwners();
+            return;
+          }
+          for(let i=0;i<resolved.length;i++)if(states[i])setCommonJsExport(String(resolved[i].key),descriptorExportLocal(resolved[i].property.value));
           return;
         }
         for(const item of resolved)setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
@@ -201,7 +218,7 @@ function collectExportsAndImports(ast,file){
             // An unknown spread can overwrite any previously observed static key.
             clearCommonJsExportOwners();
           }
-          recordObjectProperties(argument,exportsSnapshot,activeAliases);
+          recordObjectProperties(argument,exportsSnapshot,activeAliases,true);
         }
         continue;
       }
@@ -272,7 +289,7 @@ function collectExportsAndImports(ast,file){
       for(const argument of value.arguments){
         if(exportsSnapshot!==null&&argument.type==='Identifier'&&argument.name==='exports'&&isUnboundGlobal(argument)){
           for(const [name,local] of exportsSnapshot)setCommonJsExport(name,local);
-        }else recordObjectProperties(argument,exportsSnapshot);
+        }else recordObjectProperties(argument,exportsSnapshot,new Set(),true);
       }
       return;
     }
