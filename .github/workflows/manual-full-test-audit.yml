@@ -340,7 +340,7 @@ jobs:
             export BLB_CI_CHECKPOINT_FINGERPRINT="${{ steps.fingerprints.outputs.browser }}"
             export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
             export BLB_BROWSER_SHARD_CHECKPOINT_DIR="$RUNNER_TEMP/blb-browser-shard-checkpoints"
-            export BLB_PERF_OUTPUT="$RUNNER_TEMP/blb-ci-checkpoints/browser-matrix/blb-performance.jsonl"
+            export BLB_PERF_OUTPUT="$BLB_CI_CHECKPOINT_DIR/blb-performance.jsonl"
             export NO_COLOR=1 FORCE_COLOR=0
             mkdir -p "$BLB_CI_CHECKPOINT_DIR" "$(dirname "$BLB_PERF_OUTPUT")" "$BLB_BROWSER_SHARD_CHECKPOINT_DIR"
             touch "$BLB_PERF_OUTPUT"
