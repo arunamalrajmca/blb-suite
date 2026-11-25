@@ -655,7 +655,7 @@ function analyzeFile(root, file) {
     }
     if (expression.type === 'ObjectExpression') {
       const iterator = asyncIteratorMethod(expression);
-      return iterator ? [{iterator}] : [];
+      return iterator ? [{iterator, iteratorObject:expression}] : [];
     }
     if (expression.type === 'NewExpression') {
       const classNode = classForInstanceExpression(expression);
@@ -785,9 +785,16 @@ function analyzeFile(root, file) {
     }
     return values;
   };
-  const registerAsyncIteratorValues = (fn, source, origin, directNextMethod = false) => {
+  const registerAsyncIteratorValues = (fn, source, origin, directNextMethod = false, iteratorObject = null) => {
     const values = fn?.generator ? yieldedValues(fn) :
       directNextMethod ? asyncIteratorStepValues(fn) : asyncIteratorResultValues(fn);
+    if (!fn?.generator && !directNextMethod && iteratorObject &&
+        returnedValues(fn).some(returned => returned.type === 'ThisExpression')) {
+      const nextMethod = iteratorObject.properties.find(property =>
+        property.type === 'Property' && propertyKey(property.key, property.computed) === 'next' &&
+        isFunction(property.value))?.value;
+      if (nextMethod) values.push(...asyncIteratorStepValues(nextMethod));
+    }
     if (!fn?.generator) {
       for (const returned of returnedValues(fn)) {
         const iteratorObject = resolveObjectExpression(returned);
@@ -894,7 +901,7 @@ function analyzeFile(root, file) {
         for (const asyncIterable of asyncIterables) {
           if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
           else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, node.init);
-          else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init);
+          else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init, false, asyncIterable.iteratorObject);
         }
       }
     }
@@ -1295,7 +1302,7 @@ function analyzeFile(root, file) {
           for (const asyncIterable of asyncIterables) {
             if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
             else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, iterable);
-            else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable);
+            else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable, false, asyncIterable.iteratorObject);
           }
         } else if (classForInstanceExpression(iterable)) {
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
@@ -1304,7 +1311,7 @@ function analyzeFile(root, file) {
           const iterator = asyncIteratorMethod(iterable);
           if (iterator) {
             source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
-            registerAsyncIteratorValues(iterator, source, iterable);
+            registerAsyncIteratorValues(iterator, source, iterable, false, iterable);
           }
         } else if (iterable?.type === 'ArrayExpression') {
           source = 'array-from-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
@@ -1905,7 +1912,7 @@ function analyzeFile(root, file) {
         for (const asyncIterable of asyncIterables) {
           if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
           else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, right);
-          else registerAsyncIteratorValues(asyncIterable.iterator, source, right);
+          else registerAsyncIteratorValues(asyncIterable.iterator, source, right, false, asyncIterable.iteratorObject);
         }
       } else if (right.type === 'CallExpression' && right.callee.type === 'MemberExpression') {
         const method = propertyKey(right.callee.property, right.callee.computed);
