@@ -1399,6 +1399,26 @@ test('propagates delegated async-generator yields through a local iterator alias
     edge.to === 'callback@9' && edge.kind === 'container-callback-argument'));
 });
 
+test('traces every async-generator iterable returned by a branching factory', () => {
+  const result = audit([
+    'const first = () => startFirst();',
+    'const second = () => startSecond();',
+    'async function* firstTasks() { yield first; }',
+    'async function* secondTasks() { yield second; }',
+    'function makeTasks(flag) {',
+    '  if (flag) return firstTasks();',
+    '  return secondTasks();',
+    '}',
+    'async function run() {',
+    '  await Array.fromAsync(makeTasks(true), callback => callback());',
+    '}'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@1' &&
+    edge.to === 'callback@10' && edge.kind === 'container-callback-argument'));
+  assert.ok(result.flowEdges.some(edge => edge.from === 'function@2' &&
+    edge.to === 'callback@10' && edge.kind === 'container-callback-argument'));
+});
+
 test('propagates delegated yields from an object-method async generator', () => {
   const result = audit([
     'const cleanup = () => work();',
