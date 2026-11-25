@@ -1403,7 +1403,7 @@ function analyzeFile(root, file) {
             : 'iterable-source@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           for (const iterableCandidate of compatibleIterables) {
             if (iterableCandidate.collection) {
-              if (iterableCandidate.collectionKind === 'Map') entries = true;
+              if (iterableCandidate.collectionKind === 'Map') { entries = true; includeObjectValues = true; }
               if (iterableCandidate.collection.arguments[0]) {
                 addContainedReferences(iterableCandidate.collection.arguments[0], source, 'iterable-collection-source', node);
                 addObjectPropertySlots(iterableCandidate.collection.arguments[0], source);
@@ -2044,7 +2044,7 @@ function analyzeFile(root, file) {
         source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
         for (const asyncIterable of asyncIterables) {
           if (asyncIterable.collection) {
-            if (asyncIterable.collectionKind === 'Map') entries = true;
+            if (asyncIterable.collectionKind === 'Map') { entries = true; includeObjectValues = true; }
             if (asyncIterable.collection.arguments[0]) {
               addContainedReferences(asyncIterable.collection.arguments[0], source, 'iterable-collection-source', node);
               addObjectPropertySlots(asyncIterable.collection.arguments[0], source);
