@@ -769,3 +769,18 @@ test('recognizes exports alias reattachment after module.exports replacement',()
   assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='chained'&&x.exportedLocal==='chainedService'&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('preserves named CommonJS exports when module.exports is assigned to itself',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-exports-self-assignment-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'module.exports = { service };',
+   'module.exports = module.exports;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
