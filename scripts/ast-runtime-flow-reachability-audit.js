@@ -603,8 +603,8 @@ function analyzeFile(root, file) {
     if (expression.type === 'AwaitExpression') {
       return resolveGeneratorExpression(expression.argument, seen);
     }
-    if (expression.type === 'CallExpression' && expression.callee.type === 'Identifier') {
-      const resolved = resolveFunctionReference(expression.callee);
+    if (expression.type === 'CallExpression') {
+      const resolved = resolveCalledFunction(expression);
       return resolved?.generator ? resolved : null;
     }
     if (expression.type === 'Identifier') {
