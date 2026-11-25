@@ -879,3 +879,17 @@ test('does not trace stale or shadowed aliases as current CommonJS exports',()=>
   for(const name of ['stale','shadowed'])assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported===name&&x.unresolvedExport),name);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves object literals wrapped by native Object.setPrototypeOf',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-set-prototype-export-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'module.exports = Object.setPrototypeOf({ service }, null);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.cjs';");
+  const files=['service.cjs','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.imported==='service'&&x.exportedLocal==='service'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
