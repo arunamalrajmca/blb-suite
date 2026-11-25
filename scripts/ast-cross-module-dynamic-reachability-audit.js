@@ -279,8 +279,8 @@ function collectExportsAndImports(ast,file){
         property,
         key:property.type==='Property'?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null
       }));
-      if(resolved.some(item=>item.key===null)){
-        // A dynamic key or spread can overwrite any previously inferred owner.
+      if(resolved.some(item=>item.key===null||item.property.kind!=='init')){
+        // A dynamic key, spread, or accessor can supply/overwrite arbitrary descriptors.
         clearCommonJsExportOwners();
         return false;
       }
