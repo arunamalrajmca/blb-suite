@@ -323,7 +323,8 @@ jobs:
         with:
           section: browser-matrix
           always_run: 'true'
-          cache_prefix: blb-ci-v1-full-audit-browser-matrix-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          cache_prefix: blb-ci-v1-full-audit-browser-matrix-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          restore_prefix: blb-ci-v1-full-audit-browser-matrix-
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/manual-full-test-audit.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           run: |
             export BLB_EXPECTED_VERSION="${{ steps.version.outputs.version }}"
