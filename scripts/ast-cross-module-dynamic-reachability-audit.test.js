@@ -1320,3 +1320,36 @@ test('invalidates prior CommonJS export owners when descriptor mutations have dy
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('invalidates prior CommonJS export owners when Object.assign has an unknown source',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-assign-unknown-source-overwrite-'));
+ try{
+  fs.writeFileSync(path.join(root,'identifier-source.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const additions = loadExports();',
+   'Object.assign(module.exports, additions);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'call-source.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'Object.assign(module.exports, loadExports());'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'from-entries-source.cjs'),[
+   'function service() {}',
+   'module.exports.service = service;',
+   'const entries = loadEntries();',
+   'Object.assign(module.exports, Object.fromEntries(entries));'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: identifierService } = require('./identifier-source.cjs');",
+   "const { service: callService } = require('./call-source.cjs');",
+   "const { service: entriesService } = require('./from-entries-source.cjs');"
+  ].join('\n'));
+  const files=['identifier-source.cjs','call-source.cjs','from-entries-source.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of ['identifier-source.cjs','call-source.cjs','from-entries-source.cjs']) {
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'&&x.exportedLocal===null&&x.unresolvedExport),target+' should not retain a stale service owner');
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
