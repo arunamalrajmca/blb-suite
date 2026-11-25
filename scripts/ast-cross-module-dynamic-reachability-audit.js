@@ -127,6 +127,18 @@ function collectExportsAndImports(ast,file){
         for(const argument of object.arguments)recordObjectProperties(argument,exportsSnapshot);
         return;
       }
+      if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
+        // Object.create(proto, descriptors) defines the literal descriptor keys
+        // as own properties. Trace only descriptor values/getters already proven
+        // to be direct local bindings; dynamic descriptor construction stays unknown.
+        for(const property of object.arguments[1].properties||[]){
+          if(property.type!=='Property'||property.kind!=='init')continue;
+          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+          if(key===null||key===undefined)continue;
+          setCommonJsExport(String(key),descriptorExportLocal(property.value));
+        }
+        return;
+      }
       if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method)){
         recordObjectProperties(object.arguments[0],exportsSnapshot);
         return;
