@@ -610,7 +610,11 @@ function analyzeFile(root, file) {
           const asyncIterables = resolveAsyncIterableExpressions(node.argument);
           if (!asyncIterables.length) values.push(node.argument);
           for (const asyncIterable of asyncIterables) {
-            if (asyncIterable.generator) {
+            if (asyncIterable.array) {
+              for (const element of asyncIterable.array.elements) {
+                if (element) values.push(element.type === 'SpreadElement' ? element.argument : element);
+              }
+            } else if (asyncIterable.generator) {
               values.push(...yieldedValues(asyncIterable.generator, seen));
             } else if (asyncIterable.classNode) {
               const methods = classAsyncIteratorMethods(asyncIterable.classNode);
@@ -680,6 +684,9 @@ function analyzeFile(root, file) {
     }
     if (expression.type === 'SequenceExpression') {
       return resolveAsyncIterableExpressions(expression.expressions.at(-1), seen);
+    }
+    if (expression.type === 'ArrayExpression') {
+      return [{array:expression}];
     }
     if (expression.type === 'ObjectExpression') {
       const iterator = asyncIteratorMethod(expression);
@@ -927,7 +934,10 @@ function analyzeFile(root, file) {
         const source = 'async-iterable@' + node.init.loc.start.line + ':' + node.init.loc.start.column;
         asyncIterableSources.set(assigned, source);
         for (const asyncIterable of asyncIterables) {
-          if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
+          if (asyncIterable.array) {
+            addContainedReferences(asyncIterable.array, source, 'array-from-source', node.init);
+            addObjectPropertySlots(asyncIterable.array, source);
+          } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, node.init);
           else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, node.init);
           else registerAsyncIteratorValues(asyncIterable.iterator, source, node.init, false, asyncIterable.iteratorObject);
         }
@@ -1328,7 +1338,10 @@ function analyzeFile(root, file) {
           const asyncIterables = resolveAsyncIterableExpressions(iterable);
           source = 'async-iterable@' + iterable.loc.start.line + ':' + iterable.loc.start.column;
           for (const asyncIterable of asyncIterables) {
-            if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
+            if (asyncIterable.array) {
+              addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
+              addObjectPropertySlots(asyncIterable.array, source);
+            } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, iterable);
             else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, iterable);
             else registerAsyncIteratorValues(asyncIterable.iterator, source, iterable, false, asyncIterable.iteratorObject);
           }
@@ -1937,7 +1950,10 @@ function analyzeFile(root, file) {
         const asyncIterables = resolveAsyncIterableExpressions(right);
         source = 'async-iterable@' + right.loc.start.line + ':' + right.loc.start.column;
         for (const asyncIterable of asyncIterables) {
-          if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
+          if (asyncIterable.array) {
+            addContainedReferences(asyncIterable.array, source, 'array-from-source', node);
+            addObjectPropertySlots(asyncIterable.array, source);
+          } else if (asyncIterable.generator) registerAsyncIteratorValues(asyncIterable.generator, source, right);
           else if (asyncIterable.classNode) registerClassAsyncIterator(asyncIterable.classNode, source, right);
           else registerAsyncIteratorValues(asyncIterable.iterator, source, right, false, asyncIterable.iteratorObject);
         }
