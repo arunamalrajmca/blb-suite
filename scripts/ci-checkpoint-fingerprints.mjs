@@ -14,11 +14,11 @@ const shared = [
 
 const hasPrefix = (file, prefix) => file === prefix || file.startsWith(prefix + '/');
 const matches = {
-  inventory: file => ['extension', 'tests', 'scripts', 'regression-suite'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
+  inventory: file => ['extension', 'tests', 'scripts', 'regression-suite', '.github/workflows'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
   ast: file => ['extension', 'scripts', 'regression-suite'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
   astConcurrency: file => ['extension', 'scripts', 'regression-suite'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
   build: file => ['extension', 'scripts', 'regression-suite'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
-  selector: file => ['extension', 'tests/selector', 'scripts', 'regression-suite'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
+  selector: file => ['extension', 'tests/selector', 'scripts', 'regression-suite', '.github/workflows'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
   scripts: file => ['extension', 'scripts', 'regression-suite'].some(prefix => hasPrefix(file, prefix)) || shared.includes(file),
   python: file => hasPrefix(file, 'extension') || hasPrefix(file, 'scripts') || hasPrefix(file, 'regression-suite') ||
     (hasPrefix(file, 'tests') && /(^|\/)test_[^/]+\.py$/.test(file)) || shared.includes(file),
