@@ -1480,3 +1480,20 @@ test('does not treat non-enumerable Object.create descriptors as copied CommonJS
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('preserves non-enumerable Object.assign target properties through object wrappers',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-wrapped-assign-target-descriptors-'));
+ try{
+  fs.writeFileSync(path.join(root,'target.cjs'),[
+   'function service() {}',
+   'module.exports = Object.freeze(Object.assign(Object.create(null, {',
+   '  service: { value: service }',
+   '}), {}));'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./target.cjs');");
+  const files=['target.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='target.cjs'&&x.imported==='service'
+   &&x.exportedLocal==='service'&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
