@@ -140,14 +140,16 @@ function collectExportsAndImports(ast,file){
       }
       if(method==='fromEntries'){recordObjectFromEntries(object);return;}
       if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
-        // Object.create(proto, descriptors) defines the literal descriptor keys
-        // as own properties. Trace only descriptor values/getters already proven
-        // to be direct local bindings; dynamic descriptor construction stays unknown.
-        for(const property of object.arguments[1].properties||[]){
-          if(property.type!=='Property'||property.kind!=='init')continue;
-          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
-          if(key===null||key===undefined)continue;
-          setCommonJsExport(String(key),descriptorExportLocal(property.value));
+        // A dynamic descriptor key or spread may overwrite any statically named
+        // property, so only infer owners when every descriptor key is literal.
+        const descriptors=(object.arguments[1].properties||[]).map(property=>({
+          property,
+          key:property.type==='Property'?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null
+        }));
+        if(descriptors.some(item=>item.key===null||item.key===undefined))return;
+        for(const item of descriptors){
+          if(item.property.kind!=='init')continue;
+          setCommonJsExport(String(item.key),descriptorExportLocal(item.property.value));
         }
         return;
       }
