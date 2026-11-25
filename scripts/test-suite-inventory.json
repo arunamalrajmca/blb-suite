@@ -220,7 +220,7 @@
       "runnerChecks": [
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
-          "requiredText": "node scripts/run-checkpointed-playwright-audit.mjs \"$test_list\""
+          "requiredText": "node scripts/run-checkpointed-playwright-audit.mjs \"$RUNNER_TEMP/blb-playwright-test-list.txt\" 1"
         },
         {
           "file": ".github/actions/ci-section-checkpoint/action.yml",
