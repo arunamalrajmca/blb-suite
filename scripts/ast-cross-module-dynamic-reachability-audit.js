@@ -144,7 +144,7 @@ function collectExportsAndImports(ast,file){
       } else if(moduleExportsObject&&key) {
         // CommonJS permits incremental named exports after assigning module.exports.
         // Record only literal property names; dynamic names remain outside this proof.
-        exports.set(key,n.right.type==='Identifier'?n.right.name:null);
+        setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
       } else if(obj==='exports'&&key&&isUnboundGlobal(n.left.object)&&!exportsAliasDetached)setCommonJsExport(key,n.right.type==='Identifier'?n.right.name:null);
     }
   });
