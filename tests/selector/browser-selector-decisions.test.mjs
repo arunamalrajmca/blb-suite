@@ -1262,6 +1262,10 @@ test("full audit delegates performance and physical-input tests to workflows tri
     !audit.includes(': > "$BLB_PERF_OUTPUT"'),
     "full-audit corpus A/B samples must survive browser-shard retries without truncation"
   );
+  assert.ok(audit.includes("name: Restore browser-matrix performance checkpoint"),
+    "full-audit corpus A/B samples must be restored before browser shards");
+  assert.equal((audit.match(/name: Save browser-matrix performance checkpoint after shard/g) || []).length, 8,
+    "full-audit corpus A/B samples must be checkpointed after every browser shard");
   for (const title of [
     "a real MV3 service-worker termination is recovered by the physical Alt+B browser shortcut",
     "native Chromium _self prerender activation initializes the activated document without tab replacement",
