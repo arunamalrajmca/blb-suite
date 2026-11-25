@@ -1143,3 +1143,42 @@ test('traces literal CommonJS properties created with Object.create descriptors'
   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='dynamic'&&x.exportedLocal===null&&!x.unresolvedExport));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('traces literal Object.fromEntries CommonJS export tuples',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-from-entries-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   'function replacement() {}',
+   'module.exports = Object.fromEntries([',
+   "  ['service', service],",
+   "  ['numeric', replacement],",
+   "  ['service', replacement],",
+   "  ['computedValue', createService()]",
+   ']);'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service, numeric, computedValue } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='numeric'&&x.exportedLocal==='replacement'&&!x.unresolvedExport));
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='computedValue'&&x.exportedLocal===null&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not infer Object.fromEntries exports when a key is dynamic',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-from-entries-dynamic-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.cjs'),[
+   'function service() {}',
+   "const key = process.env.EXPORT_NAME;",
+   'module.exports = Object.fromEntries([',
+   "  ['service', service],",
+   '  [key, createService()]',
+   ']);'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const { service } = require('./service.cjs');");
+  const files=['service.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.imported==='service'&&x.exportedLocal===null&&!x.unresolvedExport));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
