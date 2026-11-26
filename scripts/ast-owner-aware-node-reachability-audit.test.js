@@ -881,6 +881,54 @@ test('follows call and apply wrappers around createRequire factories', () => {
   }
 });
 
+test('follows Node loader aliases assigned through object destructuring', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'assigned-destructured-module-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: {
+      run: 'node scripts/main.mjs',
+      cjs: 'node scripts/cjs-main.cjs'
+    } }));
+    write('scripts/main.mjs', [
+      "import * as nodeModule from 'node:module';",
+      'let makeRequire;',
+      '({ createRequire: makeRequire } = nodeModule);',
+      'const load = makeRequire(import.meta.url);',
+      "load('./assigned-create-require-child.js');",
+      'let replacedFactory;',
+      '({ createRequire: replacedFactory } = unrelated);',
+      'const notALoader = replacedFactory(import.meta.url);',
+      "notALoader('./not-a-create-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/cjs-main.cjs', [
+      'let load;',
+      '({ require: load } = module);',
+      "load('./assigned-module-require-child.js');",
+      'let replacedRequire;',
+      '({ require: replacedRequire } = unrelated);',
+      "replacedRequire('./not-a-module-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    for (const name of [
+      'scripts/assigned-create-require-child.js',
+      'scripts/assigned-module-require-child.js',
+      'scripts/not-a-create-require-child.js',
+      'scripts/not-a-module-require-child.js'
+    ]) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/assigned-create-require-child.js'));
+    assert.ok(reachable.has('scripts/assigned-module-require-child.js'));
+    assert.equal(reachable.has('scripts/not-a-create-require-child.js'), false);
+    assert.equal(reachable.has('scripts/not-a-module-require-child.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('follows destructured loaders from Node module namespace and CommonJS module object', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'destructured-module-loaders-'));
   const write = (name, value = '') => {
