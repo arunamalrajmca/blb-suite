@@ -582,7 +582,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           property.value.type === 'Identifier' && property.value.name === variable.name);
       }
       return false;
-    })
+    });
     if (declaredFactory) return true;
     const uninitializedVariable = (variable.defs || []).some(definition =>
       definition.type === 'Variable' && definition.node?.type === 'VariableDeclarator' &&
@@ -591,7 +591,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     return uninitializedVariable && (variable.references || []).some(write =>
       write.isWrite() && write.writeExpr?.type === 'AssignmentExpression' &&
       isFactoryExpression(write.writeExpr.right, seen)
-    );;
+    );
   }
   function isFactoryExpression(expression, seen = new Set()) {
     if (!expression) return false;
