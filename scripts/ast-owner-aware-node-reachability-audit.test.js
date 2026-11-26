@@ -806,7 +806,7 @@ test('follows bound createRequire factories from imported and module namespace s
       'const boundModuleFactory = module.createRequire.bind(module);',
       'const loadModule = boundModuleFactory(__filename);',
       "loadModule('./bound-module-factory-child.js');"
-    ].join(String.fromCharCode(10));
+    ].join(String.fromCharCode(10)));
     write('scripts/bound-imported-factory-child.js');
     write('scripts/bound-module-factory-child.js');
     const graph = buildModuleGraph(root);
