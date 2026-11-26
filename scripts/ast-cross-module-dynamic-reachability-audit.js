@@ -61,7 +61,7 @@ function resolveLocal(from,spec,files,root=path.resolve(__dirname,'..'),mode='im
   return resolveModuleFile(from,spec,files,root,mode);
 }
 function collectExportsAndImports(ast,file){
-  const exports=new Map(),imports=[],pathIdentifiers=new Set(),commonJsExportNames=new Set();
+  const exports=new Map(),imports=[],pathIdentifiers=new Set(),requireAliases=new Set(),commonJsExportNames=new Set();
   let exportsAliasDetached=false;
   const setCommonJsExport=(name,local)=>{
     exports.set(String(name),local);
@@ -665,6 +665,11 @@ function collectExportsAndImports(ast,file){
       for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(variableForIdentifier.get(specifier.local));
     }
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(variableForIdentifier.get(n.id));
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
+      &&n.init.name==='require'&&isUnboundGlobal(n.init)&&n.parent?.kind==='const'){
+      const variable=variableForIdentifier.get(n.id);
+      if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)requireAliases.add(variable);
+    }
   });
   visit(ast,(n,parent)=>{
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='Identifier'
@@ -680,7 +685,7 @@ function collectExportsAndImports(ast,file){
       }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
     }
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
-    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require'&&isUnboundGlobal(n.callee))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
+    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&((n.callee.name==='require'&&isUnboundGlobal(n.callee))||requireAliases.has(variableForIdentifier.get(n.callee))))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
