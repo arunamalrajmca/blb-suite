@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
+const eslintScope = require('eslint-scope');
 
 const SKIP = new Set(['.git', 'node_modules', 'coverage', 'test-results', 'playwright-report', 'dist']);
 const EXT = new Set(['.js', '.cjs', '.mjs']);
@@ -39,6 +40,25 @@ function visit(node, fn, parent = null) {
     else if (value && typeof value.type === 'string') visit(value, fn, node);
   }
 }
+function unresolvedReferences(ast) {
+  const manager = eslintScope.analyze(ast, {
+    ecmaVersion: 2022,
+    sourceType: ast.sourceType || 'script',
+    optimistic: false,
+    ignoreEval: false
+  });
+  const unresolved = new Set();
+  for (const scope of manager.scopes) {
+    for (const reference of scope.references || []) {
+      if (!reference.resolved) unresolved.add(reference.identifier);
+    }
+  }
+  return unresolved;
+}
+function rootIdentifier(node) {
+  while (node && node.type === 'MemberExpression') node = node.object;
+  return node?.type === 'Identifier' ? node : null;
+}
 function memberName(node) {
   if (!node || node.type !== 'MemberExpression') return null;
   const property = node.computed
@@ -66,8 +86,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
   for (const file of files) {
     let ast;
     try { ast = parse(file); } catch (error) { parseErrors.push({ file: path.relative(root, file), error: error.message }); continue; }
+    let unresolved;
+    try { unresolved = unresolvedReferences(ast); }
+    catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
     visit(ast, (node, parent) => {
-      if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy') {
+      if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
           ? node.arguments[1].properties.filter(p => p.type === 'Property').map(p => p.key.name || p.key.value).filter(Boolean)
           : [];
@@ -81,16 +104,16 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression') {
         const calleeName = node.callee.type === 'Identifier' ? node.callee.name : null;
-        if (calleeName === 'eval') {
+        if (calleeName === 'eval' && unresolved.has(node.callee)) {
           add(file, node, 'dynamic-code-generation', 'eval may execute source that is invisible to static reachability analysis');
         }
-        if (calleeName === 'Function' ||
+        if ((calleeName === 'Function' && unresolved.has(node.callee)) ||
             (node.callee.type === 'MemberExpression' && !node.callee.computed && node.callee.property.name === 'constructor')) {
           add(file, node, 'dynamic-code-generation', 'Function constructor or constructor access may create executable code dynamically');
         }
         const name = memberName(node.callee);
         if (node.callee.type === 'MemberExpression' && node.callee.object.type === 'Identifier' &&
-            node.callee.object.name === 'Reflect') {
+            node.callee.object.name === 'Reflect' && unresolved.has(node.callee.object)) {
           add(file, node, 'reflective-operation', 'Reflect.' + (node.callee.property.name || 'computed') + ' may bypass ordinary property-use analysis');
         }
         if (name && /^(Object|Reflect)\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|freeze|seal|preventExtensions)$/.test(name)) {
@@ -124,12 +147,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression') {
         const key = node.left.computed ? (node.left.property.type === 'Literal' ? String(node.left.property.value) : null) : node.left.property.name;
-        if (key === '__proto__' || key === 'prototype' || (node.left.object.type === 'Identifier' && node.left.object.name === 'Object' && key === 'setPrototypeOf')) {
+        if (key === '__proto__' || key === 'prototype' || (node.left.object.type === 'Identifier' && node.left.object.name === 'Object' && key === 'setPrototypeOf' && unresolved.has(node.left.object))) {
           add(file, node, 'prototype-mutation', 'assignment to ' + key + ' can change property lookup/inheritance');
         }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
-          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' && unresolved.has(node.callee.object) &&
           ['setPrototypeOf', 'defineProperty', 'defineProperties', 'assign', 'create'].includes(node.callee.property.name)) {
         add(file, node, 'prototype-or-descriptor-api', 'Object.' + node.callee.property.name + ' may change property visibility or inheritance');
       }
