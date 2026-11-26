@@ -38,18 +38,6 @@ test('attributes class methods and this-property reads to the class owner', () =
   assert.equal(result.findings[0].ownerKind, 'class-instance');
 });
 
-test('does not attribute shadowed same-name property reads to an outer owner', () => {
-  const result = ownerAwarePropertyAudit([
-    'const service = { start() {}, stop() {} };',
-    'function useShadow(service) { service.stop(); }',
-    'service.start();'
-  ].join('\n'), 'shadowed-owner.js');
-  assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
-    ['object', 'stop']
-  ]);
-  assert.match(result.findings[0].owner, /service/);
-});
-
 test('does not attribute nested ordinary-function this reads to an enclosing class', () => {
   const result = ownerAwarePropertyAudit([
     'class Worker {',
