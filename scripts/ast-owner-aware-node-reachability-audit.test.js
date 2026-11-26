@@ -38,6 +38,39 @@ test('attributes class methods and this-property reads to the class owner', () =
   assert.equal(result.findings[0].ownerKind, 'class-instance');
 });
 
+test('does not attribute nested ordinary-function this reads to an enclosing class', () => {
+  const result = ownerAwarePropertyAudit([
+    'class Worker {',
+    '  run() { function unrelated() { this.stop(); } }',
+    '  stop() {}',
+    '}',
+    'const worker = new Worker();',
+    'worker.run();'
+  ].join('\n'), 'nested-this-owner.js');
+  assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
+    ['class-instance', 'stop']
+  ]);
+});
+
+test('does not attribute shadowed local property reads to an outer same-named owner', () => {
+  const result = ownerAwarePropertyAudit([
+    'const service = { start() {}, stop() {} };',
+    'function useShadow() { const service = {}; service.stop(); }',
+    'service.start();'
+  ].join('\n'), 'shadowed-local-owner.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['stop']);
+});
+
+test('attributes destructuring assignments to the source object owner', () => {
+  const result = ownerAwarePropertyAudit([
+    'const service = { start() {}, stop() {} };',
+    'let start;',
+    '({ start } = service);',
+    'void start;'
+  ].join('\n'), 'destructuring-assignment-owner.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['stop']);
+});
+
 test('tracks object aliases and destructured property reads', () => {
   const result = ownerAwarePropertyAudit([
     'const service = { start() {}, stop() {}, reset() {} };',
@@ -149,6 +182,7 @@ test('reports dynamic module loading without treating it as a resolved dependenc
     const graph = buildModuleGraph(root);
     assert.equal(graph.dynamic.length, 1);
     assert.deepEqual(graph.candidates.map(item => item.file), ['scripts/possible.js']);
+    assert.match(graph.candidates[0].reason, /unresolved dynamic module loading may reach this candidate/);
     assert.match(graph.dynamic[0].kind, /dynamic-require/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -392,14 +426,19 @@ test('follows module.createRequire and imported createRequire loader factories',
       "load('./esm-loaded.js');",
       "const { createRequire } = require('node:module');",
       'const loadAgain = createRequire(import.meta.url);',
-      "loadAgain('./cjs-loaded.js');"
+      "loadAgain('./cjs-loaded.js');",
+      "const computedFactory = module['createRequire'];",
+      'const loadComputed = computedFactory(import.meta.url);',
+      "loadComputed('./computed-loaded.js');"
     ].join('\n'));
     write('scripts/esm-loaded.js');
     write('scripts/cjs-loaded.js');
+    write('scripts/computed-loaded.js');
     const graph = buildModuleGraph(root);
     const reachable = new Set(graph.reachable);
     assert.ok(reachable.has('scripts/esm-loaded.js'));
     assert.ok(reachable.has('scripts/cjs-loaded.js'));
+    assert.ok(reachable.has('scripts/computed-loaded.js'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -459,4 +498,557 @@ test('recognizes computed module.require calls and aliases without changing pack
   assert.ok(graph.reachable.includes('src/esm.js'));
   assert.ok(graph.reachable.includes('src/cjs.js'));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('does not retain require aliases after reassignment',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'require-alias-reassign-'));
+ const write=(name,value='')=>{const file=path.join(root,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,value);};
+ try{
+  write('package.json',JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  write('scripts/main.js',[
+   'let load = require;',
+   'load = replacement;',
+   "load('./not-a-loader.js');"
+  ].join('\n'));
+  write('scripts/not-a-loader.js');
+  const graph=buildModuleGraph(root);
+  assert.equal(new Set(graph.reachable).has('scripts/not-a-loader.js'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not retain reassigned createRequire factory aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'create-require-alias-reassign-'));
+ const write=(name,value='')=>{const file=path.join(root,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,value);};
+ try{
+  write('package.json',JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  write('scripts/main.js',[
+   "const { createRequire: makeRequire } = require('node:module');",
+   'makeRequire = replacement;',
+   'const load = makeRequire(import.meta.url);',
+   "load('./not-a-loader.js');"
+  ].join('\n'));
+  write('scripts/not-a-loader.js');
+  const graph=buildModuleGraph(root);
+  assert.equal(new Set(graph.reachable).has('scripts/not-a-loader.js'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not create module edges from lexically shadowed loader names', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-loader-bindings-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const load = require;',
+      "load('./real-loader-target.js');",
+      'function shadowRequire(require) { require("./shadowed-require-target.js"); }',
+      'function shadowAlias(load) { load("./shadowed-alias-target.js"); }',
+      'function localReplacement() { const load = replacement; load("./shadowed-local-target.js"); }'
+    ].join(String.fromCharCode(10)));
+    for (const file of ['scripts/real-loader-target.js', 'scripts/shadowed-require-target.js',
+      'scripts/shadowed-alias-target.js', 'scripts/shadowed-local-target.js']) write(file);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/real-loader-target.js'));
+    for (const file of ['scripts/shadowed-require-target.js', 'scripts/shadowed-alias-target.js',
+      'scripts/shadowed-local-target.js']) assert.equal(reachable.has(file), false, file);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('does not treat a shadowed module parameter or local object as Node module', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-module-binding-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'function shadowModule(module) { module.require("./parameter-module-target.js"); }',
+      'function localModule() { const module = { require() {} }; module.require("./local-module-target.js"); }'
+    ].join(String.fromCharCode(10)));
+    for (const file of ['scripts/parameter-module-target.js', 'scripts/local-module-target.js']) write(file);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.equal(reachable.has('scripts/parameter-module-target.js'), false);
+    assert.equal(reachable.has('scripts/local-module-target.js'), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('records a shadowed require binding as unresolved dynamic loading', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-require-'));
+  try {
+    const from = path.join(root, 'entry.js');
+    const target = path.join(root, 'possible-loader-target.js');
+    fs.writeFileSync(from, '');
+    fs.writeFileSync(target, '');
+    const result = collectModuleEdges(
+      'function invoke(require) { require("./possible-loader-target"); }',
+      from, new Set([from, target]));
+    assert.equal(result.edges.length, 0);
+    assert.deepEqual(result.dynamic.map(item => item.kind), ['unresolved-require-binding']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('treats named ESM export specifiers as cross-module owner escapes', () => {
+  const result = ownerAwarePropertyAudit([
+    'const api = { used() {}, externallyUsed() {} };',
+    'api.used();',
+    'export { api as publicApi };'
+  ].join('\n'), 'named-export-owner.js');
+  assert.deepEqual(result.findings, []);
+  assert.equal(result.owners[0].escaped, true);
+  assert.ok(result.owners[0].escapeReasons.includes('module-export'));
+});
+
+test('follows createRequire destructured from awaited node:module import', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'awaited-create-require-'));
+  try {
+    const from = path.join(root, 'main.mjs');
+    const target = path.join(root, 'loaded.js');
+    fs.writeFileSync(from, '');
+    fs.writeFileSync(target, '');
+    const result = collectModuleEdges([
+      "const { createRequire } = await import('node:module');",
+      'const load = createRequire(import.meta.url);',
+      "load('./loaded.js');"
+    ].join('\n'), from, new Set([from, target]), root);
+    assert.ok(result.edges.some(edge => edge.file === target && edge.kind === 'require'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows aliases of the Node module object and invalidates reassigned aliases', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'module-object-aliases-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const mod = module;',
+      "mod.require('./first.js');",
+      'const modAgain = mod;',
+      "modAgain.require('./second.js');",
+      'let assignedAlias;',
+      'assignedAlias = module;',
+      "assignedAlias.require('./assigned-alias-child.js');",
+      'let replaced = module;',
+      'replaced = customModule;',
+      "replaced.require('./not-a-loader.js');"
+    ].join('\n'));
+    for (const name of ['scripts/first.js', 'scripts/second.js', 'scripts/assigned-alias-child.js', 'scripts/not-a-loader.js']) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/first.js'));
+    assert.ok(reachable.has('scripts/second.js'));
+    assert.ok(reachable.has('scripts/assigned-alias-child.js'));
+    assert.equal(reachable.has('scripts/not-a-loader.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows node:module namespace imports and dynamic namespace aliases', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'module-namespace-aliases-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.mjs' } }));
+    write('scripts/main.mjs', [
+      "import * as nodeModule from 'node:module';",
+      'const load = nodeModule.createRequire(import.meta.url);',
+      "load('./static-namespace-child.js');",
+      "const dynamicModule = await import('node:module');",
+      'const loadDynamic = dynamicModule.createRequire(import.meta.url);',
+      "loadDynamic('./dynamic-namespace-child.js');",
+      "let replacedNamespace = await import('node:module');",
+      'replacedNamespace = unrelated;',
+      'const loadFromReplaced = replacedNamespace.createRequire(import.meta.url);',
+      "loadFromReplaced('./not-a-module-namespace-target.js');"
+    ].join('\n'));
+    write('scripts/static-namespace-child.js');
+    write('scripts/dynamic-namespace-child.js');
+    write('scripts/not-a-module-namespace-target.js');
+    write('package.json', JSON.stringify({ scripts: {
+      run: 'node scripts/main.mjs',
+      cjs: 'node scripts/cjs-main.js'
+    } }));
+    write('scripts/cjs-main.js', [
+      "const nodeModule = require('node:module');",
+      'const loadCjs = nodeModule.createRequire(__filename);',
+      "loadCjs('./cjs-namespace-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/cjs-namespace-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/static-namespace-child.js'));
+    assert.ok(reachable.has('scripts/dynamic-namespace-child.js'));
+    assert.equal(reachable.has('scripts/not-a-module-namespace-target.js'), false);
+    assert.ok(reachable.has('scripts/cjs-namespace-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows bound, call, and apply wrappers around Node module loaders', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapped-require-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const boundRequire = require.bind(module);',
+      "boundRequire('./bound-require-child.js');",
+      'const boundModuleRequire = module.require.bind(module);',
+      "boundModuleRequire('./bound-module-child.js');",
+      "require.call(module, './call-child.js');",
+      "require.apply(module, ['./apply-child.js']);",
+      "require.bind(module)('./inline-bound-child.js');",
+      'let replacedBound = require.bind(module);',
+      'replacedBound = replacement;',
+      "replacedBound('./not-bound-child.js');"
+    ].join(String.fromCharCode(10)));
+    for (const name of ['scripts/bound-require-child.js', 'scripts/bound-module-child.js',
+      'scripts/call-child.js', 'scripts/apply-child.js', 'scripts/inline-bound-child.js',
+      'scripts/not-bound-child.js']) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const name of ['scripts/bound-require-child.js', 'scripts/bound-module-child.js',
+      'scripts/call-child.js', 'scripts/apply-child.js', 'scripts/inline-bound-child.js']) {
+      assert.ok(reachable.has(name), name);
+    }
+    assert.equal(reachable.has('scripts/not-bound-child.js'), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('preserves outer require aliases when a same-named parameter is reassigned', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-require-reassignment-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const load = require;',
+      'function shadowAndReplace(load) {',
+      '  load = replacement;',
+      '  load("./not-a-loader-target.js");',
+      '}',
+      'load("./outer-loader-target.js");'
+    ].join('\n'));
+    write('scripts/outer-loader-target.js');
+    write('scripts/not-a-loader-target.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/outer-loader-target.js'));
+    assert.equal(reachable.has('scripts/not-a-loader-target.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('keeps outer createRequire factory valid when a shadowed parameter is reassigned', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-create-require-reassignment-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const { createRequire } = require('node:module');",
+      'function shadowAndReplace(createRequire) {',
+      '  createRequire = replacement;',
+      '  const localLoad = createRequire(import.meta.url);',
+      '  localLoad("./not-a-factory-target.js");',
+      '}',
+      'const load = createRequire(import.meta.url);',
+      'load("./outer-factory-target.js");'
+    ].join('\n'));
+    write('scripts/outer-factory-target.js');
+    write('scripts/not-a-factory-target.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/outer-factory-target.js'));
+    assert.equal(reachable.has('scripts/not-a-factory-target.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows a local alias of the imported createRequire factory', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'create-require-factory-alias-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const { createRequire } = require('node:module');",
+      'const makeRequire = createRequire;',
+      'const load = makeRequire(import.meta.url);',
+      'load("./factory-alias-target.js");'
+    ].join('\n'));
+    write('scripts/factory-alias-target.js');
+    const graph = buildModuleGraph(root);
+    assert.ok(new Set(graph.reachable).has('scripts/factory-alias-target.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows bound createRequire factories from imported and module namespace sources', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bound-create-require-factory-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
+    write('scripts/main.cjs', [
+      "const { createRequire } = require('node:module');",
+      'const boundImportedFactory = createRequire.bind(null);',
+      'const loadImported = boundImportedFactory(__filename);',
+      "loadImported('./bound-imported-factory-child.js');",
+      'const boundModuleFactory = module.createRequire.bind(module);',
+      'const loadModule = boundModuleFactory(__filename);',
+      "loadModule('./bound-module-factory-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/bound-imported-factory-child.js');
+    write('scripts/bound-module-factory-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/bound-imported-factory-child.js'));
+    assert.ok(reachable.has('scripts/bound-module-factory-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows bound createRequire factories assigned to previously uninitialized variables', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'assigned-bound-create-require-factory-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
+    write('scripts/main.cjs', [
+      "const { createRequire } = require('node:module');",
+      'let assignedRequire;',
+      'assignedRequire = require;',
+      "assignedRequire('./assigned-require-child.js');",
+      'let assignedImportedFactory;',
+      'assignedImportedFactory = createRequire.bind(null);',
+      'const loadImported = assignedImportedFactory(__filename);',
+      "loadImported('./assigned-imported-factory-child.js');",
+      'let assignedModuleFactory;',
+      'assignedModuleFactory = module.createRequire.bind(module);',
+      'const loadModule = assignedModuleFactory(__filename);',
+      "loadModule('./assigned-module-factory-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/assigned-require-child.js');
+    write('scripts/assigned-imported-factory-child.js');
+    write('scripts/assigned-module-factory-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/assigned-require-child.js'));
+    assert.ok(reachable.has('scripts/assigned-imported-factory-child.js'));
+    assert.ok(reachable.has('scripts/assigned-module-factory-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows call and apply wrappers around createRequire factories', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapped-create-require-factory-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
+    write('scripts/main.cjs', [
+      "const { createRequire } = require('node:module');",
+      'const loadCall = createRequire.call(null, __filename);',
+      "loadCall('./call-factory-child.js');",
+      'const loadApply = createRequire.apply(null, [__filename]);',
+      "loadApply('./apply-factory-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/call-factory-child.js');
+    write('scripts/apply-factory-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/call-factory-child.js'));
+    assert.ok(reachable.has('scripts/apply-factory-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows Node loader aliases assigned through object destructuring', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'assigned-destructured-module-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: {
+      run: 'node scripts/main.mjs',
+      cjs: 'node scripts/cjs-main.cjs'
+    } }));
+    write('scripts/main.mjs', [
+      "import * as nodeModule from 'node:module';",
+      'let makeRequire;',
+      '({ createRequire: makeRequire } = nodeModule);',
+      'const load = makeRequire(import.meta.url);',
+      "load('./assigned-create-require-child.js');",
+      'let replacedFactory;',
+      '({ createRequire: replacedFactory } = unrelated);',
+      'const notALoader = replacedFactory(import.meta.url);',
+      "notALoader('./not-a-create-require-child.js');",
+      'let overwrittenFactory;',
+      '({ createRequire: overwrittenFactory } = nodeModule);',
+      '({ createRequire: overwrittenFactory } = unrelated);',
+      'const overwrittenLoad = overwrittenFactory(import.meta.url);',
+      "overwrittenLoad('./not-overwritten-create-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/cjs-main.cjs', [
+      'let load;',
+      '({ require: load } = module);',
+      "load('./assigned-module-require-child.js');",
+      'let replacedRequire;',
+      '({ require: replacedRequire } = unrelated);',
+      "replacedRequire('./not-a-module-require-child.js');",
+      'let overwrittenRequire;',
+      '({ require: overwrittenRequire } = module);',
+      '({ require: overwrittenRequire } = unrelated);',
+      "overwrittenRequire('./not-overwritten-module-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    for (const name of [
+      'scripts/assigned-create-require-child.js',
+      'scripts/assigned-module-require-child.js',
+      'scripts/not-a-create-require-child.js',
+      'scripts/not-a-module-require-child.js',
+      'scripts/not-overwritten-create-require-child.js',
+      'scripts/not-overwritten-module-require-child.js'
+    ]) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/assigned-create-require-child.js'));
+    assert.ok(reachable.has('scripts/assigned-module-require-child.js'));
+    assert.equal(reachable.has('scripts/not-a-create-require-child.js'), false);
+    assert.equal(reachable.has('scripts/not-a-module-require-child.js'), false);
+    assert.equal(reachable.has('scripts/not-overwritten-create-require-child.js'), false);
+    assert.equal(reachable.has('scripts/not-overwritten-module-require-child.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('follows destructured loader aliases with default initializers', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'default-destructured-module-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: {
+      run: 'node scripts/main.mjs',
+      cjs: 'node scripts/main.cjs'
+    } }));
+    write('scripts/main.mjs', [
+      "import * as nodeModule from 'node:module';",
+      'const { createRequire: makeRequire = fallbackFactory } = nodeModule;',
+      'const load = makeRequire(import.meta.url);',
+      "load('./default-create-require-child.js');",
+      'let assignedFactory;',
+      '({ createRequire: assignedFactory = fallbackFactory } = nodeModule);',
+      'const assignedLoad = assignedFactory(import.meta.url);',
+      "assignedLoad('./assigned-default-create-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/main.cjs', [
+      'const { require: load = fallbackRequire } = module;',
+      "load('./default-module-require-child.js');",
+      'let assignedLoad;',
+      '({ require: assignedLoad = fallbackRequire } = module);',
+      "assignedLoad('./assigned-default-module-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    for (const name of [
+      'scripts/default-create-require-child.js',
+      'scripts/assigned-default-create-require-child.js',
+      'scripts/default-module-require-child.js',
+      'scripts/assigned-default-module-require-child.js'
+    ]) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const name of [
+      'scripts/default-create-require-child.js',
+      'scripts/assigned-default-create-require-child.js',
+      'scripts/default-module-require-child.js',
+      'scripts/assigned-default-module-require-child.js'
+    ]) assert.ok(reachable.has(name), name);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('follows destructured loaders from Node module namespace and CommonJS module object', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'destructured-module-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.mjs' } }));
+    write('scripts/main.mjs', [
+      "import * as nodeModule from 'node:module';",
+      'const { createRequire: makeRequire } = nodeModule;',
+      'const load = makeRequire(import.meta.url);',
+      "load('./namespace-destructured-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/main.cjs', [
+      'const { require: load } = module;',
+      "load('./module-destructured-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/namespace-destructured-child.js');
+    write('scripts/module-destructured-child.js');
+    write('package.json', JSON.stringify({ scripts: {
+      run: 'node scripts/main.mjs',
+      cjs: 'node scripts/main.cjs'
+    } }));
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/namespace-destructured-child.js'));
+    assert.ok(reachable.has('scripts/module-destructured-child.js'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

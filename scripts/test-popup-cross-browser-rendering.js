@@ -109,7 +109,7 @@ async function collectStartupDiagnostics(name, context, userDataDir, startupErro
             if (node.shadowRoot) result += collect(node.shadowRoot);
           }
         }
-        return result.replace(/\\s+/g, ' ').trim();
+        return result.replace(/\s+/g, ' ').trim();
       };
       return {
         title: document.title,
@@ -353,10 +353,10 @@ function compareBrowsers(results) {
     const b = brave.snapshots.find(x => x.profile === profile.name && x.scenario === 'ordinary');
     if (!a || !b) { differences.push(profile.name + ': missing ordinary popup-document snapshot'); continue; }
     if (a.devicePixelRatio !== b.devicePixelRatio) differences.push(profile.name + ' devicePixelRatio differs');
-    if (!a.htmlClasses.split(/\\s+/).includes('chrome-popup-density')) {
+    if (!a.htmlClasses.split(/\s+/).includes('chrome-popup-density')) {
       differences.push(profile.name + ': Chrome popup document did not receive chrome-popup-density class');
     }
-    if (b.htmlClasses.split(/\\s+/).includes('chrome-popup-density')) {
+    if (b.htmlClasses.split(/\s+/).includes('chrome-popup-density')) {
       differences.push(profile.name + ': Brave popup document unexpectedly received Chrome density class');
     }
     for (const selector of normalSelectors) {

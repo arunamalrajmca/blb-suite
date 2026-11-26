@@ -67,4 +67,4 @@ for (const resource of resources) {
   };
 }
 process.stdout.write('Generated and validated compressed KJV assets: '
-  + JSON.stringify(report) + '\\n');
+  + JSON.stringify(report) + '\n');

@@ -307,7 +307,7 @@ test('discovers Playwright specs and GitHub Actions Node commands as execution r
     'tests/browser/progress-reporter.js': 'module.exports = class Reporter {};',
     'tests/selector/contract.test.mjs': 'export const ready = true;',
     'scripts/test-sample.js': 'module.exports = true;',
-    '.github/workflows/ci.yml': "jobs:\\n  checks:\\n    steps:\\n      - run: node --test scripts/ci-check.test.js\\n      - run: node --test tests/selector/*.test.mjs\\n      - run: node regression-suite/tests/run-regression.mjs extension\\n      - run: for test_file in scripts/test-*.js; do node \"$test_file\"; done",
+    '.github/workflows/ci.yml': "jobs:\n  checks:\n    steps:\n      - run: node --test scripts/ci-check.test.js\n      - run: node --test tests/selector/*.test.mjs\n      - run: node regression-suite/tests/run-regression.mjs extension\n      - run: for test_file in scripts/test-*.js; do node \"$test_file\"; done",
     'scripts/ci-check.test.js': "require('./ci-helper.js');",
     'scripts/ci-helper.js': 'module.exports = true;',
     'regression-suite/tests/run-regression.mjs': 'export const ready = true;'
