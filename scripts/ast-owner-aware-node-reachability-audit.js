@@ -567,6 +567,9 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       if (init?.type === 'Identifier') return isFactoryIdentifier(init, seen);
       if (init?.type === 'MemberExpression' && isNodeModuleIdentifier(init.object) &&
           staticKey(init.property, init.computed) === 'createRequire') return true;
+      if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
+          staticKey(init.callee.property, init.callee.computed) === 'bind' &&
+          isFactoryExpression(init.callee.object, seen)) return true;
       const moduleRequireFactory = init?.type === 'CallExpression' &&
         init.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(init.arguments[0].value) &&
         isRequireIdentifier(init.callee, new Set());
@@ -580,6 +583,21 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
       return false;
     });
+  }
+  function isFactoryExpression(expression, seen = new Set()) {
+    if (!expression) return false;
+    if (expression.type === 'Identifier') return isFactoryIdentifier(expression, seen);
+    if (expression.type === 'MemberExpression' &&
+        staticKey(expression.property, expression.computed) === 'bind') {
+      return isFactoryExpression(expression.object, seen);
+    }
+    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
+        staticKey(expression.callee.property, expression.callee.computed) === 'bind') {
+      return isFactoryExpression(expression.callee.object, seen);
+    }
+    return expression.type === 'MemberExpression' &&
+      staticKey(expression.property, expression.computed) === 'createRequire' &&
+      isNodeModuleIdentifier(expression.object);
   }
   function isRequireExpression(expression, seen = new Set()) {
     if (!expression) return false;
@@ -681,6 +699,12 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         const factoryVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
         if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
       }
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'MemberExpression' &&
+          staticKey(node.init.callee.property, node.init.callee.computed) === 'bind' &&
+          isFactoryExpression(node.init.callee.object)) {
+        const factoryVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
+      }
       if (node.init?.type === 'Identifier' && isFactoryIdentifier(node.init)) {
         const factoryVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
         if (factoryVariable) {
@@ -769,7 +793,10 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
 
       const assignedCreateRequire = value.type === 'Identifier' && isFactoryIdentifier(value) ||
         value.type === 'MemberExpression' && isNodeModuleIdentifier(value.object) &&
-          staticKey(value.property, value.computed) === 'createRequire';
+          staticKey(value.property, value.computed) === 'createRequire' ||
+        value.type === 'CallExpression' && value.callee.type === 'MemberExpression' &&
+          staticKey(value.callee.property, value.callee.computed) === 'bind' &&
+          isFactoryExpression(value.callee.object);
       if (targetVariable && assignedCreateRequire) {
         createRequireFactoryVariables.add(targetVariable);
         invalidatedFactoryVariables.delete(targetVariable);
