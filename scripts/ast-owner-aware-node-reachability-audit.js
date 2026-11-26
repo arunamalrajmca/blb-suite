@@ -576,7 +576,10 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       const awaitedModuleImport = init?.type === 'AwaitExpression' &&
         init.argument?.type === 'ImportExpression' && init.argument.source?.type === 'Literal' &&
         ['node:module', 'module'].includes(init.argument.source.value);
-      if (declaration.id.type === 'ObjectPattern' && (moduleRequireFactory || awaitedModuleImport)) {
+      const moduleNamespaceDestructure = declaration.id.type === 'ObjectPattern' &&
+        init?.type === 'Identifier' && isNodeModuleIdentifier(init);
+      if (declaration.id.type === 'ObjectPattern' &&
+          (moduleRequireFactory || awaitedModuleImport || moduleNamespaceDestructure)) {
         return declaration.id.properties.some(property => property.type === 'Property' &&
           staticKey(property.key, property.computed) === 'createRequire' &&
           property.value.type === 'Identifier' && property.value.name === variable.name);
@@ -645,6 +648,12 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
           isNodeModuleIdentifier(init.callee.object) &&
           staticKey(init.callee.property, init.callee.computed) === 'createRequire') return true;
+      if (definition.node.id.type === 'ObjectPattern' && init?.type === 'Identifier' &&
+          isNodeModuleIdentifier(init)) {
+        return definition.node.id.properties.some(property => property.type === 'Property' &&
+          staticKey(property.key, property.computed) === 'require' &&
+          property.value.type === 'Identifier' && property.value.name === variable.name);
+      }
       if (!init) {
         return (variable.references || []).some(write => {
           if (!write.isWrite()) return false;
