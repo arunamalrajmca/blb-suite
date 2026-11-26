@@ -1190,3 +1190,836 @@ test('keeps callback factories uncertain when return paths produce different fun
   assert.equal(registration.certainty, 'unresolved-callback-owner');
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
+
+
+test('resolves indirect module.require loading while respecting lexical module shadowing', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "const target = './feature.js';",
+      'module.require(target);',
+      'function isolated(module) { module.require("./not-a-real-local.js"); }'
+    ].join(' '),
+    'scripts/feature.js': 'module.exports = true;'
+  });
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/feature.js'));
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'require' && item.expression === './not-a-real-local.js'
+  ), false);
+});
+
+
+test('resolves immutable aliases of require and module.createRequire results', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { createRequire as makeRequire } from 'node:module';",
+      "const localRequire = require;",
+      "const load = localRequire;",
+      "const requireFromHere = makeRequire(import.meta.url);",
+      "load('./feature.js');",
+      "requireFromHere('./other.js');"
+    ].join(' '),
+    'scripts/feature.js': 'module.exports = 1;',
+    'scripts/other.js': 'module.exports = 2;'
+  });
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/feature.js'));
+  assert.ok(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/other.js'));
+});
+
+
+test('honors package conditional-export key order for active conditions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': { default: './src/default.js', import: './src/import.js', require: './src/require.js' }
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('fixture-suite'); require('fixture-suite');",
+    'src/default.js': 'export const selected = "default";',
+    'src/import.js': 'export const selected = "import";',
+    'src/require.js': 'module.exports = "require";'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/default.js'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'src/default.js'));
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/import.js'), false);
+  assert.equal(edge(result, 'commonjs-require', 'scripts/main.js', 'src/require.js'), false);
+});
+
+test('continues to later conditions when a nested active condition has no matching key', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': {
+        import: { browser: './src/browser.js' },
+        default: './src/fallback.js'
+      }
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('fixture-suite');",
+    'src/browser.js': 'export const browser = true;',
+    'src/fallback.js': 'export const fallback = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/fallback.js'));
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/browser.js'), false);
+});
+
+test('does not fall through a selected null package export condition', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': { import: null, default: './src/fallback.js' }
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('fixture-suite');",
+    'src/fallback.js': 'export const fallback = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/fallback.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dynamic-import' && item.expression === 'fixture-suite'
+  ));
+});
+
+test('does not fall through a valid but missing package export array target', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': { import: ['./src/missing.js', './src/fallback.js'], require: './src/require.js' }
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('fixture-suite'); require('fixture-suite');",
+    'src/fallback.js': 'export const fallback = true;',
+    'src/require.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/fallback.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dynamic-import' && item.expression === 'fixture-suite'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'src/require.js'));
+});
+
+test('falls through invalid package export array targets to a later valid target', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': ['../outside.js', './src/fallback.js']
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('fixture-suite');",
+    'outside.js': 'export const outside = true;',
+    'src/fallback.js': 'export const fallback = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/fallback.js'));
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'outside.js'), false);
+});
+
+test('resolves package self-reference exports for import and require conditions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': { import: './src/esm.js', require: './src/cjs.js' },
+      './feature': './src/feature.js'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import('fixture-suite');",
+      "require('fixture-suite');",
+      "import('fixture-suite/feature');"
+    ].join(' '),
+    'src/esm.js': 'export const mode = "esm";',
+    'src/cjs.js': 'module.exports = "cjs";',
+    'src/feature.js': 'export const feature = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/esm.js'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'src/cjs.js'));
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/feature.js'));
+});
+
+
+test('resolves package self-reference in static imports and re-exports', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': { import: './src/index.js', require: './src/index.cjs' },
+      './shared': './src/shared.js'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import { value } from 'fixture-suite'; export { shared } from 'fixture-suite/shared';",
+    'src/index.js': 'export const value = true;',
+    'src/index.cjs': 'module.exports = true;',
+    'src/shared.js': 'export const shared = true;'
+  });
+  assert.ok(edge(result, 'static-import', 'scripts/main.js', 'src/index.js'));
+  assert.ok(edge(result, 're-export', 'scripts/main.js', 'src/shared.js'));
+});
+
+test('records unresolved static package imports as uncertainty rather than dropping them', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import 'dependency-not-present'; export * from 'another-missing-package';"
+  });
+  assert.equal(result.uncertainty.filter(item => item.certainty === 'unresolved-static-import').length, 2);
+  assert.ok(result.uncertainty.some(item => item.expression === 'dependency-not-present'));
+  assert.ok(result.uncertainty.some(item => item.expression === 'another-missing-package'));
+});
+
+test('recognizes active Node conditions while preserving manifest condition order', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      '.': {
+        'node-addons': './src/node-addons.js',
+        import: './src/import.js',
+        'module-sync': './src/module-sync.js',
+        default: './src/default.js'
+      }
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('fixture-suite');",
+    'src/node-addons.js': 'export const selected = "node-addons";',
+    'src/import.js': 'export const selected = "import";',
+    'src/module-sync.js': 'export const selected = "module-sync";',
+    'src/default.js': 'export const selected = "default";'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/node-addons.js'));
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/import.js'), false);
+});
+
+test('rejects percent-encoded package-map traversal and separators', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      './encoded-dot': './src/%2e%2e/outside.js',
+      './encoded-separator': './src%2f..%2foutside.js'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import('fixture-suite/encoded-dot');",
+      "import('fixture-suite/encoded-separator');"
+    ].join(' '),
+    'outside.js': 'export const outside = true;',
+    'src/outside.js': 'export const misleading = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'outside.js'), false);
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/outside.js'), false);
+  assert.ok(result.uncertainty.some(item => item.expression === 'fixture-suite/encoded-dot'));
+  assert.ok(result.uncertainty.some(item => item.expression === 'fixture-suite/encoded-separator'));
+});
+
+test('requires exact package-map target paths without extension or directory-index fallback', () => {
+  const result = run({
+    'package.json': JSON.stringify({
+      name: 'app',
+      type: 'module',
+      exports: { '.': './entry' },
+      scripts: { audit: 'node scripts/main.js' }
+    }),
+    'scripts/main.js': [
+      "import 'app';",
+      "import './consumer.js';"
+    ].join(' '),
+    'entry.js': 'module.exports = true;',
+    'consumer.js': "import value from 'app';"
+  });
+  assert.equal(edge(result, 'static-import', 'scripts/main.js', 'entry.js'), false);
+  assert.equal(edge(result, 'static-import', 'consumer.js', 'entry.js'), false);
+});
+
+test('uses exact-file relative resolution for ESM and extension probing for CommonJS', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import './dependency';",
+      "import './folder';",
+      "import('./dynamic');",
+      "require('./dependency');",
+      "require('./folder');"
+    ].join(' '),
+    'scripts/dependency.js': 'module.exports = true;',
+    'scripts/dynamic.js': 'export const value = true;',
+    'scripts/folder/index.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'static-import', 'scripts/main.js', 'scripts/dependency.js'), false);
+  assert.equal(edge(result, 'static-import', 'scripts/main.js', 'scripts/folder/index.js'), false);
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'scripts/dynamic.js'), false);
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/dependency.js'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/folder/index.js'));
+});
+
+test('uses Node main rather than the bundler-specific module field for legacy packages', () => {
+  const result = run({
+    'package.json': JSON.stringify({
+      name: 'fixture-suite',
+      main: './src/main.js',
+      module: './src/module.js',
+      scripts: { audit: 'node scripts/main.js' }
+    }),
+    'scripts/main.js': "import('fixture-suite');",
+    'src/main.js': 'module.exports = true;',
+    'src/module.js': 'export const wrong = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/main.js'));
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/module.js'), false);
+});
+
+test('rejects dot segments and node_modules segments in package-map targets', () => {
+  const result = run({
+    'package.json': JSON.stringify({
+      name: 'app',
+      exports: {
+        './dot': './features/./entry.js',
+        './dependency': './node_modules/dep/index.js'
+      },
+      scripts: { audit: 'node scripts/main.js' }
+    }),
+    'scripts/main.js': [
+      "require('app/dot');",
+      "require('app/dependency');"
+    ].join(' '),
+    'features/entry.js': 'module.exports = true;',
+    'node_modules/dep/index.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-require', 'scripts/main.js', 'features/entry.js'), false);
+  assert.equal(edge(result, 'commonjs-require', 'scripts/main.js', 'node_modules/dep/index.js'), false);
+});
+
+test('rejects encoded package-target separators even when the decoded path is contained', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      './encoded-forward': './src%2fentry.js',
+      './encoded-backward': './src%5Centry.js',
+      './encoded-dot': './src/%2e/entry.js'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import('fixture-suite/encoded-forward');",
+      "import('fixture-suite/encoded-backward');",
+      "import('fixture-suite/encoded-dot');"
+    ].join(' '),
+    'src/entry.js': 'export const entry = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/entry.js'), false);
+  for (const expression of [
+    'fixture-suite/encoded-forward',
+    'fixture-suite/encoded-backward',
+    'fixture-suite/encoded-dot'
+  ]) assert.ok(result.uncertainty.some(item => item.expression === expression));
+});
+
+test('rejects package export targets that escape the package root', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('../local-package');",
+    'local-package/package.json': JSON.stringify({ exports: './..\\/outside.js' }),
+    'outside.js': 'export const outside = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'outside.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dynamic-import' && item.expression === '../local-package'
+  ));
+});
+
+test('resolves CommonJS relative package directories while keeping ESM directory imports unresolved', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import('../local-package');",
+      "require('../local-package');",
+      "require('../legacy-package');",
+      "import('external-dependency');"
+    ].join(' '),
+    'local-package/package.json': JSON.stringify({
+      type: 'module',
+      main: './lib/start.cjs',
+      exports: { '.': './entry.mjs' }
+    }),
+    'local-package/entry.mjs': 'export const value = 1;',
+    'local-package/lib/start.cjs': 'module.exports = 1;',
+    'legacy-package/package.json': JSON.stringify({ main: 'lib/start.js' }),
+    'legacy-package/lib/start.js': 'module.exports = 1;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'local-package/entry.mjs'), false);
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'local-package/lib/start.cjs'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'legacy-package/lib/start.js'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import' && item.expression === 'external-dependency'));
+});
+
+test('does not treat a shadowed importScripts function as the worker loader', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function importScripts(specifier) { return specifier; }',
+      "importScripts('./not-a-worker-dependency.js');"
+    ].join(' '),
+    'scripts/not-a-worker-dependency.js': 'export const unrelated = true;'
+  });
+  assert.equal(edge(result, 'importScripts', 'scripts/main.js', 'scripts/not-a-worker-dependency.js'), false, JSON.stringify({ sites: result.dynamicSites.filter(site => site.kind === 'importScripts'), edges: result.edges.filter(item => item.kind === 'importScripts') }));
+  assert.ok(result.dynamicSites.some(site =>
+    site.kind === 'importScripts' && site.file === 'scripts/main.js' &&
+    site.certainty === 'unresolved-shadowed-importScripts'
+  ));
+});
+
+test('does not extension-probe ESM package subpaths without an exports map', () => {
+  const result = run({
+    'package.json': JSON.stringify({
+      name: 'fixture-suite',
+      scripts: { audit: 'node scripts/main.js' }
+    }),
+    'scripts/main.js': [
+      "import('fixture-suite/feature');",
+      "require('fixture-suite/feature');"
+    ].join(' '),
+    'feature.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'feature.js'), false);
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'feature.js'));
+});
+
+test('does not resolve bare external package specifiers as sibling filesystem paths', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('external-dependency'); require('external-dependency');",
+    'scripts/external-dependency.js': 'export const misleading = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'scripts/external-dependency.js'), false);
+  assert.equal(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/external-dependency.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dynamic-import' && item.expression === 'external-dependency'
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'require' && item.expression === 'external-dependency'
+  ));
+});
+
+test('keeps unknown and package require targets explicitly uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const load = require;',
+      'load(runtimeSpecifier);',
+      "load('external-package');"
+    ].join(' ')
+  });
+  assert.ok(result.uncertainty.some(item => item.kind === 'require' && item.certainty === 'unresolved-dynamic-require'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'require' && item.certainty === 'unresolved-package-require'));
+});
+
+test('resolves package wildcard exports for import and require conditions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'fixture-suite', exports: {
+      './features/*': { import: './src/esm/*.js', require: './src/cjs/*.cjs' }
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import('fixture-suite/features/alpha');",
+      "require('fixture-suite/features/beta');"
+    ].join(' '),
+    'src/esm/alpha.js': 'export const alpha = true;',
+    'src/cjs/beta.cjs': 'module.exports = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/esm/alpha.js'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'src/cjs/beta.cjs'));
+});
+
+test('does not fall through an external package-import target in an array', () => {
+  const result = run({
+    'package.json': JSON.stringify({ imports: {
+      '#internal': ['external-dependency', './src/fallback.js']
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('#internal');",
+    'src/fallback.js': 'export const fallback = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/main.js', 'src/fallback.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dynamic-import' && item.expression === '#internal'
+  ));
+});
+
+test('resolves package imports and self-references from the nearest nested package scope', () => {
+  const result = run({
+    'package.json': JSON.stringify({ name: 'root-suite', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import('../packages/feature/index.js');",
+    'packages/feature/package.json': JSON.stringify({
+      name: 'feature-package',
+      imports: { '#internal/*': './src/*.js' },
+      exports: { '.': './src/self.js' }
+    }),
+    'packages/feature/index.js': [
+      "import('#internal/tool');",
+      "import('feature-package');"
+    ].join(' '),
+    'packages/feature/src/tool.js': 'export const tool = true;',
+    'packages/feature/src/self.js': 'export const self = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'packages/feature/index.js', 'packages/feature/src/tool.js'));
+  assert.ok(edge(result, 'dynamic-import', 'packages/feature/index.js', 'packages/feature/src/self.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'packages/feature/index.js' && item.expression === '#internal/tool'
+  ), false);
+});
+
+test('resolves local package imports aliases and keeps unknown aliases uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ imports: {
+      '#internal/*': './src/internal/*.js',
+      '#external': 'external-package'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import('#internal/tools');",
+      "import('#missing');",
+      "import('#external');"
+    ].join(' '),
+    'src/internal/tools.js': 'export const tools = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/main.js', 'src/internal/tools.js'));
+  assert.ok(result.uncertainty.some(item => item.expression === '#missing' && item.certainty === 'unresolved-dynamic-import'));
+  assert.ok(result.uncertainty.some(item => item.expression === '#external' && item.certainty === 'unresolved-dynamic-import'));
+});
+
+test('resolves createRequire relative to the module that supplies its import.meta.url base', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': "import './config/loader.js';",
+    'scripts/config/loader.js': [
+      "import { createRequire } from 'node:module';",
+      'const loadFromConfig = createRequire(import.meta.url);',
+      "loadFromConfig('./dependency.js');"
+    ].join(' '),
+    'scripts/config/dependency.js': 'module.exports = true;',
+    'scripts/dependency.js': 'module.exports = false;'
+  });
+  assert.ok(edge(result, 'commonjs-createRequire', 'scripts/config/loader.js', 'scripts/config/dependency.js'));
+  assert.equal(edge(result, 'commonjs-createRequire', 'scripts/config/loader.js', 'scripts/dependency.js'), false);
+});
+
+test('uses import.meta.url as the createRequire base and propagates base context through aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { createRequire as makeRequire } from 'node:module';",
+      'const first = makeRequire(import.meta.url);',
+      'const second = first;',
+      "second('./dependency.js');"
+    ].join(' '),
+    'scripts/dependency.js': 'module.exports = true;'
+  });
+  assert.ok(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/dependency.js'));
+});
+
+test('recognizes CommonJS and namespace forms of the Node createRequire API', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "const direct = require('node:module').createRequire(import.meta.url);",
+      "const { createRequire: destructured } = require('module');",
+      'const fromDestructured = destructured(import.meta.url);',
+      "import * as Module from 'node:module';",
+      'const fromNamespace = Module.createRequire(import.meta.url);',
+      "const CommonJSModule = require('module');",
+      'const fromCommonJSNamespace = CommonJSModule.createRequire(import.meta.url);',
+      "direct('./direct.js');",
+      "fromDestructured('./destructured.js');",
+      "fromNamespace('./namespace.js');",
+      "fromCommonJSNamespace('./commonjs-namespace.js');"
+    ].join(' '),
+    'scripts/direct.js': 'module.exports = true;',
+    'scripts/destructured.js': 'module.exports = true;',
+    'scripts/namespace.js': 'module.exports = true;',
+    'scripts/commonjs-namespace.js': 'module.exports = true;'
+  });
+  for (const target of ['direct.js', 'destructured.js', 'namespace.js', 'commonjs-namespace.js']) {
+    assert.ok(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/' + target));
+  }
+});
+
+test('does not treat the nonexistent module.createRequire instance property as Node API', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const load = module.createRequire(import.meta.url);',
+      "load('./not-loaded.js');"
+    ].join(' '),
+    'scripts/not-loaded.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/not-loaded.js'), false);
+});
+
+test('does not resolve createRequire relative imports when its base is unknown', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { createRequire } from 'node:module';",
+      'const load = createRequire(runtimeBase);',
+      "load('./maybe.js');"
+    ].join(' '),
+    'scripts/maybe.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/maybe.js'), false);
+  assert.ok(result.uncertainty.some(item => item.certainty === 'unresolved-createRequire-base-context'));
+});
+
+
+test('resolves a local loader wrapper only when it directly forwards its sole argument to require', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function loadLocal(specifier) { return require(specifier); }',
+      'const loadOther = name => require(name);',
+      "loadLocal('./first.js');",
+      "loadOther('./second.js');"
+    ].join(' '),
+    'scripts/first.js': 'module.exports = 1;',
+    'scripts/second.js': 'module.exports = 2;'
+  });
+  assert.ok(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/first.js'));
+  assert.ok(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/second.js'));
+});
+
+test('resolves createRequire-backed loader wrappers from their factory base', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { createRequire } from 'node:module';",
+      'const configRequire = createRequire(import.meta.url);',
+      'function loadFromConfig(specifier) { return configRequire(specifier); }',
+      "loadFromConfig('./dependency.js');"
+    ].join(' '),
+    'scripts/dependency.js': 'module.exports = true;'
+  });
+  assert.ok(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/dependency.js'));
+});
+
+test('invalidates unresolved name-based wrapper references after reassignment', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function loadLocal(specifier) { return require(specifier); }',
+      'loadLocal = unrelated;',
+      "loadLocal('./not-loaded.js');"
+    ].join(' '),
+    'scripts/not-loaded.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/not-loaded.js'), false);
+});
+
+test('keeps wrappers over unknown createRequire bases explicitly unresolved', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { createRequire } from 'node:module';",
+      'const configRequire = createRequire(runtimeBase);',
+      'function loadFromConfig(specifier) { return configRequire(specifier); }',
+      "loadFromConfig('./maybe.js');"
+    ].join(' '),
+    'scripts/maybe.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/maybe.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.certainty === 'unresolved-createRequire-base-context'));
+});
+
+test('does not trust a CommonJS loader wrapper after its binding is reassigned', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function loadLocal(specifier) { return require(specifier); }',
+      'loadLocal = unrelated;',
+      "loadLocal('./not-loaded.js');"
+    ].join(' '),
+    'scripts/not-loaded.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/not-loaded.js'), false);
+});
+
+test('invalidates reassigned CommonJS loader aliases without invalidating captured aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const originalRequire = require;',
+      'let mutableRequire = originalRequire;',
+      'mutableRequire = customLoader;',
+      "originalRequire('./valid.js');",
+      "mutableRequire('./not-loaded.js');"
+    ].join(' '),
+    'scripts/valid.js': 'module.exports = true;',
+    'scripts/not-loaded.js': 'module.exports = true;'
+  });
+  assert.ok(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/valid.js'));
+  assert.equal(edge(result, 'commonjs-require', 'scripts/main.js', 'scripts/not-loaded.js'), false);
+});
+
+test('invalidates reassigned createRequire factories and result aliases', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { createRequire } from 'node:module';",
+      'let factory = createRequire;',
+      'factory = customFactory;',
+      'const invalidRequire = factory(import.meta.url);',
+      "invalidRequire('./factory-target.js');",
+      'function loadFromInvalidFactory(specifier) { return invalidRequire(specifier); }',
+      "loadFromInvalidFactory('./factory-wrapper-target.js');",
+      'const validRequire = createRequire(import.meta.url);',
+      'let mutableRequire = validRequire;',
+      'mutableRequire = customLoader;',
+      "validRequire('./valid.js');",
+      "mutableRequire('./result-target.js');"
+    ].join(' '),
+    'scripts/factory-target.js': 'module.exports = true;',
+    'scripts/factory-wrapper-target.js': 'module.exports = true;',
+    'scripts/valid.js': 'module.exports = true;',
+    'scripts/result-target.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/factory-target.js'), false);
+  assert.equal(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/factory-wrapper-target.js'), false);
+  assert.ok(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/valid.js'));
+  assert.equal(edge(result, 'commonjs-createRequire', 'scripts/main.js', 'scripts/result-target.js'), false);
+});
+
+test('recognizes wrappers forwarding through aliased CommonJS loader functions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const requireAlias = require;',
+      'const moduleRequireAlias = module.require;',
+      'function loadAfterAlias(specifier) { return requireAlias(specifier); }',
+      'const loadModuleAlias = name => moduleRequireAlias(name);',
+      "loadAfterAlias('./first.js');",
+      "loadModuleAlias('./second.js');"
+    ].join(' '),
+    'scripts/first.js': 'module.exports = 1;',
+    'scripts/second.js': 'module.exports = 2;'
+  });
+  assert.ok(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/first.js'));
+  assert.ok(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/second.js'));
+});
+
+test('keeps dynamic wrapper arguments uncertain and rejects wrappers with shadowed require', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function loadLocal(specifier) { return require(specifier); }',
+      'function shadowed(specifier, require) { return require(specifier); }',
+      'loadLocal(runtimeName);',
+      "shadowed('./not-loaded.js', customLoader);"
+    ].join(' '),
+    'scripts/not-loaded.js': 'module.exports = true;'
+  });
+  assert.equal(edge(result, 'commonjs-require-wrapper', 'scripts/main.js', 'scripts/not-loaded.js'), false);
+  assert.ok(result.uncertainty.some(item => item.kind === 'require-wrapper' &&
+    item.certainty === 'unresolved-require-wrapper-argument'));
+});
+
+test('propagates a single static specifier argument into an imported dynamic-import function', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join(' '),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
+});
+
+test('does not guess a dynamic-import target when imported function callsites disagree', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./first.js');",
+      "load('./second.js');"
+    ].join(' '),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/first.js': 'export const first = true;',
+    'scripts/second.js': 'export const second = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/first.js'), false);
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/second.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('keeps cross-module dynamic-import arguments uncertain when any callsite is unknown', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./known.js');",
+      'load(runtimeSpecifier);'
+    ].join(' '),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/known.js': 'export const known = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/known.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('resolves package self-reference export-star barrels for imported loader functions', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', name: 'fixture-suite', exports: {
+      './loader': './scripts/loader.js',
+      './bridge': './scripts/bridge.js'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from 'fixture-suite/bridge';",
+      "load('./target.js');"
+    ].join(' '),
+    'scripts/bridge.js': "export * from 'fixture-suite/loader';",
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const target = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+});
+
+test('resolves package self-reference re-exports while building imported-function summaries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', name: 'fixture-suite', exports: {
+      './loader': './scripts/loader.js',
+      './bridge': './scripts/bridge.js'
+    }, scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from 'fixture-suite/bridge';",
+      "load('./target.js');"
+    ].join(' '),
+    'scripts/bridge.js': "export { load } from 'fixture-suite/loader';",
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const target = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+});
+
+
+test('does not propagate static imported arguments into reassigned dynamic-import parameters', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join(' '),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      "  specifier = runtimeOverride || specifier;",
+      '  return import(specifier);',
+      '}'
+    ].join(' '),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate static imported arguments when a dynamic-import parameter is incremented or updated', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join(' '),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  specifier++;',
+      '  return import(specifier);',
+      '}'
+    ].join(' '),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});

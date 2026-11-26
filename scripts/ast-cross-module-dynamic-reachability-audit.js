@@ -146,10 +146,9 @@ function collectExportsAndImports(ast,file){
       }
       return state;
     }
-    if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
-      &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
-      &&isUnboundGlobal(object.callee.object)){
-      const method=memberName(object.callee);
+    const nativeCall=trustedNativeMethodInfo(object);
+    if(nativeCall?.globalName==='Object'){
+      const method=nativeCall.method;
       if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
         const byKey=new Map();
         for(const property of object.arguments[1].properties||[]){
@@ -209,6 +208,180 @@ function collectExportsAndImports(ast,file){
     if(references.length!==1||references[0].identifier!==identifier||!references[0].isRead())return null;
     return declarator.init;
   };
+  const nativeGlobalName=(node,active=new Set())=>{
+    if(node?.type==='MemberExpression'&&memberName(node)==='value'&&node.object?.type==='CallExpression'){
+      const descriptor=trustedNativeMethodInfo(node.object),root=node.object.arguments[0],key=staticPropertyKey(node.object.arguments[1]);
+      if(descriptor?.globalName==='Object'&&descriptor.method==='getOwnPropertyDescriptor'
+        &&root?.type==='Identifier'&&['globalThis','window','self'].includes(root.name)&&isUnboundGlobal(root)
+        &&['Object','Reflect'].includes(String(key)))return String(key);
+      return null;
+    }
+    if(node?.type==='CallExpression'){
+      const getter=trustedNativeMethodInfo(node),root=node.arguments[0],key=staticPropertyKey(node.arguments[1]);
+      if(getter?.globalName==='Reflect'&&getter.method==='get'
+        &&root?.type==='Identifier'&&['globalThis','window','self'].includes(root.name)&&isUnboundGlobal(root)
+        &&['Object','Reflect'].includes(String(key)))return String(key);
+      return null;
+    }
+    if(node?.type==='MemberExpression'){
+      const root=node.object;
+      const globalObject=root?.type==='Identifier'&&['globalThis','window','self'].includes(root.name)&&isUnboundGlobal(root);
+      const property=memberName(node);
+      if(globalObject&&['Object','Reflect'].includes(property))return property;
+      return null;
+    }
+    if(node?.type!=='Identifier')return null;
+    if(['Object','Reflect'].includes(node.name)&&isUnboundGlobal(node))return node.name;
+    const variable=resolveVariable(node);
+    if(!variable||active.has(variable))return null;
+    const definition=variable.defs?.find(item=>item.type==='Variable');
+    const declarator=definition?.node;
+    if(declarator?.type!=='VariableDeclarator'||declarator.id.type!=='Identifier'
+      ||!['Identifier','MemberExpression','CallExpression'].includes(declarator.init?.type)||definition.parent?.type!=='VariableDeclaration'
+      ||definition.parent.kind!=='const')return null;
+    active.add(variable);
+    const result=nativeGlobalName(declarator.init,active);
+    active.delete(variable);
+    return result;
+  };
+  const resolveNativeMethodAlias=(identifier,active=new Set())=>{
+    if(identifier?.type!=='Identifier')return null;
+    const variable=resolveVariable(identifier);
+    if(!variable||active.has(variable))return null;
+    const definition=variable.defs?.find(item=>item.type==='Variable');
+    const declarator=definition?.node;
+    if(declarator?.type!=='VariableDeclarator'||definition.parent?.type!=='VariableDeclaration'
+      ||definition.parent.kind!=='const')return null;
+    active.add(variable);
+    let result=null;
+    if(declarator.id.type==='Identifier'){
+      if(declarator.init?.type==='MemberExpression'){
+        const member=declarator.init,descriptorCall=member.object?.type==='CallExpression'?member.object:null;
+        if(memberName(member)==='value'&&descriptorCall){
+          const descriptor=trustedNativeMethodInfo(descriptorCall),globalName=nativeGlobalName(descriptorCall.arguments[0]);
+          const method=staticPropertyKey(descriptorCall.arguments[1]);
+          if(descriptor?.globalName==='Object'&&descriptor.method==='getOwnPropertyDescriptor'
+            &&globalName&&method!==null)result={globalName,method:String(method)};
+        }else{
+          const globalName=nativeGlobalName(member.object),method=memberName(member);
+          if(globalName&&method)result={globalName,method};
+        }
+      }else if(declarator.init?.type==='Identifier')result=resolveNativeMethodAlias(declarator.init,active);
+      else if(declarator.init?.type==='CallExpression'){
+        const getter=trustedNativeMethodInfo(declarator.init),globalName=nativeGlobalName(declarator.init.arguments[0]);
+        const method=staticPropertyKey(declarator.init.arguments[1]);
+        if(getter?.globalName==='Reflect'&&getter.method==='get'&&globalName&&method!==null)
+          result={globalName,method:String(method)};
+      }
+    }else if(declarator.id.type==='ObjectPattern'){
+      const globalName=nativeGlobalName(declarator.init);
+      if(globalName){
+        const property=declarator.id.properties?.find(item=>item.type==='Property'
+          &&item.value.type==='Identifier'&&item.value.name===identifier.name);
+        const method=property?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null;
+        if(method)result={globalName,method:String(method)};
+      }
+    }
+    active.delete(variable);
+    return result;
+  };
+  const resolveNativeMutationWrapperAlias=(identifier,active=new Set())=>{
+    if(identifier?.type!=='Identifier')return null;
+    const variable=resolveVariable(identifier);
+    if(!variable||active.has(variable))return null;
+    const definition=variable.defs?.find(item=>item.type==='Variable'),declarator=definition?.node;
+    if(declarator?.type!=='VariableDeclarator'||definition.parent?.type!=='VariableDeclaration'
+      ||definition.parent.kind!=='const')return null;
+    active.add(variable);
+    let result=null;
+    if(declarator.id.type==='Identifier'){
+      if(declarator.init?.type==='Identifier'){
+        result=resolveNativeMutationWrapperAlias(declarator.init,active)||resolveNativeMethodAlias(declarator.init);
+      }else if(declarator.init?.type==='MemberExpression'
+        ||(declarator.init?.type==='CallExpression'&&declarator.init.callee.type==='MemberExpression')){
+        const wrapperNode=declarator.init.type==='CallExpression'?declarator.init.callee:declarator.init;
+        const wrapper=memberName(wrapperNode),base=wrapperNode.object;
+        const baseInfo=base?.type==='MemberExpression'
+          ?{globalName:nativeGlobalName(base.object),method:memberName(base)}
+          :base?.type==='Identifier'?resolveNativeMethodAlias(base):null;
+        if(baseInfo&&['call','apply','bind'].includes(wrapper)
+          &&((baseInfo.globalName==='Object'&&['assign','defineProperty','defineProperties'].includes(baseInfo.method))
+            ||(baseInfo.globalName==='Reflect'&&['set','defineProperty','deleteProperty'].includes(baseInfo.method))))
+          result={...baseInfo,wrapper};
+      }
+    }
+    active.delete(variable);
+    return result;
+  };
+  const nativeMethodInfo=call=>{
+    if(call?.type!=='CallExpression')return null;
+    if(call.callee.type==='MemberExpression'){
+      const globalName=nativeGlobalName(call.callee.object);
+      const method=memberName(call.callee);
+      return globalName&&method?{globalName,method}:null;
+    }
+    if(call.callee.type==='Identifier')return resolveNativeMethodAlias(call.callee);
+    return null;
+  };
+  const mutatedNativeGlobals=new Set(),mutatedNativeMethods=new Set();
+  const trustedNativeMethodInfo=call=>{
+    const info=nativeMethodInfo(call);
+    if(!info||mutatedNativeGlobals.has(info.globalName)||mutatedNativeMethods.has(info.globalName+'.'+info.method))return null;
+    return info;
+  };
+  const markNativeMutation=(globalName,method)=>{
+    if(method)mutatedNativeMethods.add(globalName+'.'+method);
+    else mutatedNativeGlobals.add(globalName);
+  };
+  const collectNativeMutation=(node)=>{
+    if(node.type==='AssignmentExpression'||node.type==='UpdateExpression'
+      ||(node.type==='UnaryExpression'&&node.operator==='delete')){
+      const target=node.type==='AssignmentExpression'?node.left:node.argument;
+      if(target?.type==='Identifier'&&['Object','Reflect'].includes(target.name)&&isUnboundGlobal(target))
+        mutatedNativeGlobals.add(target.name);
+      if(target?.type==='MemberExpression'){
+        const globalName=nativeGlobalName(target.object),method=memberName(target);
+        if(globalName)markNativeMutation(globalName,method);
+        if(target.object.type==='Identifier'&&['globalThis','window','self'].includes(target.object.name)
+          &&isUnboundGlobal(target.object)){
+          const globalProperty=memberName(target);
+          if(['Object','Reflect'].includes(globalProperty))mutatedNativeGlobals.add(globalProperty);
+        }
+      }
+    }
+    if(node.type!=='CallExpression')return;
+    const info=nativeMethodInfo(node);
+    if(!info)return;
+    const targetGlobal=nativeGlobalName(node.arguments[0]);
+    if(!['Object','Reflect'].includes(targetGlobal))return;
+    if(['defineProperty','set','deleteProperty'].includes(info.method)){
+      const key=staticPropertyKey(node.arguments[1]);
+      markNativeMutation(targetGlobal,key);
+      return;
+    }
+    if(info.method==='defineProperties'){
+      const descriptors=node.arguments[1];
+      if(descriptors?.type!=='ObjectExpression'){mutatedNativeGlobals.add(targetGlobal);return;}
+      for(const property of descriptors.properties||[]){
+        if(property.type!=='Property'){mutatedNativeGlobals.add(targetGlobal);return;}
+        const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+        if(key===null||key===undefined){mutatedNativeGlobals.add(targetGlobal);return;}
+        markNativeMutation(targetGlobal,String(key));
+      }
+      return;
+    }
+    if(info.method==='assign'){
+      for(const source of node.arguments.slice(1)){
+        if(source?.type!=='ObjectExpression'){mutatedNativeGlobals.add(targetGlobal);return;}
+        for(const property of source.properties||[]){
+          if(property.type==='SpreadElement'){mutatedNativeGlobals.add(targetGlobal);return;}
+          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+          if(key===null||key===undefined){mutatedNativeGlobals.add(targetGlobal);return;}
+          markNativeMutation(targetGlobal,String(key));
+        }
+      }
+    }
+  };
   const isCurrentCommonJsExportAlias=(identifier,atNode=identifier)=>{
     if(identifier?.type!=='Identifier')return false;
     const declarator=resolveVariableDeclarator(identifier);
@@ -252,10 +425,9 @@ function collectExportsAndImports(ast,file){
       }
       return;
     }
-    if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
-      &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
-      &&isUnboundGlobal(object.callee.object)){
-      const method=memberName(object.callee);
+    const nativeCall=trustedNativeMethodInfo(object);
+    if(nativeCall?.globalName==='Object'){
+      const method=nativeCall.method;
       if(method==='assign'){
         for(let index=0;index<object.arguments.length;index++){
           // Object.assign preserves non-enumerable own properties already on its target;
@@ -335,11 +507,10 @@ function collectExportsAndImports(ast,file){
         }else{
           const argument=property.argument;
           const staticAlias=argument.type==='Identifier'?resolveStaticObjectSpread(argument):null;
+          const spreadFactory=trustedNativeMethodInfo(argument);
           if(argument.type!=='ObjectExpression'&&!staticAlias
-            &&!(argument.type==='CallExpression'&&argument.callee.type==='MemberExpression'
-              &&argument.callee.object.type==='Identifier'&&argument.callee.object.name==='Object'
-              &&isUnboundGlobal(argument.callee.object)
-              &&['assign','fromEntries','create','defineProperty','defineProperties','freeze','seal','preventExtensions','setPrototypeOf'].includes(memberName(argument.callee)))){
+            &&!(spreadFactory?.globalName==='Object'
+              &&['assign','fromEntries','create','defineProperty','defineProperties','freeze','seal','preventExtensions','setPrototypeOf'].includes(spreadFactory.method))){
             // An unknown spread can overwrite any previously observed static key.
             clearCommonJsExportOwners();
           }
@@ -371,7 +542,7 @@ function collectExportsAndImports(ast,file){
     }
   };
   const recordObjectDefineProperties=(call,enumerableOnly=false,baseline=null,assignSource=false,existingTarget=null)=>{
-    const method=memberName(call.callee);
+    const method=trustedNativeMethodInfo(call)?.method;
     if(method==='defineProperty'){
       const key=staticPropertyKey(call.arguments[1]);
       if(key===null){
@@ -426,10 +597,9 @@ function collectExportsAndImports(ast,file){
   };
   const recordCommonJsAssignmentValue=(value,exportsSnapshot=null)=>{
     if(value?.type==='ObjectExpression'){recordObjectProperties(value,exportsSnapshot);return;}
-    if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
-      ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
-      ||!isUnboundGlobal(value.callee.object))return;
-    const method=memberName(value.callee);
+    const nativeCall=trustedNativeMethodInfo(value);
+    if(nativeCall?.globalName!=='Object')return;
+    const method=nativeCall.method;
     if(method==='fromEntries'){recordObjectFromEntries(value);return;}
     if(method==='defineProperty'||method==='defineProperties'){
       recordObjectProperties(value.arguments[0],exportsSnapshot);
@@ -449,6 +619,7 @@ function collectExportsAndImports(ast,file){
     if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
   };
   visit(ast,n=>{
+    collectNativeMutation(n);
     if(isModuleExportsAssignment(n)){
       const selfAssignment=isModuleExportsReference(n.right);
       if(!selfAssignment)moduleExportsReplacements.push(n);
@@ -472,10 +643,10 @@ function collectExportsAndImports(ast,file){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
+      const parentNativeCall=trustedNativeMethodInfo(parent);
       const assignedThroughObjectAssign=parent?.type==='CallExpression'&&parent.arguments.includes(n)
-        &&parent.callee.type==='MemberExpression'&&parent.callee.object.type==='Identifier'
-        &&parent.callee.object.name==='Object'&&isUnboundGlobal(parent.callee.object)
-        &&memberName(parent.callee)==='assign'&&isCommonJsExportsTarget(parent.arguments[0]);
+        &&parentNativeCall?.globalName==='Object'&&parentNativeCall.method==='assign'
+        &&isCommonJsExportsTarget(parent.arguments[0]);
       const spreadAsWholeModuleExports=parent?.type==='SpreadElement'
         &&moduleExportsReplacements.some(replacement=>replacement.right.type==='ObjectExpression'
           &&replacement.right.properties.length===1&&replacement.right.properties[0]===parent
@@ -490,10 +661,57 @@ function collectExportsAndImports(ast,file){
         }
       }else imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports||assignedThroughObjectAssign||spreadAsWholeModuleExports});
     }
+    if(n.type==='CallExpression'&&n.callee.type==='Identifier'){
+      const wrapperAlias=resolveNativeMutationWrapperAlias(n.callee);
+      if(wrapperAlias){
+        let target=null,unknownTarget=false;
+        if(wrapperAlias.wrapper==='call')target=n.arguments[1]||null;
+        else if(wrapperAlias.wrapper==='bind')target=n.arguments[0]||null;
+        else{
+          const argsArray=n.arguments[1];
+          if(argsArray?.type==='ArrayExpression'&&argsArray.elements.length>0
+            &&argsArray.elements[0]?.type!=='SpreadElement')target=argsArray.elements[0];
+          else unknownTarget=true;
+        }
+        if(unknownTarget||isCommonJsExportsTarget(target))clearCommonJsExportOwners();
+      }
+    }
     if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
-      &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
-      &&isUnboundGlobal(n.callee.object)){
-      const method=memberName(n.callee);
+      &&['call','apply'].includes(memberName(n.callee))){
+      const baseRef=n.callee.object,baseInfo=baseRef?.type==='MemberExpression'
+        ?{globalName:nativeGlobalName(baseRef.object),method:memberName(baseRef)}
+        :baseRef?.type==='Identifier'?resolveNativeMethodAlias(baseRef):null,
+        indirectMethod=memberName(n.callee);
+      if(baseInfo&&((baseInfo.globalName==='Object'&&['assign','defineProperty','defineProperties'].includes(baseInfo.method))
+        ||(baseInfo.globalName==='Reflect'&&['set','defineProperty','deleteProperty'].includes(baseInfo.method)))){
+        let target=null,unknownTarget=false;
+        if(indirectMethod==='call')target=n.arguments[1]||null;
+        else{
+          const argsArray=n.arguments[1];
+          if(argsArray?.type==='ArrayExpression'&&argsArray.elements.length>0
+            &&argsArray.elements[0]?.type!=='SpreadElement')target=argsArray.elements[0];
+          else unknownTarget=true;
+        }
+        if(unknownTarget||isCommonJsExportsTarget(target))clearCommonJsExportOwners();
+      }
+    }
+    if(n.type==='CallExpression'){
+      const reflector=nativeMethodInfo(n),appliedRef=n.arguments[0],applied=appliedRef?.type==='MemberExpression'
+        ?{globalName:nativeGlobalName(appliedRef.object),method:memberName(appliedRef)}
+        :appliedRef?.type==='Identifier'?resolveNativeMethodAlias(appliedRef):null;
+      if(reflector?.globalName==='Reflect'&&reflector.method==='apply'&&applied
+        &&((applied.globalName==='Object'&&['assign','defineProperty','defineProperties'].includes(applied.method))
+          ||(applied.globalName==='Reflect'&&['set','defineProperty','deleteProperty'].includes(applied.method)))){
+        const argsArray=n.arguments[2];
+        if(argsArray?.type==='ArrayExpression'&&argsArray.elements.length>0
+          &&argsArray.elements[0]?.type!=='SpreadElement'){
+          if(isCommonJsExportsTarget(argsArray.elements[0]))clearCommonJsExportOwners();
+        }else clearCommonJsExportOwners();
+      }
+    }
+    const nativeCall=trustedNativeMethodInfo(n);
+    if(n.type==='CallExpression'&&nativeCall?.globalName==='Object'){
+      const method=nativeCall.method;
       if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])&&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
         for(const argument of n.arguments.slice(1))recordObjectProperties(argument,null,new Set(),true);
       }
@@ -509,10 +727,9 @@ function collectExportsAndImports(ast,file){
         recordObjectDefineProperties(n);
       }
     }
-    if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
-      &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Reflect'
-      &&isUnboundGlobal(n.callee.object)){
-      const method=memberName(n.callee),target=n.arguments[0];
+    const reflectCall=trustedNativeMethodInfo(n);
+    if(n.type==='CallExpression'&&reflectCall?.globalName==='Reflect'){
+      const method=reflectCall.method,target=n.arguments[0];
       const liveTarget=isCommonJsExportsTarget(target)
         &&!(target?.type==='Identifier'&&target.name==='exports'&&exportsAliasDetached);
       if(liveTarget&&method==='defineProperty')recordObjectDefineProperties(n);
@@ -532,6 +749,15 @@ function collectExportsAndImports(ast,file){
         if(key===null)clearCommonJsExportOwners();
         else{exports.delete(key);commonJsExportNames.delete(key);}
       }
+    }
+    if(n.type==='CallExpression'&&!nativeCall&&!reflectCall){
+      const possibleInfo=nativeMethodInfo(n);
+      const method=possibleInfo?.method??(n.callee.type==='MemberExpression'?memberName(n.callee):null);
+      const target=n.arguments[0];
+      const liveTarget=isCommonJsExportsTarget(target)
+        &&!(target?.type==='Identifier'&&target.name==='exports'&&exportsAliasDetached);
+      if(liveTarget&&['assign','defineProperty','defineProperties','set','deleteProperty'].includes(method))
+        clearCommonJsExportOwners();
     }
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
@@ -567,17 +793,14 @@ function collectExportsAndImports(ast,file){
         const isCurrentExportsObjectIdentity=n.right.type==='Identifier'&&n.right.name==='exports'
           &&isUnboundGlobal(n.right)&&!exportsAliasDetached;
         const assignmentValue=n.right;
-        const isAssignMutation=assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
-          &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
-          &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
+        const assignmentNativeCall=trustedNativeMethodInfo(assignmentValue);
+        const isAssignMutation=assignmentNativeCall?.globalName==='Object'&&assignmentNativeCall.method==='assign'
           &&assignmentValue.arguments.length>0
           &&(isModuleExportsReference(assignmentValue.arguments[0])
             ||(assignmentValue.arguments[0].type==='Identifier'&&assignmentValue.arguments[0].name==='exports'
               &&isUnboundGlobal(assignmentValue.arguments[0])&&!exportsAliasDetached)
             ||(assignmentValue.arguments[0].type==='Identifier'&&isCurrentCommonJsExportAlias(assignmentValue.arguments[0],n)));
-        const copiesCurrentExports=(assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
-          &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
-          &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
+        const copiesCurrentExports=(assignmentNativeCall?.globalName==='Object'&&assignmentNativeCall.method==='assign'
           &&assignmentValue.arguments.some(argument=>argument.type==='Identifier'&&argument.name==='exports'
             &&isUnboundGlobal(argument)&&!exportsAliasDetached))
           ||(assignmentValue.type==='ObjectExpression'&&assignmentValue.properties.some(property=>property.type==='SpreadElement'

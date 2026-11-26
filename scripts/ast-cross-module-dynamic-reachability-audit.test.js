@@ -1919,3 +1919,311 @@ test('preserves existing enumerability through nested duplicate descriptor facto
   }
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('traces immutable native Object and Reflect aliases but rejects shadowed or patched methods',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-native-method-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'object-alias.cjs'),[
+   'const NativeObject = Object;',
+   'function service() {}',
+   'NativeObject.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'method-alias.cjs'),[
+   'const assign = Object.assign;',
+   'function service() {}',
+   'assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'destructured-alias.cjs'),[
+   'const { assign: copy } = Object;',
+   'function service() {}',
+   'copy(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'define-alias.cjs'),[
+   'const { defineProperty: define } = Object;',
+   'function service() {}',
+   "define(module.exports, 'service', { value: service });"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'reflect-alias.cjs'),[
+   'const NativeReflect = Reflect;',
+   'const { set: write } = NativeReflect;',
+   'function service() {}',
+   "write(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'shadowed-object.cjs'),[
+   'function original() {}',
+   'function service() {}',
+   'module.exports.service = original;',
+   'const Object = { assign() {} };',
+   'Object.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'shadowed-reflect.cjs'),[
+   'function original() {}',
+   'function service() {}',
+   'module.exports.service = original;',
+   'const Reflect = { set() {} };',
+   "Reflect.set(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'patched-object.cjs'),[
+   'function original() {}',
+   'function service() {}',
+   'module.exports.service = original;',
+   'Object.assign = function customAssign() {};',
+   'Object.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'patched-alias.cjs'),[
+   'function original() {}',
+   'function service() {}',
+   'module.exports.service = original;',
+   'const assign = Object.assign;',
+   'Object.assign = function customAssign() {};',
+   'assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'reassigned-object-alias.cjs'),[
+   'function original() {}',
+   'function service() {}',
+   'module.exports.service = original;',
+   'let NativeObject = Object;',
+   'NativeObject = customObject;',
+   'NativeObject.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: objectAlias } = require('./object-alias.cjs');",
+   "const { service: methodAlias } = require('./method-alias.cjs');",
+   "const { service: destructuredAlias } = require('./destructured-alias.cjs');",
+   "const { service: defineAlias } = require('./define-alias.cjs');",
+   "const { service: reflectAlias } = require('./reflect-alias.cjs');",
+   "const { service: shadowedObject } = require('./shadowed-object.cjs');",
+   "const { service: shadowedReflect } = require('./shadowed-reflect.cjs');",
+   "const { service: patchedObject } = require('./patched-object.cjs');",
+   "const { service: patchedAlias } = require('./patched-alias.cjs');",
+   "const { service: reassignedAlias } = require('./reassigned-object-alias.cjs');"
+  ].join('\n'));
+  const targets=['object-alias.cjs','method-alias.cjs','destructured-alias.cjs','define-alias.cjs','reflect-alias.cjs',
+   'shadowed-object.cjs','shadowed-reflect.cjs','patched-object.cjs','patched-alias.cjs','reassigned-object-alias.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets.slice(0,5)){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='service'&&!x.unresolvedExport),'immutable native method alias should be traced for '+target);
+  }
+  for(const target of targets.slice(5)){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal===null&&x.unresolvedExport),'shadowed, patched, or reassigned method must not be trusted for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('traces native Object and Reflect through global-object properties',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-native-global-object-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'global-this.cjs'),[
+   'const NativeObject = globalThis.Object;',
+   'function service() {}',
+   'NativeObject.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'window.cjs'),[
+   'const { assign: copy } = window.Object;',
+   'function service() {}',
+   'copy(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'self.cjs'),[
+   'const NativeReflect = self.Reflect;',
+   'function service() {}',
+   "NativeReflect.set(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: fromGlobalThis } = require('./global-this.cjs');",
+   "const { service: fromWindow } = require('./window.cjs');",
+   "const { service: fromSelf } = require('./self.cjs');"
+  ].join('\n'));
+  const targets=['global-this.cjs','window.cjs','self.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='service'&&!x.unresolvedExport),'native global-object alias should be traced for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+
+test('traces computed and chained immutable native global-object aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-native-computed-global-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'computed-object.cjs'),[
+   "const NativeObject = globalThis['Object'];",
+   "const ObjectAlias = NativeObject;",
+   "const copy = ObjectAlias['assign'];",
+   'function service() {}',
+   'copy(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'computed-reflect.cjs'),[
+   "const { set: put } = self['Reflect'];",
+   'function service() {}',
+   "put(module.exports, 'service', service);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: fromObject } = require('./computed-object.cjs');",
+   "const { service: fromReflect } = require('./computed-reflect.cjs');"
+  ].join('\n'));
+  const targets=['computed-object.cjs','computed-reflect.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets){
+   assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&x.exportedLocal==='service'&&!x.unresolvedExport),'computed native global alias should be traced for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('invalidates stale CommonJS owners through native mutation call and apply wrappers',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-native-call-apply-owners-'));
+ try{
+  fs.writeFileSync(path.join(root,'call.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   'Object.assign.call(null, module.exports, unknownSource);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'apply.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "Reflect.apply(Reflect.set, null, [module.exports, 'service', unknownValue]);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'alias-call.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   'const assignCall = Object.assign.call;',
+   'assignCall(null, module.exports, unknownSource);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'alias-bind.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   'const assignBound = Object.assign.bind(null);',
+   'assignBound(module.exports, unknownSource);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: fromCall } = require('./call.cjs');",
+   "const { service: fromApply } = require('./apply.cjs');",
+   "const { service: fromAliasCall } = require('./alias-call.cjs');",
+   "const { service: fromAliasBind } = require('./alias-bind.cjs');"
+  ].join('\n'));
+  const targets=['call.cjs','apply.cjs','alias-call.cjs','alias-bind.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets){
+   assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&!x.unresolvedExport),'unknown indirect mutation must invalidate previous owner for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('traces immutable native mutation aliases returned by Reflect.get',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-reflect-get-native-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'object-get.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "const copy = Reflect.get(Object, 'assign');",
+   'copy(module.exports, unknownSource);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'reflect-get.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "const put = Reflect.get(Reflect, 'set');",
+   "put(module.exports, unknownKey, unknownValue);"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: fromObjectGet } = require('./object-get.cjs');",
+   "const { service: fromReflectGet } = require('./reflect-get.cjs');"
+  ].join('\n'));
+  const targets=['object-get.cjs','reflect-get.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets){
+   assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&!x.unresolvedExport),'Reflect.get method alias must apply mutation semantics for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('traces native globals obtained through trusted Reflect.get',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-reflect-get-native-globals-'));
+ try{
+  fs.writeFileSync(path.join(root,'object-global.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "const NativeObject = Reflect.get(globalThis, 'Object');",
+   "const copy = Reflect.get(NativeObject, 'assign');",
+   'copy(module.exports, unknownSource);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'reflect-global.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "const NativeReflect = Reflect.get(self, 'Reflect');",
+   "const put = Reflect.get(NativeReflect, 'set');",
+   'put(module.exports, unknownKey, unknownValue);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: fromObjectGlobal } = require('./object-global.cjs');",
+   "const { service: fromReflectGlobal } = require('./reflect-global.cjs');"
+  ].join('\n'));
+  const targets=['object-global.cjs','reflect-global.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets){
+   assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&!x.unresolvedExport),'Reflect.get native-global alias must apply mutation semantics for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('traces native mutation aliases through Object.getOwnPropertyDescriptor',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-descriptor-native-aliases-'));
+ try{
+  fs.writeFileSync(path.join(root,'descriptor-object.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "const NativeObject = Object.getOwnPropertyDescriptor(globalThis, 'Object').value;",
+   "const copy = Object.getOwnPropertyDescriptor(NativeObject, 'assign').value;",
+   'copy(module.exports, unknownSource);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'descriptor-reflect.cjs'),[
+   'function original() {}',
+   'module.exports.service = original;',
+   "const NativeReflect = Object.getOwnPropertyDescriptor(self, 'Reflect').value;",
+   "const put = Object.getOwnPropertyDescriptor(NativeReflect, 'set').value;",
+   'put(module.exports, unknownKey, unknownValue);'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: fromDescriptorObject } = require('./descriptor-object.cjs');",
+   "const { service: fromDescriptorReflect } = require('./descriptor-reflect.cjs');"
+  ].join('\n'));
+  const targets=['descriptor-object.cjs','descriptor-reflect.cjs'];
+  const files=[...targets,'consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  for(const target of targets){
+   assert.ok(!r.links.some(x=>x.from==='consumer.cjs'&&x.to===target&&x.imported==='service'
+    &&!x.unresolvedExport),'descriptor-reflected native alias must apply mutation semantics for '+target);
+  }
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('invalidates native method aliases patched through global-object paths',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'commonjs-global-object-native-patch-'));
+ try{
+  fs.writeFileSync(path.join(root,'patched.cjs'),[
+   'function original() {}',
+   'function service() {}',
+   'module.exports.service = original;',
+   'const NativeObject = globalThis.Object;',
+   'globalThis.Object.assign = function customAssign() {};',
+   'NativeObject.assign(module.exports, { service });'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.cjs'),[
+   "const { service: patched } = require('./patched.cjs');"
+  ].join('\n'));
+  const files=['patched.cjs','consumer.cjs'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.cjs'&&x.to==='patched.cjs'&&x.imported==='service'
+   &&x.exportedLocal===null&&x.unresolvedExport),
+   'patching Object.assign through globalThis must invalidate previously inferred export owners');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
