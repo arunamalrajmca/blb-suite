@@ -417,8 +417,8 @@ test('resolves package self-references through the active import and require exp
   fs.writeFileSync(path.join(root,'consumer.mjs'),"import 'fixture-suite/service';");
   fs.writeFileSync(path.join(root,'consumer.cjs'),"require('fixture-suite/service');");
   const graph=buildModuleGraph(root);
-  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.file===path.join(root,'src/service.mjs')));
-  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.file===path.join(root,'src/service.cjs')));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.to==='src/service.mjs'));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.to==='src/service.cjs'));
   assert.equal(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.external),false);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
@@ -455,7 +455,7 @@ test('recognizes computed module.require calls and aliases without changing pack
   fs.writeFileSync(path.join(root,'src/esm.js'),'export default true;');
   fs.writeFileSync(path.join(root,'src/cjs.js'),'module.exports = true;');
   const graph=buildModuleGraph(root);
-  assert.ok(graph.edges.some(edge=>edge.specifier==='./child.js'&&edge.file===path.join(root,'child.js')));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='./child.js'&&edge.to==='child.js'));
   assert.ok(graph.reachable.includes('src/esm.js'));
   assert.ok(graph.reachable.includes('src/cjs.js'));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
