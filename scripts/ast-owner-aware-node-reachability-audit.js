@@ -723,6 +723,11 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           invalidatedFactoryVariables.delete(factoryVariable);
         }
       }
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
+          isFactoryIdentifier(node.init.callee)) {
+        const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (aliasVariable) requireAliasVariables.add(aliasVariable);
+      }
       if (node.init?.type === 'CallExpression' && isRequireExpression(node.init)) {
         const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
         if (aliasVariable) requireAliasVariables.add(aliasVariable);
