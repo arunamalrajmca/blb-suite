@@ -252,10 +252,17 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
 
   function resolvedOwner(identifier) {
     const reference = referenceByNode.get(identifier);
-    // A resolved lexical binding with no known owner is still authoritative:
-    // falling back by spelling would attribute a shadowed local to an outer
-    // object/class that merely shares its identifier.
-    if (reference?.resolved) return variableOwners.get(reference.resolved) || null;
+    // A resolved lexical binding is authoritative. Class declarations are
+    // the one exception to the ordinary owner map because their static owner
+    // is also indexed separately by the declaration's lexical variable.
+    if (reference?.resolved) {
+      const owner = variableOwners.get(reference.resolved);
+      if (owner) return owner;
+      const isClassBinding = (reference.resolved.defs || []).some(definition =>
+        definition.type === 'ClassName'
+      );
+      return isClassBinding ? classStaticOwnerByName.get(identifier.name) || null : null;
+    }
     return ownerByIdentifierName.get(identifier.name) ||
       classStaticOwnerByName.get(identifier.name) || null;
   }
