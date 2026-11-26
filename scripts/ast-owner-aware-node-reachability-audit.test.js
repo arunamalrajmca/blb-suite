@@ -788,3 +788,32 @@ test('follows a local alias of the imported createRequire factory', () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('follows bound createRequire factories from imported and module namespace sources', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bound-create-require-factory-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
+    write('scripts/main.cjs', [
+      "const { createRequire } = require('node:module');",
+      'const boundImportedFactory = createRequire.bind(null);',
+      'const loadImported = boundImportedFactory(__filename);',
+      "loadImported('./bound-imported-factory-child.js');",
+      'const boundModuleFactory = module.createRequire.bind(module);',
+      'const loadModule = boundModuleFactory(__filename);',
+      "loadModule('./bound-module-factory-child.js');"
+    ].join('\\n'));
+    write('scripts/bound-imported-factory-child.js');
+    write('scripts/bound-module-factory-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/bound-imported-factory-child.js'));
+    assert.ok(reachable.has('scripts/bound-module-factory-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
