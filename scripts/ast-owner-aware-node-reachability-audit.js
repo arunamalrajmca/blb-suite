@@ -552,19 +552,6 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (!variable || invalidatedModuleAliasVariables.has(variable)) return false;
     return moduleNamespaceAliasVariables.has(variable) || moduleObjectAliasVariables.has(variable);
   }
-  function isDestructuredAssignmentAlias(variable, propertyName) {
-    return (variable.references || []).some(reference => {
-      if (!reference.isWrite()) return false;
-      const property = parentByNode.get(reference.identifier);
-      const pattern = property && parentByNode.get(property);
-      const assignment = pattern && parentByNode.get(pattern);
-      return property?.type === 'Property' && property.value === reference.identifier &&
-        staticKey(property.key, property.computed) === propertyName &&
-        pattern?.type === 'ObjectPattern' && assignment?.type === 'AssignmentExpression' &&
-        assignment.left === pattern && assignment.right?.type === 'Identifier' &&
-        isNodeModuleIdentifier(assignment.right);
-    });
-  }
   function isFactoryIdentifier(identifier, seen = new Set()) {
     if (!identifier || identifier.type !== 'Identifier') return false;
     const variable = resolveLexicalVariable(identifier);
@@ -608,7 +595,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
       return false;
     });
-    if (declaredFactory || isDestructuredAssignmentAlias(variable, 'createRequire')) return true;
+    if (declaredFactory) return true;
     const uninitializedVariable = (variable.defs || []).some(definition =>
       definition.type === 'Variable' && definition.node?.type === 'VariableDeclarator' &&
       !definition.node.init
@@ -654,7 +641,6 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (seen.has(variable)) return false;
     seen.add(variable);
     if (!requireAliasVariables.has(variable)) return false;
-    if (isDestructuredAssignmentAlias(variable, 'require')) return true;
     return (variable.defs || []).some(definition => {
       if (definition.type !== 'Variable' || !definition.node ||
           definition.node.type !== 'VariableDeclarator') return false;
