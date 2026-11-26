@@ -530,8 +530,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const moduleObjectAliasVariables = new Set();
   const moduleNamespaceAliasVariables = new Set();
   const invalidatedModuleAliasVariables = new Set();
-  const createRequireAliases = new Set(['createRequire']);
-  const invalidatedFactoryAliases = new Set();
+  const createRequireFactoryVariables = new Set();
+  const invalidatedFactoryVariables = new Set();
   function resolveLexicalVariable(identifier) {
     if (!identifier || identifier.type !== 'Identifier') return null;
     const direct = referenceByNode.get(identifier);
@@ -558,8 +558,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
   function isFactoryIdentifier(identifier, seen = new Set()) {
     if (!identifier || identifier.type !== 'Identifier') return false;
     const variable = resolveLexicalVariable(identifier);
-    if (!variable || seen.has(variable) || !createRequireAliases.has(identifier.name) ||
-        invalidatedFactoryAliases.has(identifier.name)) return false;
+    if (!variable || seen.has(variable) || !createRequireFactoryVariables.has(variable) ||
+        invalidatedFactoryVariables.has(variable)) return false;
     seen.add(variable);
     return (variable.defs || []).some(definition => {
       if (definition.type === 'ImportBinding') {
@@ -643,7 +643,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         }
         if (specifier.type === 'ImportSpecifier' &&
             (specifier.imported.name || specifier.imported.value) === 'createRequire') {
-          createRequireAliases.add(specifier.local.name);
+          const factoryVariable = variableByDefinitionNode.get(specifier.local) || resolveLexicalVariable(specifier.local);
+          if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
         }
       }
     }
@@ -682,7 +683,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
       if (node.init?.type === 'MemberExpression' && isNodeModuleIdentifier(node.init.object) &&
           staticKey(node.init.property, node.init.computed) === 'createRequire') {
-        createRequireAliases.add(node.id.name);
+        const factoryVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
       }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
           isFactoryIdentifier(node.init.callee)) {
@@ -718,7 +720,10 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       if (fromCommonJsModule || fromAwaitedModuleImport) {
         for (const property of node.id.properties) {
           if (property.type === 'Property' && staticKey(property.key, property.computed) === 'createRequire' &&
-              property.value.type === 'Identifier') createRequireAliases.add(property.value.name);
+              property.value.type === 'Identifier') {
+            const factoryVariable = variableByDefinitionNode.get(property.value) || resolveLexicalVariable(property.value);
+            if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
+          }
         }
       }
     }
@@ -760,15 +765,15 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         if (targetVariable) requireAliasVariables.add(targetVariable);
       } else if (targetVariable) requireAliasVariables.delete(targetVariable);
 
-      const assignedCreateRequire = value.type === 'Identifier' && createRequireAliases.has(value.name) ||
-        value.type === 'MemberExpression' && value.property &&
+      const assignedCreateRequire = value.type === 'Identifier' && isFactoryIdentifier(value) ||
+        value.type === 'MemberExpression' && isNodeModuleIdentifier(value.object) &&
           staticKey(value.property, value.computed) === 'createRequire';
-      if (assignedCreateRequire) {
-        createRequireAliases.add(target);
-        invalidatedFactoryAliases.delete(target);
-      } else {
-        createRequireAliases.delete(target);
-        invalidatedFactoryAliases.add(target);
+      if (targetVariable && assignedCreateRequire) {
+        createRequireFactoryVariables.add(targetVariable);
+        invalidatedFactoryVariables.delete(targetVariable);
+      } else if (targetVariable) {
+        createRequireFactoryVariables.delete(targetVariable);
+        invalidatedFactoryVariables.add(targetVariable);
       }
     }
     if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') {
@@ -780,8 +785,11 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         moduleNamespaceAliasVariables.delete(updatedModuleVariable);
         invalidatedModuleAliasVariables.add(updatedModuleVariable);
       }
-      createRequireAliases.delete(node.argument.name);
-      invalidatedFactoryAliases.add(node.argument.name);
+      const updatedFactoryVariable = resolveLexicalVariable(node.argument);
+      if (updatedFactoryVariable) {
+        createRequireFactoryVariables.delete(updatedFactoryVariable);
+        invalidatedFactoryVariables.add(updatedFactoryVariable);
+      }
     }
   });
   walkAst(parsed.ast, node => {
