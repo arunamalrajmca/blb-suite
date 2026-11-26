@@ -402,3 +402,37 @@ test('follows module.createRequire and imported createRequire loader factories',
     assert.ok(reachable.has('scripts/cjs-loaded.js'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('resolves package self-references through the active import and require export conditions',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'owner-package-self-reference-'));
+ try{
+  fs.mkdirSync(path.join(root,'src'),{recursive:true});
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',
+   exports:{'./service':{import:'./src/service.mjs',require:'./src/service.cjs'}}
+  }));
+  fs.writeFileSync(path.join(root,'src/service.mjs'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'src/service.cjs'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.mjs'),"import 'fixture-suite/service';");
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"require('fixture-suite/service');");
+  const graph=buildModuleGraph(root);
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.file===path.join(root,'src/service.mjs')));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.file===path.join(root,'src/service.cjs')));
+  assert.equal(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.external),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('retains missing package self-references and package-import aliases as unresolved edges',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'owner-unresolved-package-self-reference-'));
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',exports:{'./missing':'./src/not-present.js'},imports:{'#missing':'./src/not-present.js'}
+  }));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import 'fixture-suite/missing'; import '#missing';");
+  const graph=buildModuleGraph(root);
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/missing'&&edge.unresolved));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='#missing'&&edge.unresolved));
+  assert.equal(graph.edges.some(edge=>edge.specifier==='fixture-suite/missing'&&edge.external),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
