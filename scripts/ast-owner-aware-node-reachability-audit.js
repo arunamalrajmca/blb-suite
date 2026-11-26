@@ -681,6 +681,13 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         const factoryVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
         if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
       }
+      if (node.init?.type === 'Identifier' && isFactoryIdentifier(node.init)) {
+        const factoryVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (factoryVariable) {
+          createRequireFactoryVariables.add(factoryVariable);
+          invalidatedFactoryVariables.delete(factoryVariable);
+        }
+      }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
           isFactoryIdentifier(node.init.callee)) {
         const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
