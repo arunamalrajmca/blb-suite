@@ -589,8 +589,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       !definition.node.init
     );
     return uninitializedVariable && (variable.references || []).some(write =>
-      write.isWrite() && write.writeExpr?.type === 'AssignmentExpression' &&
-      isFactoryExpression(write.writeExpr.right, seen)
+      write.isWrite() && isFactoryExpression(write.writeExpr, new Set(seen))
     );
   }
   function isFactoryExpression(expression, seen = new Set()) {
@@ -645,13 +644,16 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           isNodeModuleIdentifier(init.callee.object) &&
           staticKey(init.callee.property, init.callee.computed) === 'createRequire') return true;
       if (!init) {
-        return (variable.references || []).some(write => write.isWrite() &&
-          write.writeExpr?.type === 'AssignmentExpression' &&
-          (write.writeExpr.right.type === 'Identifier'
-            ? isRequireIdentifier(write.writeExpr.right, new Set(seen))
-            : write.writeExpr.right.type === 'MemberExpression' &&
-              isNodeModuleIdentifier(write.writeExpr.right.object) &&
-              staticKey(write.writeExpr.right.property, write.writeExpr.right.computed) === 'require'));
+        return (variable.references || []).some(write => {
+          if (!write.isWrite()) return false;
+          const assigned = write.writeExpr;
+          if (isRequireExpression(assigned, new Set(seen))) return true;
+          if (assigned?.type === 'CallExpression' && assigned.callee.type === 'Identifier' &&
+              isFactoryIdentifier(assigned.callee, new Set())) return true;
+          return assigned?.type === 'CallExpression' && assigned.callee.type === 'MemberExpression' &&
+            isNodeModuleIdentifier(assigned.callee.object) &&
+            staticKey(assigned.callee.property, assigned.callee.computed) === 'createRequire';
+        });
       }
       return false;
     });
