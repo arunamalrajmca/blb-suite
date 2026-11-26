@@ -252,10 +252,11 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
 
   function resolvedOwner(identifier) {
     const reference = referenceByNode.get(identifier);
-    const resolved = reference && reference.resolved
-      ? variableOwners.get(reference.resolved) || null
-      : null;
-    return resolved || ownerByIdentifierName.get(identifier.name) ||
+    // A resolved lexical binding with no known owner is still authoritative:
+    // falling back by spelling would attribute a shadowed local to an outer
+    // object/class that merely shares its identifier.
+    if (reference?.resolved) return variableOwners.get(reference.resolved) || null;
+    return ownerByIdentifierName.get(identifier.name) ||
       classStaticOwnerByName.get(identifier.name) || null;
   }
 
