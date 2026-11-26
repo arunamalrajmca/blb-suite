@@ -57,7 +57,7 @@ test('does not attribute shadowed local property reads to an outer same-named ow
     'const service = { start() {}, stop() {} };',
     'function useShadow() { const service = {}; service.stop(); }',
     'service.start();'
-  ].join('\\n'), 'shadowed-local-owner.js');
+  ].join('\n'), 'shadowed-local-owner.js');
   assert.deepEqual(result.findings.map(item => item.name), ['stop']);
 });
 
