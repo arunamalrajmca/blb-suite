@@ -4,7 +4,7 @@
  */
 
 function isAstAuditToolingPath(path) {
-  return /^scripts\/ast-(?:symbol-reference|repository-reachability|owner-aware-node-reachability|cross-module-dynamic-reachability|runtime-flow-reachability|unified-dynamic-runtime-reachability|computed-property-reachability)-audit(?:\.test)?\.js$/i.test(path);
+  return /^scripts\/ast-(?:symbol-reference|repository-reachability|owner-aware-node-reachability|cross-module-dynamic-reachability|runtime-flow-reachability|unified-dynamic-runtime-reachability|computed-property-reachability|executable-source-coverage|runtime-metaprogramming-uncertainty)-audit(?:\.test)?\.js$/i.test(path);
 }
 
 export function isNonRuntimePath(path) {

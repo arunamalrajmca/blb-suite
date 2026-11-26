@@ -402,3 +402,61 @@ test('follows module.createRequire and imported createRequire loader factories',
     assert.ok(reachable.has('scripts/cjs-loaded.js'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('resolves package self-references through the active import and require export conditions',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'owner-package-self-reference-'));
+ try{
+  fs.mkdirSync(path.join(root,'src'),{recursive:true});
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',
+   exports:{'./service':{import:'./src/service.mjs',require:'./src/service.cjs'}}
+  }));
+  fs.writeFileSync(path.join(root,'src/service.mjs'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'src/service.cjs'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.mjs'),"import 'fixture-suite/service';");
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"require('fixture-suite/service');");
+  const graph=buildModuleGraph(root);
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.to==='src/service.mjs'));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.to==='src/service.cjs'));
+  assert.equal(graph.edges.some(edge=>edge.specifier==='fixture-suite/service'&&edge.external),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('retains missing package self-references and package-import aliases as unresolved edges',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'owner-unresolved-package-self-reference-'));
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',exports:{'./missing':'./src/not-present.js'},imports:{'#missing':'./src/not-present.js'}
+  }));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import 'fixture-suite/missing'; import '#missing';");
+  const graph=buildModuleGraph(root);
+  assert.ok(graph.edges.some(edge=>edge.specifier==='fixture-suite/missing'&&edge.unresolved));
+  assert.ok(graph.edges.some(edge=>edge.specifier==='#missing'&&edge.unresolved));
+  assert.equal(graph.edges.some(edge=>edge.specifier==='fixture-suite/missing'&&edge.external),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('recognizes computed module.require calls and aliases without changing package-import condition inventory',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'computed-module-require-'));
+ try{
+  fs.mkdirSync(path.join(root,'src'),{recursive:true});
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   imports:{'#conditional':{import:'./src/esm.js',require:'./src/cjs.js'}},
+   scripts:{run:'node main.js'}
+  }));
+  fs.writeFileSync(path.join(root,'main.js'),[
+   "const load = module['require'];",
+   "load('./child.js');",
+   "require('#conditional');"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'child.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'src/esm.js'),'export default true;');
+  fs.writeFileSync(path.join(root,'src/cjs.js'),'module.exports = true;');
+  const graph=buildModuleGraph(root);
+  assert.ok(graph.edges.some(edge=>edge.specifier==='./child.js'&&edge.to==='child.js'));
+  assert.ok(graph.reachable.includes('src/esm.js'));
+  assert.ok(graph.reachable.includes('src/cjs.js'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

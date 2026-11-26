@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
 const { buildModuleGraph } = require('./ast-owner-aware-node-reachability-audit');
+const { resolveModuleFile } = require('./ast-unified-dynamic-runtime-reachability-audit');
 const EXCLUDED = new Set(['.git','node_modules','coverage','test-results','playwright-report','dist']);
 const EXT = ['.js','.cjs','.mjs','.json'];
 function walk(root) {
@@ -30,7 +31,35 @@ function literalString(n,file,pathIdentifiers=null) {
   }
   return null;
 }
-function resolveLocal(from,spec,files){if(!spec||(!path.isAbsolute(spec)&&!spec.startsWith('.')))return null;const b=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
+function isPackageScopedSpecifier(from,spec,root){
+  if(typeof spec!=='string')return false;
+  if(spec.startsWith('#'))return true;
+  const boundary=path.resolve(root);
+  let directory=path.dirname(from);
+  while(directory===boundary||directory.startsWith(boundary+path.sep)){
+    const manifestPath=path.join(directory,'package.json');
+    if(fs.existsSync(manifestPath)){
+      try{
+        const name=JSON.parse(fs.readFileSync(manifestPath,'utf8')).name;
+        return typeof name==='string'&&(spec===name||spec.startsWith(name+'/'));
+      }catch{return false;}
+    }
+    if(directory===boundary)break;
+    const parent=path.dirname(directory);
+    if(parent===directory)break;
+    directory=parent;
+  }
+  return false;
+}
+function resolveLocal(from,spec,files,root=path.resolve(__dirname,'..'),mode='import'){
+  if(!spec)return null;
+  if(path.isAbsolute(spec)||spec.startsWith('.')){
+    const base=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);
+    const candidates=path.extname(base)?[base]:[...EXT.map(ext=>base+ext),...EXT.map(ext=>path.join(base,'index'+ext))];
+    return candidates.find(candidate=>files.has(candidate))||null;
+  }
+  return resolveModuleFile(from,spec,files,root,mode);
+}
 function collectExportsAndImports(ast,file){
   const exports=new Map(),imports=[],pathIdentifiers=new Set(),commonJsExportNames=new Set();
   let exportsAliasDetached=false;
@@ -146,10 +175,9 @@ function collectExportsAndImports(ast,file){
       }
       return state;
     }
-    if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
-      &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
-      &&isUnboundGlobal(object.callee.object)){
-      const method=memberName(object.callee);
+    const nativeCall=trustedNativeMethodInfo(object);
+    if(nativeCall?.globalName==='Object'){
+      const method=nativeCall.method;
       if(method==='create'&&object.arguments[1]?.type==='ObjectExpression'){
         const byKey=new Map();
         for(const property of object.arguments[1].properties||[]){
@@ -209,6 +237,180 @@ function collectExportsAndImports(ast,file){
     if(references.length!==1||references[0].identifier!==identifier||!references[0].isRead())return null;
     return declarator.init;
   };
+  const nativeGlobalName=(node,active=new Set())=>{
+    if(node?.type==='MemberExpression'&&memberName(node)==='value'&&node.object?.type==='CallExpression'){
+      const descriptor=trustedNativeMethodInfo(node.object),root=node.object.arguments[0],key=staticPropertyKey(node.object.arguments[1]);
+      if(descriptor?.globalName==='Object'&&descriptor.method==='getOwnPropertyDescriptor'
+        &&root?.type==='Identifier'&&['globalThis','window','self'].includes(root.name)&&isUnboundGlobal(root)
+        &&['Object','Reflect'].includes(String(key)))return String(key);
+      return null;
+    }
+    if(node?.type==='CallExpression'){
+      const getter=trustedNativeMethodInfo(node),root=node.arguments[0],key=staticPropertyKey(node.arguments[1]);
+      if(getter?.globalName==='Reflect'&&getter.method==='get'
+        &&root?.type==='Identifier'&&['globalThis','window','self'].includes(root.name)&&isUnboundGlobal(root)
+        &&['Object','Reflect'].includes(String(key)))return String(key);
+      return null;
+    }
+    if(node?.type==='MemberExpression'){
+      const root=node.object;
+      const globalObject=root?.type==='Identifier'&&['globalThis','window','self'].includes(root.name)&&isUnboundGlobal(root);
+      const property=memberName(node);
+      if(globalObject&&['Object','Reflect'].includes(property))return property;
+      return null;
+    }
+    if(node?.type!=='Identifier')return null;
+    if(['Object','Reflect'].includes(node.name)&&isUnboundGlobal(node))return node.name;
+    const variable=resolveVariable(node);
+    if(!variable||active.has(variable))return null;
+    const definition=variable.defs?.find(item=>item.type==='Variable');
+    const declarator=definition?.node;
+    if(declarator?.type!=='VariableDeclarator'||declarator.id.type!=='Identifier'
+      ||!['Identifier','MemberExpression','CallExpression'].includes(declarator.init?.type)||definition.parent?.type!=='VariableDeclaration'
+      ||definition.parent.kind!=='const')return null;
+    active.add(variable);
+    const result=nativeGlobalName(declarator.init,active);
+    active.delete(variable);
+    return result;
+  };
+  const resolveNativeMethodAlias=(identifier,active=new Set())=>{
+    if(identifier?.type!=='Identifier')return null;
+    const variable=resolveVariable(identifier);
+    if(!variable||active.has(variable))return null;
+    const definition=variable.defs?.find(item=>item.type==='Variable');
+    const declarator=definition?.node;
+    if(declarator?.type!=='VariableDeclarator'||definition.parent?.type!=='VariableDeclaration'
+      ||definition.parent.kind!=='const')return null;
+    active.add(variable);
+    let result=null;
+    if(declarator.id.type==='Identifier'){
+      if(declarator.init?.type==='MemberExpression'){
+        const member=declarator.init,descriptorCall=member.object?.type==='CallExpression'?member.object:null;
+        if(memberName(member)==='value'&&descriptorCall){
+          const descriptor=trustedNativeMethodInfo(descriptorCall),globalName=nativeGlobalName(descriptorCall.arguments[0]);
+          const method=staticPropertyKey(descriptorCall.arguments[1]);
+          if(descriptor?.globalName==='Object'&&descriptor.method==='getOwnPropertyDescriptor'
+            &&globalName&&method!==null)result={globalName,method:String(method)};
+        }else{
+          const globalName=nativeGlobalName(member.object),method=memberName(member);
+          if(globalName&&method)result={globalName,method};
+        }
+      }else if(declarator.init?.type==='Identifier')result=resolveNativeMethodAlias(declarator.init,active);
+      else if(declarator.init?.type==='CallExpression'){
+        const getter=trustedNativeMethodInfo(declarator.init),globalName=nativeGlobalName(declarator.init.arguments[0]);
+        const method=staticPropertyKey(declarator.init.arguments[1]);
+        if(getter?.globalName==='Reflect'&&getter.method==='get'&&globalName&&method!==null)
+          result={globalName,method:String(method)};
+      }
+    }else if(declarator.id.type==='ObjectPattern'){
+      const globalName=nativeGlobalName(declarator.init);
+      if(globalName){
+        const property=declarator.id.properties?.find(item=>item.type==='Property'
+          &&item.value.type==='Identifier'&&item.value.name===identifier.name);
+        const method=property?(property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value)):null;
+        if(method)result={globalName,method:String(method)};
+      }
+    }
+    active.delete(variable);
+    return result;
+  };
+  const resolveNativeMutationWrapperAlias=(identifier,active=new Set())=>{
+    if(identifier?.type!=='Identifier')return null;
+    const variable=resolveVariable(identifier);
+    if(!variable||active.has(variable))return null;
+    const definition=variable.defs?.find(item=>item.type==='Variable'),declarator=definition?.node;
+    if(declarator?.type!=='VariableDeclarator'||definition.parent?.type!=='VariableDeclaration'
+      ||definition.parent.kind!=='const')return null;
+    active.add(variable);
+    let result=null;
+    if(declarator.id.type==='Identifier'){
+      if(declarator.init?.type==='Identifier'){
+        result=resolveNativeMutationWrapperAlias(declarator.init,active)||resolveNativeMethodAlias(declarator.init);
+      }else if(declarator.init?.type==='MemberExpression'
+        ||(declarator.init?.type==='CallExpression'&&declarator.init.callee.type==='MemberExpression')){
+        const wrapperNode=declarator.init.type==='CallExpression'?declarator.init.callee:declarator.init;
+        const wrapper=memberName(wrapperNode),base=wrapperNode.object;
+        const baseInfo=base?.type==='MemberExpression'
+          ?{globalName:nativeGlobalName(base.object),method:memberName(base)}
+          :base?.type==='Identifier'?resolveNativeMethodAlias(base):null;
+        if(baseInfo&&['call','apply','bind'].includes(wrapper)
+          &&((baseInfo.globalName==='Object'&&['assign','defineProperty','defineProperties'].includes(baseInfo.method))
+            ||(baseInfo.globalName==='Reflect'&&['set','defineProperty','deleteProperty'].includes(baseInfo.method))))
+          result={...baseInfo,wrapper};
+      }
+    }
+    active.delete(variable);
+    return result;
+  };
+  const nativeMethodInfo=call=>{
+    if(call?.type!=='CallExpression')return null;
+    if(call.callee.type==='MemberExpression'){
+      const globalName=nativeGlobalName(call.callee.object);
+      const method=memberName(call.callee);
+      return globalName&&method?{globalName,method}:null;
+    }
+    if(call.callee.type==='Identifier')return resolveNativeMethodAlias(call.callee);
+    return null;
+  };
+  const mutatedNativeGlobals=new Set(),mutatedNativeMethods=new Set();
+  const trustedNativeMethodInfo=call=>{
+    const info=nativeMethodInfo(call);
+    if(!info||mutatedNativeGlobals.has(info.globalName)||mutatedNativeMethods.has(info.globalName+'.'+info.method))return null;
+    return info;
+  };
+  const markNativeMutation=(globalName,method)=>{
+    if(method)mutatedNativeMethods.add(globalName+'.'+method);
+    else mutatedNativeGlobals.add(globalName);
+  };
+  const collectNativeMutation=(node)=>{
+    if(node.type==='AssignmentExpression'||node.type==='UpdateExpression'
+      ||(node.type==='UnaryExpression'&&node.operator==='delete')){
+      const target=node.type==='AssignmentExpression'?node.left:node.argument;
+      if(target?.type==='Identifier'&&['Object','Reflect'].includes(target.name)&&isUnboundGlobal(target))
+        mutatedNativeGlobals.add(target.name);
+      if(target?.type==='MemberExpression'){
+        const globalName=nativeGlobalName(target.object),method=memberName(target);
+        if(globalName)markNativeMutation(globalName,method);
+        if(target.object.type==='Identifier'&&['globalThis','window','self'].includes(target.object.name)
+          &&isUnboundGlobal(target.object)){
+          const globalProperty=memberName(target);
+          if(['Object','Reflect'].includes(globalProperty))mutatedNativeGlobals.add(globalProperty);
+        }
+      }
+    }
+    if(node.type!=='CallExpression')return;
+    const info=nativeMethodInfo(node);
+    if(!info)return;
+    const targetGlobal=nativeGlobalName(node.arguments[0]);
+    if(!['Object','Reflect'].includes(targetGlobal))return;
+    if(['defineProperty','set','deleteProperty'].includes(info.method)){
+      const key=staticPropertyKey(node.arguments[1]);
+      markNativeMutation(targetGlobal,key);
+      return;
+    }
+    if(info.method==='defineProperties'){
+      const descriptors=node.arguments[1];
+      if(descriptors?.type!=='ObjectExpression'){mutatedNativeGlobals.add(targetGlobal);return;}
+      for(const property of descriptors.properties||[]){
+        if(property.type!=='Property'){mutatedNativeGlobals.add(targetGlobal);return;}
+        const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+        if(key===null||key===undefined){mutatedNativeGlobals.add(targetGlobal);return;}
+        markNativeMutation(targetGlobal,String(key));
+      }
+      return;
+    }
+    if(info.method==='assign'){
+      for(const source of node.arguments.slice(1)){
+        if(source?.type!=='ObjectExpression'){mutatedNativeGlobals.add(targetGlobal);return;}
+        for(const property of source.properties||[]){
+          if(property.type==='SpreadElement'){mutatedNativeGlobals.add(targetGlobal);return;}
+          const key=property.computed?staticPropertyKey(property.key):(property.key.name??property.key.value);
+          if(key===null||key===undefined){mutatedNativeGlobals.add(targetGlobal);return;}
+          markNativeMutation(targetGlobal,String(key));
+        }
+      }
+    }
+  };
   const isCurrentCommonJsExportAlias=(identifier,atNode=identifier)=>{
     if(identifier?.type!=='Identifier')return false;
     const declarator=resolveVariableDeclarator(identifier);
@@ -252,10 +454,9 @@ function collectExportsAndImports(ast,file){
       }
       return;
     }
-    if(object?.type==='CallExpression'&&object.callee.type==='MemberExpression'
-      &&object.callee.object.type==='Identifier'&&object.callee.object.name==='Object'
-      &&isUnboundGlobal(object.callee.object)){
-      const method=memberName(object.callee);
+    const nativeCall=trustedNativeMethodInfo(object);
+    if(nativeCall?.globalName==='Object'){
+      const method=nativeCall.method;
       if(method==='assign'){
         for(let index=0;index<object.arguments.length;index++){
           // Object.assign preserves non-enumerable own properties already on its target;
@@ -335,11 +536,10 @@ function collectExportsAndImports(ast,file){
         }else{
           const argument=property.argument;
           const staticAlias=argument.type==='Identifier'?resolveStaticObjectSpread(argument):null;
+          const spreadFactory=trustedNativeMethodInfo(argument);
           if(argument.type!=='ObjectExpression'&&!staticAlias
-            &&!(argument.type==='CallExpression'&&argument.callee.type==='MemberExpression'
-              &&argument.callee.object.type==='Identifier'&&argument.callee.object.name==='Object'
-              &&isUnboundGlobal(argument.callee.object)
-              &&['assign','fromEntries','create','defineProperty','defineProperties','freeze','seal','preventExtensions','setPrototypeOf'].includes(memberName(argument.callee)))){
+            &&!(spreadFactory?.globalName==='Object'
+              &&['assign','fromEntries','create','defineProperty','defineProperties','freeze','seal','preventExtensions','setPrototypeOf'].includes(spreadFactory.method))){
             // An unknown spread can overwrite any previously observed static key.
             clearCommonJsExportOwners();
           }
@@ -371,7 +571,7 @@ function collectExportsAndImports(ast,file){
     }
   };
   const recordObjectDefineProperties=(call,enumerableOnly=false,baseline=null,assignSource=false,existingTarget=null)=>{
-    const method=memberName(call.callee);
+    const method=trustedNativeMethodInfo(call)?.method;
     if(method==='defineProperty'){
       const key=staticPropertyKey(call.arguments[1]);
       if(key===null){
@@ -426,10 +626,9 @@ function collectExportsAndImports(ast,file){
   };
   const recordCommonJsAssignmentValue=(value,exportsSnapshot=null)=>{
     if(value?.type==='ObjectExpression'){recordObjectProperties(value,exportsSnapshot);return;}
-    if(value?.type!=='CallExpression'||value.callee.type!=='MemberExpression'
-      ||value.callee.object.type!=='Identifier'||value.callee.object.name!=='Object'
-      ||!isUnboundGlobal(value.callee.object))return;
-    const method=memberName(value.callee);
+    const nativeCall=trustedNativeMethodInfo(value);
+    if(nativeCall?.globalName!=='Object')return;
+    const method=nativeCall.method;
     if(method==='fromEntries'){recordObjectFromEntries(value);return;}
     if(method==='defineProperty'||method==='defineProperties'){
       recordObjectProperties(value.arguments[0],exportsSnapshot);
@@ -449,6 +648,7 @@ function collectExportsAndImports(ast,file){
     if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
   };
   visit(ast,n=>{
+    collectNativeMutation(n);
     if(isModuleExportsAssignment(n)){
       const selfAssignment=isModuleExportsReference(n.right);
       if(!selfAssignment)moduleExportsReplacements.push(n);
@@ -466,16 +666,20 @@ function collectExportsAndImports(ast,file){
         &&right.object.name==='module'&&isUnboundGlobal(right.object)&&memberName(right)==='exports';
       if(directModuleExports)exportsAliasDetached=false;
     }
-    if(n.type==='ImportDeclaration')for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
+    if(n.type==='ImportDeclaration'){
+      if(n.specifiers.length){
+        for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
+      }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
+    }
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
+      const parentNativeCall=trustedNativeMethodInfo(parent);
       const assignedThroughObjectAssign=parent?.type==='CallExpression'&&parent.arguments.includes(n)
-        &&parent.callee.type==='MemberExpression'&&parent.callee.object.type==='Identifier'
-        &&parent.callee.object.name==='Object'&&isUnboundGlobal(parent.callee.object)
-        &&memberName(parent.callee)==='assign'&&isCommonJsExportsTarget(parent.arguments[0]);
+        &&parentNativeCall?.globalName==='Object'&&parentNativeCall.method==='assign'
+        &&isCommonJsExportsTarget(parent.arguments[0]);
       const spreadAsWholeModuleExports=parent?.type==='SpreadElement'
         &&moduleExportsReplacements.some(replacement=>replacement.right.type==='ObjectExpression'
           &&replacement.right.properties.length===1&&replacement.right.properties[0]===parent
@@ -490,10 +694,57 @@ function collectExportsAndImports(ast,file){
         }
       }else imports.push({source:n.arguments[0].value,imported:'default',local:parent?.type==='VariableDeclarator'&&parent.id.type==='Identifier'?parent.id.name:null,commonjs:true,commonjsReexportAll:assignedToModuleExports||assignedThroughObjectAssign||spreadAsWholeModuleExports});
     }
+    if(n.type==='CallExpression'&&n.callee.type==='Identifier'){
+      const wrapperAlias=resolveNativeMutationWrapperAlias(n.callee);
+      if(wrapperAlias){
+        let target=null,unknownTarget=false;
+        if(wrapperAlias.wrapper==='call')target=n.arguments[1]||null;
+        else if(wrapperAlias.wrapper==='bind')target=n.arguments[0]||null;
+        else{
+          const argsArray=n.arguments[1];
+          if(argsArray?.type==='ArrayExpression'&&argsArray.elements.length>0
+            &&argsArray.elements[0]?.type!=='SpreadElement')target=argsArray.elements[0];
+          else unknownTarget=true;
+        }
+        if(unknownTarget||isCommonJsExportsTarget(target))clearCommonJsExportOwners();
+      }
+    }
     if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
-      &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Object'
-      &&isUnboundGlobal(n.callee.object)){
-      const method=memberName(n.callee);
+      &&['call','apply'].includes(memberName(n.callee))){
+      const baseRef=n.callee.object,baseInfo=baseRef?.type==='MemberExpression'
+        ?{globalName:nativeGlobalName(baseRef.object),method:memberName(baseRef)}
+        :baseRef?.type==='Identifier'?resolveNativeMethodAlias(baseRef):null,
+        indirectMethod=memberName(n.callee);
+      if(baseInfo&&((baseInfo.globalName==='Object'&&['assign','defineProperty','defineProperties'].includes(baseInfo.method))
+        ||(baseInfo.globalName==='Reflect'&&['set','defineProperty','deleteProperty'].includes(baseInfo.method)))){
+        let target=null,unknownTarget=false;
+        if(indirectMethod==='call')target=n.arguments[1]||null;
+        else{
+          const argsArray=n.arguments[1];
+          if(argsArray?.type==='ArrayExpression'&&argsArray.elements.length>0
+            &&argsArray.elements[0]?.type!=='SpreadElement')target=argsArray.elements[0];
+          else unknownTarget=true;
+        }
+        if(unknownTarget||isCommonJsExportsTarget(target))clearCommonJsExportOwners();
+      }
+    }
+    if(n.type==='CallExpression'){
+      const reflector=nativeMethodInfo(n),appliedRef=n.arguments[0],applied=appliedRef?.type==='MemberExpression'
+        ?{globalName:nativeGlobalName(appliedRef.object),method:memberName(appliedRef)}
+        :appliedRef?.type==='Identifier'?resolveNativeMethodAlias(appliedRef):null;
+      if(reflector?.globalName==='Reflect'&&reflector.method==='apply'&&applied
+        &&((applied.globalName==='Object'&&['assign','defineProperty','defineProperties'].includes(applied.method))
+          ||(applied.globalName==='Reflect'&&['set','defineProperty','deleteProperty'].includes(applied.method)))){
+        const argsArray=n.arguments[2];
+        if(argsArray?.type==='ArrayExpression'&&argsArray.elements.length>0
+          &&argsArray.elements[0]?.type!=='SpreadElement'){
+          if(isCommonJsExportsTarget(argsArray.elements[0]))clearCommonJsExportOwners();
+        }else clearCommonJsExportOwners();
+      }
+    }
+    const nativeCall=trustedNativeMethodInfo(n);
+    if(n.type==='CallExpression'&&nativeCall?.globalName==='Object'){
+      const method=nativeCall.method;
       if(method==='assign'&&isCommonJsExportsTarget(n.arguments[0])&&!(n.arguments[0].type==='Identifier'&&n.arguments[0].name==='exports'&&exportsAliasDetached)){
         for(const argument of n.arguments.slice(1))recordObjectProperties(argument,null,new Set(),true);
       }
@@ -509,10 +760,9 @@ function collectExportsAndImports(ast,file){
         recordObjectDefineProperties(n);
       }
     }
-    if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'
-      &&n.callee.object.type==='Identifier'&&n.callee.object.name==='Reflect'
-      &&isUnboundGlobal(n.callee.object)){
-      const method=memberName(n.callee),target=n.arguments[0];
+    const reflectCall=trustedNativeMethodInfo(n);
+    if(n.type==='CallExpression'&&reflectCall?.globalName==='Reflect'){
+      const method=reflectCall.method,target=n.arguments[0];
       const liveTarget=isCommonJsExportsTarget(target)
         &&!(target?.type==='Identifier'&&target.name==='exports'&&exportsAliasDetached);
       if(liveTarget&&method==='defineProperty')recordObjectDefineProperties(n);
@@ -532,6 +782,15 @@ function collectExportsAndImports(ast,file){
         if(key===null)clearCommonJsExportOwners();
         else{exports.delete(key);commonJsExportNames.delete(key);}
       }
+    }
+    if(n.type==='CallExpression'&&!nativeCall&&!reflectCall){
+      const possibleInfo=nativeMethodInfo(n);
+      const method=possibleInfo?.method??(n.callee.type==='MemberExpression'?memberName(n.callee):null);
+      const target=n.arguments[0];
+      const liveTarget=isCommonJsExportsTarget(target)
+        &&!(target?.type==='Identifier'&&target.name==='exports'&&exportsAliasDetached);
+      if(liveTarget&&['assign','defineProperty','defineProperties','set','deleteProperty'].includes(method))
+        clearCommonJsExportOwners();
     }
     if(n.type==='ExportNamedDeclaration'){
       if(n.declaration){const d=n.declaration;const names=d.id?[d.id.name]:(d.declarations||[]).flatMap(x=>x.id.type==='Identifier'?[x.id.name]:[]);for(const name of names)exports.set(name,name);}
@@ -567,17 +826,14 @@ function collectExportsAndImports(ast,file){
         const isCurrentExportsObjectIdentity=n.right.type==='Identifier'&&n.right.name==='exports'
           &&isUnboundGlobal(n.right)&&!exportsAliasDetached;
         const assignmentValue=n.right;
-        const isAssignMutation=assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
-          &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
-          &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
+        const assignmentNativeCall=trustedNativeMethodInfo(assignmentValue);
+        const isAssignMutation=assignmentNativeCall?.globalName==='Object'&&assignmentNativeCall.method==='assign'
           &&assignmentValue.arguments.length>0
           &&(isModuleExportsReference(assignmentValue.arguments[0])
             ||(assignmentValue.arguments[0].type==='Identifier'&&assignmentValue.arguments[0].name==='exports'
               &&isUnboundGlobal(assignmentValue.arguments[0])&&!exportsAliasDetached)
             ||(assignmentValue.arguments[0].type==='Identifier'&&isCurrentCommonJsExportAlias(assignmentValue.arguments[0],n)));
-        const copiesCurrentExports=(assignmentValue.type==='CallExpression'&&assignmentValue.callee.type==='MemberExpression'
-          &&assignmentValue.callee.object.type==='Identifier'&&assignmentValue.callee.object.name==='Object'
-          &&isUnboundGlobal(assignmentValue.callee.object)&&memberName(assignmentValue.callee)==='assign'
+        const copiesCurrentExports=(assignmentNativeCall?.globalName==='Object'&&assignmentNativeCall.method==='assign'
           &&assignmentValue.arguments.some(argument=>argument.type==='Identifier'&&argument.name==='exports'
             &&isUnboundGlobal(argument)&&!exportsAliasDetached))
           ||(assignmentValue.type==='ObjectExpression'&&assignmentValue.properties.some(property=>property.type==='SpreadElement'
@@ -618,7 +874,7 @@ function collectExportsAndImports(ast,file){
   });
   return {exports,imports};
 }
-function resolveExportOrigin(file,name,meta,files,active=new Set()){
+function resolveExportOrigin(file,name,meta,files,active=new Set(),root=path.resolve(__dirname,'..')){
   const key=file+'::'+name;
   if(active.has(key))return null;
   const data=meta.get(file);
@@ -628,14 +884,14 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
     if(typeof local==='string'){
       const importedBinding=data.imports.find(item=>item.local===local&&!item.reexport&&!item.reexportAll&&!item.reexportNamespace&&!item.dynamic);
       if(importedBinding){
-        const target=resolveLocal(file,importedBinding.source,new Set(files));
+        const target=resolveLocal(file,importedBinding.source,new Set(files),root,importedBinding.commonjs?'require':'import');
         if(!target)return null;
         if(importedBinding.imported==='*')return {file:target,local:null,namespace:true,namespaceTarget:target};
-        return resolveExportOrigin(target,importedBinding.imported,meta,files,new Set([...active,key]));
+        return resolveExportOrigin(target,importedBinding.imported,meta,files,new Set([...active,key]),root);
       }
     }
     if(name==='default'&&data.imports.some(item=>item.commonjsReexportAll)){
-      const item=data.imports.find(entry=>entry.commonjsReexportAll),target=resolveLocal(file,item.source,new Set(files));
+      const item=data.imports.find(entry=>entry.commonjsReexportAll),target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');
       if(target)return {file:target,local:null,namespace:true,namespaceTarget:target};
     }
     return {file,local:typeof local==='string'?local:null};
@@ -645,9 +901,9 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
   if(explicit.length){
     const candidates=new Map();
     for(const item of explicit){
-      const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
+      const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');if(!target)continue;
       const origin=item.reexportNamespace?{file:target,local:null,namespace:true,namespaceTarget:target}:
-        resolveExportOrigin(target,item.imported,meta,files,next);
+        resolveExportOrigin(target,item.imported,meta,files,next,root);
       if(origin)candidates.set(origin.namespace?'namespace::'+origin.namespaceTarget:origin.file+'::'+(origin.local||'[anonymous]'),origin);
     }
     return candidates.size===1?[...candidates.values()][0]:null;
@@ -656,23 +912,23 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
   for(const item of data.imports){
     if(!item.reexportAll&&!item.commonjsReexportAll)continue;
     if(name==='default')continue;
-    const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
-    const origin=resolveExportOrigin(target,name,meta,files,next);
+    const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');if(!target)continue;
+    const origin=resolveExportOrigin(target,name,meta,files,next,root);
     if(origin)candidates.set(origin.namespace?'namespace::'+origin.namespaceTarget:origin.file+'::'+(origin.local||'[anonymous]'),origin);
   }
   return candidates.size===1?[...candidates.values()][0]:null;
 }
-function exportedNames(file,meta,files,seen=new Set()){
+function exportedNames(file,meta,files,seen=new Set(),root=path.resolve(__dirname,'..')){
   if(seen.has(file))return new Set();
   const next=new Set(seen);next.add(file);
   const data=meta.get(file),names=new Set(data?[...data.exports.keys()]:[]);
   if(!data)return names;
   for(const item of data.imports){
     if(!item.reexport&&!item.reexportAll&&!item.reexportNamespace)continue;
-    const target=resolveLocal(file,item.source,new Set(files));
+    const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');
     if(!target)continue;
     if(item.reexport||item.reexportNamespace)names.add(item.exported);
-    if(item.reexportAll||item.commonjsReexportAll)for(const name of exportedNames(target,meta,files,next))if(name!=='default')names.add(name);
+    if(item.reexportAll||item.commonjsReexportAll)for(const name of exportedNames(target,meta,files,next,root))if(name!=='default')names.add(name);
   }
   return names;
 }
@@ -680,12 +936,12 @@ function analyzeCrossModule(root,files){
   const asts=new Map(files.map(f=>[f,parse(fs.readFileSync(f,'utf8'),f)]));
   const fileSet=new Set(files),meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast,f)]));
   const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
-  const originFor=(file,name)=>resolveExportOrigin(file,name,meta,files);
+  const originFor=(file,name)=>resolveExportOrigin(file,name,meta,files,new Set(),root);
   for(const [file,data] of meta)for(const item of data.imports){
-    const target=resolveLocal(file,item.source,fileSet);
+    const target=resolveLocal(file,item.source,fileSet,root,item.commonjs?'require':'import');
     if(!target){
       const entry={file:path.relative(root,file),source:item.source,dynamic:!!item.dynamic,line:item.line||null};
-      if((item.dynamic&&item.source===null)||(typeof item.source==='string'&&(item.source.startsWith('.')||path.isAbsolute(item.source))))unresolved.push(entry);
+      if((item.dynamic&&item.source===null)||(typeof item.source==='string'&&(item.source.startsWith('.')||path.isAbsolute(item.source)||isPackageScopedSpecifier(file,item.source,root))))unresolved.push(entry);
       else externalImports.push(entry);
       continue;
     }
@@ -694,7 +950,7 @@ function analyzeCrossModule(root,files){
       continue;
     }
     if(item.reexportAll){
-      for(const name of exportedNames(target,meta,files)){
+      for(const name of exportedNames(target,meta,files,new Set(),root)){
         if(name==='default')continue;
         const origin=originFor(target,name);
         links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:origin?.local??null,originFile:origin?path.relative(root,origin.file):null,unresolvedExport:!origin,reexport:true,namespace:!!origin?.namespace});
@@ -712,7 +968,7 @@ function analyzeCrossModule(root,files){
   }
   for(const [file,data] of meta)for(const item of data.imports){
     if(!item.local||item.reexport)continue;
-    const target=resolveLocal(file,item.source,fileSet);if(!target)continue;
+    const target=resolveLocal(file,item.source,fileSet,root,item.commonjs?'require':'import');if(!target)continue;
     const traceNamespaceChain=(namespaceTarget,node,parent)=>{
       if(node.type!=='MemberExpression'||(parent?.type==='MemberExpression'&&parent.object===node))return;
       const properties=[];let current=node;
@@ -776,6 +1032,7 @@ function analyzeCrossModule(root,files){
 function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const eslintScope=require('eslint-scope');
   const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map(),functionAliases=new Map(),parameterValues=new Map();
+  const reassignedVariables=new Set(),reassignedParameterVariables=new Set(),reassignedFunctionVariables=new Set(),invalidatedFunctionAliases=new Set();
   for(const [file,ast] of asts){
     const manager=eslintScope.analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
     for(const scope of manager.scopes){
@@ -785,6 +1042,16 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
         if(scope.type==='module'||scope.type==='global')topLevel.set(file+'::'+variable.name,variable);
       }
       for(const ref of scope.references||[])if(ref.resolved)variableForNode.set(ref.identifier,ref.resolved);
+      for(const variable of scope.variables||[]){
+        if((variable.references||[]).some(ref=>ref.isWrite()&&ref.identifier!==variable.defs[0]?.name))
+          reassignedVariables.add(variable);
+        if((variable.defs||[]).some(def=>def.type==='Parameter')
+          &&reassignedVariables.has(variable))reassignedParameterVariables.add(variable);
+        const isFunctionBinding=(variable.defs||[]).some(def=>def.type==='FunctionName'
+          ||(def.type==='Variable'&&['FunctionExpression','ArrowFunctionExpression'].includes(def.node?.init?.type)));
+        if(isFunctionBinding&&(variable.references||[]).some(ref=>ref.isWrite()&&ref.identifier!==variable.defs[0]?.name))
+          reassignedFunctionVariables.add(variable);
+      }
     }
   }
   const getTop=(file,name)=>topLevel.get(file+'::'+name)||null;
@@ -805,38 +1072,68 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   for(const [file,data] of meta)for(const item of data.imports){
     if(!item.local)continue;
     const localVariable=getTop(file,item.local);
-    const target=resolveLocal(file,item.source,new Set(files));
+    const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');
     if(!localVariable||!target)continue;
     if(item.imported==='*'||item.reexport||item.reexportNamespace)continue;
-    const origin=resolveExportOrigin(target,item.imported,meta,files);
+    const origin=resolveExportOrigin(target,item.imported,meta,files,new Set(),root);
     if(!origin||!origin.local||origin.namespace)continue;
     const targetVariable=getTop(origin.file,origin.local);
     if(!targetVariable)continue;
     importsForVariable.set(localVariable,{file,target:origin.file,exportedLocal:origin.local,imported:item.imported,targetVariable});
   }
-  // Preserve function identity through local aliases and reassignment.
+  // Preserve function identity through local aliases, but never retain an alias
+  // after an unknown, conflicting, destructuring, or update write to its binding.
   // Aliases are binding-based, so shadowed names cannot cross-contaminate.
+  const invalidateFunctionAlias=variable=>{
+    if(!variable)return;
+    functionAliases.delete(variable);
+    invalidatedFunctionAliases.add(variable);
+  };
+  const assignFunctionAlias=(target,source)=>{
+    if(!target||invalidatedFunctionAliases.has(target))return;
+    if(!source){invalidateFunctionAlias(target);return;}
+    const previous=functionAliases.get(target);
+    if(previous&&previous!==source){invalidateFunctionAlias(target);return;}
+    functionAliases.set(target,source);
+  };
+  const invalidatePatternAliases=pattern=>{
+    if(!pattern)return;
+    if(pattern.type==='Identifier')invalidateFunctionAlias(variableForNode.get(pattern));
+    else if(pattern.type==='RestElement'||pattern.type==='AssignmentPattern')invalidatePatternAliases(pattern.argument||pattern.left);
+    else if(pattern.type==='ArrayPattern')for(const item of pattern.elements||[])invalidatePatternAliases(item);
+    else if(pattern.type==='ObjectPattern')for(const property of pattern.properties||[])
+      invalidatePatternAliases(property.type==='RestElement'?property.argument:property.value);
+  };
   for(const [file,ast] of asts) visit(ast,node=>{
-    if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'){
-      const target=variableForNode.get(node.id),source=variableForNode.get(node.init);
-      if(target&&source)functionAliases.set(target,source);
+    if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'){
+      const target=variableForNode.get(node.id);
+      if(node.init?.type==='Identifier')assignFunctionAlias(target,variableForNode.get(node.init));
+      else if(node.init)invalidateFunctionAlias(target);
     }
-    if(node.type==='AssignmentExpression'&&node.operator==='='&&node.left.type==='Identifier'&&node.right.type==='Identifier'){
-      const target=variableForNode.get(node.left),source=variableForNode.get(node.right);
-      if(target&&source)functionAliases.set(target,source);
+    if(node.type==='AssignmentExpression'){
+      if(node.left.type==='Identifier'){
+        if(node.operator==='='&&node.right.type==='Identifier')
+          assignFunctionAlias(variableForNode.get(node.left),variableForNode.get(node.right));
+        else invalidateFunctionAlias(variableForNode.get(node.left));
+      }else if(node.left.type==='ObjectPattern'||node.left.type==='ArrayPattern')invalidatePatternAliases(node.left);
     }
+    if(node.type==='UpdateExpression')invalidatePatternAliases(node.argument);
+    if((node.type==='ForInStatement'||node.type==='ForOfStatement')&&node.left.type!=='VariableDeclaration')
+      invalidatePatternAliases(node.left);
   });
   const functionForImportedVariable=new Map();
   for(const [variable,info] of importsForVariable){
     const fn=functionForVariable.get(info.targetVariable);
-    if(fn)functionForImportedVariable.set(variable,fn);
+    // ESM imports are live bindings: once the exporting binding is reassigned,
+    // the original declaration is no longer a safe identity for importer calls.
+    if(fn&&!reassignedFunctionVariables.has(info.targetVariable))functionForImportedVariable.set(variable,fn);
   }
   const resolveFunction=(file,identifier)=>{
     let variable=variableForNode.get(identifier);
     const seen=new Set();
     while(variable&&!seen.has(variable)){
       seen.add(variable);
-      const found=functionForVariable.get(variable)||functionForImportedVariable.get(variable);
+      const found=(!reassignedFunctionVariables.has(variable)&&functionForVariable.get(variable))||functionForImportedVariable.get(variable);
       if(found)return found;
       variable=functionAliases.get(variable)||null;
     }
@@ -866,7 +1163,8 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       if(!isRoot&&['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
       if(node.type==='ReturnStatement'&&node.argument){
         if(node.argument.type==='Identifier'){
-          const variable=variableForNode.get(node.argument);if(variable)returned.push({variable,parameterIndex:fn.params.indexOf(variable)});
+          const variable=variableForNode.get(node.argument);
+          if(variable&&!reassignedParameterVariables.has(variable))returned.push({variable,parameterIndex:fn.params.indexOf(variable)});
         } else if(node.argument.type==='CallExpression'){
           const nested=resolveFunction(fn.file,node.argument.callee);
           if(nested){
@@ -901,33 +1199,37 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     origins.get(variable).set(origin.file+'::'+origin.exportedLocal,origin);
   };
   for(const [variable,info] of importsForVariable){
-    if(functionForVariable.has(info.targetVariable))continue;
+    // Imported bindings are live: an exporting module write means the initial
+    // export owner is no longer a safe origin for the import.
+    if(functionForVariable.has(info.targetVariable)||reassignedVariables.has(info.targetVariable))continue;
     addOrigin(variable,{file:path.relative(root,info.target),target:info.target,exportedLocal:info.exportedLocal});
   }
   for(const [file,ast] of asts){
     visit(ast,(node,parentNode)=>{
-      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init&&node.init.type==='Identifier'){
-        addEdge(variableForNode.get(node.init),variableForNode.get(node.id));
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'){
+        const target=variableForNode.get(node.id);
+        if(target&&!reassignedVariables.has(target))addEdge(variableForNode.get(node.init),target);
       }
       if(node.type!=='CallExpression'||node.callee.type!=='Identifier')return;
       const fn=resolveFunction(file,node.callee);
       if(!fn)return;
       for(let i=0;i<Math.min(fn.params.length,node.arguments.length);i++){
         const arg=node.arguments[i], parameter=fn.params[i], parameterNode=fn.paramNodes[i];
-        if(arg.type==='Identifier')addEdge(variableForNode.get(arg),parameter);
+        if(arg.type==='Identifier'&&parameter&&!reassignedParameterVariables.has(parameter))
+          addEdge(variableForNode.get(arg),parameter);
         if(parameterNode?.type==='ObjectPattern'&&arg.type==='Identifier'){
           if(!patternParameterArguments.has(parameterNode))patternParameterArguments.set(parameterNode,new Set());
           const argumentVariable=variableForNode.get(arg);
           if(argumentVariable)patternParameterArguments.get(parameterNode).add(argumentVariable);
         }
         const value=literalString(arg,file);
-        if(parameter&&value!==null){
+        if(parameter&&value!==null&&!reassignedParameterVariables.has(parameter)){
           if(!parameterValues.has(parameter))parameterValues.set(parameter,new Set());
           parameterValues.get(parameter).add(value);
         }
       }
       const assigned=parentNode&&parentNode.type==='VariableDeclarator'&&parentNode.init===node&&parentNode.id.type==='Identifier'?variableForNode.get(parentNode.id):null;
-      if(assigned){
+      if(assigned&&!reassignedVariables.has(assigned)){
         const returned=returnedValues(fn);
         if(returned.length===1)addEdge(returned[0].variable,assigned);
         else if(returned.length>1)for(const item of returned)addEdge(item.variable,assigned);
@@ -967,7 +1269,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     let property=node.computed?(node.property.type==='Literal'&&(typeof node.property.value==='string'||typeof node.property.value==='number')?String(node.property.value):null):(node.property.name||null);
     if(property===null&&node.computed&&node.property.type==='Identifier'){
       const parameter=variableForNode.get(node.property);
-      const values=parameter&&parameterValues.get(parameter);
+      const values=parameter&&!reassignedParameterVariables.has(parameter)&&parameterValues.get(parameter);
       if(values&&values.size&&values.size<=32){
         for(const value of values)for(const origin of objectOrigins.values()){
           propertyReferences.push({from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property:value,line:node.loc.start.line,flow:'interprocedural-parameter-key'});
@@ -1010,7 +1312,7 @@ function analyzeDynamicExecution(root,files,graph){
     const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)&&(c.type==='Identifier'||object==='module'||object==='Module');
     if(loader){
       const spec=literalString(n.arguments[0],file);
-      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set)):null;
+      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
       const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
       if(target)extra.push({from:file,to:target});

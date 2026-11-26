@@ -48,6 +48,165 @@ function resolveFile(from, spec, files) {
   const candidates = path.extname(base) ? [base] : [base, ...EXT.map(ext => base + ext), ...EXT.map(ext => path.join(base, 'index' + ext))];
   return candidates.find(candidate => files.has(candidate)) || null;
 }
+function selectPackageConditions(value, mode) {
+  if (value === null) return { matched: true, blocked: true, candidates: [] };
+  if (typeof value === 'string') return { matched: true, blocked: false, candidates: [value] };
+  if (Array.isArray(value)) {
+    const candidates = [];
+    for (const item of value) {
+      const found = selectPackageConditions(item, mode);
+      if (!found.matched || found.blocked) continue;
+      candidates.push(...found.candidates);
+    }
+    return candidates.length
+      ? { matched: true, blocked: false, candidates }
+      : { matched: false, blocked: false, candidates: [] };
+  }
+  if (value && typeof value === 'object') {
+    // Node evaluates active conditional exports in package.json key order.
+    // If a nested condition object has no active key, continue to the next
+    // outer condition; an explicit null target remains a blocking match.
+    const active = new Set([mode, 'node', 'node-addons', 'module-sync', 'default']);
+    for (const [condition, target] of Object.entries(value)) {
+      if (!active.has(condition)) continue;
+      const found = selectPackageConditions(target, mode);
+      if (found.matched) return found;
+    }
+  }
+  return { matched: false, blocked: false, candidates: [] };
+}
+function resolveMappedPackageTarget(target, packageRoot, capture, files, mode, externalTargetsAreValid = false) {
+  const selection = selectPackageConditions(target, mode);
+  if (!selection.matched || selection.blocked) return null;
+  for (const selected of selection.candidates) {
+    const rawTargetSpec = selected.includes('*') ? selected.replace(/\*/g, capture) : selected;
+    // Encoded path separators are invalid package-map targets even when the
+    // decoded path would remain inside the package root.
+    if (/%2f|%5c/i.test(rawTargetSpec)) continue;
+    let targetSpec;
+    try { targetSpec = decodeURIComponent(rawTargetSpec); } catch { continue; }
+    if (!targetSpec.startsWith('./')) {
+      if (externalTargetsAreValid) return null;
+      continue;
+    }
+    // Node package-map targets are URL-like paths. Validate after percent
+    // decoding so encoded separators/dot segments cannot bypass containment.
+    // Resolve the decoded path as Node does, while keeping it inside the
+    // package root and rejecting node_modules segments.
+    if (targetSpec.includes('\\') || targetSpec.includes('\0')) continue;
+    const targetSegments = targetSpec.slice(2).split('/');
+    if (targetSegments.some(segment => segment === '.' || segment === '..' || segment === 'node_modules')) continue;
+    // Package-map targets are exact file paths. Do not apply extension or
+    // directory-index probing here: that would turn an invalid target such as
+    // "./entry" into an unrelated implicit match for "./entry.js".
+    const resolved = path.resolve(path.dirname(packageRoot), targetSpec);
+    // Once a syntactically valid target is selected, a missing file is a
+    // resolution failure, not permission to try a later array alternative.
+    return files.has(resolved) ? resolved : null;
+  }
+  return null;
+}
+function matchPackageMap(map, key) {
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return null;
+  if (Object.prototype.hasOwnProperty.call(map, key)) return { target: map[key], capture: '' };
+  const patterns = Object.keys(map).filter(pattern => pattern.includes('*')).map(pattern => {
+    const star = pattern.indexOf('*');
+    return { pattern, prefix: pattern.slice(0, star), suffix: pattern.slice(star + 1) };
+  }).filter(item => key.startsWith(item.prefix) && key.endsWith(item.suffix) &&
+      key.length >= item.prefix.length + item.suffix.length)
+    .sort((a, b) => b.prefix.length - a.prefix.length || b.suffix.length - a.suffix.length);
+  if (!patterns.length) return null;
+  const best = patterns[0];
+  return { target: map[best.pattern], capture: key.slice(best.prefix.length, key.length - best.suffix.length) };
+}
+function resolveLegacyPackageDirectory(packageRoot, files) {
+  const manifestPath = path.join(packageRoot, 'package.json');
+  let manifest = {};
+  if (fs.existsSync(manifestPath)) {
+    try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { return null; }
+  }
+  for (const entry of [manifest.main, 'index.js', 'index.cjs', 'index.mjs']) {
+    if (typeof entry !== 'string') continue;
+    const found = resolveFile(manifestPath, entry.startsWith('.') ? entry : './' + entry, files);
+    if (found) return found;
+  }
+  return null;
+}
+function resolvePackageTarget(packageRoot, subpath, files, mode) {
+  const manifestPath = path.join(packageRoot, 'package.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  let manifest;
+  try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { return null; }
+  const key = subpath ? './' + subpath : '.';
+  if (manifest.exports !== undefined) {
+    let mapping;
+    if (manifest.exports && typeof manifest.exports === 'object' && !Array.isArray(manifest.exports) &&
+        Object.keys(manifest.exports).some(item => item.startsWith('.'))) {
+      mapping = matchPackageMap(manifest.exports, key);
+    } else if (key === '.') mapping = { target: manifest.exports, capture: '' };
+    if (!mapping) return null;
+    return resolveMappedPackageTarget(mapping.target, manifestPath, mapping.capture, files, mode);
+  }
+  if (subpath) {
+    if (mode === 'import') {
+      const exact = path.resolve(path.dirname(manifestPath), './' + subpath);
+      return files.has(exact) ? exact : null;
+    }
+    return resolveFile(manifestPath, './' + subpath, files);
+  }
+  // Node's package resolver does not honor bundler-specific "module".
+  // Legacy package entry resolution uses "main", then index fallbacks.
+  return resolveLegacyPackageDirectory(packageRoot, files);
+}
+function resolvePackageImport(packageRoot, spec, files, mode) {
+  const manifestPath = path.join(packageRoot, 'package.json');
+  if (!fs.existsSync(manifestPath)) return null;
+  let manifest;
+  try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { return null; }
+  const mapping = matchPackageMap(manifest.imports, spec);
+  if (!mapping) return null;
+  // Local package-import targets are resolved; external targets remain unknown.
+  return resolveMappedPackageTarget(mapping.target, manifestPath, mapping.capture, files, mode, true);
+}
+function nearestPackageRoot(from, root) {
+  const boundary = path.resolve(root);
+  let directory = path.resolve(path.dirname(from));
+  while (directory === boundary || directory.startsWith(boundary + path.sep)) {
+    if (fs.existsSync(path.join(directory, 'package.json'))) return directory;
+    if (directory === boundary) break;
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  return boundary;
+}
+function resolveModuleFile(from, spec, files, root, mode = 'import') {
+  if (typeof spec !== 'string' || !spec) return null;
+  // Bare specifiers are package names, never paths relative to the importing
+  // file. Resolving them as filesystem paths can invent local edges when a
+  // coincidentally named sibling file exists.
+  if (spec.startsWith('.') || path.isAbsolute(spec)) {
+    const exact = path.resolve(path.dirname(from), spec);
+    // Node ESM relative imports (including dynamic import) require the exact
+    // file URL and do not probe extensions or directory indexes. CommonJS
+    // require retains extension and package-directory resolution.
+    if (mode === 'import') return files.has(exact) ? exact : null;
+    const direct = resolveFile(from, spec, files);
+    if (direct) return direct;
+    const directory = path.resolve(path.dirname(from), spec);
+    return resolveLegacyPackageDirectory(directory, files);
+  }
+  if (spec.startsWith('node:')) return null;
+  const packageRoot = nearestPackageRoot(from, root);
+  if (spec.startsWith('#')) return resolvePackageImport(packageRoot, spec, files, mode);
+  let pkg;
+  try { pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')); } catch { pkg = {}; }
+  const packageName = pkg.name;
+  if (packageName && (spec === packageName || spec.startsWith(packageName + '/'))) {
+    return resolvePackageTarget(packageRoot, spec === packageName ? '' : spec.slice(packageName.length + 1), files, mode);
+  }
+  return null;
+}
 function staticPrefix(node, constants, bindings, depth = 0) {
   if (!node || depth > 8) return null;
   const exact = staticValue(node, constants, 0, bindings);
@@ -430,7 +589,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const aliases = new Map();
     visit(ast, node => {
       if (node.type === 'ImportDeclaration' && node.source.value) {
-        const target = resolveFile(file, node.source.value, fileSet);
+        const target = resolveModuleFile(file, node.source.value, fileSet, root, 'import');
         if (!target) return;
         for (const spec of node.specifiers || []) {
           const importedName = spec.imported ? (spec.imported.name || spec.imported.value) : 'default';
@@ -454,13 +613,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
     if (localDefinition) return { file, key: localKey, node: localDefinition.node };
     const candidates = [];
     for (const item of reExportsByFile.get(file)?.get(name) || []) {
-      const target = resolveFile(file, item.source, fileSet);
+      const target = resolveModuleFile(file, item.source, fileSet, root, 'import');
       const resolved = target && resolveExportedFunction(target, item.importedName, new Set(seen));
       if (resolved) candidates.push(resolved);
     }
     // ECMAScript export-star never forwards a module's default export.
     if (name !== 'default') for (const source of exportStarsByFile.get(file) || []) {
-      const target = resolveFile(file, source, fileSet);
+      const target = resolveModuleFile(file, source, fileSet, root, 'import');
       const resolved = target && resolveExportedFunction(target, name, new Set(seen));
       if (resolved) candidates.push(resolved);
     }
@@ -523,6 +682,61 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
     return objectKey && objectMethodDefsByFile.get(file)?.get(objectKey + '::' + property) || null;
   };
+  // Propagate a single statically known string argument into imported
+  // functions that perform import(specifier). This is intentionally all-callsite
+  // conservative: any unknown or disagreeing callsite prevents propagation.
+  const crossModuleStringArguments = new Map();
+  for (const [callerFile, callerAst] of asts) {
+    const callerBindings = bindingByFile.get(callerFile);
+    const callerConstants = constantsByFile.get(callerFile);
+    visit(callerAst, node => {
+      if (node.type !== 'CallExpression') return;
+      const target = resolveCallableOwner(callerFile, node.callee);
+      if (!target || target.file === callerFile) return;
+      for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
+        const parameter = target.node.params[index];
+        if (parameter.type !== 'Identifier') continue;
+        const parameterKey = bindingByFile.get(target.file)?.get(parameter);
+        if (!parameterKey) continue;
+        const slot = target.file + '::' + parameterKey;
+        if (!crossModuleStringArguments.has(slot)) crossModuleStringArguments.set(slot, []);
+        const value = staticValue(node.arguments[index], callerConstants, 0, callerBindings);
+        crossModuleStringArguments.get(slot).push(typeof value === 'string' && value.length ? value : undefined);
+      }
+    });
+  }
+  for (const [slot, values] of crossModuleStringArguments) {
+    if (!values.length || values.some(value => typeof value !== 'string')) continue;
+    const unique = [...new Set(values)];
+    if (unique.length !== 1) continue;
+    const separator = slot.indexOf('::');
+    const targetFile = slot.slice(0, separator), parameterKey = slot.slice(separator + 2);
+    const target = [...functionDefs.entries()].find(([identity]) =>
+      identity.startsWith(targetFile + '::') &&
+      bindingByFile.get(targetFile)?.get(functionDefs.get(identity).node.params.find(parameter =>
+        parameter.type === 'Identifier' && bindingByFile.get(targetFile)?.get(parameter) === parameterKey
+      )) === parameterKey
+    )?.[1];
+    if (!target) continue;
+    let reassigned = false;
+    const inspect = node => {
+      if (!node || typeof node !== 'object' || reassigned) return;
+      if (node !== target.node.body &&
+          ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' &&
+          bindingByFile.get(targetFile)?.get(node.left) === parameterKey) reassigned = true;
+      if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier' &&
+          bindingByFile.get(targetFile)?.get(node.argument) === parameterKey) reassigned = true;
+      for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+        if (Array.isArray(value)) value.forEach(inspect);
+        else if (value && typeof value.type === 'string') inspect(value);
+      }
+    };
+    inspect(target.node.body);
+    if (!reassigned) constantsByFile.get(targetFile)?.set(parameterKey, unique[0]);
+  }
+
   // Resolve callback factories whose direct return values are functions.
   // This covers factories imported from another module as well as local ones,
   // while refusing to guess when distinct return paths produce different owners.
@@ -678,6 +892,283 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
     const sourceText = fs.readFileSync(file, 'utf8');
     const loopValues = loopValuesByFile.get(file);
+    // eslint-scope does not consistently resolve script-global function
+    // declarations as lexical bindings. Conservatively detect any local
+    // declaration named importScripts and keep its callsites uncertain rather
+    // than interpreting a same-named local function as the worker API.
+    let hasLocalImportScriptsBinding = false;
+    visit(ast, node => {
+      if ((node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' ||
+           node.type === 'ClassDeclaration') && node.id?.name === 'importScripts') {
+        hasLocalImportScriptsBinding = true;
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.id.name === 'importScripts') hasLocalImportScriptsBinding = true;
+      if (['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type) &&
+          (node.params || []).some(parameter => parameter.type === 'Identifier' && parameter.name === 'importScripts')) {
+        hasLocalImportScriptsBinding = true;
+      }
+      if (node.type === 'ImportDeclaration' && (node.specifiers || []).some(specifier => specifier.local?.name === 'importScripts')) {
+        hasLocalImportScriptsBinding = true;
+      }
+    });
+    // Identify lexical aliases of the CommonJS loader and createRequire factory.
+    // Bindings are scope-aware, so locally shadowed require/module names do not
+    // become loader capabilities.
+    const requireFunctionBindings = new Set();
+    const moduleNamespaceBindings = new Set();
+    const createRequireFactoryBindings = new Set();
+    const createRequireFactorySources = new Map();
+    const createRequireResultBindings = new Map();
+    const createRequireResultFactories = new Map();
+    const createRequireBaseFile = node => {
+      if (!node) return null;
+      if (node.type === 'MemberExpression' && node.object.type === 'MetaProperty' &&
+          node.object.meta.name === 'import' && node.object.property.name === 'meta' &&
+          !node.computed && node.property.name === 'url') return file;
+      const value = staticValue(node, constants, 0, bindings);
+      if (typeof value !== 'string') return null;
+      if (path.isAbsolute(value)) return path.resolve(value);
+      if (value.startsWith('file://')) {
+        try { return path.resolve(decodeURIComponent(new URL(value).pathname)); } catch { return null; }
+      }
+      return null;
+    };
+    const loaderWrapperBindings = new Set();
+    const loaderWrapperBaseFiles = new Map();
+    const initializedLoaderBindings = new Set();
+    const isSingleArgumentRequireWrapper = fn => {
+      const parameter = fn.params && fn.params.length === 1 ? fn.params[0] : null;
+      if (!parameter || parameter.type !== 'Identifier') return false;
+      const parameterKey = bindings.get(parameter);
+      if (!parameterKey) return false;
+      // Deliberately accept only a single direct forwarding expression. This
+      // avoids mistaking nested callbacks or unrelated loader calls for a
+      // transparent wrapper.
+      const body = fn.body;
+      const call = body.type === 'CallExpression' ? body :
+        body.type === 'BlockStatement' && body.body.length === 1 &&
+          body.body[0].type === 'ReturnStatement' ? body.body[0].argument : null;
+      if (!call || call.type !== 'CallExpression' || call.arguments.length !== 1) return false;
+      const callee = call.callee;
+      const direct = isUnshadowedRequire(callee) ||
+        (callee?.type === 'Identifier' && (requireFunctionBindings.has(bindings.get(callee)) ||
+          createRequireResultBindings.has(bindings.get(callee)))) ||
+        (callee?.type === 'MemberExpression' && callee.object.type === 'Identifier' &&
+         callee.object.name === 'module' && !bindings.get(callee.object) &&
+         (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) === 'require');
+      if (!direct || call.arguments[0]?.type !== 'Identifier') return false;
+      const argument = call.arguments[0];
+      const argumentKey = bindings.get(argument);
+      return argumentKey ? argumentKey === parameterKey : argument.name === parameter.name;
+    };
+    const isUnshadowedRequire = node => node?.type === 'Identifier' &&
+      node.name === 'require' && !bindings.get(node);
+    const memberName = node => node?.type === 'MemberExpression'
+      ? (node.computed ? staticValue(node.property, constants, 0, bindings) :
+        node.property.type === 'Identifier' ? node.property.name : null) : null;
+    const isNodeModuleLoad = node => node?.type === 'CallExpression' &&
+      isUnshadowedRequire(node.callee) && node.arguments.length === 1 &&
+      ['module', 'node:module'].includes(staticValue(node.arguments[0], constants, 0, bindings));
+    const isModuleNamespaceCreateRequire = node => node?.type === 'MemberExpression' &&
+      node.object.type === 'Identifier' && moduleNamespaceBindings.has(bindings.get(node.object)) &&
+      memberName(node) === 'createRequire';
+    const isRequireModuleCreateRequire = node => node?.type === 'MemberExpression' &&
+      isNodeModuleLoad(node.object) && memberName(node) === 'createRequire';
+    const isCreateRequireFactoryExpression = node =>
+      (node?.type === 'Identifier' && createRequireFactoryBindings.has(bindings.get(node))) ||
+      isModuleNamespaceCreateRequire(node) || isRequireModuleCreateRequire(node);
+    visit(ast, node => {
+      if (node.type === 'FunctionDeclaration' && node.id && isSingleArgumentRequireWrapper(node)) {
+        loaderWrapperBindings.add(node.id.name);
+        const wrapperBinding = bindings.get(node.id);
+        if (wrapperBinding) loaderWrapperBindings.add(wrapperBinding);
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.init && node.init.type === 'ArrowFunctionExpression' && isSingleArgumentRequireWrapper(node.init)) {
+        loaderWrapperBindings.add(node.id.name);
+        const wrapperBinding = bindings.get(node.id);
+        if (wrapperBinding) loaderWrapperBindings.add(wrapperBinding);
+      }
+      if (node.type === 'ImportDeclaration') {
+        for (const specifier of node.specifiers || []) {
+          const key = bindings.get(specifier.local);
+          if (key) initializedLoaderBindings.add(key);
+        }
+      }
+      if (node.type === 'ImportDeclaration' && ['module', 'node:module'].includes(node.source.value)) {
+        for (const specifier of node.specifiers || []) {
+          const key = bindings.get(specifier.local);
+          if (specifier.type === 'ImportNamespaceSpecifier' && key) moduleNamespaceBindings.add(key);
+          if (specifier.type === 'ImportSpecifier' &&
+              (specifier.imported.name || specifier.imported.value) === 'createRequire' && key) {
+            createRequireFactoryBindings.add(key);
+          }
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.init) {
+        if (node.id.type === 'ObjectPattern' &&
+            (isNodeModuleLoad(node.init) ||
+             (node.init.type === 'Identifier' && moduleNamespaceBindings.has(bindings.get(node.init))))) {
+          for (const property of node.id.properties || []) {
+            if (property.type !== 'Property' || memberName({ type: 'MemberExpression', object: {}, property: property.key, computed: property.computed }) !== 'createRequire') continue;
+            const local = property.value?.type === 'AssignmentPattern' ? property.value.left : property.value;
+            if (local?.type === 'Identifier') {
+              const key = bindings.get(local);
+              if (key) {
+                initializedLoaderBindings.add(key);
+                createRequireFactoryBindings.add(key);
+                const sourceKey = node.init.type === 'Identifier' ? bindings.get(node.init) : null;
+                if (sourceKey) createRequireFactorySources.set(key, sourceKey);
+              }
+            }
+          }
+          return;
+        }
+        if (node.id.type !== 'Identifier') return;
+        const key = bindings.get(node.id);
+        if (!key) return;
+        initializedLoaderBindings.add(key);
+        if (isNodeModuleLoad(node.init)) moduleNamespaceBindings.add(key);
+        if (isUnshadowedRequire(node.init) || (node.init.type === 'MemberExpression' &&
+            node.init.object.type === 'Identifier' && node.init.object.name === 'module' &&
+            !bindings.get(node.init.object) &&
+            memberName(node.init) === 'require')) {
+          requireFunctionBindings.add(key);
+        }
+        if (node.init.type === 'Identifier') {
+          const sourceKey = bindings.get(node.init);
+          if (sourceKey && moduleNamespaceBindings.has(sourceKey)) moduleNamespaceBindings.add(key);
+          if (sourceKey && requireFunctionBindings.has(sourceKey)) requireFunctionBindings.add(key);
+          if (sourceKey && createRequireFactoryBindings.has(sourceKey)) {
+            createRequireFactoryBindings.add(key);
+            if (createRequireFactorySources.has(sourceKey)) createRequireFactorySources.set(key, createRequireFactorySources.get(sourceKey));
+          }
+          if (sourceKey && createRequireResultBindings.has(sourceKey)) {
+            createRequireResultBindings.set(key, createRequireResultBindings.get(sourceKey));
+            if (createRequireResultFactories.has(sourceKey)) createRequireResultFactories.set(key, createRequireResultFactories.get(sourceKey));
+          }
+        }
+        if (isModuleNamespaceCreateRequire(node.init) || isRequireModuleCreateRequire(node.init)) {
+          createRequireFactoryBindings.add(key);
+          if (isModuleNamespaceCreateRequire(node.init)) createRequireFactorySources.set(key, bindings.get(node.init.object));
+        }
+        if (node.init.type === 'CallExpression' && isCreateRequireFactoryExpression(node.init.callee)) {
+          createRequireResultBindings.set(key, createRequireBaseFile(node.init.arguments[0]));
+          const factoryKey = node.init.callee.type === 'Identifier'
+            ? bindings.get(node.init.callee)
+            : node.init.callee.type === 'MemberExpression' && node.init.callee.object.type === 'Identifier'
+              ? bindings.get(node.init.callee.object) : null;
+          if (factoryKey) createRequireResultFactories.set(key,
+            createRequireFactorySources.get(factoryKey) || factoryKey);
+        }
+      }
+      if (node.type === 'AssignmentExpression' && node.operator === '=' &&
+          node.left.type === 'Identifier' && node.right.type === 'Identifier') {
+        const target = bindings.get(node.left), source = bindings.get(node.right);
+        if (target && source && moduleNamespaceBindings.has(source)) moduleNamespaceBindings.add(target);
+        if (target && source && requireFunctionBindings.has(source)) requireFunctionBindings.add(target);
+        if (target && source && createRequireFactoryBindings.has(source)) {
+          createRequireFactoryBindings.add(target);
+          if (createRequireFactorySources.has(source)) createRequireFactorySources.set(target, createRequireFactorySources.get(source));
+        }
+        if (target && source && createRequireResultBindings.has(source)) {
+          createRequireResultBindings.set(target, createRequireResultBindings.get(source));
+          if (createRequireResultFactories.has(source)) createRequireResultFactories.set(target, createRequireResultFactories.get(source));
+        }
+      }
+    });
+    // A mutable loader alias is trustworthy only while its binding has not
+    // been written after initialization. Preserve a captured alias when a
+    // different binding is reassigned; invalidate only the written binding.
+    const loaderAliasWrites = new Map();
+    visit(ast, node => {
+      if (node.type !== 'AssignmentExpression' || node.left.type !== 'Identifier') return;
+      const key = bindings.get(node.left);
+      if (!key) return;
+      if (moduleNamespaceBindings.has(key) || requireFunctionBindings.has(key) ||
+          createRequireFactoryBindings.has(key) || createRequireResultBindings.has(key)) {
+        loaderAliasWrites.set(key, (loaderAliasWrites.get(key) || 0) + 1);
+      }
+    });
+    const invalidatedLoaderBindings = new Set();
+    for (const [key, writes] of loaderAliasWrites) {
+      if (initializedLoaderBindings.has(key) || writes > 1) {
+        invalidatedLoaderBindings.add(key);
+        moduleNamespaceBindings.delete(key);
+        requireFunctionBindings.delete(key);
+        createRequireFactoryBindings.delete(key);
+        createRequireResultBindings.delete(key);
+      }
+    }
+    // A createRequire result is only trustworthy while the factory binding
+    // that produced it remains intact. Propagate factory invalidation through
+    // result aliases without invalidating independently captured results.
+    let invalidatedResult = true;
+    while (invalidatedResult) {
+      invalidatedResult = false;
+      for (const [factoryKey, namespaceKey] of createRequireFactorySources) {
+        if (invalidatedLoaderBindings.has(namespaceKey) && !invalidatedLoaderBindings.has(factoryKey)) {
+          invalidatedLoaderBindings.add(factoryKey);
+          createRequireFactoryBindings.delete(factoryKey);
+          invalidatedResult = true;
+        }
+      }
+      for (const [resultKey, factoryKey] of createRequireResultFactories) {
+        if (invalidatedLoaderBindings.has(factoryKey) && !invalidatedLoaderBindings.has(resultKey)) {
+          invalidatedLoaderBindings.add(resultKey);
+          createRequireResultBindings.delete(resultKey);
+          invalidatedResult = true;
+        }
+      }
+    }
+    // Rebuild wrapper identities after loader aliases have been invalidated;
+    // wrappers over a reassigned createRequire/require alias are not transparent.
+    loaderWrapperBindings.clear();
+    loaderWrapperBaseFiles.clear();
+    // The first pass discovers require aliases in source order. Revisit wrappers
+    // after that pass so a wrapper declared before its aliased loader is still
+    // recognized, without treating shadowed identifiers as loader capabilities.
+    visit(ast, node => {
+      if (node.type === 'FunctionDeclaration' && node.id && isSingleArgumentRequireWrapper(node)) {
+        const key = bindings.get(node.id);
+        if (key) {
+          loaderWrapperBindings.add(key);
+          loaderWrapperBindings.add(node.id.name);
+          const body = node.body.type === 'BlockStatement' ? node.body.body[0]?.argument : node.body;
+          const call = body?.type === 'CallExpression' ? body : null;
+          const calleeKey = call?.callee?.type === 'Identifier' ? bindings.get(call.callee) : null;
+          loaderWrapperBaseFiles.set(key, createRequireResultBindings.has(calleeKey)
+            ? createRequireResultBindings.get(calleeKey) : file);
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.init && node.init.type === 'ArrowFunctionExpression' && isSingleArgumentRequireWrapper(node.init)) {
+        const key = bindings.get(node.id);
+        if (key) {
+          loaderWrapperBindings.add(key);
+          const body = node.init.body.type === 'BlockStatement' ? node.init.body.body[0]?.argument : node.init.body;
+          const call = body?.type === 'CallExpression' ? body : null;
+          const calleeKey = call?.callee?.type === 'Identifier' ? bindings.get(call.callee) : null;
+          loaderWrapperBaseFiles.set(key, createRequireResultBindings.has(calleeKey)
+            ? createRequireResultBindings.get(calleeKey) : file);
+        }
+      }
+    });
+    const reassignedLoaderWrapperBindings = new Set();
+    visit(ast, node => {
+      let target = null;
+      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier') target = node.left;
+      if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') target = node.argument;
+      if (target) {
+        const key = bindings.get(target);
+        if (key && loaderWrapperBindings.has(key)) reassignedLoaderWrapperBindings.add(key);
+        // Some script/global references are unresolved by eslint-scope. The
+        // call-site fallback is name-based, so invalidate that fallback too.
+        if (loaderWrapperBindings.has(target.name)) reassignedLoaderWrapperBindings.add(target.name);
+      }
+    });
+    for (const key of reassignedLoaderWrapperBindings) loaderWrapperBindings.delete(key);
     const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set(['Worker', 'SharedWorker']);
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
@@ -1150,7 +1641,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
     visit(ast, node => {
       if (node.type === 'ImportDeclaration' && node.source.value) {
-        const target = resolveFile(file, node.source.value, fileSet);
+        const target = resolveModuleFile(file, node.source.value, fileSet, root, 'import');
         if (target) {
           addEdge(file, target, 'static-import', file, node.loc.start.line, node.source.value);
           for (const spec of node.specifiers) {
@@ -1164,6 +1655,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
               line: spec.loc.start.line, detail: importedName
             });
           }
+        } else {
+          addSite(file, node, 'static-import', node.source.value, null, 'unresolved-static-import', [], node.source.value);
         }
       }
     });
@@ -1231,15 +1724,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
         addSite(file, node, 'dom-script-setAttribute-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection', [], staticPrefix(node.arguments[1], constants, bindings));
       }
       if (node.type === 'ExportNamedDeclaration' && node.source) {
-        const target = resolveFile(file, node.source.value, fileSet);
+        const target = resolveModuleFile(file, node.source.value, fileSet, root, 'import');
         if (target) addEdge(file, target, 're-export', file, node.loc.start.line, node.source.value);
+        else addSite(file, node, 're-export', node.source.value, null, 'unresolved-static-import', [], node.source.value);
       }
       if (node.type === 'ExportAllDeclaration' && node.source) {
-        const target = resolveFile(file, node.source.value, fileSet);
+        const target = resolveModuleFile(file, node.source.value, fileSet, root, 'import');
         if (target) addEdge(file, target, 're-export-all', file, node.loc.start.line, node.source.value);
+        else addSite(file, node, 're-export-all', node.source.value, null, 'unresolved-static-import', [], node.source.value);
       }
       if (node.type === 'ImportExpression') {
-        const spec = staticValue(node.source, constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+        const spec = staticValue(node.source, constants, 0, bindings), target = typeof spec === 'string' ? resolveModuleFile(file, spec, fileSet, root, 'import') : null;
         addSite(file, node, 'dynamic-import', spec, target, target ? 'resolved-local' : 'unresolved-dynamic-import', [], staticPrefix(node.source, constants, bindings));
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
@@ -1291,7 +1786,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target) addEdge(file, target, 'packaged-data-fetch', file, node.loc.start.line, spec);
           else if (spec !== undefined) addSite(file, node, 'packaged-data-fetch', spec, null, 'unresolved-packaged-data-fetch', [], staticPrefix(node.arguments[0], constants, bindings));
         }
-        if (callee.type === 'Identifier' && callee.name === 'importScripts') {
+        if (callee.type === 'Identifier' && callee.name === 'importScripts' &&
+            (hasLocalImportScriptsBinding || bindings.get(callee))) {
+          addSite(file, node, 'importScripts', null, null, 'unresolved-shadowed-importScripts', [], staticPrefix(node.arguments[0], constants, bindings));
+        } else if (callee.type === 'Identifier' && callee.name === 'importScripts') {
           for (const arg of node.arguments) {
             const boundedValues = arg.type === 'Identifier' ? loopValues.get(bindings.get(arg)) : null;
             const specs = Array.isArray(boundedValues) ? boundedValues : [staticValue(arg, constants, 0, bindings)];
@@ -1366,10 +1864,38 @@ function analyze(root = path.resolve(__dirname, '..')) {
               'unresolved-registered-script', [], staticPrefix(node.arguments[0], constants, bindings));
           }
         }
-        if (callee.type === 'Identifier' && callee.name === 'require') {
-          const spec = staticValue(node.arguments[0], constants, 0, bindings), target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
-          if (target) addEdge(file, target, 'commonjs-require', file, node.loc.start.line, spec);
-          else if (spec !== undefined && typeof spec === 'string' && spec.startsWith('.')) addSite(file, node, 'require', spec, null, 'unresolved-local-require', [], staticPrefix(node.arguments[0], constants, bindings));
+        const isDirectRequire = (callee.type === 'Identifier' &&
+          (isUnshadowedRequire(callee) || requireFunctionBindings.has(bindings.get(callee)))) ||
+          (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'module' &&
+            !bindings.get(callee.object) &&
+            (callee.computed ? staticValue(callee.property, constants, 0, bindings) : callee.property.name) === 'require');
+        const isCreatedRequire = callee.type === 'Identifier' && createRequireResultBindings.has(bindings.get(callee));
+        const wrapperKey = bindings.get(callee) || callee.name;
+        const isRequireWrapper = callee.type === 'Identifier' && loaderWrapperBindings.has(wrapperKey);
+        if (isRequireWrapper) {
+          const spec = staticValue(node.arguments[0], constants, 0, bindings);
+          const wrapperBase = loaderWrapperBaseFiles.has(bindings.get(callee))
+            ? loaderWrapperBaseFiles.get(bindings.get(callee)) : file;
+          const target = typeof spec === 'string' && wrapperBase
+            ? resolveModuleFile(wrapperBase, spec, fileSet, root, 'require') : null;
+          if (target) addEdge(file, target, 'commonjs-require-wrapper', file, node.loc.start.line, spec);
+          else addSite(file, node, 'require-wrapper', spec, null,
+            wrapperBase === null ? 'unresolved-createRequire-base-context' : 'unresolved-require-wrapper-argument',
+            [], staticPrefix(node.arguments[0], constants, bindings));
+        }
+        if (isDirectRequire || isCreatedRequire) {
+          const spec = staticValue(node.arguments[0], constants, 0, bindings);
+          const requireBase = isCreatedRequire ? createRequireResultBindings.get(bindings.get(callee)) : file;
+          const target = typeof spec === 'string' && requireBase ? resolveModuleFile(requireBase, spec, fileSet, root, 'require') : null;
+          if (target) addEdge(file, target, isCreatedRequire ? 'commonjs-createRequire' : 'commonjs-require', file, node.loc.start.line, spec);
+          else addSite(file, node, isCreatedRequire ? 'createRequire' : 'require', spec, null,
+            isCreatedRequire && !requireBase ? 'unresolved-createRequire-base-context' :
+              (typeof spec === 'string' && !spec.startsWith('.') ? 'unresolved-package-require' : 'unresolved-dynamic-require'),
+            [], staticPrefix(node.arguments[0], constants, bindings));
+        }
+        if (isCreateRequireFactoryExpression(callee)) {
+          addSite(file, node, 'createRequire-factory', staticValue(node.arguments[0], constants, 0, bindings), null,
+            'createRequire-base-context', [], staticPrefix(node.arguments[0], constants, bindings));
         }
         // Interprocedural direct-call and callback argument edges. Imported function
         // aliases are resolved to the declaring module; unresolved names are not guessed.
@@ -1513,24 +2039,58 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // affected root's otherwise-unreached files uncertain rather than dead.
     'unresolved-dynamic-execution', 'string-timer-execution'
   ].includes(site.kind));
-  for (const [entry, seen] of rootReach) {
-    const scopedSites = loaderUncertainty.filter(site => seen.has(path.resolve(root, site.file)));
-    unresolvedByRoot[rel(root, entry)] = uncertainty.filter(site => seen.has(path.resolve(root, site.file)))
-      .map(site => ({ file: site.file, line: site.line, kind: site.kind, scopePath: site.scopePath || null }));
-    for (const site of scopedSites) {
-      const source = path.resolve(root, site.file);
-      const prefix = typeof site.scopePath === 'string' && site.scopePath.length ? site.scopePath : null;
-      const base = prefix ? path.resolve(path.dirname(source), prefix) : null;
-      for (const candidate of files) {
-        if (reachable.has(candidate)) continue;
-        const candidatePath = path.resolve(candidate);
-        const matches = base
-          ? (prefix.endsWith('/') ? candidatePath.startsWith(base + path.sep) || candidatePath === base : candidatePath === base || candidatePath.startsWith(base + path.sep))
-          : true;
-        if (!matches) continue;
-        if (!uncertainFileRoots.has(candidate)) uncertainFileRoots.set(candidate, new Set());
-        uncertainFileRoots.get(candidate).add(rel(root, entry));
+  // Root reachability is already known for every uncertainty site. Group
+  // loader uncertainty by its source file and scope so candidate path matching
+  // is performed once per distinct scope, not once per root and site. The
+  // affected-root sets are then unioned onto the same candidate inventory.
+  for (const [entry] of rootReach) unresolvedByRoot[rel(root, entry)] = [];
+  for (const site of uncertainty) {
+    for (const entry of site.affectedRoots || []) {
+      unresolvedByRoot[entry]?.push({
+        file: site.file, line: site.line, kind: site.kind, scopePath: site.scopePath || null
+      });
+    }
+  }
+  const loaderGroups = new Map();
+  for (const site of loaderUncertainty) {
+    const prefix = typeof site.scopePath === 'string' && site.scopePath.length ? site.scopePath : null;
+    const key = JSON.stringify([site.file, prefix]);
+    if (!loaderGroups.has(key)) loaderGroups.set(key, { file: site.file, prefix, affectedRoots: new Set() });
+    const group = loaderGroups.get(key);
+    for (const entry of site.affectedRoots || []) group.affectedRoots.add(entry);
+  }
+  // The file inventory is already sorted by absolute path. Use a lower-bound
+  // lookup for scoped prefixes instead of rescanning all files for every
+  // distinct loader group. Unscoped uncertainty still intentionally covers the
+  // complete inventory.
+  const firstAtOrAfter = target => {
+    let low = 0, high = files.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (files[middle] < target) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  };
+  for (const group of loaderGroups.values()) {
+    if (!group.affectedRoots.size) continue;
+    const source = path.resolve(root, group.file);
+    const base = group.prefix ? path.resolve(path.dirname(source), group.prefix) : null;
+    const candidates = [];
+    if (!base) candidates.push(...files);
+    else {
+      if (fileSet.has(base)) candidates.push(base);
+      const descendantPrefix = base.endsWith(path.sep) ? base : base + path.sep;
+      for (let index = firstAtOrAfter(descendantPrefix);
+        index < files.length && files[index].startsWith(descendantPrefix); index++) {
+        candidates.push(files[index]);
       }
+    }
+    for (const candidate of candidates) {
+      if (reachable.has(candidate)) continue;
+      if (!uncertainFileRoots.has(candidate)) uncertainFileRoots.set(candidate, new Set());
+      const affected = uncertainFileRoots.get(candidate);
+      for (const entry of group.affectedRoots) affected.add(entry);
     }
   }
   const uncertainFiles = [...uncertainFileRoots].map(([file, affectedRoots]) => ({
@@ -1633,4 +2193,4 @@ function run(root) {
   return result;
 }
 if (require.main === module) run(process.argv[2]);
-module.exports = { analyze, run, staticValue, resolveFile };
+module.exports = { analyze, run, staticValue, resolveFile, resolveModuleFile };

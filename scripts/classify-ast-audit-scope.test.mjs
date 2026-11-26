@@ -26,15 +26,22 @@ test("each independent analyzer change selects its own audit", () => {
   }
 });
 
+test("executable-source and metaprogramming analyzer changes select their own audits", () => {
+  assert.deepEqual(selectAstAudits(["scripts/ast-executable-source-coverage-audit.js"]), ["executable_source"]);
+  assert.deepEqual(selectAstAudits(["scripts/ast-executable-source-coverage-audit.test.js"]), ["executable_source"]);
+  assert.deepEqual(selectAstAudits(["scripts/ast-runtime-metaprogramming-uncertainty-audit.js"]), ["metaprogramming"]);
+  assert.deepEqual(selectAstAudits(["scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js"]), ["metaprogramming"]);
+});
+
 test("parser/dependency/workflow/shared checkpoint changes run every audit", () => {
   for (const path of ["package-lock.json", "package.json", ".github/workflows/browser-tests.yml",
     ".github/actions/ci-section-checkpoint/action.yml", "scripts/ast-new-shared-helper.js"]) {
-    assert.equal(selectAstAudits([path]).length, 7, path);
+    assert.equal(selectAstAudits([path]).length, 9, path);
   }
 });
 
 test("manual full audit selection runs every audit", () => {
-  assert.equal(selectAstAudits([], { full: true }).length, 7);
+  assert.equal(selectAstAudits([], { full: true }).length, 9);
 });
 
 test("unrelated changes select no AST audits", () => {

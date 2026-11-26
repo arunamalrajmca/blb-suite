@@ -14,7 +14,9 @@ export const auditDefinitions = {
   cross_module: ["scripts/ast-cross-module-dynamic-reachability-audit.js", "scripts/ast-cross-module-dynamic-reachability-audit.test.js"],
   runtime: ["scripts/ast-runtime-flow-reachability-audit.js", "scripts/ast-runtime-flow-reachability-audit.test.js"],
   unified: ["scripts/ast-unified-dynamic-runtime-reachability-audit.js", "scripts/ast-unified-dynamic-runtime-reachability-audit.test.js"],
-  computed: ["scripts/ast-computed-property-reachability-audit.js", "scripts/ast-computed-property-reachability-audit.test.js"]
+  computed: ["scripts/ast-computed-property-reachability-audit.js", "scripts/ast-computed-property-reachability-audit.test.js"],
+  executable_source: ["scripts/ast-executable-source-coverage-audit.js", "scripts/ast-executable-source-coverage-audit.test.js"],
+  metaprogramming: ["scripts/ast-runtime-metaprogramming-uncertainty-audit.js", "scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js"]
 };
 const all = Object.keys(auditDefinitions);
 

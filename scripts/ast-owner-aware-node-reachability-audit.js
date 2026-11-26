@@ -15,6 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
 const eslintScope = require('eslint-scope');
+const { resolveModuleFile } = require('./ast-unified-dynamic-runtime-reachability-audit');
 
 const EXCLUDED = new Set([
   '.git', 'node_modules', 'coverage', 'test-results', 'playwright-report', 'dist'
@@ -470,15 +471,25 @@ function resolvePackageImport(fromFile, specifier, files) {
   }
   return { unresolved: true, specifier, packageImport: true, targets: candidates };
 }
-function resolveModuleSpecifier(fromFile, specifier, files) {
+function resolveModuleSpecifier(fromFile, specifier, files, root = process.cwd(), mode = 'import') {
   if (specifier.startsWith('#')) return resolvePackageImport(fromFile, specifier, files) ||
     { unresolved: true, specifier, packageImport: true };
-  if (!specifier.startsWith('.')) return { external: true, specifier };
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  if (path.extname(base) === '.json' && fs.existsSync(base)) {
-    return { external: true, dataDependency: true, specifier };
+  if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
+    const base = path.isAbsolute(specifier) ? path.resolve(specifier) : path.resolve(path.dirname(fromFile), specifier);
+    if (path.extname(base) === '.json' && fs.existsSync(base)) {
+      return { external: true, dataDependency: true, specifier };
+    }
+    return resolveLocalFile(base, files) || { unresolved: true, specifier };
   }
-  return resolveLocalFile(base, files) || { unresolved: true, specifier };
+  const resolved = resolveModuleFile(fromFile, specifier, files, root, mode);
+  if (resolved) return { file: resolved, external: false };
+  if (specifier.startsWith('#')) return { unresolved: true, specifier, packageImport: true };
+  const pkg = nearestPackage(fromFile);
+  const name = pkg?.value?.name;
+  if (typeof name === 'string' && (specifier === name || specifier.startsWith(name + '/'))) {
+    return { unresolved: true, specifier, packageSelfReference: true };
+  }
+  return { external: true, specifier };
 }
 
 function collectModuleEdges(source, filename, files, root = process.cwd()) {
@@ -501,7 +512,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         requireAliases.add(node.id.name);
       }
       if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
-          node.init.object.name === 'module' && node.init.property.name === 'require') requireAliases.add(node.id.name);
+          node.init.object.name === 'module' && staticKey(node.init.property, node.init.computed) === 'require') requireAliases.add(node.id.name);
       if (node.init?.type === 'MemberExpression' && node.init.property.name === 'createRequire') {
         createRequireAliases.add(node.id.name);
       }
@@ -553,7 +564,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
                node.callee.object.type === 'Identifier' && node.callee.object.name === 'module' &&
-               node.callee.property.name === 'require') {
+               staticKey(node.callee.property, node.callee.computed) === 'require') {
       if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
           typeof node.arguments[0].value === 'string') {
         specifier = node.arguments[0].value;
@@ -579,7 +590,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         }
         if (request && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(request)) {
           const specifier = request.startsWith('.') || request.startsWith('/') ? request : './' + request;
-          const resolution = resolveModuleSpecifier(baseFile, specifier, files);
+          const resolution = resolveModuleSpecifier(baseFile, specifier, files, root, 'import');
           edges.push({ from: filename, specifier: request, kind: 'worker-thread-static-launch', ...resolution });
         }
         dynamic.push({
@@ -623,7 +634,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         if (launchedScript) {
           const request = launchedScript.startsWith('.') || launchedScript.startsWith('/')
             ? launchedScript : './' + launchedScript;
-          const resolution = resolveModuleSpecifier(path.join(root, 'package.json'), request, files);
+          const resolution = resolveModuleSpecifier(path.join(root, 'package.json'), request, files, root, 'require');
           edges.push({ from: filename, specifier: launchedScript, kind: 'child-process-static-launch', ...resolution });
         }
         dynamic.push({
@@ -638,7 +649,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     }
     if (specifier !== null) {
-      const resolution = resolveModuleSpecifier(filename, specifier, files);
+      const resolution = resolveModuleSpecifier(filename, specifier, files, root, kind === 'require' || kind === 'module.require' ? 'require' : 'import');
       edges.push({ from: filename, specifier, kind, ...resolution });
       for (const alternative of resolution.alternatives || []) {
         edges.push({ from: filename, specifier, kind, file: alternative, external: false, packageImportAlternative: true });
