@@ -52,6 +52,15 @@ test('does not attribute nested ordinary-function this reads to an enclosing cla
   ]);
 });
 
+test('does not attribute shadowed local property reads to an outer same-named owner', () => {
+  const result = ownerAwarePropertyAudit([
+    'const service = { start() {}, stop() {} };',
+    'function useShadow() { const service = {}; service.stop(); }',
+    'service.start();'
+  ].join('\\n'), 'shadowed-local-owner.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['stop']);
+});
+
 test('attributes destructuring assignments to the source object owner', () => {
   const result = ownerAwarePropertyAudit([
     'const service = { start() {}, stop() {} };',
