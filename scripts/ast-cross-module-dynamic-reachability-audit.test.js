@@ -14,6 +14,21 @@ test('maps CommonJS exported identifiers to importing modules',()=>{
  const r=analyzeCrossModule(root,[path.join(root,'service.js'),path.join(root,'consumer.js')]);assert.ok(r.links.some(x=>x.to==='service.js'&&x.imported==='default'));}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('does not classify shadowed require or module.require calls as module edges',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'shadowed-require-edge-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "function load(require, module) {",
+   "  require('./worker.js');",
+   "  module.require('./worker.js');",
+   "}"
+  ].join('\\n'));
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('resolves statically composed dynamic require specifiers',()=>{
  const file=path.join(os.tmpdir(),'audit','main.js'),ast=require('acorn').parse("require('./' + 'worker.js'); path.join(__dirname, 'child.js');",{ecmaVersion:'latest'}),calls=[];
  (function w(n){if(!n||typeof n!=='object')return;if(n.type==='CallExpression')calls.push(n);for(const v of Object.values(n))Array.isArray(v)?v.forEach(w):v&&typeof v.type==='string'&&w(v);})(ast);
