@@ -600,7 +600,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       return isFactoryExpression(expression.object, seen);
     }
     if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
-        staticKey(expression.callee.property, expression.callee.computed) === 'bind') {
+        ['bind', 'call', 'apply'].includes(staticKey(expression.callee.property, expression.callee.computed))) {
       return isFactoryExpression(expression.callee.object, seen);
     }
     return expression.type === 'MemberExpression' &&
@@ -615,9 +615,10 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       if (key === 'bind') return isRequireExpression(expression.object, seen);
       return key === 'require' && isNodeModuleIdentifier(expression.object);
     }
-    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
-        staticKey(expression.callee.property, expression.callee.computed) === 'bind') {
-      return isRequireExpression(expression.callee.object, seen);
+    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression') {
+      const method = staticKey(expression.callee.property, expression.callee.computed);
+      if (method === 'bind') return isRequireExpression(expression.callee.object, seen);
+      if (['call', 'apply'].includes(method) && isFactoryExpression(expression.callee.object)) return true;
     }
     return false;
   }
@@ -723,8 +724,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           invalidatedFactoryVariables.delete(factoryVariable);
         }
       }
-      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
-          isFactoryIdentifier(node.init.callee)) {
+      if (node.init?.type === 'CallExpression' && isRequireExpression(node.init)) {
         const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
         if (aliasVariable) requireAliasVariables.add(aliasVariable);
       }
