@@ -675,7 +675,7 @@ function collectExportsAndImports(ast,file){
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
       &&n.init.name==='require'&&isUnboundGlobal(n.init)&&parent?.type==='VariableDeclaration'&&parent.kind==='const'){
       const variable=variableForIdentifier.get(n.id);
-      if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)requireAliases.add(variable);
+      if(variable&&hasStableBinding(variable))requireAliases.add(variable);
     }
   });
   // Resolve path-module aliases through stable CommonJS loader aliases after
