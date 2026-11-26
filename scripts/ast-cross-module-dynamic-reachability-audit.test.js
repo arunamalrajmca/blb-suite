@@ -14,6 +14,26 @@ test('maps CommonJS exported identifiers to importing modules',()=>{
  const r=analyzeCrossModule(root,[path.join(root,'service.js'),path.join(root,'consumer.js')]);assert.ok(r.links.some(x=>x.to==='service.js'&&x.imported==='default'));}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('resolves immutable aliases of the CommonJS require function',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'require-function-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; load('./worker.js');");
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'&&x.commonjs===true));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not resolve reassigned aliases of the CommonJS require function',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reassigned-require-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"let load = require; load = customLoader; load('./worker.js');");
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'&&x.commonjs===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('does not classify shadowed require or module.require calls as module edges',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'shadowed-require-edge-'));
  try{
