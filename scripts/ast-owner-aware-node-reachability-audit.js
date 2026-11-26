@@ -556,7 +556,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (!variable || seen.has(variable) || !createRequireFactoryVariables.has(variable) ||
         invalidatedFactoryVariables.has(variable)) return false;
     seen.add(variable);
-    return (variable.defs || []).some(definition => {
+    const declaredFactory = (variable.defs || []).some(definition => {
       if (definition.type === 'ImportBinding') {
         return true;
       }
@@ -582,7 +582,16 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           property.value.type === 'Identifier' && property.value.name === variable.name);
       }
       return false;
-    });
+    })
+    if (declaredFactory) return true;
+    const uninitializedVariable = (variable.defs || []).some(definition =>
+      definition.type === 'Variable' && definition.node?.type === 'VariableDeclarator' &&
+      !definition.node.init
+    );
+    return uninitializedVariable && (variable.references || []).some(write =>
+      write.isWrite() && write.writeExpr?.type === 'AssignmentExpression' &&
+      isFactoryExpression(write.writeExpr.right, seen)
+    );;
   }
   function isFactoryExpression(expression, seen = new Set()) {
     if (!expression) return false;
