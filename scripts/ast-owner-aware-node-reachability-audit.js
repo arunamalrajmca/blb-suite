@@ -550,11 +550,6 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (!variable || invalidatedModuleAliasVariables.has(variable)) return false;
     return moduleNamespaceAliasVariables.has(variable) || moduleObjectAliasVariables.has(variable);
   }
-  function isFactoryExpression(expression, seen = new Set()) {
-    if (expression?.type === 'Identifier') return isFactoryIdentifier(expression, seen);
-    return expression?.type === 'MemberExpression' && isNodeModuleIdentifier(expression.object) &&
-      staticKey(expression.property, expression.computed) === 'createRequire';
-  }
   function isFactoryIdentifier(identifier, seen = new Set()) {
     if (!identifier || identifier.type !== 'Identifier') return false;
     const variable = resolveLexicalVariable(identifier);
