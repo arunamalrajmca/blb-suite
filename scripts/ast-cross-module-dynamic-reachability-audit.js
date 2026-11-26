@@ -107,6 +107,7 @@ function collectExportsAndImports(ast,file){
     for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
   }
   const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
+  const hasStableBinding=variable=>!!variable&&(variable.references||[]).every(reference=>!reference.isWrite()||reference.init);
   const staticPropertyKey=node=>{
     if(node?.type==='Literal'&&(typeof node.value==='string'||typeof node.value==='number'))return String(node.value);
     if(node?.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked;
@@ -664,12 +665,12 @@ function collectExportsAndImports(ast,file){
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
       for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier'){
         const variable=variableForIdentifier.get(specifier.local);
-        if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===0)pathIdentifiers.add(variable);
+        if(variable&&hasStableBinding(variable))pathIdentifiers.add(variable);
       }
     }
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value)){
       const variable=variableForIdentifier.get(n.id);
-      if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)pathIdentifiers.add(variable);
+      if(variable&&hasStableBinding(variable))pathIdentifiers.add(variable);
     }
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
       &&n.init.name==='require'&&isUnboundGlobal(n.init)&&parent?.type==='VariableDeclaration'&&parent.kind==='const'){
