@@ -64,6 +64,16 @@ test('does not attribute nested ordinary-function this reads to an enclosing cla
   ]);
 });
 
+test('attributes destructuring assignments to the source object owner', () => {
+  const result = ownerAwarePropertyAudit([
+    'const service = { start() {}, stop() {} };',
+    'let start;',
+    '({ start } = service);',
+    'void start;'
+  ].join('\n'), 'destructuring-assignment-owner.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['stop']);
+});
+
 test('tracks object aliases and destructured property reads', () => {
   const result = ownerAwarePropertyAudit([
     'const service = { start() {}, stop() {}, reset() {} };',
