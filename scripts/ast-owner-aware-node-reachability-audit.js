@@ -760,13 +760,14 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       const fromAwaitedModuleImport = init?.type === 'AwaitExpression' &&
         init.argument?.type === 'ImportExpression' && init.argument.source?.type === 'Literal' &&
         ['node:module', 'module'].includes(init.argument.source.value);
-      if (fromCommonJsModule || fromAwaitedModuleImport) {
+      const fromModuleNamespaceAlias = init?.type === 'Identifier' && isNodeModuleIdentifier(init);
+      if (fromCommonJsModule || fromAwaitedModuleImport || fromModuleNamespaceAlias) {
         for (const property of node.id.properties) {
-          if (property.type === 'Property' && staticKey(property.key, property.computed) === 'createRequire' &&
-              property.value.type === 'Identifier') {
-            const factoryVariable = variableByDefinitionNode.get(property.value) || resolveLexicalVariable(property.value);
-            if (factoryVariable) createRequireFactoryVariables.add(factoryVariable);
-          }
+          if (property.type !== 'Property' || property.value.type !== 'Identifier') continue;
+          const key = staticKey(property.key, property.computed);
+          const targetVariable = variableByDefinitionNode.get(property.value) || resolveLexicalVariable(property.value);
+          if (key === 'createRequire' && targetVariable) createRequireFactoryVariables.add(targetVariable);
+          if (key === 'require' && fromModuleNamespaceAlias && targetVariable) requireAliasVariables.add(targetVariable);
         }
       }
     }
