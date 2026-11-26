@@ -817,3 +817,34 @@ test('follows bound createRequire factories from imported and module namespace s
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('follows bound createRequire factories assigned to previously uninitialized variables', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'assigned-bound-create-require-factory-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
+    write('scripts/main.cjs', [
+      "const { createRequire } = require('node:module');",
+      'let assignedImportedFactory;',
+      'assignedImportedFactory = createRequire.bind(null);',
+      'const loadImported = assignedImportedFactory(__filename);',
+      "loadImported('./assigned-imported-factory-child.js');",
+      'let assignedModuleFactory;',
+      'assignedModuleFactory = module.createRequire.bind(module);',
+      'const loadModule = assignedModuleFactory(__filename);',
+      "loadModule('./assigned-module-factory-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/assigned-imported-factory-child.js');
+    write('scripts/assigned-module-factory-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/assigned-imported-factory-child.js'));
+    assert.ok(reachable.has('scripts/assigned-module-factory-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
