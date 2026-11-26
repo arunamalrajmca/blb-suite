@@ -672,3 +672,38 @@ test('follows node:module namespace imports and dynamic namespace aliases', () =
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('follows bound, call, and apply wrappers around Node module loaders', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapped-require-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const boundRequire = require.bind(module);',
+      "boundRequire('./bound-require-child.js');",
+      'const boundModuleRequire = module.require.bind(module);',
+      "boundModuleRequire('./bound-module-child.js');",
+      "require.call(module, './call-child.js');",
+      "require.apply(module, ['./apply-child.js']);",
+      "require.bind(module)('./inline-bound-child.js');",
+      'let replacedBound = require.bind(module);',
+      'replacedBound = replacement;',
+      "replacedBound('./not-bound-child.js');"
+    ].join(String.fromCharCode(10)));
+    for (const name of ['scripts/bound-require-child.js', 'scripts/bound-module-child.js',
+      'scripts/call-child.js', 'scripts/apply-child.js', 'scripts/inline-bound-child.js',
+      'scripts/not-bound-child.js']) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const name of ['scripts/bound-require-child.js', 'scripts/bound-module-child.js',
+      'scripts/call-child.js', 'scripts/apply-child.js', 'scripts/inline-bound-child.js']) {
+      assert.ok(reachable.has(name), name);
+    }
+    assert.equal(reachable.has('scripts/not-bound-child.js'), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+

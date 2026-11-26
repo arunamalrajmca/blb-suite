@@ -586,6 +586,20 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       return false;
     });
   }
+  function isRequireExpression(expression, seen = new Set()) {
+    if (!expression) return false;
+    if (expression.type === 'Identifier') return isRequireIdentifier(expression, seen);
+    if (expression.type === 'MemberExpression') {
+      const key = staticKey(expression.property, expression.computed);
+      if (key === 'bind') return isRequireExpression(expression.object, seen);
+      return key === 'require' && isNodeModuleIdentifier(expression.object);
+    }
+    if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
+        staticKey(expression.callee.property, expression.callee.computed) === 'bind') {
+      return isRequireExpression(expression.callee.object, seen);
+    }
+    return false;
+  }
   function isRequireIdentifier(identifier, seen = new Set()) {
     if (!identifier || identifier.type !== 'Identifier') return false;
     const variable = resolveLexicalVariable(identifier);
@@ -602,6 +616,9 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           staticKey(init.property, init.computed) === 'require') return true;
       if (init?.type === 'CallExpression' && init.callee.type === 'Identifier' &&
           isFactoryIdentifier(init.callee, new Set())) return true;
+      if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
+          staticKey(init.callee.property, init.callee.computed) === 'bind' &&
+          isRequireExpression(init.callee.object, new Set())) return true;
       if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
           isNodeModuleIdentifier(init.callee.object) &&
           staticKey(init.callee.property, init.callee.computed) === 'createRequire') return true;
@@ -672,6 +689,9 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           staticKey(node.init.callee.property, node.init.callee.computed) === 'createRequire') {
         requireAliases.add(node.id.name);
       }
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'MemberExpression' &&
+          staticKey(node.init.callee.property, node.init.callee.computed) === 'bind' &&
+          isRequireExpression(node.init.callee.object)) requireAliases.add(node.id.name);
       if (node.init?.type === 'ObjectExpression' && node.init.properties.some(item =>
         item.type === 'Property' && (item.key.name || item.key.value) === 'createRequire')) {
         // Keep object-literal exports of createRequire conservative unless a
@@ -721,8 +741,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         moduleNamespaceAliasVariables.delete(targetVariable);
         invalidatedModuleAliasVariables.add(targetVariable);
       }
-      const directRequire = value.type === 'Identifier' &&
-        isRequireIdentifier(value);
+      const directRequire = isRequireExpression(value);
       const moduleRequire = value.type === 'MemberExpression' &&
         value.object.type === 'Identifier' && isNodeModuleIdentifier(value.object) &&
         staticKey(value.property, value.computed) === 'require';
@@ -783,6 +802,29 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       // represent a forwarded loader. Preserve the uncertainty rather than
       // silently omitting the loading site from the candidate-only report.
       dynamic.push({ file: filename, line: node.loc.start.line, kind: 'unresolved-require-binding' });
+    } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+               ['call', 'apply'].includes(staticKey(node.callee.property, node.callee.computed)) &&
+               isRequireExpression(node.callee.object)) {
+      const method = staticKey(node.callee.property, node.callee.computed);
+      const supplied = method === 'call'
+        ? node.arguments[1]
+        : node.arguments[1]?.type === 'ArrayExpression' && node.arguments[1].elements.length === 1
+          ? node.arguments[1].elements[0] : null;
+      if (supplied?.type === 'Literal' && typeof supplied.value === 'string') {
+        specifier = supplied.value;
+        kind = method === 'call' ? 'require-call-wrapper' : 'require-apply-wrapper';
+      } else {
+        dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require-' + method + '-wrapper' });
+      }
+    } else if (node.type === 'CallExpression' && node.callee.type === 'CallExpression' &&
+               isRequireExpression(node.callee)) {
+      if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
+          typeof node.arguments[0].value === 'string') {
+        specifier = node.arguments[0].value;
+        kind = 'inline-bound-require';
+      } else {
+        dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-inline-bound-require' });
+      }
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
                node.callee.object.type === 'Identifier' && isNodeModuleIdentifier(node.callee.object) &&
                staticKey(node.callee.property, node.callee.computed) === 'require') {
