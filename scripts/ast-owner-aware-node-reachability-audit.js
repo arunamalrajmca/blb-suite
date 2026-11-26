@@ -127,6 +127,12 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
     else if (ownerByIdentifierName.get(name) !== owner) ownerByIdentifierName.set(name, null);
   }
 
+  function resolvedVariableOwner(identifier, ownersByVariable, fallbackByName) {
+    const reference = referenceByNode.get(identifier);
+    if (reference?.resolved) return ownersByVariable.get(reference.resolved) || null;
+    return fallbackByName.get(identifier.name) || null;
+  }
+
   function addOwner(id, kind, node) {
     if (!owners.has(id)) owners.set(id, {
       id, kind, line: node.loc.start.line, definitions: [], references: new Set(),
@@ -186,19 +192,15 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         }
         bindIdentifierOwner(node.id.name, id);
       } else if (node.init.type === 'NewExpression' && node.init.callee.type === 'Identifier') {
-        const reference = referenceByNode.get(node.init.callee);
-        const classOwner = (reference && reference.resolved
-          ? classInstanceOwners.get(reference.resolved) : null) ||
-          classInstanceOwnerByName.get(node.init.callee.name) || null;
+        const classOwner = resolvedVariableOwner(
+          node.init.callee, classInstanceOwners, classInstanceOwnerByName
+        );
         const variable = variableByDefinitionNode.get(node.id);
         if (variable && classOwner) variableOwners.set(variable, classOwner);
         if (classOwner) bindIdentifierOwner(node.id.name, classOwner);
       } else if (node.init.type === 'Identifier') {
-        const sourceReference = referenceByNode.get(node.init);
         const targetVariable = variableByDefinitionNode.get(node.id);
-        const sourceOwner = (sourceReference && sourceReference.resolved
-          ? variableOwners.get(sourceReference.resolved) : null) ||
-          ownerByIdentifierName.get(node.init.name) || null;
+        const sourceOwner = resolvedVariableOwner(node.init, variableOwners, ownerByIdentifierName);
         if (targetVariable && sourceOwner) variableOwners.set(targetVariable, sourceOwner);
         if (sourceOwner) bindIdentifierOwner(node.id.name, sourceOwner);
       }
