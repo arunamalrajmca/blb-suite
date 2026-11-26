@@ -25,7 +25,7 @@ function literalString(n,file,pathIdentifiers=null,unboundIdentifiers=null) {
   if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers,unboundIdentifiers),b=literalString(n.right,file,pathIdentifiers,unboundIdentifiers);return a===null||b===null?null:a+b;}
   if(n.type==='Identifier'&&n.name==='__dirname')return unboundIdentifiers===null||unboundIdentifiers.has(n)?path.dirname(file):null;
   if(n.type==='Identifier'&&n.name==='__filename')return unboundIdentifiers===null||unboundIdentifiers.has(n)?file:null;
-  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(n.callee.object.name))&&['join','resolve'].includes(n.callee.property.name)){
+  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(variableForIdentifier.get(n.callee.object)))&&['join','resolve'].includes(n.callee.property.name)){
     const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers,unboundIdentifiers));if(parts.some(x=>x===null))return null;
     return n.callee.property.name==='join'?path.join(...parts):path.resolve(...parts);
   }
@@ -98,6 +98,14 @@ function collectExportsAndImports(ast,file){
   };
   const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
   const unboundIdentifiers=new Set((scopeManager.globalScope?.through||[]).map(reference=>reference.identifier));
+  const variableForIdentifier=new Map();
+  for(const scope of scopeManager.scopes){
+    for(const variable of scope.variables||[]){
+      for(const identifier of variable.identifiers||[])variableForIdentifier.set(identifier,variable);
+      for(const definition of variable.defs||[])if(definition.name)variableForIdentifier.set(definition.name,variable);
+    }
+    for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
+  }
   const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
   const staticPropertyKey=node=>{
     if(node?.type==='Literal'&&(typeof node.value==='string'||typeof node.value==='number'))return String(node.value);
@@ -654,9 +662,9 @@ function collectExportsAndImports(ast,file){
       if(!selfAssignment)moduleExportsReplacements.push(n);
     }
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
-      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(specifier.local.name);
+      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(variableForIdentifier.get(specifier.local));
     }
-    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(n.id.name);
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(variableForIdentifier.get(n.id));
   });
   visit(ast,(n,parent)=>{
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='Identifier'
