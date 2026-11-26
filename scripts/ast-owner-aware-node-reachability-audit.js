@@ -564,7 +564,14 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           definition.node.type !== 'VariableDeclarator') return false;
       const declaration = definition.node;
       const init = declaration.init;
-      if (init?.type === 'Identifier') return isFactoryIdentifier(init, seen);
+      if (init?.type === 'Identifier') {
+        if (declaration.id.type === 'ObjectPattern' && isNodeModuleIdentifier(init)) {
+          return declaration.id.properties.some(property => property.type === 'Property' &&
+            staticKey(property.key, property.computed) === 'createRequire' &&
+            property.value.type === 'Identifier' && property.value.name === variable.name);
+        }
+        return isFactoryIdentifier(init, seen);
+      }
       if (init?.type === 'MemberExpression' && isNodeModuleIdentifier(init.object) &&
           staticKey(init.property, init.computed) === 'createRequire') return true;
       if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
