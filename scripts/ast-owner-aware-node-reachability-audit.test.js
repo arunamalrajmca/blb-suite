@@ -735,3 +735,33 @@ test('preserves outer require aliases when a same-named parameter is reassigned'
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('keeps outer createRequire factory valid when a shadowed parameter is reassigned', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-create-require-reassignment-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const { createRequire } = require('node:module');",
+      'function shadowAndReplace(createRequire) {',
+      '  createRequire = replacement;',
+      '  const localLoad = createRequire(import.meta.url);',
+      '  localLoad("./not-a-factory-target.js");',
+      '}',
+      'const load = createRequire(import.meta.url);',
+      'load("./outer-factory-target.js");'
+    ].join('\n'));
+    write('scripts/outer-factory-target.js');
+    write('scripts/not-a-factory-target.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/outer-factory-target.js'));
+    assert.equal(reachable.has('scripts/not-a-factory-target.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
