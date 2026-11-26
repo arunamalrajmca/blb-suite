@@ -23,7 +23,7 @@ test('does not classify shadowed require or module.require calls as module edges
    "  require('./worker.js');",
    "  module.require('./worker.js');",
    "}"
-  ].join('\\n'));
+  ].join('\n'));
   const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),false);
  } finally{fs.rmSync(root,{recursive:true,force:true});}
