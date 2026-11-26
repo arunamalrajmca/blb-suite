@@ -600,7 +600,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       return isFactoryExpression(expression.object, seen);
     }
     if (expression.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
-        ['bind', 'call', 'apply'].includes(staticKey(expression.callee.property, expression.callee.computed))) {
+        staticKey(expression.callee.property, expression.callee.computed) === 'bind') {
       return isFactoryExpression(expression.callee.object, seen);
     }
     return expression.type === 'MemberExpression' &&
