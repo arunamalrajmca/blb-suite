@@ -592,7 +592,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         if (declaration.id.type === 'ObjectPattern' && isNodeModuleIdentifier(init)) {
           return declaration.id.properties.some(property => property.type === 'Property' &&
             staticKey(property.key, property.computed) === 'createRequire' &&
-            property.value.type === 'Identifier' && property.value.name === variable.name);
+            destructuredTargetIdentifier(property)?.name === variable.name);
         }
         return isFactoryIdentifier(init, seen);
       }
@@ -613,7 +613,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           (moduleRequireFactory || awaitedModuleImport || moduleNamespaceDestructure)) {
         return declaration.id.properties.some(property => property.type === 'Property' &&
           staticKey(property.key, property.computed) === 'createRequire' &&
-          property.value.type === 'Identifier' && property.value.name === variable.name);
+          destructuredTargetIdentifier(property)?.name === variable.name);
       }
       return false;
     });
@@ -672,7 +672,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         if (definition.node.id.type === 'ObjectPattern' && isNodeModuleIdentifier(init)) {
           return definition.node.id.properties.some(property => property.type === 'Property' &&
             staticKey(property.key, property.computed) === 'require' &&
-            property.value.type === 'Identifier' && property.value.name === variable.name);
+            destructuredTargetIdentifier(property)?.name === variable.name);
         }
         return isRequireIdentifier(init, seen);
       }
@@ -691,7 +691,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           isNodeModuleIdentifier(init)) {
         return definition.node.id.properties.some(property => property.type === 'Property' &&
           staticKey(property.key, property.computed) === 'require' &&
-          property.value.type === 'Identifier' && property.value.name === variable.name);
+          destructuredTargetIdentifier(property)?.name === variable.name);
       }
       if (!init) {
         return (variable.references || []).some(write => {
