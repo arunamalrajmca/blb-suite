@@ -43,7 +43,7 @@ test('does not attribute shadowed same-name property reads to an outer owner', (
     'const service = { start() {}, stop() {} };',
     'function useShadow(service) { service.stop(); }',
     'service.start();'
-  ].join('\\n'), 'shadowed-owner.js');
+  ].join('\n'), 'shadowed-owner.js');
   assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
     ['object', 'stop']
   ]);
