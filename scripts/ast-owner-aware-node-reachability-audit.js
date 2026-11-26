@@ -272,9 +272,15 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
         );
         if (ownerNode && (ownerNode.type === 'ClassDeclaration' || ownerNode.type === 'ClassExpression')) {
           const methodNode = [...ancestors].reverse().find(item => item.type === 'MethodDefinition');
-          owner = methodNode && methodNode.static
-            ? classStaticOwnerByNode.get(ownerNode)
-            : classOwnerByNode.get(ownerNode);
+          const nestedOrdinaryFunction = ancestors.some(item =>
+            ['FunctionDeclaration', 'FunctionExpression'].includes(item.type) &&
+            (!methodNode || item !== methodNode.value)
+          );
+          if (!nestedOrdinaryFunction) {
+            owner = methodNode && methodNode.static
+              ? classStaticOwnerByNode.get(ownerNode)
+              : classOwnerByNode.get(ownerNode);
+          }
         } else if (ownerNode) {
           const methodProperty = [...ancestors].reverse().find(item =>
             item.type === 'Property' && item.method && item.value &&
