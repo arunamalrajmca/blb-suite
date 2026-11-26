@@ -290,7 +290,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'AssignmentExpression' && node.operator === '=' && node.left.type === 'Identifier') {
         const key = bindings.get(node.left), values = valuesOf(node.right, env, bindings);
-        if (key && isArrayProducer(node.right)) arrays.add(key);
+        if (key && isArrayProducer(node.right, bindings)) arrays.add(key);
         if (key && values) unionInto(env, key, values);
         if (key && node.right.type === 'Identifier') {
           const source = bindings.get(node.right); if (source) aliases.set(key, source);
