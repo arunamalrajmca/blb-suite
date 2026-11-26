@@ -765,3 +765,26 @@ test('keeps outer createRequire factory valid when a shadowed parameter is reass
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('follows a local alias of the imported createRequire factory', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'create-require-factory-alias-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      "const { createRequire } = require('node:module');",
+      'const makeRequire = createRequire;',
+      'const load = makeRequire(import.meta.url);',
+      'load("./factory-alias-target.js");'
+    ].join('\n'));
+    write('scripts/factory-alias-target.js');
+    const graph = buildModuleGraph(root);
+    assert.ok(new Set(graph.reachable).has('scripts/factory-alias-target.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
