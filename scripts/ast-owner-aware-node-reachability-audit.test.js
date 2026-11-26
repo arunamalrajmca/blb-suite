@@ -902,7 +902,12 @@ test('follows Node loader aliases assigned through object destructuring', () => 
       'let replacedFactory;',
       '({ createRequire: replacedFactory } = unrelated);',
       'const notALoader = replacedFactory(import.meta.url);',
-      "notALoader('./not-a-create-require-child.js');"
+      "notALoader('./not-a-create-require-child.js');",
+      'let overwrittenFactory;',
+      '({ createRequire: overwrittenFactory } = nodeModule);',
+      '({ createRequire: overwrittenFactory } = unrelated);',
+      'const overwrittenLoad = overwrittenFactory(import.meta.url);',
+      "overwrittenLoad('./not-overwritten-create-require-child.js');"
     ].join(String.fromCharCode(10)));
     write('scripts/cjs-main.cjs', [
       'let load;',
@@ -910,13 +915,19 @@ test('follows Node loader aliases assigned through object destructuring', () => 
       "load('./assigned-module-require-child.js');",
       'let replacedRequire;',
       '({ require: replacedRequire } = unrelated);',
-      "replacedRequire('./not-a-module-require-child.js');"
+      "replacedRequire('./not-a-module-require-child.js');",
+      'let overwrittenRequire;',
+      '({ require: overwrittenRequire } = module);',
+      '({ require: overwrittenRequire } = unrelated);',
+      "overwrittenRequire('./not-overwritten-module-require-child.js');"
     ].join(String.fromCharCode(10)));
     for (const name of [
       'scripts/assigned-create-require-child.js',
       'scripts/assigned-module-require-child.js',
       'scripts/not-a-create-require-child.js',
-      'scripts/not-a-module-require-child.js'
+      'scripts/not-a-module-require-child.js',
+      'scripts/not-overwritten-create-require-child.js',
+      'scripts/not-overwritten-module-require-child.js'
     ]) write(name);
     const graph = buildModuleGraph(root);
     const reachable = new Set(graph.reachable);
@@ -924,6 +935,8 @@ test('follows Node loader aliases assigned through object destructuring', () => 
     assert.ok(reachable.has('scripts/assigned-module-require-child.js'));
     assert.equal(reachable.has('scripts/not-a-create-require-child.js'), false);
     assert.equal(reachable.has('scripts/not-a-module-require-child.js'), false);
+    assert.equal(reachable.has('scripts/not-overwritten-create-require-child.js'), false);
+    assert.equal(reachable.has('scripts/not-overwritten-module-require-child.js'), false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
