@@ -787,6 +787,16 @@ test('traces async factory callback values through await inside object wrappers'
     edge.kind === 'object-wrap-factory-return-callback'));
 });
 
+test('does not treat shadowed Promise and Object methods as transparent built-in wrappers', () => {
+  const result = audit([
+    'function wrap(Promise, Object, callback) {',
+    '  const wrapped = [Promise.resolve(callback), Object.freeze(callback)];',
+    '  return wrapped;',
+    '}'
+  ].join('\\n'));
+  assert.equal(result.flowEdges.some(edge => edge.kind.includes('transparent-call')), false);
+});
+
 test('traces callback values through Promise.resolve before container storage and retrieval', () => {
   const result = audit([
     'const callback = () => start();',
