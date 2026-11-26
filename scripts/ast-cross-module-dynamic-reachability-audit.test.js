@@ -2363,3 +2363,41 @@ test('invalidates stale object origins after local aliases, returned values, and
    'an imported live binding must not keep the original export origin after reassignment');
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('resolves cross-module bindings through package self-references and package imports aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cross-package-scope-'));
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',type:'module',
+   exports:{'./service':'./src/service.js'},
+   imports:{'#internal/*':'./src/*.js'}
+  }));
+  fs.mkdirSync(path.join(root,'src'),{recursive:true});
+  fs.writeFileSync(path.join(root,'src/service.js'),'export const service = { start() {} };');
+  fs.writeFileSync(path.join(root,'src/helper.js'),'export const helper = { stop() {} };');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from 'fixture-suite/service'; import { helper } from '#internal/helper'; service.start(); helper.stop();");
+  const files=['src/service.js','src/helper.js','consumer.js'].map(file=>path.join(root,file));
+  const result=analyzeCrossModule(root,files);
+  assert.ok(result.links.some(item=>item.to==='src/service.js'&&item.imported==='service'&&item.exportedLocal==='service'));
+  assert.ok(result.links.some(item=>item.to==='src/helper.js'&&item.imported==='helper'&&item.exportedLocal==='helper'));
+  assert.equal(result.externalImports.some(item=>item.source==='fixture-suite/service'||item.source==='#internal/helper'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('resolves CommonJS cross-module bindings through the active package require export condition',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cross-package-require-'));
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',exports:{'./service':{import:'./src/service.mjs',require:'./src/service.cjs'}}
+  }));
+  fs.mkdirSync(path.join(root,'src'),{recursive:true});
+  fs.writeFileSync(path.join(root,'src/service.mjs'),'export const service = {};');
+  fs.writeFileSync(path.join(root,'src/service.cjs'),'module.exports = { service: {} };');
+  fs.writeFileSync(path.join(root,'consumer.cjs'),"const service = require('fixture-suite/service');");
+  const files=['src/service.mjs','src/service.cjs','consumer.cjs'].map(file=>path.join(root,file));
+  const result=analyzeCrossModule(root,files);
+  assert.ok(result.links.some(item=>item.to==='src/service.cjs'&&item.imported==='default'));
+  assert.equal(result.links.some(item=>item.to==='src/service.mjs'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

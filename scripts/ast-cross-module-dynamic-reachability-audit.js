@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const acorn = require('acorn');
 const { buildModuleGraph } = require('./ast-owner-aware-node-reachability-audit');
+const { resolveModuleFile } = require('./ast-unified-dynamic-runtime-reachability-audit');
 const EXCLUDED = new Set(['.git','node_modules','coverage','test-results','playwright-report','dist']);
 const EXT = ['.js','.cjs','.mjs','.json'];
 function walk(root) {
@@ -30,7 +31,15 @@ function literalString(n,file,pathIdentifiers=null) {
   }
   return null;
 }
-function resolveLocal(from,spec,files){if(!spec||(!path.isAbsolute(spec)&&!spec.startsWith('.')))return null;const b=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);const c=path.extname(b)?[b]:[...EXT.map(x=>b+x),...EXT.map(x=>path.join(b,'index'+x))];return c.find(x=>files.has(x))||null;}
+function resolveLocal(from,spec,files,root=path.resolve(__dirname,'..'),mode='import'){
+  if(!spec)return null;
+  if(path.isAbsolute(spec)||spec.startsWith('.')){
+    const base=path.isAbsolute(spec)?path.resolve(spec):path.resolve(path.dirname(from),spec);
+    const candidates=path.extname(base)?[base]:[...EXT.map(ext=>base+ext),...EXT.map(ext=>path.join(base,'index'+ext))];
+    return candidates.find(candidate=>files.has(candidate))||null;
+  }
+  return resolveModuleFile(from,spec,files,root,mode);
+}
 function collectExportsAndImports(ast,file){
   const exports=new Map(),imports=[],pathIdentifiers=new Set(),commonJsExportNames=new Set();
   let exportsAliasDetached=false;
@@ -841,7 +850,7 @@ function collectExportsAndImports(ast,file){
   });
   return {exports,imports};
 }
-function resolveExportOrigin(file,name,meta,files,active=new Set()){
+function resolveExportOrigin(file,name,meta,files,active=new Set(),root=path.resolve(__dirname,'..')){
   const key=file+'::'+name;
   if(active.has(key))return null;
   const data=meta.get(file);
@@ -851,14 +860,14 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
     if(typeof local==='string'){
       const importedBinding=data.imports.find(item=>item.local===local&&!item.reexport&&!item.reexportAll&&!item.reexportNamespace&&!item.dynamic);
       if(importedBinding){
-        const target=resolveLocal(file,importedBinding.source,new Set(files));
+        const target=resolveLocal(file,importedBinding.source,new Set(files),root,importedBinding.commonjs?'require':'import');
         if(!target)return null;
         if(importedBinding.imported==='*')return {file:target,local:null,namespace:true,namespaceTarget:target};
-        return resolveExportOrigin(target,importedBinding.imported,meta,files,new Set([...active,key]));
+        return resolveExportOrigin(target,importedBinding.imported,meta,files,new Set([...active,key]),root);
       }
     }
     if(name==='default'&&data.imports.some(item=>item.commonjsReexportAll)){
-      const item=data.imports.find(entry=>entry.commonjsReexportAll),target=resolveLocal(file,item.source,new Set(files));
+      const item=data.imports.find(entry=>entry.commonjsReexportAll),target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');
       if(target)return {file:target,local:null,namespace:true,namespaceTarget:target};
     }
     return {file,local:typeof local==='string'?local:null};
@@ -868,9 +877,9 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
   if(explicit.length){
     const candidates=new Map();
     for(const item of explicit){
-      const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
+      const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');if(!target)continue;
       const origin=item.reexportNamespace?{file:target,local:null,namespace:true,namespaceTarget:target}:
-        resolveExportOrigin(target,item.imported,meta,files,next);
+        resolveExportOrigin(target,item.imported,meta,files,next,root);
       if(origin)candidates.set(origin.namespace?'namespace::'+origin.namespaceTarget:origin.file+'::'+(origin.local||'[anonymous]'),origin);
     }
     return candidates.size===1?[...candidates.values()][0]:null;
@@ -879,23 +888,23 @@ function resolveExportOrigin(file,name,meta,files,active=new Set()){
   for(const item of data.imports){
     if(!item.reexportAll&&!item.commonjsReexportAll)continue;
     if(name==='default')continue;
-    const target=resolveLocal(file,item.source,new Set(files));if(!target)continue;
-    const origin=resolveExportOrigin(target,name,meta,files,next);
+    const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');if(!target)continue;
+    const origin=resolveExportOrigin(target,name,meta,files,next,root);
     if(origin)candidates.set(origin.namespace?'namespace::'+origin.namespaceTarget:origin.file+'::'+(origin.local||'[anonymous]'),origin);
   }
   return candidates.size===1?[...candidates.values()][0]:null;
 }
-function exportedNames(file,meta,files,seen=new Set()){
+function exportedNames(file,meta,files,seen=new Set(),root=path.resolve(__dirname,'..')){
   if(seen.has(file))return new Set();
   const next=new Set(seen);next.add(file);
   const data=meta.get(file),names=new Set(data?[...data.exports.keys()]:[]);
   if(!data)return names;
   for(const item of data.imports){
     if(!item.reexport&&!item.reexportAll&&!item.reexportNamespace)continue;
-    const target=resolveLocal(file,item.source,new Set(files));
+    const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');
     if(!target)continue;
     if(item.reexport||item.reexportNamespace)names.add(item.exported);
-    if(item.reexportAll||item.commonjsReexportAll)for(const name of exportedNames(target,meta,files,next))if(name!=='default')names.add(name);
+    if(item.reexportAll||item.commonjsReexportAll)for(const name of exportedNames(target,meta,files,next,root))if(name!=='default')names.add(name);
   }
   return names;
 }
@@ -903,9 +912,9 @@ function analyzeCrossModule(root,files){
   const asts=new Map(files.map(f=>[f,parse(fs.readFileSync(f,'utf8'),f)]));
   const fileSet=new Set(files),meta=new Map([...asts].map(([f,ast])=>[f,collectExportsAndImports(ast,f)]));
   const links=[],unresolved=[],externalImports=[],propertyReferences=[],dynamicPropertyReferences=[];
-  const originFor=(file,name)=>resolveExportOrigin(file,name,meta,files);
+  const originFor=(file,name)=>resolveExportOrigin(file,name,meta,files,new Set(),root);
   for(const [file,data] of meta)for(const item of data.imports){
-    const target=resolveLocal(file,item.source,fileSet);
+    const target=resolveLocal(file,item.source,fileSet,root,item.commonjs?'require':'import');
     if(!target){
       const entry={file:path.relative(root,file),source:item.source,dynamic:!!item.dynamic,line:item.line||null};
       if((item.dynamic&&item.source===null)||(typeof item.source==='string'&&(item.source.startsWith('.')||path.isAbsolute(item.source))))unresolved.push(entry);
@@ -917,7 +926,7 @@ function analyzeCrossModule(root,files){
       continue;
     }
     if(item.reexportAll){
-      for(const name of exportedNames(target,meta,files)){
+      for(const name of exportedNames(target,meta,files,new Set(),root)){
         if(name==='default')continue;
         const origin=originFor(target,name);
         links.push({from:path.relative(root,file),to:path.relative(root,target),imported:name,exportedLocal:origin?.local??null,originFile:origin?path.relative(root,origin.file):null,unresolvedExport:!origin,reexport:true,namespace:!!origin?.namespace});
@@ -935,7 +944,7 @@ function analyzeCrossModule(root,files){
   }
   for(const [file,data] of meta)for(const item of data.imports){
     if(!item.local||item.reexport)continue;
-    const target=resolveLocal(file,item.source,fileSet);if(!target)continue;
+    const target=resolveLocal(file,item.source,fileSet,root,item.commonjs?'require':'import');if(!target)continue;
     const traceNamespaceChain=(namespaceTarget,node,parent)=>{
       if(node.type!=='MemberExpression'||(parent?.type==='MemberExpression'&&parent.object===node))return;
       const properties=[];let current=node;
@@ -1039,10 +1048,10 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   for(const [file,data] of meta)for(const item of data.imports){
     if(!item.local)continue;
     const localVariable=getTop(file,item.local);
-    const target=resolveLocal(file,item.source,new Set(files));
+    const target=resolveLocal(file,item.source,new Set(files),root,item.commonjs?'require':'import');
     if(!localVariable||!target)continue;
     if(item.imported==='*'||item.reexport||item.reexportNamespace)continue;
-    const origin=resolveExportOrigin(target,item.imported,meta,files);
+    const origin=resolveExportOrigin(target,item.imported,meta,files,new Set(),root);
     if(!origin||!origin.local||origin.namespace)continue;
     const targetVariable=getTop(origin.file,origin.local);
     if(!targetVariable)continue;
@@ -1279,7 +1288,7 @@ function analyzeDynamicExecution(root,files,graph){
     const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)&&(c.type==='Identifier'||object==='module'||object==='Module');
     if(loader){
       const spec=literalString(n.arguments[0],file);
-      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set)):null;
+      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
       const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
       if(target)extra.push({from:file,to:target});

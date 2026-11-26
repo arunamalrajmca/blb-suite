@@ -2193,4 +2193,4 @@ function run(root) {
   return result;
 }
 if (require.main === module) run(process.argv[2]);
-module.exports = { analyze, run, staticValue, resolveFile };
+module.exports = { analyze, run, staticValue, resolveFile, resolveModuleFile };
