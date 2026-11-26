@@ -2411,10 +2411,23 @@ test('keeps unresolved package self-references and package-import aliases in the
    exports:{'./missing':'./src/missing.js'},
    imports:{'#missing':'./src/not-present.js'}
   }));
-  fs.writeFileSync(path.join(root,'consumer.js'),"import 'fixture-suite/missing'; import '#missing';");
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { missingA } from 'fixture-suite/missing'; import { missingB } from '#missing';");
   const result=analyzeCrossModule(root,[path.join(root,'consumer.js')]);
   assert.ok(result.unresolved.some(item=>item.source==='fixture-suite/missing'));
   assert.ok(result.unresolved.some(item=>item.source==='#missing'));
   assert.equal(result.externalImports.some(item=>item.source==='fixture-suite/missing'||item.source==='#missing'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('records side-effect-only static imports as cross-module execution links',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cross-side-effect-import-'));
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({type:'module'}));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import './side-effect.js';");
+  fs.writeFileSync(path.join(root,'side-effect.js'),'globalThis.sideEffectFixture = true;');
+  const files=['consumer.js','side-effect.js'].map(file=>path.join(root,file));
+  const result=analyzeCrossModule(root,files);
+  assert.ok(result.links.some(item=>item.from==='consumer.js'&&item.to==='side-effect.js'&&item.imported==='*'));
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
