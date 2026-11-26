@@ -163,7 +163,7 @@ test('records computed-write values and distinguishes property deletion', () => 
 
 test('does not classify shadowed built-in names as array producers', () => {
   const result = run({
-    'main.js': "function exercise(Array, Object, Promise) { const from = Array.from(); const keys = Object.keys(); const all = Promise.all(); const index = getIndex(); from[index]; keys[index]; all[index]; }"
+    'main.js': "function exercise(Array, Object, Promise) { let from, keys, all; from = Array.from(); keys = Object.keys(); all = Promise.all(); const index = getIndex(); from[index]; keys[index]; all[index]; }"
   });
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.equal(result.observations.length, 3);
@@ -172,7 +172,7 @@ test('does not classify shadowed built-in names as array producers', () => {
 
 test('continues to recognize unshadowed built-in array producers', () => {
   const result = run({
-    'main.js': "const from = Array.from('abc'); const keys = Object.keys({a:1}); const all = Promise.all([]); const index = getIndex(); from[index]; keys[index]; all[index];"
+    'main.js': "let from; from = Array.from('abc'); const keys = Object.keys({a:1}); const all = Promise.all([]); const index = getIndex(); from[index]; keys[index]; all[index];"
   });
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.equal(result.observations.length, 3);
