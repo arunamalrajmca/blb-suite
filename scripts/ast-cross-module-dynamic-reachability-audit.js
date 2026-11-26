@@ -1090,7 +1090,9 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const functionForImportedVariable=new Map();
   for(const [variable,info] of importsForVariable){
     const fn=functionForVariable.get(info.targetVariable);
-    if(fn)functionForImportedVariable.set(variable,fn);
+    // ESM imports are live bindings: once the exporting binding is reassigned,
+    // the original declaration is no longer a safe identity for importer calls.
+    if(fn&&!reassignedFunctionVariables.has(info.targetVariable))functionForImportedVariable.set(variable,fn);
   }
   const resolveFunction=(file,identifier)=>{
     let variable=variableForNode.get(identifier);
@@ -1127,7 +1129,8 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       if(!isRoot&&['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type))return;
       if(node.type==='ReturnStatement'&&node.argument){
         if(node.argument.type==='Identifier'){
-          const variable=variableForNode.get(node.argument);if(variable)returned.push({variable,parameterIndex:fn.params.indexOf(variable)});
+          const variable=variableForNode.get(node.argument);
+          if(variable&&!reassignedParameterVariables.has(variable))returned.push({variable,parameterIndex:fn.params.indexOf(variable)});
         } else if(node.argument.type==='CallExpression'){
           const nested=resolveFunction(fn.file,node.argument.callee);
           if(nested){
@@ -1175,7 +1178,8 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       if(!fn)return;
       for(let i=0;i<Math.min(fn.params.length,node.arguments.length);i++){
         const arg=node.arguments[i], parameter=fn.params[i], parameterNode=fn.paramNodes[i];
-        if(arg.type==='Identifier')addEdge(variableForNode.get(arg),parameter);
+        if(arg.type==='Identifier'&&parameter&&!reassignedParameterVariables.has(parameter))
+          addEdge(variableForNode.get(arg),parameter);
         if(parameterNode?.type==='ObjectPattern'&&arg.type==='Identifier'){
           if(!patternParameterArguments.has(parameterNode))patternParameterArguments.set(parameterNode,new Set());
           const argumentVariable=variableForNode.get(arg);

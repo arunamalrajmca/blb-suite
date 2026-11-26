@@ -2282,3 +2282,52 @@ test('keeps computed parameter keys dynamic after every kind of parameter write'
   } finally{fs.rmSync(root,{recursive:true,force:true});}
  }
 });
+
+
+test('does not propagate object identity through reassigned parameters or their return values',()=>{
+ const mutations=[
+  ['assignment','target = runtimeOverride; target.start();'],
+  ['update','target++; target.start();'],
+  ['destructuring','({ target } = runtimeOverride); target.start();'],
+  ['for-of','for (target of runtimeTargets) target.start();']
+ ];
+ for(const [name,body] of mutations){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-object-parameter-write-'));
+  try{
+   fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+   fs.writeFileSync(path.join(root,'helper.js'),`export function invoke(target) { ${body} }`);
+   fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api);");
+   const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+   assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'),
+    `${name} writes must prevent stale callsite object identity from reaching property reads`);
+  } finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-returned-reassigned-parameter-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),'export function replace(target) { target = runtimeOverride; return target; }');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { replace } from './helper.js'; const result = replace(api); result.start();");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'),
+   'a reassigned parameter must not leak its original object identity through a return edge');
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('does not treat reassigned exported function bindings as their original imported helper',()=>{
+ const fixtures=[
+  ['declaration','export function invoke(target) { target.start(); } invoke = runtimeOverride;'],
+  ['arrow','export let invoke = target => target.start(); invoke = runtimeOverride;']
+ ];
+ for(const [name,source] of fixtures){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-reassigned-exported-function-'));
+  try{
+   fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
+   fs.writeFileSync(path.join(root,'helper.js'),source);
+   fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api);");
+   const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+   assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'),
+    `${name} export reassignment must invalidate the imported helper's original function identity`);
+  } finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+});
