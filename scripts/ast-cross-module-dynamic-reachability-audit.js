@@ -31,6 +31,26 @@ function literalString(n,file,pathIdentifiers=null) {
   }
   return null;
 }
+function isPackageScopedSpecifier(from,spec,root){
+  if(typeof spec!=='string')return false;
+  if(spec.startsWith('#'))return true;
+  const boundary=path.resolve(root);
+  let directory=path.dirname(from);
+  while(directory===boundary||directory.startsWith(boundary+path.sep)){
+    const manifestPath=path.join(directory,'package.json');
+    if(fs.existsSync(manifestPath)){
+      try{
+        const name=JSON.parse(fs.readFileSync(manifestPath,'utf8')).name;
+        return typeof name==='string'&&(spec===name||spec.startsWith(name+'/'));
+      }catch{return false;}
+    }
+    if(directory===boundary)break;
+    const parent=path.dirname(directory);
+    if(parent===directory)break;
+    directory=parent;
+  }
+  return false;
+}
 function resolveLocal(from,spec,files,root=path.resolve(__dirname,'..'),mode='import'){
   if(!spec)return null;
   if(path.isAbsolute(spec)||spec.startsWith('.')){
@@ -917,7 +937,7 @@ function analyzeCrossModule(root,files){
     const target=resolveLocal(file,item.source,fileSet,root,item.commonjs?'require':'import');
     if(!target){
       const entry={file:path.relative(root,file),source:item.source,dynamic:!!item.dynamic,line:item.line||null};
-      if((item.dynamic&&item.source===null)||(typeof item.source==='string'&&(item.source.startsWith('.')||path.isAbsolute(item.source))))unresolved.push(entry);
+      if((item.dynamic&&item.source===null)||(typeof item.source==='string'&&(item.source.startsWith('.')||path.isAbsolute(item.source)||isPackageScopedSpecifier(file,item.source,root))))unresolved.push(entry);
       else externalImports.push(entry);
       continue;
     }

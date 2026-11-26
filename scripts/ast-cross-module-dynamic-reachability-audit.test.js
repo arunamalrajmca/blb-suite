@@ -2401,3 +2401,20 @@ test('resolves CommonJS cross-module bindings through the active package require
   assert.equal(result.links.some(item=>item.to==='src/service.mjs'),false);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('keeps unresolved package self-references and package-import aliases in the unresolved inventory',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'cross-unresolved-package-scope-'));
+ try{
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({
+   name:'fixture-suite',type:'module',
+   exports:{'./missing':'./src/missing.js'},
+   imports:{'#missing':'./src/not-present.js'}
+  }));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import 'fixture-suite/missing'; import '#missing';");
+  const result=analyzeCrossModule(root,[path.join(root,'consumer.js')]);
+  assert.ok(result.unresolved.some(item=>item.source==='fixture-suite/missing'));
+  assert.ok(result.unresolved.some(item=>item.source==='#missing'));
+  assert.equal(result.externalImports.some(item=>item.source==='fixture-suite/missing'||item.source==='#missing'),false);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
