@@ -552,6 +552,20 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (!variable || invalidatedModuleAliasVariables.has(variable)) return false;
     return moduleNamespaceAliasVariables.has(variable) || moduleObjectAliasVariables.has(variable);
   }
+  function isLatestDestructuredAssignmentAlias(variable, propertyName) {
+    const writes = (variable.references || []).filter(reference => reference.isWrite())
+      .sort((left, right) => left.identifier.start - right.identifier.start);
+    const latest = writes[writes.length - 1];
+    if (!latest) return false;
+    const property = parentByNode.get(latest.identifier);
+    const pattern = property && parentByNode.get(property);
+    const assignment = pattern && parentByNode.get(pattern);
+    return property?.type === 'Property' && property.value === latest.identifier &&
+      staticKey(property.key, property.computed) === propertyName &&
+      pattern?.type === 'ObjectPattern' && assignment?.type === 'AssignmentExpression' &&
+      assignment.left === pattern && assignment.right?.type === 'Identifier' &&
+      isNodeModuleIdentifier(assignment.right);
+  }
   function isFactoryIdentifier(identifier, seen = new Set()) {
     if (!identifier || identifier.type !== 'Identifier') return false;
     const variable = resolveLexicalVariable(identifier);
@@ -595,7 +609,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
       return false;
     });
-    if (declaredFactory) return true;
+    if (declaredFactory || isLatestDestructuredAssignmentAlias(variable, 'createRequire')) return true;
     const uninitializedVariable = (variable.defs || []).some(definition =>
       definition.type === 'Variable' && definition.node?.type === 'VariableDeclarator' &&
       !definition.node.init
@@ -641,6 +655,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (seen.has(variable)) return false;
     seen.add(variable);
     if (!requireAliasVariables.has(variable)) return false;
+    if (isLatestDestructuredAssignmentAlias(variable, 'require')) return true;
     return (variable.defs || []).some(definition => {
       if (definition.type !== 'Variable' || !definition.node ||
           definition.node.type !== 'VariableDeclarator') return false;
