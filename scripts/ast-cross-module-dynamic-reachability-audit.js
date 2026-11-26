@@ -18,15 +18,15 @@ function walk(root) {
 }
 function parse(s,f) { let err; for(const sourceType of ['script','module']) try{return acorn.parse(s,{ecmaVersion:'latest',sourceType,locations:true,ranges:true,allowHashBang:true});}catch(e){err=e;} throw new Error(f+': '+err.message); }
 function visit(n,fn,p=null) { if(!n||typeof n!=='object'||typeof n.type!=='string')return; fn(n,p); for(const [k,v] of Object.entries(n)){if(['loc','start','end','range'].includes(k))continue;if(Array.isArray(v))v.forEach(x=>visit(x,fn,n));else if(v&&typeof v.type==='string')visit(v,fn,n);} }
-function literalString(n,file,pathIdentifiers=null) {
+function literalString(n,file,pathIdentifiers=null,unboundIdentifiers=null) {
   if(!n)return null;
   if(n.type==='Literal'&&typeof n.value==='string')return n.value;
   if(n.type==='TemplateLiteral'&&!n.expressions.length)return n.quasis[0].value.cooked;
-  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers),b=literalString(n.right,file,pathIdentifiers);return a===null||b===null?null:a+b;}
-  if(n.type==='Identifier'&&n.name==='__dirname')return path.dirname(file);
-  if(n.type==='Identifier'&&n.name==='__filename')return file;
+  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers,unboundIdentifiers),b=literalString(n.right,file,pathIdentifiers,unboundIdentifiers);return a===null||b===null?null:a+b;}
+  if(n.type==='Identifier'&&n.name==='__dirname')return unboundIdentifiers===null||unboundIdentifiers.has(n)?path.dirname(file):null;
+  if(n.type==='Identifier'&&n.name==='__filename')return unboundIdentifiers===null||unboundIdentifiers.has(n)?file:null;
   if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(n.callee.object.name))&&['join','resolve'].includes(n.callee.property.name)){
-    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers));if(parts.some(x=>x===null))return null;
+    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers,unboundIdentifiers));if(parts.some(x=>x===null))return null;
     return n.callee.property.name==='join'?path.join(...parts):path.resolve(...parts);
   }
   return null;
@@ -97,8 +97,8 @@ function collectExportsAndImports(ast,file){
     exportsAliasDetached=true;
   };
   const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
-  const isUnboundGlobal=node=>!!node&&node.type==='Identifier'
-    &&(scopeManager.globalScope?.through||[]).some(reference=>reference.identifier===node);
+  const unboundIdentifiers=new Set((scopeManager.globalScope?.through||[]).map(reference=>reference.identifier));
+  const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
   const staticPropertyKey=node=>{
     if(node?.type==='Literal'&&(typeof node.value==='string'||typeof node.value==='number'))return String(node.value);
     if(node?.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked;
@@ -671,7 +671,7 @@ function collectExportsAndImports(ast,file){
         for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
       }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
     }
-    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
+    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
