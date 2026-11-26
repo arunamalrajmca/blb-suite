@@ -2227,3 +2227,21 @@ test('invalidates native method aliases patched through global-object paths',()=
    'patching Object.assign through globalThis must invalidate previously inferred export owners');
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+
+test('does not propagate imported computed-property keys through reassigned parameters',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-reassigned-key-parameter-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {}, stop() {} }; export { service };');
+  fs.writeFileSync(path.join(root,'helper.js'),[
+   'export function invoke(target, key) {',
+   "  key = runtimeOverride || key;",
+   '  target[key]();',
+   '}'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api, 'start');");
+  const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.equal(r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.to==='service.js'&&x.flow==='interprocedural-parameter-key').length,0);
+  assert.ok(r.interprocedural.dynamicPropertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property===null));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});

@@ -999,6 +999,7 @@ function analyzeCrossModule(root,files){
 function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const eslintScope=require('eslint-scope');
   const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map(),functionAliases=new Map(),parameterValues=new Map();
+  const reassignedParameterVariables=new Set();
   for(const [file,ast] of asts){
     const manager=eslintScope.analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
     for(const scope of manager.scopes){
@@ -1008,6 +1009,10 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
         if(scope.type==='module'||scope.type==='global')topLevel.set(file+'::'+variable.name,variable);
       }
       for(const ref of scope.references||[])if(ref.resolved)variableForNode.set(ref.identifier,ref.resolved);
+      for(const variable of scope.variables||[]){
+        if(!(variable.defs||[]).some(def=>def.type==='Parameter'))continue;
+        if((variable.references||[]).some(ref=>ref.isWrite()&&ref.identifier!==variable.defs[0]?.name))reassignedParameterVariables.add(variable);
+      }
     }
   }
   const getTop=(file,name)=>topLevel.get(file+'::'+name)||null;
@@ -1144,7 +1149,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
           if(argumentVariable)patternParameterArguments.get(parameterNode).add(argumentVariable);
         }
         const value=literalString(arg,file);
-        if(parameter&&value!==null){
+        if(parameter&&value!==null&&!reassignedParameterVariables.has(parameter)){
           if(!parameterValues.has(parameter))parameterValues.set(parameter,new Set());
           parameterValues.get(parameter).add(value);
         }
@@ -1190,7 +1195,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     let property=node.computed?(node.property.type==='Literal'&&(typeof node.property.value==='string'||typeof node.property.value==='number')?String(node.property.value):null):(node.property.name||null);
     if(property===null&&node.computed&&node.property.type==='Identifier'){
       const parameter=variableForNode.get(node.property);
-      const values=parameter&&parameterValues.get(parameter);
+      const values=parameter&&!reassignedParameterVariables.has(parameter)&&parameterValues.get(parameter);
       if(values&&values.size&&values.size<=32){
         for(const value of values)for(const origin of objectOrigins.values()){
           propertyReferences.push({from:path.relative(root,file),to:path.relative(root,origin.target),local:node.object.name,exportedLocal:origin.exportedLocal,property:value,line:node.loc.start.line,flow:'interprocedural-parameter-key'});
