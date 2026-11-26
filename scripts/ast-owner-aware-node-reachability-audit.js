@@ -526,7 +526,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     }
   }
-  const requireAliases = new Set();
+  const requireAliasVariables = new Set();
   const moduleObjectAliasVariables = new Set();
   const moduleNamespaceAliasVariables = new Set();
   const invalidatedModuleAliasVariables = new Set();
@@ -606,7 +606,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (!variable) return identifier.name === 'require';
     if (seen.has(variable)) return false;
     seen.add(variable);
-    if (!requireAliases.has(variable.name)) return false;
+    if (!requireAliasVariables.has(variable)) return false;
     return (variable.defs || []).some(definition => {
       if (definition.type !== 'Variable' || !definition.node ||
           definition.node.type !== 'VariableDeclarator') return false;
@@ -671,27 +671,36 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           invalidatedModuleAliasVariables.delete(variable);
         }
       }
-      if (node.init?.type === 'Identifier' && (node.init.name === 'require' || requireAliases.has(node.init.name))) {
-        requireAliases.add(node.id.name);
+      if (node.init?.type === 'Identifier' && isRequireIdentifier(node.init)) {
+        const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (aliasVariable) requireAliasVariables.add(aliasVariable);
       }
       if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
-          isNodeModuleIdentifier(node.init.object) && staticKey(node.init.property, node.init.computed) === 'require') requireAliases.add(node.id.name);
+          isNodeModuleIdentifier(node.init.object) && staticKey(node.init.property, node.init.computed) === 'require') {
+        const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (aliasVariable) requireAliasVariables.add(aliasVariable);
+      }
       if (node.init?.type === 'MemberExpression' && isNodeModuleIdentifier(node.init.object) &&
           staticKey(node.init.property, node.init.computed) === 'createRequire') {
         createRequireAliases.add(node.id.name);
       }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
           isFactoryIdentifier(node.init.callee)) {
-        requireAliases.add(node.id.name);
+        const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (aliasVariable) requireAliasVariables.add(aliasVariable);
       }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'MemberExpression' &&
           isNodeModuleIdentifier(node.init.callee.object) &&
           staticKey(node.init.callee.property, node.init.callee.computed) === 'createRequire') {
-        requireAliases.add(node.id.name);
+        const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (aliasVariable) requireAliasVariables.add(aliasVariable);
       }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'MemberExpression' &&
           staticKey(node.init.callee.property, node.init.callee.computed) === 'bind' &&
-          isRequireExpression(node.init.callee.object)) requireAliases.add(node.id.name);
+          isRequireExpression(node.init.callee.object)) {
+        const aliasVariable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (aliasVariable) requireAliasVariables.add(aliasVariable);
+      }
       if (node.init?.type === 'ObjectExpression' && node.init.properties.some(item =>
         item.type === 'Property' && (item.key.name || item.key.value) === 'createRequire')) {
         // Keep object-literal exports of createRequire conservative unless a
@@ -747,8 +756,9 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         staticKey(value.property, value.computed) === 'require';
       const createRequireResult = value.type === 'CallExpression' &&
         value.callee.type === 'Identifier' && isFactoryIdentifier(value.callee);
-      if (directRequire || moduleRequire || createRequireResult) requireAliases.add(target);
-      else requireAliases.delete(target);
+      if (directRequire || moduleRequire || createRequireResult) {
+        if (targetVariable) requireAliasVariables.add(targetVariable);
+      } else if (targetVariable) requireAliasVariables.delete(targetVariable);
 
       const assignedCreateRequire = value.type === 'Identifier' && createRequireAliases.has(value.name) ||
         value.type === 'MemberExpression' && value.property &&
@@ -762,7 +772,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     }
     if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') {
-      requireAliases.delete(node.argument.name);
+      const updatedRequireVariable = resolveLexicalVariable(node.argument);
+      if (updatedRequireVariable) requireAliasVariables.delete(updatedRequireVariable);
       const updatedModuleVariable = resolveLexicalVariable(node.argument);
       if (updatedModuleVariable) {
         moduleObjectAliasVariables.delete(updatedModuleVariable);
