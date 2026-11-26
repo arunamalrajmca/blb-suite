@@ -677,6 +677,15 @@ function collectExportsAndImports(ast,file){
       if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)requireAliases.add(variable);
     }
   });
+  // Resolve path-module aliases through stable CommonJS loader aliases after
+  // the first pass has collected loader bindings, independent of declaration order.
+  visit(ast,(n)=>{
+    if(n.type!=='VariableDeclarator'||n.id.type!=='Identifier'||n.init?.type!=='CallExpression'
+      ||n.init.callee.type!=='Identifier'||!requireAliases.has(variableForIdentifier.get(n.init.callee))
+      ||n.init.arguments[0]?.type!=='Literal'||!['path','node:path'].includes(n.init.arguments[0].value))return;
+    const variable=variableForIdentifier.get(n.id);
+    if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)pathIdentifiers.add(variable);
+  });
   visit(ast,(n,parent)=>{
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='Identifier'
       &&n.left.name==='exports'&&isUnboundGlobal(n.left)){
