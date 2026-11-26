@@ -34,12 +34,12 @@ test('workflow changes invalidate inventory and selector checkpoints', () => {
     execFileSync('git', ['config', 'user.name', 'CI Test'], { cwd: directory });
     fs.mkdirSync(path.join(directory, 'extension'), { recursive: true });
     fs.mkdirSync(path.join(directory, '.github', 'workflows'), { recursive: true });
-    fs.writeFileSync(path.join(directory, 'extension', 'manifest.json'), '{"version":"1"}\\n');
-    fs.writeFileSync(path.join(directory, '.github', 'workflows', 'browser-tests.yml'), 'name: first\\n');
+    fs.writeFileSync(path.join(directory, 'extension', 'manifest.json'), '{"version":"1"}\n');
+    fs.writeFileSync(path.join(directory, '.github', 'workflows', 'browser-tests.yml'), 'name: first\n');
     execFileSync('git', ['add', '.'], { cwd: directory });
     execFileSync('git', ['commit', '-qm', 'initial'], { cwd: directory });
     const before = computeSectionFingerprints(directory);
-    fs.writeFileSync(path.join(directory, '.github', 'workflows', 'browser-tests.yml'), 'name: changed\\n');
+    fs.writeFileSync(path.join(directory, '.github', 'workflows', 'browser-tests.yml'), 'name: changed\n');
     execFileSync('git', ['add', '.'], { cwd: directory });
     execFileSync('git', ['commit', '-qm', 'change workflow'], { cwd: directory });
     const after = computeSectionFingerprints(directory);

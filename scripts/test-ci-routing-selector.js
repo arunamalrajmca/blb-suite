@@ -258,7 +258,7 @@ try {
 
   // The extracted Kings Bible collector should select its existing behavior suite only.
   resetScenario(base);
-  write('extension/kings-bible-collector.js', '// changed Kings Bible feature\\n');
+  write('extension/kings-bible-collector.js', '// changed Kings Bible feature\n');
   commit('change Kings Bible collector feature');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'Kings Bible feature');
@@ -268,7 +268,7 @@ try {
 
   // Webster's collector has dedicated behavior coverage and should not trigger unrelated suites.
   resetScenario(base);
-  write('extension/webster-collector.js', '// changed Webster collector\\n');
+  write('extension/webster-collector.js', '// changed Webster collector\n');
   commit('change Webster collector');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'Webster collector');
@@ -283,7 +283,7 @@ try {
   // The generated case-sensitive word set now has live MV3 routing coverage.
   // Its edits should run the focused case-sensitive browser spec, not the full suite.
   resetScenario(base);
-  write('extension/kjv-case-sensitive-words.js', '// changed generated KJV case-sensitive word set\\n');
+  write('extension/kjv-case-sensitive-words.js', '// changed generated KJV case-sensitive word set\n');
   commit('change generated KJV case-sensitive word set');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'KJV case-sensitive word set');
@@ -296,7 +296,7 @@ try {
 
   // Criteria Search navigation has a dedicated browser spec for its page-specific handlers.
   resetScenario(base);
-  write('extension/criteria-search-navigation.js', '// changed Criteria Search navigation\\n');
+  write('extension/criteria-search-navigation.js', '// changed Criteria Search navigation\n');
   commit('change Criteria Search navigation');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'Criteria Search navigation');
@@ -309,8 +309,8 @@ try {
 
   // Background changes have an explicit behavior map; do not override it with the full-suite fallback.
   resetScenario(base);
-  write('extension/background.js', '// isolated omnibox routing change\\n');
-  write('tests/browser/omnibox-command-routing.spec.js', '// matching omnibox regression\\n');
+  write('extension/background.js', '// isolated omnibox routing change\n');
+  write('tests/browser/omnibox-command-routing.spec.js', '// matching omnibox regression\n');
   commit('change background omnibox routing with its focused regression');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'isolated background omnibox behavior');
@@ -327,9 +327,9 @@ try {
 
   // Source-page runtime registration changes have a narrow paired regression set.
   resetScenario(base);
-  write('extension/background.js', '// source-page runtime registration change\\n');
-  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page refresh regression\\n');
-  write('tests/browser/scripttagger-global-injection.spec.js', '// stable collector redirect bundle regression\\n');
+  write('extension/background.js', '// source-page runtime registration change\n');
+  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page refresh regression\n');
+  write('tests/browser/scripttagger-global-injection.spec.js', '// stable collector redirect bundle regression\n');
   commit('change source-page runtime registration with focused regressions');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'source-page runtime registration');
@@ -473,7 +473,7 @@ try {
 
   // Focused behavior spec-only edits are handled by their dedicated workflow, not broad E2E groups.
   resetScenario(base);
-  write('tests/browser/case-sensitive-routing-behavior.spec.js', '// focused test edit\\n');
+  write('tests/browser/case-sensitive-routing-behavior.spec.js', '// focused test edit\n');
   commit('change focused case-sensitive behavior test');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'focused behavior spec only');
@@ -486,7 +486,7 @@ try {
   // The source-page refresh regression is matrix-managed, but changes to this
   // test alone must rerun its focused matrix job rather than silently skip it.
   resetScenario(base);
-  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page regression test-only edit\\n');
+  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page regression test-only edit\n');
   commit('change source-page refresh regression only');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'source-page focused spec only');
@@ -514,8 +514,8 @@ try {
   // Shared background changes must retain the dedicated site-registration race regression,
   // without pulling either split extension suite into the focused race run.
   resetScenario(base);
-  write('extension/background.js', '// shared background registration change\\n');
-  write('tests/browser/site-registration-opt-out-race.spec.js', '// focused registration race regression\\n');
+  write('extension/background.js', '// shared background registration change\n');
+  write('tests/browser/site-registration-opt-out-race.spec.js', '// focused registration race regression\n');
   commit('change background and focused registration regression');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'background plus focused registration spec');
@@ -527,8 +527,8 @@ try {
 
   // Selector implementation edits remain package-validated without broad browser runs.
   resetScenario(base);
-  write('scripts/select-browser-specs.mjs', '// selector infrastructure change\\n');
-  write('scripts/select-reference-matrix.mjs', '// matrix selector infrastructure change\\n');
+  write('scripts/select-browser-specs.mjs', '// selector infrastructure change\n');
+  write('scripts/select-reference-matrix.mjs', '// matrix selector infrastructure change\n');
   commit('change selector implementation');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'selector implementation');
@@ -558,7 +558,7 @@ try {
   console.log('PASS: reference matrix edits force complete browser validation');
 
   resetScenario(base);
-  write('.github/workflows/browser-e2e-groups.yml', 'name: changed Group A workflow\\n');
+  write('.github/workflows/browser-e2e-groups.yml', 'name: changed Group A workflow\n');
   commit('change browser feature runner');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'browser feature workflow');

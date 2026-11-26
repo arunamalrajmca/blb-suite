@@ -95,7 +95,7 @@ test('the real git ancestry and diff checks accept the five-file harness change 
     git('commit', '-m', 'baseline');
     const baseline = git('rev-parse', 'HEAD');
     for (const file of AUDIT_HARNESS_RECOVERY_FILES.slice(0, 3)) {
-      fs.writeFileSync(path.join(directory, file), 'audit harness update\\n');
+      fs.writeFileSync(path.join(directory, file), 'audit harness update\n');
     }
     git('add', '.');
     git('commit', '-m', 'approved audit harness subset only');

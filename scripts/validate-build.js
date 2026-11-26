@@ -12,7 +12,7 @@ if (!fs.existsSync(gzipGeneratorPath)) {
   fail('KJV compressed-data generator missing');
 } else {
   const generated = cp.spawnSync(process.execPath, [gzipGeneratorPath, ext], { encoding: 'utf8' });
-  if (generated.status !== 0) fail('KJV compressed-data generation failed\\n' + generated.stderr);
+  if (generated.status !== 0) fail('KJV compressed-data generation failed\n' + generated.stderr);
   else pass('compressed KJV search assets generated and validated');
 }
 
