@@ -552,15 +552,23 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (!variable || invalidatedModuleAliasVariables.has(variable)) return false;
     return moduleNamespaceAliasVariables.has(variable) || moduleObjectAliasVariables.has(variable);
   }
+  function destructuredTargetIdentifier(property) {
+    if (property?.value?.type === 'Identifier') return property.value;
+    if (property?.value?.type === 'AssignmentPattern' &&
+        property.value.left?.type === 'Identifier') return property.value.left;
+    return null;
+  }
   function isLatestDestructuredAssignmentAlias(variable, propertyName) {
     const writes = (variable.references || []).filter(reference => reference.isWrite())
       .sort((left, right) => left.identifier.start - right.identifier.start);
     const latest = writes[writes.length - 1];
     if (!latest) return false;
-    const property = parentByNode.get(latest.identifier);
+    let property = parentByNode.get(latest.identifier);
+    if (property?.type === 'AssignmentPattern') property = parentByNode.get(property);
     const pattern = property && parentByNode.get(property);
     const assignment = pattern && parentByNode.get(pattern);
-    return property?.type === 'Property' && property.value === latest.identifier &&
+    return property?.type === 'Property' &&
+      destructuredTargetIdentifier(property) === latest.identifier &&
       staticKey(property.key, property.computed) === propertyName &&
       pattern?.type === 'ObjectPattern' && assignment?.type === 'AssignmentExpression' &&
       assignment.left === pattern && assignment.right?.type === 'Identifier' &&
@@ -803,9 +811,11 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       const fromModuleNamespaceAlias = init?.type === 'Identifier' && isNodeModuleIdentifier(init);
       if (fromCommonJsModule || fromAwaitedModuleImport || fromModuleNamespaceAlias) {
         for (const property of node.id.properties) {
-          if (property.type !== 'Property' || property.value.type !== 'Identifier') continue;
+          if (property.type !== 'Property') continue;
+          const targetIdentifier = destructuredTargetIdentifier(property);
+          if (!targetIdentifier) continue;
           const key = staticKey(property.key, property.computed);
-          const targetVariable = variableByDefinitionNode.get(property.value) || resolveLexicalVariable(property.value);
+          const targetVariable = variableByDefinitionNode.get(targetIdentifier) || resolveLexicalVariable(targetIdentifier);
           if (key === 'createRequire' && targetVariable) createRequireFactoryVariables.add(targetVariable);
           if (key === 'require' && fromModuleNamespaceAlias && targetVariable) requireAliasVariables.add(targetVariable);
         }
@@ -814,9 +824,11 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (node.type === 'AssignmentExpression' && node.left.type === 'ObjectPattern') {
       const fromNodeModule = node.right?.type === 'Identifier' && isNodeModuleIdentifier(node.right);
       for (const property of node.left.properties) {
-        if (property.type !== 'Property' || property.value.type !== 'Identifier') continue;
+        if (property.type !== 'Property') continue;
+        const targetIdentifier = destructuredTargetIdentifier(property);
+        if (!targetIdentifier) continue;
         const key = staticKey(property.key, property.computed);
-        const targetVariable = resolveLexicalVariable(property.value);
+        const targetVariable = resolveLexicalVariable(targetIdentifier);
         if (!targetVariable) continue;
         if (key === 'require') {
           if (fromNodeModule) requireAliasVariables.add(targetVariable);
