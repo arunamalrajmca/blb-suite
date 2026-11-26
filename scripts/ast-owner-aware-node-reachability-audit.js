@@ -472,6 +472,8 @@ function resolvePackageImport(fromFile, specifier, files) {
   return { unresolved: true, specifier, packageImport: true, targets: candidates };
 }
 function resolveModuleSpecifier(fromFile, specifier, files, root = process.cwd(), mode = 'import') {
+  if (specifier.startsWith('#')) return resolvePackageImport(fromFile, specifier, files) ||
+    { unresolved: true, specifier, packageImport: true };
   if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
     const base = path.isAbsolute(specifier) ? path.resolve(specifier) : path.resolve(path.dirname(fromFile), specifier);
     if (path.extname(base) === '.json' && fs.existsSync(base)) {
@@ -510,7 +512,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         requireAliases.add(node.id.name);
       }
       if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
-          node.init.object.name === 'module' && node.init.property.name === 'require') requireAliases.add(node.id.name);
+          node.init.object.name === 'module' && staticKey(node.init.property, node.init.computed) === 'require') requireAliases.add(node.id.name);
       if (node.init?.type === 'MemberExpression' && node.init.property.name === 'createRequire') {
         createRequireAliases.add(node.id.name);
       }
@@ -562,7 +564,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
                node.callee.object.type === 'Identifier' && node.callee.object.name === 'module' &&
-               node.callee.property.name === 'require') {
+               staticKey(node.callee.property, node.callee.computed) === 'require') {
       if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
           typeof node.arguments[0].value === 'string') {
         specifier = node.arguments[0].value;
