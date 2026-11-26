@@ -999,7 +999,7 @@ function analyzeCrossModule(root,files){
 function analyzeInterproceduralObjectFlow(root,files,asts,meta){
   const eslintScope=require('eslint-scope');
   const variableForNode=new Map(),topLevel=new Map(),functionForVariable=new Map(),importsForVariable=new Map(),functionAliases=new Map(),parameterValues=new Map();
-  const reassignedParameterVariables=new Set();
+  const reassignedParameterVariables=new Set(),reassignedFunctionVariables=new Set(),invalidatedFunctionAliases=new Set();
   for(const [file,ast] of asts){
     const manager=eslintScope.analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
     for(const scope of manager.scopes){
@@ -1010,8 +1010,13 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
       }
       for(const ref of scope.references||[])if(ref.resolved)variableForNode.set(ref.identifier,ref.resolved);
       for(const variable of scope.variables||[]){
-        if(!(variable.defs||[]).some(def=>def.type==='Parameter'))continue;
-        if((variable.references||[]).some(ref=>ref.isWrite()&&ref.identifier!==variable.defs[0]?.name))reassignedParameterVariables.add(variable);
+        if((variable.defs||[]).some(def=>def.type==='Parameter')
+          &&(variable.references||[]).some(ref=>ref.isWrite()&&ref.identifier!==variable.defs[0]?.name))
+          reassignedParameterVariables.add(variable);
+        const isFunctionBinding=(variable.defs||[]).some(def=>def.type==='FunctionName'
+          ||(def.type==='Variable'&&['FunctionExpression','ArrowFunctionExpression'].includes(def.node?.init?.type)));
+        if(isFunctionBinding&&(variable.references||[]).some(ref=>ref.isWrite()&&ref.identifier!==variable.defs[0]?.name))
+          reassignedFunctionVariables.add(variable);
       }
     }
   }
@@ -1042,17 +1047,45 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     if(!targetVariable)continue;
     importsForVariable.set(localVariable,{file,target:origin.file,exportedLocal:origin.local,imported:item.imported,targetVariable});
   }
-  // Preserve function identity through local aliases and reassignment.
+  // Preserve function identity through local aliases, but never retain an alias
+  // after an unknown, conflicting, destructuring, or update write to its binding.
   // Aliases are binding-based, so shadowed names cannot cross-contaminate.
+  const invalidateFunctionAlias=variable=>{
+    if(!variable)return;
+    functionAliases.delete(variable);
+    invalidatedFunctionAliases.add(variable);
+  };
+  const assignFunctionAlias=(target,source)=>{
+    if(!target||invalidatedFunctionAliases.has(target))return;
+    if(!source){invalidateFunctionAlias(target);return;}
+    const previous=functionAliases.get(target);
+    if(previous&&previous!==source){invalidateFunctionAlias(target);return;}
+    functionAliases.set(target,source);
+  };
+  const invalidatePatternAliases=pattern=>{
+    if(!pattern)return;
+    if(pattern.type==='Identifier')invalidateFunctionAlias(variableForNode.get(pattern));
+    else if(pattern.type==='RestElement'||pattern.type==='AssignmentPattern')invalidatePatternAliases(pattern.argument||pattern.left);
+    else if(pattern.type==='ArrayPattern')for(const item of pattern.elements||[])invalidatePatternAliases(item);
+    else if(pattern.type==='ObjectPattern')for(const property of pattern.properties||[])
+      invalidatePatternAliases(property.type==='RestElement'?property.argument:property.value);
+  };
   for(const [file,ast] of asts) visit(ast,node=>{
-    if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'){
-      const target=variableForNode.get(node.id),source=variableForNode.get(node.init);
-      if(target&&source)functionAliases.set(target,source);
+    if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'){
+      const target=variableForNode.get(node.id);
+      if(node.init?.type==='Identifier')assignFunctionAlias(target,variableForNode.get(node.init));
+      else if(node.init)invalidateFunctionAlias(target);
     }
-    if(node.type==='AssignmentExpression'&&node.operator==='='&&node.left.type==='Identifier'&&node.right.type==='Identifier'){
-      const target=variableForNode.get(node.left),source=variableForNode.get(node.right);
-      if(target&&source)functionAliases.set(target,source);
+    if(node.type==='AssignmentExpression'){
+      if(node.left.type==='Identifier'){
+        if(node.operator==='='&&node.right.type==='Identifier')
+          assignFunctionAlias(variableForNode.get(node.left),variableForNode.get(node.right));
+        else invalidateFunctionAlias(variableForNode.get(node.left));
+      }else if(node.left.type==='ObjectPattern'||node.left.type==='ArrayPattern')invalidatePatternAliases(node.left);
     }
+    if(node.type==='UpdateExpression')invalidatePatternAliases(node.argument);
+    if((node.type==='ForInStatement'||node.type==='ForOfStatement')&&node.left.type!=='VariableDeclaration')
+      invalidatePatternAliases(node.left);
   });
   const functionForImportedVariable=new Map();
   for(const [variable,info] of importsForVariable){
@@ -1064,7 +1097,7 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
     const seen=new Set();
     while(variable&&!seen.has(variable)){
       seen.add(variable);
-      const found=functionForVariable.get(variable)||functionForImportedVariable.get(variable);
+      const found=(!reassignedFunctionVariables.has(variable)&&functionForVariable.get(variable))||functionForImportedVariable.get(variable);
       if(found)return found;
       variable=functionAliases.get(variable)||null;
     }

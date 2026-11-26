@@ -125,14 +125,28 @@ test('preserves multiple object origins passed to the same helper parameter',()=
 });
 
 
-test('resolves imported helper function identity through local aliases and reassignment',()=>{
+test('preserves valid imported function aliases and invalidates stale or conflicting function identities',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-function-alias-'));
  try{
   fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {} }; export { service };');
   fs.writeFileSync(path.join(root,'helper.js'),'export function invoke(target) { target.start(); }');
-  fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; let runner; runner = invoke; const alias = runner; alias(api);");
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "import { service as api } from './service.js';",
+   "import { invoke } from './helper.js';",
+   'let runner; runner = invoke; const validAlias = runner; validAlias(api);',
+   'let staleAtInit = invoke; staleAtInit = runtimeOverride; staleAtInit(api);',
+   'let staleAfterAssign; staleAfterAssign = invoke; staleAfterAssign = runtimeOverride; staleAfterAssign(api);',
+   'let staleThroughChain; staleThroughChain = invoke; const chainedAlias = staleThroughChain; staleThroughChain = runtimeOverride; chainedAlias(api);',
+   'let conflicting; conflicting = invoke; if (override) conflicting = runtimeOverride; else conflicting = invoke; conflicting(api);',
+   'function localInvoke(target) { target.start(); } localInvoke = runtimeOverride; localInvoke(api);'
+  ].join('\n'));
   const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'));
+  assert.ok(r.interprocedural.propertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start'),
+   'the established unambiguous assignment-before-alias flow must remain supported');
+  assert.ok(!r.interprocedural.propertyReferences.some(x=>x.from==='consumer.js'&&x.to==='helper.js'),
+   'consumer callsites must not be mistaken for property reads in the helper');
+  assert.equal(r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property==='start').length,1,
+   'only the call through the still-valid alias should contribute the helper property read');
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
@@ -2244,4 +2258,27 @@ test('does not propagate imported computed-property keys through reassigned para
   assert.equal(r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.to==='service.js'&&x.flow==='interprocedural-parameter-key').length,0);
   assert.ok(r.interprocedural.dynamicPropertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property===null));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('keeps computed parameter keys dynamic after every kind of parameter write',()=>{
+ const mutations=[
+  ['assignment','key = runtimeOverride; target[key]();'],
+  ['update','key++; target[key]();'],
+  ['destructuring','({ key } = runtimeOverride); target[key]();'],
+  ['for-of','for (key of runtimeKeys) target[key]();']
+ ];
+ for(const [name,body] of mutations){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-parameter-write-'));
+  try{
+   fs.writeFileSync(path.join(root,'service.js'),'const service = { start() {}, stop() {} }; export { service };');
+   fs.writeFileSync(path.join(root,'helper.js'),`export function invoke(target, key) { ${body} }`);
+   fs.writeFileSync(path.join(root,'consumer.js'),"import { service as api } from './service.js'; import { invoke } from './helper.js'; invoke(api, 'start');");
+   const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+   assert.equal(r.interprocedural.propertyReferences.filter(x=>x.from==='helper.js'&&x.to==='service.js'&&x.flow==='interprocedural-parameter-key').length,0,
+    `${name} writes must prevent stale literal-key propagation`);
+   assert.ok(r.interprocedural.dynamicPropertyReferences.some(x=>x.from==='helper.js'&&x.to==='service.js'&&x.property===null),
+    `${name} writes must preserve an explicit dynamic-property reference`);
+  } finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
 });
