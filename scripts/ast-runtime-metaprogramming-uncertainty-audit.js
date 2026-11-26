@@ -116,7 +116,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
             node.callee.object.name === 'Reflect' && unresolved.has(node.callee.object.start + ':' + node.callee.object.end)) {
           add(file, node, 'reflective-operation', 'Reflect.' + (node.callee.property.name || 'computed') + ' may bypass ordinary property-use analysis');
         }
-        if (name && /^(Object|Reflect)\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|freeze|seal|preventExtensions)$/.test(name)) {
+        if (name && /^(Object|Reflect)\\.(?:defineProperty|defineProperties|setPrototypeOf|assign|create|freeze|seal|preventExtensions)$/.test(name) &&
+            unresolved.has(rootIdentifier(node.callee)?.start + ':' + rootIdentifier(node.callee)?.end)) {
           add(file, node, 'descriptor-or-prototype-mutation', name + ' can alter visible properties or inheritance');
         }
         const method = node.callee.type === 'MemberExpression'
