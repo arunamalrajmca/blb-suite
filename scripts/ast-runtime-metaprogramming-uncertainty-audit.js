@@ -104,10 +104,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression') {
         const calleeName = node.callee.type === 'Identifier' ? node.callee.name : null;
-        if (calleeName === 'eval' && unresolved.has(node.callee)) {
+        if (calleeName === 'eval' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
           add(file, node, 'dynamic-code-generation', 'eval may execute source that is invisible to static reachability analysis');
         }
-        if ((calleeName === 'Function' && unresolved.has(node.callee)) ||
+        if ((calleeName === 'Function' && unresolved.has(node.callee.start + ':' + node.callee.end)) ||
             (node.callee.type === 'MemberExpression' && !node.callee.computed && node.callee.property.name === 'constructor')) {
           add(file, node, 'dynamic-code-generation', 'Function constructor or constructor access may create executable code dynamically');
         }
@@ -152,7 +152,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
-          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' && unresolved.has(node.callee.object) &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'Object' && unresolved.has(node.callee.object.start + ':' + node.callee.object.end) &&
           ['setPrototypeOf', 'defineProperty', 'defineProperties', 'assign', 'create'].includes(node.callee.property.name)) {
         add(file, node, 'prototype-or-descriptor-api', 'Object.' + node.callee.property.name + ' may change property visibility or inheritance');
       }
