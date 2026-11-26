@@ -54,3 +54,14 @@ test('keeps the census explicitly observational and never emits dead-code claims
   assert.ok(!Object.keys(result).some(key => /dead|deleteCandidate|unusedCode/i.test(key)));
   assert.equal(result.parseErrors.length, 0);
 });
+
+
+test('does not report shadowed eval, Function, Proxy, Object, or Reflect as global metaprogramming', () => {
+  const result = run("function invoke(eval, Function, Proxy, Object, Reflect) { eval('source'); Function('return 1'); new Proxy({}, {}); Object.assign({}, {}); Reflect.get({}, 'x'); }");
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(has(result, 'dynamic-code-generation'), false);
+  assert.equal(has(result, 'proxy-construction'), false);
+  assert.equal(has(result, 'reflective-operation'), false);
+  assert.equal(has(result, 'descriptor-or-prototype-mutation'), false);
+  assert.equal(has(result, 'prototype-or-descriptor-api'), false);
+});
