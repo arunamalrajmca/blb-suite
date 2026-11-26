@@ -532,6 +532,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const invalidatedModuleAliasVariables = new Set();
   const createRequireFactoryVariables = new Set();
   const invalidatedFactoryVariables = new Set();
+  const parentByNode = new Map();
+  walkAst(parsed.ast, (node, parent) => { if (parent) parentByNode.set(node, parent); });
   function resolveLexicalVariable(identifier) {
     if (!identifier || identifier.type !== 'Identifier') return null;
     const direct = referenceByNode.get(identifier);
@@ -549,6 +551,19 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     const variable = resolveLexicalVariable(identifier);
     if (!variable || invalidatedModuleAliasVariables.has(variable)) return false;
     return moduleNamespaceAliasVariables.has(variable) || moduleObjectAliasVariables.has(variable);
+  }
+  function isDestructuredAssignmentAlias(variable, propertyName) {
+    return (variable.references || []).some(reference => {
+      if (!reference.isWrite()) return false;
+      const property = parentByNode.get(reference.identifier);
+      const pattern = property && parentByNode.get(property);
+      const assignment = pattern && parentByNode.get(pattern);
+      return property?.type === 'Property' && property.value === reference.identifier &&
+        staticKey(property.key, property.computed) === propertyName &&
+        pattern?.type === 'ObjectPattern' && assignment?.type === 'AssignmentExpression' &&
+        assignment.left === pattern && assignment.right?.type === 'Identifier' &&
+        isNodeModuleIdentifier(assignment.right);
+    });
   }
   function isFactoryIdentifier(identifier, seen = new Set()) {
     if (!identifier || identifier.type !== 'Identifier') return false;
@@ -593,7 +608,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
       return false;
     });
-    if (declaredFactory) return true;
+    if (declaredFactory || isDestructuredAssignmentAlias(variable, 'createRequire')) return true;
     const uninitializedVariable = (variable.defs || []).some(definition =>
       definition.type === 'Variable' && definition.node?.type === 'VariableDeclarator' &&
       !definition.node.init
@@ -639,6 +654,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     if (seen.has(variable)) return false;
     seen.add(variable);
     if (!requireAliasVariables.has(variable)) return false;
+    if (isDestructuredAssignmentAlias(variable, 'require')) return true;
     return (variable.defs || []).some(definition => {
       if (definition.type !== 'Variable' || !definition.node ||
           definition.node.type !== 'VariableDeclarator') return false;
@@ -791,6 +807,24 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           const targetVariable = variableByDefinitionNode.get(property.value) || resolveLexicalVariable(property.value);
           if (key === 'createRequire' && targetVariable) createRequireFactoryVariables.add(targetVariable);
           if (key === 'require' && fromModuleNamespaceAlias && targetVariable) requireAliasVariables.add(targetVariable);
+        }
+      }
+    }
+    if (node.type === 'AssignmentExpression' && node.left.type === 'ObjectPattern') {
+      const fromNodeModule = node.right?.type === 'Identifier' && isNodeModuleIdentifier(node.right);
+      for (const property of node.left.properties) {
+        if (property.type !== 'Property' || property.value.type !== 'Identifier') continue;
+        const key = staticKey(property.key, property.computed);
+        const targetVariable = resolveLexicalVariable(property.value);
+        if (!targetVariable) continue;
+        if (key === 'require' && fromNodeModule) requireAliasVariables.add(targetVariable);
+        else requireAliasVariables.delete(targetVariable);
+        if (key === 'createRequire' && fromNodeModule) {
+          createRequireFactoryVariables.add(targetVariable);
+          invalidatedFactoryVariables.delete(targetVariable);
+        } else {
+          createRequireFactoryVariables.delete(targetVariable);
+          invalidatedFactoryVariables.add(targetVariable);
         }
       }
     }
