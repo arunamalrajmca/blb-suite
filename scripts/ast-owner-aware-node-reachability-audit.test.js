@@ -50,6 +50,20 @@ test('does not attribute shadowed same-name property reads to an outer owner', (
   assert.match(result.findings[0].owner, /service/);
 });
 
+test('does not attribute nested ordinary-function this reads to an enclosing class', () => {
+  const result = ownerAwarePropertyAudit([
+    'class Worker {',
+    '  run() { function unrelated() { this.stop(); } }',
+    '  stop() {}',
+    '}',
+    'const worker = new Worker();',
+    'worker.run();'
+  ].join('\\n'), 'nested-this-owner.js');
+  assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
+    ['class-instance', 'stop']
+  ]);
+});
+
 test('tracks object aliases and destructured property reads', () => {
   const result = ownerAwarePropertyAudit([
     'const service = { start() {}, stop() {}, reset() {} };',
