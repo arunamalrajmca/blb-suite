@@ -2331,3 +2331,35 @@ test('does not treat reassigned exported function bindings as their original imp
   } finally{fs.rmSync(root,{recursive:true,force:true});}
  }
 });
+
+
+test('invalidates stale object origins after local aliases, returned values, and exported bindings are reassigned',()=>{
+ const fixtures=[
+  ['local-alias','const api = importedApi; let alias = api; alias = runtimeOverride; alias.start();'],
+  ['source-before-alias','let source = importedApi; source = runtimeOverride; const alias = source; alias.start();'],
+  ['returned-alias','let result = getApi(importedApi); result = runtimeOverride; result.start();']
+ ];
+ for(const [name,consumer] of fixtures){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-stale-object-origin-'));
+  try{
+   fs.writeFileSync(path.join(root,'service.js'),'export const service = { start() {} };');
+   fs.writeFileSync(path.join(root,'helper.js'),'export function getApi(target) { return target; }');
+   const prelude="import { service as importedApi } from './service.js'; import { getApi } from './helper.js';";
+   fs.writeFileSync(path.join(root,'consumer.js'),prelude+' '+consumer);
+   const files=['service.js','helper.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+   assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'),
+    `${name} must not retain an object origin after the binding is reassigned`);
+  } finally{fs.rmSync(root,{recursive:true,force:true});}
+ }
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'interprocedural-reassigned-exported-object-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),[
+   'export let service = { start() {} };',
+   'service = runtimeOverride;'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'consumer.js'),"import { service } from './service.js'; service.start();");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(!r.interprocedural.propertyReferences.some(x=>x.to==='service.js'),
+   'an imported live binding must not keep the original export origin after reassignment');
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
