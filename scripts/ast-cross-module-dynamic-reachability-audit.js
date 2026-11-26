@@ -655,7 +655,7 @@ function collectExportsAndImports(ast,file){
     if(method==='create'){recordObjectProperties(value);return;}
     if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
   };
-  visit(ast,n=>{
+  visit(ast,(n,parent)=>{
     collectNativeMutation(n);
     if(isModuleExportsAssignment(n)){
       const selfAssignment=isModuleExportsReference(n.right);
@@ -666,7 +666,7 @@ function collectExportsAndImports(ast,file){
     }
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(variableForIdentifier.get(n.id));
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
-      &&n.init.name==='require'&&isUnboundGlobal(n.init)&&n.parent?.kind==='const'){
+      &&n.init.name==='require'&&isUnboundGlobal(n.init)&&parent?.type==='VariableDeclaration'&&parent.kind==='const'){
       const variable=variableForIdentifier.get(n.id);
       if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)requireAliases.add(variable);
     }
