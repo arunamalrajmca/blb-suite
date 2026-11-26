@@ -817,14 +817,18 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         const key = staticKey(property.key, property.computed);
         const targetVariable = resolveLexicalVariable(property.value);
         if (!targetVariable) continue;
-        if (key === 'require' && fromNodeModule) requireAliasVariables.add(targetVariable);
-        else requireAliasVariables.delete(targetVariable);
-        if (key === 'createRequire' && fromNodeModule) {
-          createRequireFactoryVariables.add(targetVariable);
-          invalidatedFactoryVariables.delete(targetVariable);
-        } else {
-          createRequireFactoryVariables.delete(targetVariable);
-          invalidatedFactoryVariables.add(targetVariable);
+        if (key === 'require') {
+          if (fromNodeModule) requireAliasVariables.add(targetVariable);
+          else requireAliasVariables.delete(targetVariable);
+        }
+        if (key === 'createRequire') {
+          if (fromNodeModule) {
+            createRequireFactoryVariables.add(targetVariable);
+            invalidatedFactoryVariables.delete(targetVariable);
+          } else {
+            createRequireFactoryVariables.delete(targetVariable);
+            invalidatedFactoryVariables.add(targetVariable);
+          }
         }
       }
     }
