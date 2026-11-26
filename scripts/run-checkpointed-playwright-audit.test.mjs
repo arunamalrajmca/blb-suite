@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   createShardManifest,
   isCompatibleShardManifest,
+  isSuccessfulBrowserTestRecord,
   invalidateChangedSpecShards,
   partitionTests,
   runCheckpointedBrowserAudit
@@ -174,4 +175,18 @@ test('a changed inventory invalidates every old shard result', () => {
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('browser checkpoint records accept only tests that actually passed', () => {
+  assert.equal(isSuccessfulBrowserTestRecord({
+    status: 'passed', overallStatus: 'expected', expectedStatus: 'passed'
+  }), true);
+  for (const record of [
+    { status: 'skipped', overallStatus: 'skipped', expectedStatus: 'skipped' },
+    { status: 'skipped', overallStatus: 'skipped', expectedStatus: 'passed' },
+    { status: 'failed', overallStatus: 'unexpected', expectedStatus: 'passed' },
+    { status: 'timedOut', overallStatus: 'unexpected', expectedStatus: 'passed' },
+    { status: 'passed', overallStatus: 'expected', expectedStatus: 'skipped' },
+    { status: 'passed', overallStatus: 'flaky', expectedStatus: 'passed' }
+  ]) assert.equal(isSuccessfulBrowserTestRecord(record), false, JSON.stringify(record));
 });
