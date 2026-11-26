@@ -358,7 +358,24 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
   });
 
   // ES module exports are external consumers even when no in-repository member read exists.
+  // Named export specifiers (including renamed exports) must escape their local owner too.
   walkAst(ast, node => {
+    if (node.type === 'ExportNamedDeclaration' && !node.source) {
+      for (const specifier of node.specifiers || []) {
+        if (specifier.type !== 'ExportSpecifier' || specifier.local.type !== 'Identifier') continue;
+        const local = specifier.local;
+        const owner = resolvedOwner(local);
+        if (owner) {
+          owners.get(owner).escaped = true;
+          owners.get(owner).escapeReasons.add('module-export');
+        }
+        const exportedInstanceOwner = classInstanceOwnerByName.get(local.name);
+        if (exportedInstanceOwner && owners.has(exportedInstanceOwner)) {
+          owners.get(exportedInstanceOwner).escaped = true;
+          owners.get(exportedInstanceOwner).escapeReasons.add('module-export');
+        }
+      }
+    }
     if (node.type === 'ExportDefaultDeclaration' && node.declaration.type === 'Identifier') {
       const owner = resolvedOwner(node.declaration);
       if (owner) { owners.get(owner).escaped = true; owners.get(owner).escapeReasons.add('module-export'); }
@@ -496,11 +513,117 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
   const parsed = parseSource(source, filename);
   const edges = [];
   const dynamic = [];
+  const scopeManager = getScopeManager(parsed.ast, parsed.sourceType);
+  const referenceByNode = new Map();
+  for (const scope of scopeManager.scopes) {
+    for (const reference of scope.references || []) referenceByNode.set(reference.identifier, reference);
+  }
+  const variableByDefinitionNode = new Map();
+  for (const scope of scopeManager.scopes) {
+    for (const variable of scope.variables || []) {
+      for (const definition of variable.defs || []) {
+        if (definition.name) variableByDefinitionNode.set(definition.name, variable);
+      }
+    }
+  }
   const requireAliases = new Set();
+  const moduleObjectAliasVariables = new Set();
+  const moduleNamespaceAliasVariables = new Set();
+  const invalidatedModuleAliasVariables = new Set();
   const createRequireAliases = new Set(['createRequire']);
-  walkAst(parsed.ast, node => {
+  const invalidatedFactoryAliases = new Set();
+  function resolveLexicalVariable(identifier) {
+    if (!identifier || identifier.type !== 'Identifier') return null;
+    const direct = referenceByNode.get(identifier);
+    if (direct?.resolved) return direct.resolved;
+    const candidates = scopeManager.scopes.filter(scope =>
+      scope.set?.has(identifier.name) && scope.block &&
+      scope.block.start <= identifier.start && identifier.end <= scope.block.end
+    ).sort((left, right) =>
+      (left.block.end - left.block.start) - (right.block.end - right.block.start));
+    return candidates[0]?.set.get(identifier.name) || null;
+  }
+  function isNodeModuleIdentifier(identifier) {
+    if (!identifier || identifier.type !== 'Identifier') return false;
+    if (identifier.name === 'module' && !resolveLexicalVariable(identifier)) return true;
+    const variable = resolveLexicalVariable(identifier);
+    if (!variable || invalidatedModuleAliasVariables.has(variable)) return false;
+    return moduleNamespaceAliasVariables.has(variable) || moduleObjectAliasVariables.has(variable);
+  }
+  function isFactoryExpression(expression, seen = new Set()) {
+    if (expression?.type === 'Identifier') return isFactoryIdentifier(expression, seen);
+    return expression?.type === 'MemberExpression' && isNodeModuleIdentifier(expression.object) &&
+      staticKey(expression.property, expression.computed) === 'createRequire';
+  }
+  function isFactoryIdentifier(identifier, seen = new Set()) {
+    if (!identifier || identifier.type !== 'Identifier') return false;
+    const variable = resolveLexicalVariable(identifier);
+    if (!variable || seen.has(variable) || !createRequireAliases.has(identifier.name) ||
+        invalidatedFactoryAliases.has(identifier.name)) return false;
+    seen.add(variable);
+    return (variable.defs || []).some(definition => {
+      if (definition.type === 'ImportBinding') {
+        return true;
+      }
+      if (definition.type !== 'Variable' || !definition.node ||
+          definition.node.type !== 'VariableDeclarator') return false;
+      const declaration = definition.node;
+      const init = declaration.init;
+      if (init?.type === 'Identifier') return isFactoryIdentifier(init, seen);
+      if (init?.type === 'MemberExpression' && isNodeModuleIdentifier(init.object) &&
+          staticKey(init.property, init.computed) === 'createRequire') return true;
+      const moduleRequireFactory = init?.type === 'CallExpression' &&
+        init.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(init.arguments[0].value) &&
+        isRequireIdentifier(init.callee, new Set());
+      const awaitedModuleImport = init?.type === 'AwaitExpression' &&
+        init.argument?.type === 'ImportExpression' && init.argument.source?.type === 'Literal' &&
+        ['node:module', 'module'].includes(init.argument.source.value);
+      if (declaration.id.type === 'ObjectPattern' && (moduleRequireFactory || awaitedModuleImport)) {
+        return declaration.id.properties.some(property => property.type === 'Property' &&
+          staticKey(property.key, property.computed) === 'createRequire' &&
+          property.value.type === 'Identifier' && property.value.name === variable.name);
+      }
+      return false;
+    });
+  }
+  function isRequireIdentifier(identifier, seen = new Set()) {
+    if (!identifier || identifier.type !== 'Identifier') return false;
+    const variable = resolveLexicalVariable(identifier);
+    if (!variable) return identifier.name === 'require';
+    if (seen.has(variable)) return false;
+    seen.add(variable);
+    if (!requireAliases.has(variable.name)) return false;
+    return (variable.defs || []).some(definition => {
+      if (definition.type !== 'Variable' || !definition.node ||
+          definition.node.type !== 'VariableDeclarator') return false;
+      const init = definition.node.init;
+      if (init?.type === 'Identifier') return isRequireIdentifier(init, seen);
+      if (init?.type === 'MemberExpression' && isNodeModuleIdentifier(init.object) &&
+          staticKey(init.property, init.computed) === 'require') return true;
+      if (init?.type === 'CallExpression' && init.callee.type === 'Identifier' &&
+          isFactoryIdentifier(init.callee, new Set())) return true;
+      if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
+          isNodeModuleIdentifier(init.callee.object) &&
+          staticKey(init.callee.property, init.callee.computed) === 'createRequire') return true;
+      if (!init) {
+        return (variable.references || []).some(write => write.isWrite() &&
+          write.writeExpr?.type === 'AssignmentExpression' &&
+          (write.writeExpr.right.type === 'Identifier'
+            ? isRequireIdentifier(write.writeExpr.right, new Set(seen))
+            : write.writeExpr.right.type === 'MemberExpression' &&
+              isNodeModuleIdentifier(write.writeExpr.right.object) &&
+              staticKey(write.writeExpr.right.property, write.writeExpr.right.computed) === 'require'));
+      }
+      return false;
+    });
+  }
+    walkAst(parsed.ast, node => {
     if (node.type === 'ImportDeclaration' && ['node:module', 'module'].includes(node.source.value)) {
       for (const specifier of node.specifiers) {
+        if (specifier.type === 'ImportNamespaceSpecifier') {
+          const variable = variableByDefinitionNode.get(specifier.local) || resolveLexicalVariable(specifier.local);
+          if (variable) moduleNamespaceAliasVariables.add(variable);
+        }
         if (specifier.type === 'ImportSpecifier' &&
             (specifier.imported.name || specifier.imported.value) === 'createRequire') {
           createRequireAliases.add(specifier.local.name);
@@ -508,36 +631,128 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     }
     if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+      if (node.init?.type === 'CallExpression' && node.init.arguments[0]?.type === 'Literal' &&
+          ['node:module', 'module'].includes(node.init.arguments[0].value) && isRequireIdentifier(node.init.callee)) {
+        const variable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (variable) {
+          moduleNamespaceAliasVariables.add(variable);
+          invalidatedModuleAliasVariables.delete(variable);
+        }
+      }
+      if (node.init?.type === 'AwaitExpression' && node.init.argument?.type === 'ImportExpression' &&
+          node.init.argument.source?.type === 'Literal' && ['node:module', 'module'].includes(node.init.argument.source.value)) {
+        const variable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (variable) {
+          moduleNamespaceAliasVariables.add(variable);
+          invalidatedModuleAliasVariables.delete(variable);
+        }
+      }
+      if (node.init?.type === 'Identifier' && isNodeModuleIdentifier(node.init)) {
+        const variable = variableByDefinitionNode.get(node.id) || resolveLexicalVariable(node.id);
+        if (variable) {
+          moduleObjectAliasVariables.add(variable);
+          invalidatedModuleAliasVariables.delete(variable);
+        }
+      }
       if (node.init?.type === 'Identifier' && (node.init.name === 'require' || requireAliases.has(node.init.name))) {
         requireAliases.add(node.id.name);
       }
       if (node.init?.type === 'MemberExpression' && node.init.object.type === 'Identifier' &&
-          node.init.object.name === 'module' && staticKey(node.init.property, node.init.computed) === 'require') requireAliases.add(node.id.name);
-      if (node.init?.type === 'MemberExpression' && node.init.property.name === 'createRequire') {
+          isNodeModuleIdentifier(node.init.object) && staticKey(node.init.property, node.init.computed) === 'require') requireAliases.add(node.id.name);
+      if (node.init?.type === 'MemberExpression' && isNodeModuleIdentifier(node.init.object) &&
+          staticKey(node.init.property, node.init.computed) === 'createRequire') {
         createRequireAliases.add(node.id.name);
       }
       if (node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
-          createRequireAliases.has(node.init.callee.name)) requireAliases.add(node.id.name);
+          isFactoryIdentifier(node.init.callee)) {
+        requireAliases.add(node.id.name);
+      }
+      if (node.init?.type === 'CallExpression' && node.init.callee.type === 'MemberExpression' &&
+          isNodeModuleIdentifier(node.init.callee.object) &&
+          staticKey(node.init.callee.property, node.init.callee.computed) === 'createRequire') {
+        requireAliases.add(node.id.name);
+      }
       if (node.init?.type === 'ObjectExpression' && node.init.properties.some(item =>
         item.type === 'Property' && (item.key.name || item.key.value) === 'createRequire')) {
         // Keep object-literal exports of createRequire conservative unless a
         // later binding explicitly invokes the imported function.
       }
     }
-    if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern' &&
-        node.init?.type === 'CallExpression' && node.init.callee.type === 'Identifier' &&
-        (node.init.callee.name === 'require' || requireAliases.has(node.init.callee.name)) &&
-        node.init.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(node.init.arguments[0].value)) {
-      for (const property of node.id.properties) {
-        if (property.type === 'Property' && (property.key.name || property.key.value) === 'createRequire' &&
-            property.value.type === 'Identifier') createRequireAliases.add(property.value.name);
+    if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern') {
+      const init = node.init;
+      const fromCommonJsModule = init?.type === 'CallExpression' &&
+        init.callee.type === 'Identifier' && isRequireIdentifier(init.callee) &&
+        init.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(init.arguments[0].value);
+      const fromAwaitedModuleImport = init?.type === 'AwaitExpression' &&
+        init.argument?.type === 'ImportExpression' && init.argument.source?.type === 'Literal' &&
+        ['node:module', 'module'].includes(init.argument.source.value);
+      if (fromCommonJsModule || fromAwaitedModuleImport) {
+        for (const property of node.id.properties) {
+          if (property.type === 'Property' && staticKey(property.key, property.computed) === 'createRequire' &&
+              property.value.type === 'Identifier') createRequireAliases.add(property.value.name);
+        }
       }
     }
-    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' &&
-        node.right.type === 'CallExpression' && node.right.callee.type === 'Identifier' &&
-        createRequireAliases.has(node.right.callee.name)) requireAliases.add(node.left.name);
-    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' && node.right.type === 'Identifier' &&
-        (node.right.name === 'require' || requireAliases.has(node.right.name))) requireAliases.add(node.left.name);
+    if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier') {
+      const target = node.left.name;
+      const value = node.right;
+      const targetVariable = resolveLexicalVariable(node.left);
+      const commonJsModuleImport = value.type === 'CallExpression' &&
+        value.arguments[0]?.type === 'Literal' && ['node:module', 'module'].includes(value.arguments[0].value) &&
+        isRequireIdentifier(value.callee);
+      if (commonJsModuleImport) {
+        if (targetVariable) {
+          moduleNamespaceAliasVariables.add(targetVariable);
+          invalidatedModuleAliasVariables.delete(targetVariable);
+        }
+      } else if (value.type === 'AwaitExpression' && value.argument?.type === 'ImportExpression' &&
+          value.argument.source?.type === 'Literal' && ['node:module', 'module'].includes(value.argument.source.value)) {
+        if (targetVariable) {
+          moduleNamespaceAliasVariables.add(targetVariable);
+          invalidatedModuleAliasVariables.delete(targetVariable);
+        }
+      } else if (value.type === 'Identifier' && isNodeModuleIdentifier(value)) {
+        if (targetVariable) {
+          moduleObjectAliasVariables.add(targetVariable);
+          invalidatedModuleAliasVariables.delete(targetVariable);
+        }
+      } else if (targetVariable) {
+        moduleObjectAliasVariables.delete(targetVariable);
+        moduleNamespaceAliasVariables.delete(targetVariable);
+        invalidatedModuleAliasVariables.add(targetVariable);
+      }
+      const directRequire = value.type === 'Identifier' &&
+        isRequireIdentifier(value);
+      const moduleRequire = value.type === 'MemberExpression' &&
+        value.object.type === 'Identifier' && isNodeModuleIdentifier(value.object) &&
+        staticKey(value.property, value.computed) === 'require';
+      const createRequireResult = value.type === 'CallExpression' &&
+        value.callee.type === 'Identifier' && isFactoryIdentifier(value.callee);
+      if (directRequire || moduleRequire || createRequireResult) requireAliases.add(target);
+      else requireAliases.delete(target);
+
+      const assignedCreateRequire = value.type === 'Identifier' && createRequireAliases.has(value.name) ||
+        value.type === 'MemberExpression' && value.property &&
+          staticKey(value.property, value.computed) === 'createRequire';
+      if (assignedCreateRequire) {
+        createRequireAliases.add(target);
+        invalidatedFactoryAliases.delete(target);
+      } else {
+        createRequireAliases.delete(target);
+        invalidatedFactoryAliases.add(target);
+      }
+    }
+    if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') {
+      requireAliases.delete(node.argument.name);
+      const updatedModuleVariable = resolveLexicalVariable(node.argument);
+      if (updatedModuleVariable) {
+        moduleObjectAliasVariables.delete(updatedModuleVariable);
+        moduleNamespaceAliasVariables.delete(updatedModuleVariable);
+        invalidatedModuleAliasVariables.add(updatedModuleVariable);
+      }
+      createRequireAliases.delete(node.argument.name);
+      invalidatedFactoryAliases.add(node.argument.name);
+    }
   });
   walkAst(parsed.ast, node => {
     let specifier = null;
@@ -554,7 +769,7 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-import-nonliteral' });
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
-               (node.callee.name === 'require' || requireAliases.has(node.callee.name))) {
+               isRequireIdentifier(node.callee)) {
       if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
           typeof node.arguments[0].value === 'string') {
         specifier = node.arguments[0].value;
@@ -562,8 +777,14 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require' });
       }
+    } else if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+               node.callee.name === 'require' && resolveLexicalVariable(node.callee)) {
+      // A shadowed/reassigned require binding is not a proven loader, but may
+      // represent a forwarded loader. Preserve the uncertainty rather than
+      // silently omitting the loading site from the candidate-only report.
+      dynamic.push({ file: filename, line: node.loc.start.line, kind: 'unresolved-require-binding' });
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
-               node.callee.object.type === 'Identifier' && node.callee.object.name === 'module' &&
+               node.callee.object.type === 'Identifier' && isNodeModuleIdentifier(node.callee.object) &&
                staticKey(node.callee.property, node.callee.computed) === 'require') {
       if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
           typeof node.arguments[0].value === 'string') {
@@ -828,8 +1049,8 @@ function buildModuleGraph(root) {
   const candidates = fileList.filter(file => !reachable.has(file)).map(file => ({
     file: relative(root, file),
     confidence: 'candidate-only',
-    reason: dynamic.some(item => item.file === file)
-      ? 'No path from a discovered entrypoint; this file also contains dynamic module loading.'
+    reason: dynamic.length
+      ? 'No static path from a discovered entrypoint; unresolved dynamic module loading may reach this candidate.'
       : 'No path from package scripts, workflow node commands, Playwright configuration, or discovered Playwright tests.'
   }));
   return {
