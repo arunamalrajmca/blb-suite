@@ -18,15 +18,15 @@ function walk(root) {
 }
 function parse(s,f) { let err; for(const sourceType of ['script','module']) try{return acorn.parse(s,{ecmaVersion:'latest',sourceType,locations:true,ranges:true,allowHashBang:true});}catch(e){err=e;} throw new Error(f+': '+err.message); }
 function visit(n,fn,p=null) { if(!n||typeof n!=='object'||typeof n.type!=='string')return; fn(n,p); for(const [k,v] of Object.entries(n)){if(['loc','start','end','range'].includes(k))continue;if(Array.isArray(v))v.forEach(x=>visit(x,fn,n));else if(v&&typeof v.type==='string')visit(v,fn,n);} }
-function literalString(n,file,pathIdentifiers=null,unboundIdentifiers=null) {
+function literalString(n,file,pathIdentifiers=null,unboundIdentifiers=null,variableForIdentifier=null) {
   if(!n)return null;
   if(n.type==='Literal'&&typeof n.value==='string')return n.value;
   if(n.type==='TemplateLiteral'&&!n.expressions.length)return n.quasis[0].value.cooked;
-  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers,unboundIdentifiers),b=literalString(n.right,file,pathIdentifiers,unboundIdentifiers);return a===null||b===null?null:a+b;}
+  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier),b=literalString(n.right,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier);return a===null||b===null?null:a+b;}
   if(n.type==='Identifier'&&n.name==='__dirname')return unboundIdentifiers===null||unboundIdentifiers.has(n)?path.dirname(file):null;
   if(n.type==='Identifier'&&n.name==='__filename')return unboundIdentifiers===null||unboundIdentifiers.has(n)?file:null;
-  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(variableForIdentifier.get(n.callee.object)))&&['join','resolve'].includes(n.callee.property.name)){
-    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers,unboundIdentifiers));if(parts.some(x=>x===null))return null;
+  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||(variableForIdentifier&&pathIdentifiers.has(variableForIdentifier.get(n.callee.object))))&&['join','resolve'].includes(n.callee.property.name)){
+    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier));if(parts.some(x=>x===null))return null;
     return n.callee.property.name==='join'?path.join(...parts):path.resolve(...parts);
   }
   return null;
@@ -679,7 +679,7 @@ function collectExportsAndImports(ast,file){
         for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
       }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
     }
-    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
+    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
     if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require'&&isUnboundGlobal(n.callee))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
