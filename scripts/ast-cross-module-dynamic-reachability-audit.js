@@ -662,9 +662,15 @@ function collectExportsAndImports(ast,file){
       if(!selfAssignment)moduleExportsReplacements.push(n);
     }
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
-      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(variableForIdentifier.get(specifier.local));
+      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier'){
+        const variable=variableForIdentifier.get(specifier.local);
+        if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===0)pathIdentifiers.add(variable);
+      }
     }
-    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(variableForIdentifier.get(n.id));
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value)){
+      const variable=variableForIdentifier.get(n.id);
+      if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)pathIdentifiers.add(variable);
+    }
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
       &&n.init.name==='require'&&isUnboundGlobal(n.init)&&parent?.type==='VariableDeclaration'&&parent.kind==='const'){
       const variable=variableForIdentifier.get(n.id);
