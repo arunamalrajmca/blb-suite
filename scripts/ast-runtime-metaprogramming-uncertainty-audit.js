@@ -26,7 +26,7 @@ function parse(file) {
   const source = fs.readFileSync(file, 'utf8');
   let error;
   for (const sourceType of ['script', 'module']) {
-    try { return acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true, allowHashBang: true }); }
+    try { return acorn.parse(source, { ecmaVersion: 'latest', sourceType, locations: true, ranges: true, allowHashBang: true }); }
     catch (caught) { error = caught; }
   }
   throw new Error(path.relative(process.cwd(), file) + ': ' + error.message);
