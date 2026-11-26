@@ -277,6 +277,17 @@ test('does not treat an unrelated shadowed path object as a Node path module',()
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
+test('resolves path modules loaded through immutable require aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-require-path-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; const path = load('node:path'); import(path.join(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('does not resolve dynamic imports through a reassigned CommonJS path alias',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-reassigned-path-alias-'));
  try{
