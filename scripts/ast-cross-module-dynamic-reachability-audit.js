@@ -664,7 +664,7 @@ function collectExportsAndImports(ast,file){
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
       for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(variableForIdentifier.get(specifier.local));
     }
-    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(variableForIdentifier.get(n.id));
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(variableForIdentifier.get(n.id));
   });
   visit(ast,(n,parent)=>{
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='Identifier'
@@ -680,7 +680,7 @@ function collectExportsAndImports(ast,file){
       }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
     }
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
-    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
+    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require'&&isUnboundGlobal(n.callee))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
