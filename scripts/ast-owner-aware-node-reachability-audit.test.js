@@ -707,3 +707,31 @@ test('follows bound, call, and apply wrappers around Node module loaders', () =>
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+
+test('preserves outer require aliases when a same-named parameter is reassigned', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shadowed-require-reassignment-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.js' } }));
+    write('scripts/main.js', [
+      'const load = require;',
+      'function shadowAndReplace(load) {',
+      '  load = replacement;',
+      '  load("./not-a-loader-target.js");',
+      '}',
+      'load("./outer-loader-target.js");'
+    ].join('\n'));
+    write('scripts/outer-loader-target.js');
+    write('scripts/not-a-loader-target.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/outer-loader-target.js'));
+    assert.equal(reachable.has('scripts/not-a-loader-target.js'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
