@@ -252,11 +252,10 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
 
   function resolvedOwner(identifier) {
     const reference = referenceByNode.get(identifier);
-    // Once lexical resolution identifies a binding, never fall back to a
-    // same-named owner from another scope. That fallback is only appropriate
-    // for genuinely unresolved/global identifiers.
-    if (reference?.resolved) return variableOwners.get(reference.resolved) || null;
-    return ownerByIdentifierName.get(identifier.name) ||
+    const resolved = reference && reference.resolved
+      ? variableOwners.get(reference.resolved) || null
+      : null;
+    return resolved || ownerByIdentifierName.get(identifier.name) ||
       classStaticOwnerByName.get(identifier.name) || null;
   }
 
@@ -342,6 +341,8 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
     if (parent && parent.type === 'NewExpression' && parent.callee === node) return;
     if (parent && parent.type === 'Property' && parent.key === node && !parent.computed) return;
     if (parent && parent.type === 'AssignmentExpression' && parent.left === node) return;
+    if (parent && parent.type === 'AssignmentExpression' && parent.right === node &&
+        parent.left.type === 'ObjectPattern') return;
     if (parent && parent.type === 'ClassDeclaration' && parent.id === node) return;
     if (parent && parent.type === 'VariableDeclarator' && parent.id === node) return;
     const record = owners.get(owner);
