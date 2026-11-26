@@ -853,3 +853,30 @@ test('follows bound createRequire factories assigned to previously uninitialized
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('follows call and apply wrappers around createRequire factories', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wrapped-create-require-factory-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
+    write('scripts/main.cjs', [
+      "const { createRequire } = require('node:module');",
+      'const loadCall = createRequire.call(null, __filename);',
+      "loadCall('./call-factory-child.js');",
+      'const loadApply = createRequire.apply(null, [__filename]);',
+      "loadApply('./apply-factory-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/call-factory-child.js');
+    write('scripts/apply-factory-child.js');
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/call-factory-child.js'));
+    assert.ok(reachable.has('scripts/apply-factory-child.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
