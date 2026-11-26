@@ -829,6 +829,9 @@ test('follows bound createRequire factories assigned to previously uninitialized
     write('package.json', JSON.stringify({ scripts: { run: 'node scripts/main.cjs' } }));
     write('scripts/main.cjs', [
       "const { createRequire } = require('node:module');",
+      'let assignedRequire;',
+      'assignedRequire = require;',
+      "assignedRequire('./assigned-require-child.js');",
       'let assignedImportedFactory;',
       'assignedImportedFactory = createRequire.bind(null);',
       'const loadImported = assignedImportedFactory(__filename);',
@@ -838,10 +841,12 @@ test('follows bound createRequire factories assigned to previously uninitialized
       'const loadModule = assignedModuleFactory(__filename);',
       "loadModule('./assigned-module-factory-child.js');"
     ].join(String.fromCharCode(10)));
+    write('scripts/assigned-require-child.js');
     write('scripts/assigned-imported-factory-child.js');
     write('scripts/assigned-module-factory-child.js');
     const graph = buildModuleGraph(root);
     const reachable = new Set(graph.reachable);
+    assert.ok(reachable.has('scripts/assigned-require-child.js'));
     assert.ok(reachable.has('scripts/assigned-imported-factory-child.js'));
     assert.ok(reachable.has('scripts/assigned-module-factory-child.js'));
   } finally {
