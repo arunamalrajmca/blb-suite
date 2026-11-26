@@ -643,7 +643,14 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       if (definition.type !== 'Variable' || !definition.node ||
           definition.node.type !== 'VariableDeclarator') return false;
       const init = definition.node.init;
-      if (init?.type === 'Identifier') return isRequireIdentifier(init, seen);
+      if (init?.type === 'Identifier') {
+        if (definition.node.id.type === 'ObjectPattern' && isNodeModuleIdentifier(init)) {
+          return definition.node.id.properties.some(property => property.type === 'Property' &&
+            staticKey(property.key, property.computed) === 'require' &&
+            property.value.type === 'Identifier' && property.value.name === variable.name);
+        }
+        return isRequireIdentifier(init, seen);
+      }
       if (init?.type === 'MemberExpression' && isNodeModuleIdentifier(init.object) &&
           staticKey(init.property, init.computed) === 'require') return true;
       if (init?.type === 'CallExpression' && isRequireExpression(init, new Set(seen))) return true;
