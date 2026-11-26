@@ -52,6 +52,25 @@ test('does not attribute nested ordinary-function this reads to an enclosing cla
   ]);
 });
 
+test('does not resolve a shadowed constructor binding to an outer class owner', () => {
+  const result = ownerAwarePropertyAudit([
+    'class Worker { start() {} stop() {} }',
+    'function useShadow(Worker) { const local = new Worker(); local.stop(); }',
+    'const worker = new Worker();',
+    'worker.start();'
+  ].join('\\n'), 'shadowed-class-constructor.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['stop']);
+});
+
+test('does not propagate an outer object owner through a shadowed local alias', () => {
+  const result = ownerAwarePropertyAudit([
+    'const service = { start() {}, stop() {} };',
+    'function useShadow(service) { const local = service; local.stop(); }',
+    'service.start();'
+  ].join('\\n'), 'shadowed-object-alias.js');
+  assert.deepEqual(result.findings.map(item => item.name), ['stop']);
+});
+
 test('does not attribute shadowed local property reads to an outer same-named owner', () => {
   const result = ownerAwarePropertyAudit([
     'const service = { start() {}, stop() {} };',
