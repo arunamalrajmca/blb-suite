@@ -302,12 +302,25 @@ function ownerAwarePropertyAudit(source, filename = '<source>') {
       }
     }
 
-    // Object destructuring is a property read on its initializer's owner.
-    if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern' &&
-        node.init && node.init.type === 'Identifier') {
-      const owner = resolvedOwner(node.init);
+    // Object destructuring reads named properties from its source owner.
+    // Both declarations and later assignment patterns are property reads.
+    const destructuringSource = node.type === 'VariableDeclarator' &&
+      node.id.type === 'ObjectPattern' ? node.init :
+      node.type === 'AssignmentExpression' && node.left.type === 'ObjectPattern'
+        ? node.right : null;
+    const destructuringPattern = node.type === 'VariableDeclarator' &&
+      node.id.type === 'ObjectPattern' ? node.id :
+      node.type === 'AssignmentExpression' && node.left.type === 'ObjectPattern'
+        ? node.left : null;
+    if (destructuringPattern && destructuringSource?.type === 'Identifier') {
+      const owner = resolvedOwner(destructuringSource);
       if (owner) {
-        for (const property of node.id.properties) {
+        for (const property of destructuringPattern.properties) {
+          if (property.type === 'RestElement') {
+            owners.get(owner).dynamic = true;
+            owners.get(owner).escapeReasons.add('object-rest-destructuring');
+            continue;
+          }
           if (property.type !== 'Property') continue;
           const key = staticKey(property.key, property.computed);
           if (key === null) owners.get(owner).dynamic = true;
