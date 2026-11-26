@@ -637,6 +637,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       if (init?.type === 'MemberExpression' && isNodeModuleIdentifier(init.object) &&
           staticKey(init.property, init.computed) === 'require') return true;
       if (init?.type === 'CallExpression' && isRequireExpression(init, new Set(seen))) return true;
+      if (init?.type === 'CallExpression' && init.callee.type === 'Identifier' &&
+          isFactoryIdentifier(init.callee, new Set())) return true;
       if (init?.type === 'CallExpression' && init.callee.type === 'MemberExpression' &&
           staticKey(init.callee.property, init.callee.computed) === 'bind' &&
           isRequireExpression(init.callee.object, new Set())) return true;
