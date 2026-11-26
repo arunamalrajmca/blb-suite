@@ -58,7 +58,7 @@ test('keeps the census explicitly observational and never emits dead-code claims
 
 
 test('does not report shadowed eval, Function, Proxy, Object, or Reflect as global metaprogramming', () => {
-  const result = run("function invoke(eval, Function, Proxy, Object, Reflect) { eval('source'); Function('return 1'); new Proxy({}, {}); Object.assign({}, {}); Reflect.get({}, 'x'); }");
+  const result = run("function invokeEval(eval) { eval('source'); } function invokeFunction(Function) { Function('return 1'); } function invokeProxy(Proxy) { new Proxy({}, {}); } function invokeObject(Object) { Object.assign({}, {}); } function invokeReflect(Reflect) { Reflect.get({}, 'x'); }");
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.equal(has(result, 'dynamic-code-generation'), false);
   assert.equal(has(result, 'proxy-construction'), false);
