@@ -58,7 +58,7 @@ test('does not attribute nested ordinary-function this reads to an enclosing cla
     '}',
     'const worker = new Worker();',
     'worker.run();'
-  ].join('\\n'), 'nested-this-owner.js');
+  ].join('\n'), 'nested-this-owner.js');
   assert.deepEqual(result.findings.map(item => [item.ownerKind, item.name]), [
     ['class-instance', 'stop']
   ]);
