@@ -942,6 +942,52 @@ test('follows Node loader aliases assigned through object destructuring', () => 
   }
 });
 
+test('follows destructured loader aliases with default initializers', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'default-destructured-module-loaders-'));
+  const write = (name, value = '') => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: {
+      run: 'node scripts/main.mjs',
+      cjs: 'node scripts/main.cjs'
+    } }));
+    write('scripts/main.mjs', [
+      "import * as nodeModule from 'node:module';",
+      'const { createRequire: makeRequire = fallbackFactory } = nodeModule;',
+      'const load = makeRequire(import.meta.url);',
+      "load('./default-create-require-child.js');",
+      'let assignedFactory;',
+      '({ createRequire: assignedFactory = fallbackFactory } = nodeModule);',
+      'const assignedLoad = assignedFactory(import.meta.url);',
+      "assignedLoad('./assigned-default-create-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    write('scripts/main.cjs', [
+      'const { require: load = fallbackRequire } = module;',
+      "load('./default-module-require-child.js');",
+      'let assignedLoad;',
+      '({ require: assignedLoad = fallbackRequire } = module);',
+      "assignedLoad('./assigned-default-module-require-child.js');"
+    ].join(String.fromCharCode(10)));
+    for (const name of [
+      'scripts/default-create-require-child.js',
+      'scripts/assigned-default-create-require-child.js',
+      'scripts/default-module-require-child.js',
+      'scripts/assigned-default-module-require-child.js'
+    ]) write(name);
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const name of [
+      'scripts/default-create-require-child.js',
+      'scripts/assigned-default-create-require-child.js',
+      'scripts/default-module-require-child.js',
+      'scripts/assigned-default-module-require-child.js'
+    ]) assert.ok(reachable.has(name), name);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('follows destructured loaders from Node module namespace and CommonJS module object', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'destructured-module-loaders-'));
   const write = (name, value = '') => {
