@@ -1,5 +1,5 @@
 name: Reusable CI section checkpoint
-description: Restore a fingerprinted section checkpoint, skip only a fully validated pass, and preserve partial state after failures.
+description: Optionally restore a fingerprinted section checkpoint, or execute directly when recovery is disabled.
 inputs:
   section:
     description: Stable unique section identifier within the workflow.
