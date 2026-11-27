@@ -71,6 +71,11 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
       add(selected, nonExtensionJs);
     } else if (/\.(?:cjs|mjs)$/i.test(path)) {
       add(selected, nonExtensionModules);
+    } else if (/\.html?$/i.test(path)) {
+      selected.add("repository");
+    } else if (/\.json$/i.test(path)) {
+      add(selected, ["owner", "cross_module", "unified"]);
+      if (/(^|\/)manifest[^/]*\.json$/i.test(path)) selected.add("repository");
     } else if (/^tests\/|^regression-suite\//.test(path) && /\.(?:html|json)$/i.test(path)) {
       add(selected, ["repository", "owner", "cross_module", "unified"]);
     } else if (/^\.github\/workflows\/|^\.github\/actions\//.test(path) &&
