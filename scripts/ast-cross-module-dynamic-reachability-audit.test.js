@@ -74,6 +74,20 @@ test('resolves child process fork and node argv targets into reachability',()=>{
  assert.ok(r.reachable.includes('scripts/worker.js'));assert.ok(r.reachable.includes('scripts/child.js'));assert.equal(r.resolvedLaunchEdges.length,2);}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('tracks nonliteral calls through immutable require aliases as reachable uncertainty',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-require-alias-uncertainty-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts/plugins'),{recursive:true});
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  fs.writeFileSync(path.join(root,'scripts/main.js'),"const load = require; const run = load; run('./plugins/' + process.env.PLUGIN);");
+  fs.writeFileSync(path.join(root,'scripts/plugins/one.js'),'module.exports = 1;');
+  const files=['scripts/main.js','scripts/plugins/one.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.ok(r.launches.some(x=>x.kind==='module-loader'&&x.certainty==='unresolved-dynamic-or-external'));
+  assert.equal(r.unresolvedReachable.length,1);
+  assert.equal(r.candidates[0].status,'uncertain-dynamic-loader');
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('does not classify shadowed dynamic loaders or worker constructors as globals',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'shadowed-dynamic-loaders-'));
  try{
