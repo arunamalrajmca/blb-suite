@@ -29,10 +29,19 @@ function listPattern(pattern) {
     .map(entry => path.posix.join(directory, entry.name)).sort();
 }
 const classified = new Set();
+const classifiedOwners = new Map();
+const suiteIds = new Set();
 for (const suite of manifest.suites) {
+  if (!suite.id || suiteIds.has(suite.id)) fail('Missing or duplicate test suite id: ' + suite.id);
+  suiteIds.add(suite.id);
   const files = listPattern(suite.pattern);
   if (!files.length) fail('Suite pattern matched no files: ' + suite.id + ' (' + suite.pattern + ')');
-  for (const file of files) classified.add(file);
+  for (const file of files) {
+    const priorOwner = classifiedOwners.get(file);
+    if (priorOwner && priorOwner !== suite.id) fail('Test file has multiple automated suite owners: ' + file + ' (' + priorOwner + ', ' + suite.id + ')');
+    classifiedOwners.set(file, suite.id);
+    classified.add(file);
+  }
   const ownerContent = readRepoFile(suite.owner);
   if (suite.requiredText && !ownerContent.includes(suite.requiredText)) fail('Execution owner lacks declared runner command for ' + suite.id + ': ' + suite.owner);
   if (suite.alsoOwnedBy && !readRepoFile(suite.alsoOwnedBy).includes(suite.alsoRequiredText)) fail('Secondary execution owner no longer runs ' + suite.id + ': ' + suite.alsoOwnedBy);
@@ -69,7 +78,13 @@ for (const suite of manifest.suites) {
   }
   counts.push({ id:suite.id, count:files.length });
 }
-const manualOnly = new Map(manifest.manualOnly.map(item => [item.path,item]));
+const manualOnlyEntries = manifest.manualOnly || [];
+const manualOnly = new Map(manualOnlyEntries.map(item => [item.path,item]));
+if (manualOnly.size !== manualOnlyEntries.length) fail('Manual-only harness inventory contains duplicate paths.');
+for (const item of manualOnlyEntries) {
+  if (!item.path || !item.reason || !item.reason.trim()) fail('Manual-only harness requires a path and explicit reason: ' + String(item.path));
+  if (classified.has(item.path)) fail('A test file cannot be both automated and manual-only: ' + item.path);
+}
 const ignoredNames = new Set(['fixtures.js','extension-test-helpers.js','progress-reporter.js','test-suite-inventory.json']);
 const candidates = [];
 function walk(directory) {
