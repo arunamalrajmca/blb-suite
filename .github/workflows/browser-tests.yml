@@ -58,7 +58,7 @@ jobs:
   repository-ast-audits:
     name: Repository AST audits
     needs: change-detection
-    if: \${{ needs.change-detection.result == 'success' && (github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
+    if: ${{ needs.change-detection.result == 'success' && (github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -72,20 +72,20 @@ jobs:
           node-version: 22
       - name: Classify repository-wide AST audit scope
         id: audit-scope
-        if: \${{ github.event_name != 'workflow_dispatch' }}
+        if: ${{ github.event_name != 'workflow_dispatch' }}
         env:
-          BASE_SHA: \${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/classify-ast-audit-scope.mjs "$BASE_SHA"
       - name: Select all repository-wide AST audits for manual full run
         id: audit-scope-manual
-        if: \${{ github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           for name in symbol repository owner cross_module runtime unified computed executable_source metaprogramming; do
             echo "run_$name=true" >> "$GITHUB_OUTPUT"
           done
           echo "run_any=true" >> "$GITHUB_OUTPUT"
       - name: Install pinned AST audit dependencies
-        if: \${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
+        if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test AST audit scope selector
         run: node --test scripts/classify-ast-audit-scope.test.mjs
@@ -93,21 +93,21 @@ jobs:
         run: node --test scripts/ast-audit-input-fingerprint.test.mjs
       - name: Run selected repository-wide AST audits with per-audit checkpoints
         env:
-          RUN_SYMBOL: \${{ steps.audit-scope.outputs.run_symbol || steps.audit-scope-manual.outputs.run_symbol }}
-          RUN_REPOSITORY: \${{ steps.audit-scope.outputs.run_repository || steps.audit-scope-manual.outputs.run_repository }}
-          RUN_OWNER: \${{ steps.audit-scope.outputs.run_owner || steps.audit-scope-manual.outputs.run_owner }}
-          RUN_CROSS_MODULE: \${{ steps.audit-scope.outputs.run_cross_module || steps.audit-scope-manual.outputs.run_cross_module }}
-          RUN_RUNTIME: \${{ steps.audit-scope.outputs.run_runtime || steps.audit-scope-manual.outputs.run_runtime }}
-          RUN_UNIFIED: \${{ steps.audit-scope.outputs.run_unified || steps.audit-scope-manual.outputs.run_unified }}
-          RUN_COMPUTED: \${{ steps.audit-scope.outputs.run_computed || steps.audit-scope-manual.outputs.run_computed }}
-          RUN_EXECUTABLE_SOURCE: \${{ steps.audit-scope.outputs.run_executable_source || steps.audit-scope-manual.outputs.run_executable_source }}
-          RUN_METAPROGRAMMING: \${{ steps.audit-scope.outputs.run_metaprogramming || steps.audit-scope-manual.outputs.run_metaprogramming }}
-        if: \${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
+          RUN_SYMBOL: ${{ steps.audit-scope.outputs.run_symbol || steps.audit-scope-manual.outputs.run_symbol }}
+          RUN_REPOSITORY: ${{ steps.audit-scope.outputs.run_repository || steps.audit-scope-manual.outputs.run_repository }}
+          RUN_OWNER: ${{ steps.audit-scope.outputs.run_owner || steps.audit-scope-manual.outputs.run_owner }}
+          RUN_CROSS_MODULE: ${{ steps.audit-scope.outputs.run_cross_module || steps.audit-scope-manual.outputs.run_cross_module }}
+          RUN_RUNTIME: ${{ steps.audit-scope.outputs.run_runtime || steps.audit-scope-manual.outputs.run_runtime }}
+          RUN_UNIFIED: ${{ steps.audit-scope.outputs.run_unified || steps.audit-scope-manual.outputs.run_unified }}
+          RUN_COMPUTED: ${{ steps.audit-scope.outputs.run_computed || steps.audit-scope-manual.outputs.run_computed }}
+          RUN_EXECUTABLE_SOURCE: ${{ steps.audit-scope.outputs.run_executable_source || steps.audit-scope-manual.outputs.run_executable_source }}
+          RUN_METAPROGRAMMING: ${{ steps.audit-scope.outputs.run_metaprogramming || steps.audit-scope-manual.outputs.run_metaprogramming }}
+        if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: repository-ast-audits
           cache_prefix: blb-ast-audits-v1
-          fingerprint: \${{ hashFiles('.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml', 'scripts/ci-section-checkpoint.mjs', 'scripts/ast-audit-input-fingerprint.mjs', 'scripts/classify-ast-audit-scope.mjs') }}
+          fingerprint: ${{ hashFiles('.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml', 'scripts/ci-section-checkpoint.mjs', 'scripts/ast-audit-input-fingerprint.mjs', 'scripts/classify-ast-audit-scope.mjs') }}
           always_run: 'true'
           run: |
             set -euo pipefail
