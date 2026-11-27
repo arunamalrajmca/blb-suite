@@ -327,7 +327,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       for (const command of Object.values(pkg.scripts || {})) {
-        const match = /(?:^|&&|\|\|)\s*(?:node|nodejs)\s+(?:--[^ ]+\s+)*([^\s;&|]+)/g;
+        const match = /(?:^|&&|\|\||;)\s*(?:node|nodejs)\s+(?:--[^ ]+\s+)*([^\s;&|]+)/g;
         let found;
         while ((found = match.exec(command))) {
           const target = resolveFile(path.join(root, 'package.json'), found[1], fileSet);
@@ -382,7 +382,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   };
   for (const workflowFile of [...collectWorkflowFiles(workflowDir), ...collectWorkflowFiles(compositeActionDir)]) {
     const workflowSource = fs.readFileSync(workflowFile, 'utf8');
-    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:scripts|tests|regression-suite)\/[A-Za-z0-9_.*?/-]+\.(?:js|cjs|mjs))/g;
+    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:js|cjs|mjs))/g;
     let command;
     while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1]);
     const shellGlobPattern = /scripts\/test-[A-Za-z0-9_.*?/-]+\.js(?=[;\s]|$)/g;
