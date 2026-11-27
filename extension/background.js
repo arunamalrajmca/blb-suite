@@ -3612,6 +3612,24 @@ async function ensureContentScriptInTab(tabId) {
           });
           if (Number(bundleProbe?.result?.evaluationCount || 0) > 0 ||
               bundleProbe?.result?.fileExecuted === true) {
+            // The registered bundle may have executed its first dependency
+            // before content.js installs the refresh listener. Wait for that
+            // same document to finish initialization instead of returning to
+            // the short outer activation retry loop (or reinjecting it).
+            for (let attempt = 0; attempt < 36; attempt++) {
+              if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100));
+              try {
+                const response = await chrome.tabs.sendMessage(tabId, {
+                  type:'blbSuiteRefreshSiteFeatures'
+                });
+                if (response?.ok === true) {
+                  tab = await getCurrentEligibleTab();
+                  if (!tab) return false;
+                  await injectOptionalRedirectFiles();
+                  return true;
+                }
+              } catch (_) {}
+            }
             return false;
           }
           // Pin the core bundle to the inspected document. A same-origin
