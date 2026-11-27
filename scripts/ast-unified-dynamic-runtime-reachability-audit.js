@@ -1825,6 +1825,25 @@ function analyze(root = path.resolve(__dirname, '..')) {
             sourceText.slice(node.left.start, node.left.end).slice(0, 160));
         }
       }
+      // Property-descriptor APIs can install event handlers without a direct
+      // assignment expression. Resolve only statically named on* properties
+      // with a direct callable value; accessors and computed names stay unknown.
+      if (node.type === 'CallExpression' &&
+          ['Object.defineProperty', 'globalThis.Object.defineProperty',
+            'window.Object.defineProperty', 'self.Object.defineProperty'].includes(memberPath(node.callee)) &&
+          node.arguments[1]?.type === 'Literal' &&
+          typeof node.arguments[1].value === 'string' &&
+          /^on[a-z0-9_]+$/i.test(node.arguments[1].value) &&
+          node.arguments[2]?.type === 'ObjectExpression') {
+        const valueProperty = node.arguments[2].properties.find(property =>
+          !property.computed && (property.key?.name || property.key?.value) === 'value');
+        if (valueProperty && valueProperty.value &&
+            ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
+              'CallExpression', 'ObjectExpression'].includes(valueProperty.value.type)) {
+          callbackRecord(valueProperty.value, 'event-property-descriptor:' + node.arguments[1].value,
+            node.loc.start.line, memberPath(node.callee));
+        }
+      }
       if (node.type === 'AssignmentExpression' && node.operator === '=' &&
           node.left.type === 'Identifier') {
         const target = bindings.get(node.left), source = bindings.get(node.right);
