@@ -65,7 +65,7 @@ test('HARD-GATE separates package validation from bounded concurrent repository 
   assert.match(workflow, /Run selected repository-wide AST audits concurrently/);
   assert.match(workflow, /if \(\( active >= 4 \)\)/);
   assert.match(workflow, /wait -n/);
-  assert.match(workflow, /tee "\\$log_file" \\| sed -u/);
+  assert.ok(workflow.includes('tee "$log_file" | sed -u'));
   assert.match(workflow, /if \(\( failed != 0 \)\)/);
   const auditJobStart = workflow.indexOf('  repository-ast-audits:\n');
   const packageJobStart = workflow.indexOf('  regression-package:\n');
