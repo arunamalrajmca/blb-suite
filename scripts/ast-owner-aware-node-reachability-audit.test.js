@@ -134,6 +134,27 @@ test('collects literal require, import, re-export and dynamic-loading edges', ()
   }
 });
 
+test('resolves literal no-substitution template strings as static Node loader targets', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-module-edges-'));
+  try {
+    const from = path.join(root, 'entry.js');
+    const target = path.join(root, 'helper.js');
+    fs.writeFileSync(from, '');
+    fs.writeFileSync(target, '');
+    const files = new Set([from, target]);
+    const result = collectModuleEdges([
+      'import(`./helper.js`);',
+      'require(`./helper`);',
+      'require(`./${name}`);'
+    ].join('\\n'), from, files);
+    assert.equal(result.edges.length, 2);
+    assert.ok(result.edges.every(edge => edge.file === target));
+    assert.deepEqual(result.dynamic.map(item => item.kind), ['dynamic-require']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('builds transitive Node module reachability from package, workflow and Playwright roots', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'node-module-graph-'));
   const write = (name, value) => {
