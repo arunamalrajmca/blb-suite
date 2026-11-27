@@ -92,7 +92,7 @@ test('checkpoint execution rule is correct and HARD-GATE runs sections directly'
   const calls = (hardGate.match(/uses: \.\/\.github\/actions\/ci-section-checkpoint/g) || []).length;
   assert.equal(calls, 0, 'HARD-GATE must not invoke the checkpoint action');
   assert.match(hardGate, /node scripts\/test-suite-inventory\.mjs/);
-  assert.match(hardGate, /node scripts\/ast-symbol-reference-audit\.js/);
+  assert.match(hardGate, /start_audit symbol scripts\/ast-symbol-reference-audit\.test\.js scripts\/ast-symbol-reference-audit\.js/);
   assert.match(hardGate, /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/);
   assert.doesNotMatch(hardGate, /BLB_CI_CHECKPOINT_DIR/);
 });
