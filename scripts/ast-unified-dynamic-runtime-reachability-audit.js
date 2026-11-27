@@ -1596,7 +1596,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
         const resolvedLastArgumentFunction = lastArgument?.type === 'Identifier' &&
-          functionDefs.has(file + '::' + bindings.get(lastArgument));
+          (functionDefs.has(file + '::' + bindings.get(lastArgument)) ||
+            [...functionDefs.values()].filter(definition =>
+              definition.file === file && definition.node.id?.name === lastArgument.name
+            ).length === 1);
         const extensionCallback = isExtensionApi && lastArgumentIsCallable &&
           (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction);
         const isCallbackCandidate = argument => argument &&
