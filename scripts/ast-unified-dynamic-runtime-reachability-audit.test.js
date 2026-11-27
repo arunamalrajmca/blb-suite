@@ -2490,6 +2490,45 @@ test('does not infer event callbacks from accessors or computed descriptor names
     item.expression === 'Object.defineProperty'), false);
 });
 
+test('recognizes lifecycle callbacks on locally registered custom elements', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'class ScripturePanel extends HTMLElement {',
+      '  connectedCallback() { this.ready = true; }',
+      '  disconnectedCallback() { this.ready = false; }',
+      '  adoptedCallback() { this.adopted = true; }',
+      '  attributeChangedCallback(name, oldValue, newValue) { this[name] = newValue; }',
+      '}',
+      'customElements.define("scripture-panel", ScripturePanel);'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    item.certainty === 'resolved-inline-callback' &&
+    item.expression === 'customElements.define');
+  assert.equal(registrations.length, 4, JSON.stringify(registrations));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat unregistered classes, non-elements, or shadowed HTMLElement as lifecycle roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'class UnregisteredPanel extends HTMLElement { connectedCallback() {} }',
+      'class OrdinaryClass { connectedCallback() {} }',
+      'function make(HTMLElement) {',
+      '  class ShadowedPanel extends HTMLElement { connectedCallback() {} }',
+      '  customElements.define("shadowed-panel", ShadowedPanel);',
+      '}'
+    ].join('\\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' &&
+    String(item.registrationApi || '').startsWith('custom-element-lifecycle:')), false);
+});
+
 test('recognizes statically named event handlers installed through Reflect.set and Object.assign', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
