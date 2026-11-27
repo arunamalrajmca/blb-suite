@@ -1807,7 +1807,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
           'addListener', 'addEventListener', 'on', 'once', 'subscribe',
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
           'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback',
-          'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback'
+          'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback',
+          // Vue Composition API lifecycle hooks receive callbacks that Vue
+          // invokes later; include the full public lifecycle registration set.
+          'onBeforeMount', 'onMounted', 'onBeforeUpdate', 'onUpdated',
+          'onBeforeUnmount', 'onUnmounted', 'onErrorCaptured', 'onRenderTracked',
+          'onRenderTriggered', 'onActivated', 'onDeactivated', 'onServerPrefetch'
         ]);
         const observerBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' &&
