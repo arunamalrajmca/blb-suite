@@ -93,7 +93,7 @@ test('HARD-GATE separates package validation from bounded concurrent repository 
     ['runtime', 'scripts/ast-runtime-flow-reachability-audit.test.js', 'scripts/ast-runtime-flow-reachability-audit.js'],
     ['unified', 'scripts/ast-unified-dynamic-runtime-reachability-audit.test.js', 'scripts/ast-unified-dynamic-runtime-reachability-audit.js'],
     ['computed', 'scripts/ast-computed-property-reachability-audit.test.js', 'scripts/ast-computed-property-reachability-audit.js'],
-    ['executable-source', 'scripts/ast-executable-source-coverage-audit.test.js', 'scripts/ast-executable-source-coverage-audit.js'],
+    ['executable_source', 'scripts/ast-executable-source-coverage-audit.test.js', 'scripts/ast-executable-source-coverage-audit.js'],
     ['metaprogramming', 'scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js', 'scripts/ast-runtime-metaprogramming-uncertainty-audit.js']
   ]) {
     assert.ok(workflow.includes(`start_audit ${name} ${testFile} ${auditFile}`), name);
