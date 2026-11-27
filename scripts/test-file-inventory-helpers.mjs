@@ -8,7 +8,7 @@ export function looksLikeTestFileName(name) {
 
 export function extractDeclaredTestTitles(source) {
   const titles = [];
-  const declaration = /\\b(?:test|it)\\s*\\(\\s*(['"`])((?:\\\\.|[\\s\\S])*?)\\1\\s*,/g;
+  const declaration = /\\b(?:test|it)\\s*\\(\\s*(['"])((?:\\\\.|[\\s\\S])*?)\\1\\s*,/g;
   for (const match of String(source || '').matchAll(declaration)) titles.push(match[2]);
   return titles;
 }
