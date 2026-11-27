@@ -2526,7 +2526,7 @@ test('does not treat unregistered classes, non-elements, or shadowed HTMLElement
   });
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' &&
-    String(item.registrationApi || '').startsWith('custom-element-lifecycle:')), false);
+    item.expression === 'customElements.define'), false);
 });
 
 test('recognizes statically named event handlers installed through Reflect.set and Object.assign', () => {
