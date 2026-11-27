@@ -2464,7 +2464,7 @@ test('recognizes event callbacks installed through Object.defineProperty descrip
     'scripts/main.js': [
       'function onMessage(event) { return event.data; }',
       'Object.defineProperty(window, "onmessage", { configurable: true, value: onMessage });'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
@@ -2483,7 +2483,7 @@ test('does not infer event callbacks from accessors or computed descriptor names
       'function onMessage(event) { return event.data; }',
       'Object.defineProperty(window, runtimeName, { get() { return onMessage; } });',
       'Object.defineProperty(window, "onmessage", { get() { return onMessage; } });'
-    ].join('\\n')
+    ].join('\n')
   });
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' &&
@@ -2501,7 +2501,7 @@ test('recognizes lifecycle callbacks on locally registered custom elements', () 
       '  attributeChangedCallback(name, oldValue, newValue) { this[name] = newValue; }',
       '}',
       'customElements.define("scripture-panel", ScripturePanel);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' &&
@@ -2522,7 +2522,7 @@ test('does not treat unregistered classes, non-elements, or shadowed HTMLElement
       '  class ShadowedPanel extends HTMLElement { connectedCallback() {} }',
       '  customElements.define("shadowed-panel", ShadowedPanel);',
       '}'
-    ].join('\\n')
+    ].join('\n')
   });
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' &&
@@ -2536,7 +2536,7 @@ test('recognizes statically named event handlers installed through Reflect.set a
       'function onMessage(event) { return event.data; }',
       'Reflect.set(window, "onmessage", onMessage);',
       'Object.assign(window, { onerror: onMessage });'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' &&
@@ -2552,7 +2552,7 @@ test('keeps dynamic Reflect.set event names outside resolved callback ownership'
     'scripts/main.js': [
       'function onMessage(event) { return event.data; }',
       'Reflect.set(window, eventName, onMessage);'
-    ].join('\\n')
+    ].join('\n')
   });
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' && item.expression === 'Reflect.set'), false);
