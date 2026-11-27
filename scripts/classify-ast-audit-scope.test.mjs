@@ -9,6 +9,13 @@ test("a runtime-flow analyzer change runs only runtime-flow and unified audits",
   ]), ["runtime", "unified"]);
 });
 
+test("unified resolver changes also run its cross-module consumer audit", () => {
+  assert.deepEqual(selectAstAudits([
+    "scripts/ast-unified-dynamic-runtime-reachability-audit.js",
+    "scripts/ast-unified-dynamic-runtime-reachability-audit.test.js"
+  ]), ["cross_module", "unified"]);
+});
+
 test("owner-aware changes also run dependent cross-module and unified audits", () => {
   assert.deepEqual(selectAstAudits(["scripts/ast-owner-aware-node-reachability-audit.js"]),
     ["owner", "cross_module", "unified"]);

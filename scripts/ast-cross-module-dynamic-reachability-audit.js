@@ -18,15 +18,15 @@ function walk(root) {
 }
 function parse(s,f) { let err; for(const sourceType of ['script','module']) try{return acorn.parse(s,{ecmaVersion:'latest',sourceType,locations:true,ranges:true,allowHashBang:true});}catch(e){err=e;} throw new Error(f+': '+err.message); }
 function visit(n,fn,p=null) { if(!n||typeof n!=='object'||typeof n.type!=='string')return; fn(n,p); for(const [k,v] of Object.entries(n)){if(['loc','start','end','range'].includes(k))continue;if(Array.isArray(v))v.forEach(x=>visit(x,fn,n));else if(v&&typeof v.type==='string')visit(v,fn,n);} }
-function literalString(n,file,pathIdentifiers=null) {
+function literalString(n,file,pathIdentifiers=null,unboundIdentifiers=null,variableForIdentifier=null) {
   if(!n)return null;
   if(n.type==='Literal'&&typeof n.value==='string')return n.value;
   if(n.type==='TemplateLiteral'&&!n.expressions.length)return n.quasis[0].value.cooked;
-  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers),b=literalString(n.right,file,pathIdentifiers);return a===null||b===null?null:a+b;}
-  if(n.type==='Identifier'&&n.name==='__dirname')return path.dirname(file);
-  if(n.type==='Identifier'&&n.name==='__filename')return file;
-  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||pathIdentifiers.has(n.callee.object.name))&&['join','resolve'].includes(n.callee.property.name)){
-    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers));if(parts.some(x=>x===null))return null;
+  if(n.type==='BinaryExpression'&&n.operator==='+'){const a=literalString(n.left,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier),b=literalString(n.right,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier);return a===null||b===null?null:a+b;}
+  if(n.type==='Identifier'&&n.name==='__dirname')return unboundIdentifiers===null||unboundIdentifiers.has(n)?path.dirname(file):null;
+  if(n.type==='Identifier'&&n.name==='__filename')return unboundIdentifiers===null||unboundIdentifiers.has(n)?file:null;
+  if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&(pathIdentifiers===null||(variableForIdentifier&&pathIdentifiers.has(variableForIdentifier.get(n.callee.object))))&&['join','resolve'].includes(n.callee.property.name)){
+    const parts=n.arguments.map(x=>literalString(x,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier));if(parts.some(x=>x===null))return null;
     return n.callee.property.name==='join'?path.join(...parts):path.resolve(...parts);
   }
   return null;
@@ -61,7 +61,7 @@ function resolveLocal(from,spec,files,root=path.resolve(__dirname,'..'),mode='im
   return resolveModuleFile(from,spec,files,root,mode);
 }
 function collectExportsAndImports(ast,file){
-  const exports=new Map(),imports=[],pathIdentifiers=new Set(),commonJsExportNames=new Set();
+  const exports=new Map(),imports=[],pathIdentifiers=new Set(),requireAliases=new Set(),commonJsExportNames=new Set();
   let exportsAliasDetached=false;
   const setCommonJsExport=(name,local)=>{
     exports.set(String(name),local);
@@ -97,8 +97,29 @@ function collectExportsAndImports(ast,file){
     exportsAliasDetached=true;
   };
   const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
-  const isUnboundGlobal=node=>!!node&&node.type==='Identifier'
-    &&(scopeManager.globalScope?.through||[]).some(reference=>reference.identifier===node);
+  const unboundIdentifiers=new Set((scopeManager.globalScope?.through||[]).map(reference=>reference.identifier));
+  const variableForIdentifier=new Map();
+  for(const scope of scopeManager.scopes){
+    for(const variable of scope.variables||[]){
+      for(const identifier of variable.identifiers||[])variableForIdentifier.set(identifier,variable);
+      for(const definition of variable.defs||[])if(definition.name)variableForIdentifier.set(definition.name,variable);
+    }
+    for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
+  }
+  const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
+  const bindingForIdentifier=identifier=>{
+    if(!identifier||identifier.type!=='Identifier')return null;
+    const mapped=variableForIdentifier.get(identifier);
+    if(mapped)return mapped;
+    for(const scope of scopeManager.scopes||[]){
+      const declared=(scope.variables||[]).find(variable=>(variable.identifiers||[]).includes(identifier));
+      if(declared)return declared;
+      const reference=(scope.references||[]).find(item=>item.identifier===identifier&&item.resolved);
+      if(reference)return reference.resolved;
+    }
+    return null;
+  };
+  const hasStableBinding=variable=>!!variable&&(variable.references||[]).every(reference=>!reference.isWrite()||reference.init);
   const staticPropertyKey=node=>{
     if(node?.type==='Literal'&&(typeof node.value==='string'||typeof node.value==='number'))return String(node.value);
     if(node?.type==='TemplateLiteral'&&!node.expressions.length)return node.quasis[0].value.cooked;
@@ -647,16 +668,51 @@ function collectExportsAndImports(ast,file){
     if(method==='create'){recordObjectProperties(value);return;}
     if(['freeze','seal','preventExtensions','setPrototypeOf'].includes(method))recordObjectProperties(value.arguments[0]);
   };
-  visit(ast,n=>{
+  visit(ast,(n,parent)=>{
     collectNativeMutation(n);
     if(isModuleExportsAssignment(n)){
       const selfAssignment=isModuleExportsReference(n.right);
       if(!selfAssignment)moduleExportsReplacements.push(n);
     }
     if(n.type==='ImportDeclaration'&&['path','node:path'].includes(n.source.value)){
-      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier')pathIdentifiers.add(specifier.local.name);
+      for(const specifier of n.specifiers)if(specifier.type==='ImportDefaultSpecifier'||specifier.type==='ImportNamespaceSpecifier'){
+        const variable=variableForIdentifier.get(specifier.local);
+        if(variable&&hasStableBinding(variable))pathIdentifiers.add(variable);
+      }
     }
-    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value))pathIdentifiers.add(n.id.name);
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='CallExpression'&&n.init.callee.type==='Identifier'&&n.init.callee.name==='require'&&isUnboundGlobal(n.init.callee)&&n.init.arguments[0]?.type==='Literal'&&['path','node:path'].includes(n.init.arguments[0].value)){
+      const variable=variableForIdentifier.get(n.id);
+      if(variable&&hasStableBinding(variable))pathIdentifiers.add(variable);
+    }
+    if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
+      &&n.init.name==='require'&&isUnboundGlobal(n.init)&&parent?.type==='VariableDeclaration'&&parent.kind==='const'){
+      const variable=bindingForIdentifier(n.id);
+      if(variable&&parent?.kind==='const')requireAliases.add(variable);
+    }
+  });
+  // Close immutable require aliases transitively (const load = require; const run = load).
+  // Each alias must remain a const binding so reassignment cannot manufacture a loader edge.
+  let addedRequireAlias=true;
+  while(addedRequireAlias){
+    addedRequireAlias=false;
+    visit(ast,(n,parent)=>{
+      if(n.type!=='VariableDeclarator'||n.id.type!=='Identifier'||n.init?.type!=='Identifier'
+        ||parent?.kind!=='const')return;
+      const sourceVariable=bindingForIdentifier(n.init),targetVariable=bindingForIdentifier(n.id);
+      if(sourceVariable&&requireAliases.has(sourceVariable)&&targetVariable&&!requireAliases.has(targetVariable)){
+        requireAliases.add(targetVariable);
+        addedRequireAlias=true;
+      }
+    });
+  }
+  // Resolve path-module aliases through stable CommonJS loader aliases after
+  // the first pass has collected loader bindings, independent of declaration order.
+  visit(ast,(n)=>{
+    if(n.type!=='VariableDeclarator'||n.id.type!=='Identifier'||n.init?.type!=='CallExpression'
+      ||n.init.callee.type!=='Identifier'||!requireAliases.has(bindingForIdentifier(n.init.callee))
+      ||n.init.arguments[0]?.type!=='Literal'||!['path','node:path'].includes(n.init.arguments[0].value))return;
+    const variable=variableForIdentifier.get(n.id);
+    if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)pathIdentifiers.add(variable);
   });
   visit(ast,(n,parent)=>{
     if(n.type==='AssignmentExpression'&&n.operator==='='&&n.left.type==='Identifier'
@@ -671,8 +727,8 @@ function collectExportsAndImports(ast,file){
         for(const s of n.specifiers)imports.push({source:n.source.value,imported:s.type==='ImportDefaultSpecifier'?'default':s.type==='ImportNamespaceSpecifier'?'*':s.imported.name||s.imported.value,local:s.local.name});
       }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
     }
-    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
-    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&n.callee.name==='require')||(n.callee.type==='MemberExpression'&&n.callee.object.name==='module'&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
+    if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
+    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&((n.callee.name==='require'&&isUnboundGlobal(n.callee))||requireAliases.has(bindingForIdentifier(n.callee))))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
@@ -1300,8 +1356,127 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
 
 function analyzeDynamicExecution(root,files,graph){
   const set=new Set(files),launches=[],extra=[];
-  for(const file of files)visit(parse(fs.readFileSync(file,'utf8'),file),n=>{
-    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&['Worker','SharedWorker'].includes(n.callee.name)){
+  for(const file of files){
+    const ast=parse(fs.readFileSync(file,'utf8'),file);
+    const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
+    const unboundIdentifiers=new Set((scopeManager.globalScope?.through||[]).map(reference=>reference.identifier));
+    const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
+    const variableForIdentifier=new Map();
+    for(const scope of scopeManager.scopes||[]){
+      for(const variable of scope.variables||[]){
+        for(const identifier of variable.identifiers||[])variableForIdentifier.set(identifier,variable);
+        for(const reference of variable.references||[])variableForIdentifier.set(reference.identifier,variable);
+      }
+    }
+    const bindingForIdentifier=node=>{
+      if(node?.type!=='Identifier')return null;
+      let best=null,bestSpan=Infinity;
+      for(const scope of scopeManager.scopes||[]){
+        const block=scope.block;
+        if(!block||typeof block.start!=='number'||typeof block.end!=='number'||node.start<block.start||node.end>block.end)continue;
+        const variable=scope.set?.get(node.name);
+        if(variable&&block.end-block.start<bestSpan){best=variable;bestSpan=block.end-block.start;}
+      }
+      if(best)return best;
+      const mapped=variableForIdentifier.get(node);
+      if(mapped)return mapped;
+      for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
+        if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
+      }
+      return null;
+    };
+    const requireAliases=new Set(),workerConstructorAliases=new Set();
+    visit(ast,(node,parent)=>{
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
+        &&['Worker','SharedWorker'].includes(node.init.name)&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
+        const variable=bindingForIdentifier(node.id);if(variable)workerConstructorAliases.add(variable);
+      }
+    });
+    let workerAliasAdded=true;
+    while(workerAliasAdded){
+      workerAliasAdded=false;
+      visit(ast,(node,parent)=>{
+        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'||parent?.kind!=='const')return;
+        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
+        if(source&&workerConstructorAliases.has(source)&&target&&!workerConstructorAliases.has(target)){
+          workerConstructorAliases.add(target);workerAliasAdded=true;
+        }
+      });
+    }
+    visit(ast,(node,parent)=>{
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
+        &&node.init.name==='require'&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
+        const variable=bindingForIdentifier(node.id);
+        if(variable)requireAliases.add(variable);
+      }
+    });
+    let aliasAdded=true;
+    while(aliasAdded){
+      aliasAdded=false;
+      visit(ast,(node,parent)=>{
+        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'
+          ||parent?.kind!=='const')return;
+        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
+        if(source&&requireAliases.has(source)&&target&&!requireAliases.has(target)){
+          requireAliases.add(target);aliasAdded=true;
+        }
+      });
+    }
+    const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(bindingForIdentifier(node));
+    const childProcessModuleBindings=new Set(),childProcessFunctionBindings=new Map();
+    const isChildProcessSpecifier=node=>node?.type==='Literal'&&['child_process','node:child_process'].includes(node.value);
+    visit(ast,(node,parent)=>{
+      if(node.type==='ImportDeclaration'&&isChildProcessSpecifier(node.source)){
+        for(const specifier of node.specifiers||[]){
+          const variable=bindingForIdentifier(specifier.local);if(!variable)continue;
+          if(specifier.type==='ImportNamespaceSpecifier'||specifier.type==='ImportDefaultSpecifier')childProcessModuleBindings.add(variable);
+          else if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(specifier.imported?.name))childProcessFunctionBindings.set(variable,specifier.imported.name);
+        }
+      }
+      if(node.type!=='VariableDeclarator'||!node.init||node.init.type!=='CallExpression')return;
+      const callee=node.init.callee;
+      const isRequire=(callee.type==='Identifier'&&(isUnboundGlobal(callee)||isRequireAlias(callee)))
+        ||(callee.type==='MemberExpression'&&callee.object.type==='Identifier'&&callee.object.name==='module'&&isUnboundGlobal(callee.object)&&callee.property.name==='require');
+      if(!isRequire||!isChildProcessSpecifier(node.init.arguments[0]))return;
+      if(parent?.kind!=='const')return;
+      if(node.id.type==='Identifier'){
+        const variable=bindingForIdentifier(node.id);if(variable)childProcessModuleBindings.add(variable);
+      }else if(node.id.type==='ObjectPattern'){
+        for(const property of node.id.properties||[]){
+          if(property.type!=='Property'||property.value.type!=='Identifier')continue;
+          const name=property.key.name||property.key.value;
+          if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(name)){
+            const variable=bindingForIdentifier(property.value);if(variable)childProcessFunctionBindings.set(variable,String(name));
+          }
+        }
+      }
+    });
+    let childProcessAliasAdded=true;
+    while(childProcessAliasAdded){
+      childProcessAliasAdded=false;
+      visit(ast,(node,parent)=>{
+        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'||parent?.kind!=='const')return;
+        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
+        if(source&&childProcessModuleBindings.has(source)&&target&&!childProcessModuleBindings.has(target)){
+          childProcessModuleBindings.add(target);childProcessAliasAdded=true;
+        }
+      });
+    }
+    const childProcessMethodForCall=call=>{
+      const callee=call.callee;
+      if(callee.type==='Identifier')return childProcessFunctionBindings.get(bindingForIdentifier(callee))||null;
+      if(callee.type!=='MemberExpression')return null;
+      const method=callee.computed&&callee.property.type==='Literal'?String(callee.property.value):callee.property.name;
+      if(callee.object.type==='Identifier'&&childProcessModuleBindings.has(bindingForIdentifier(callee.object)))return method;
+      if(callee.object.type==='CallExpression'){
+        const factory=callee.object.callee;
+        const isRequire=factory.type==='Identifier'&&(isUnboundGlobal(factory)||isRequireAlias(factory));
+        if(isRequire&&isChildProcessSpecifier(callee.object.arguments[0]))return method;
+      }
+      return null;
+    };
+    visit(ast,n=>{
+    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&(isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)||workerConstructorAliases.has(bindingForIdentifier(n.callee)))){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'worker-launch',expression:spec||null,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':'unresolved-worker-target'});
       if(target)extra.push({from:file,to:target}); return;
@@ -1309,17 +1484,25 @@ function analyzeDynamicExecution(root,files,graph){
     if(n.type!=='CallExpression')return;
     const c=n.callee,method=c.type==='MemberExpression'?(c.computed&&c.property.type==='Literal'?c.property.value:c.property.name):c.name;
     const object=c.type==='MemberExpression'&&c.object.type==='Identifier'?c.object.name:null;
-    const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)&&(c.type==='Identifier'||object==='module'||object==='Module');
+    const loader=(c.type==='Identifier'&&isRequireAlias(c))
+      ||(['require','load','runInThisContext','runInNewContext','runInContext','importScripts'].includes(method)
+        &&((c.type==='Identifier'&&isUnboundGlobal(c))
+          ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
+          ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object))));
     if(loader){
-      const spec=literalString(n.arguments[0],file);
-      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
-      const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
-      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
-      if(target)extra.push({from:file,to:target});
+      const loaderArguments=method==='importScripts'?n.arguments:[n.arguments[0]];
+      for(const argument of loaderArguments){
+        const spec=literalString(argument,file);
+        const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
+        const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
+        launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
+        if(target)extra.push({from:file,to:target});
+      }
     }
-    if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(method)){
+    const childProcessMethod=childProcessMethodForCall(n);
+    if(childProcessMethod&&['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(childProcessMethod)){
       const command=literalString(n.arguments[0],file);let candidate=null,kind=null;
-      if(method==='fork'&&command){candidate=path.resolve(path.dirname(file),command);kind='fork-script';}
+      if(childProcessMethod==='fork'&&command){candidate=path.resolve(path.dirname(file),command);kind='fork-script';}
       else if(command&&/^(?:\.{1,2}\/|\/)/.test(command)){candidate=path.resolve(path.dirname(file),command);kind='direct-script-path';}
       else if(command&&/^(?:node|nodejs)$/.test(command)&&n.arguments[1]?.type==='ArrayExpression'){
         const arg=literalString(n.arguments[1].elements[0],file);if(arg){candidate=path.resolve(path.dirname(file),arg);kind='node-argv-script';}
@@ -1327,10 +1510,11 @@ function analyzeDynamicExecution(root,files,graph){
         const m=/^(?:node|nodejs)\s+["']?([^ "';]+)/.exec(command);if(m){candidate=path.resolve(path.dirname(file),m[1]);kind='shell-node-command';}
       }
       const target=candidate&&set.has(candidate)?candidate:null;
-      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'child-process-launch',method,command,resolved:target?path.relative(root,target):null,certainty:target?kind:'unresolved-process-target'});
+      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'child-process-launch',method:childProcessMethod,command,resolved:target?path.relative(root,target):null,certainty:target?kind:'unresolved-process-target'});
       if(target)extra.push({from:file,to:target});
     }
-  });
+    });
+  }
   const outgoing=new Map();
   for(const e of graph.edges)if(e.to){const from=path.resolve(root,e.from),to=path.resolve(root,e.to);if(!outgoing.has(from))outgoing.set(from,[]);outgoing.get(from).push(to);}
   for(const e of extra){if(!outgoing.has(e.from))outgoing.set(e.from,[]);outgoing.get(e.from).push(e.to);}

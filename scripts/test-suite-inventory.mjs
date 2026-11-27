@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { looksLikeTestFileName } from './test-file-inventory-helpers.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'test-suite-inventory.json'), 'utf8'));
@@ -77,8 +78,7 @@ function walk(directory) {
     if (entry.isDirectory()) walk(absolute);
     else {
       const relative = path.relative(root,absolute).split(path.sep).join('/');
-      const lower = entry.name.toLowerCase();
-      const looksLikeTest = lower.startsWith('test-') || lower.startsWith('test_') || lower.includes('.test.') || lower.includes('.spec.') || lower.includes('test-runner');
+      const looksLikeTest = looksLikeTestFileName(entry.name);
       if (looksLikeTest && !ignoredNames.has(entry.name)) candidates.push(relative);
     }
   }

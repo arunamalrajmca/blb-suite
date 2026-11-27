@@ -127,6 +127,8 @@ function analyzeFile(root, file) {
     const definition = variable.identifiers && variable.identifiers[0];
     return variable.name + '@' + (definition && definition.loc ? definition.loc.start.line : 0);
   };
+  const isUnshadowedGlobalIdentifier = (node, name) =>
+    node?.type === 'Identifier' && node.name === name && !variableForNode.has(node);
   const addEdge = (from, to, kind, node, detail) => {
     if (!from || !to) return;
     flowEdges.push({
@@ -340,8 +342,8 @@ function analyzeFile(root, file) {
         value.callee.object.type === 'Identifier') {
       const owner = value.callee.object.name;
       const method = propertyName(value.callee);
-      if ((owner === 'Promise' && ['resolve', 'reject'].includes(method)) ||
-          (owner === 'Object' && ['freeze', 'seal', 'preventExtensions'].includes(method))) {
+      if ((isUnshadowedGlobalIdentifier(value.callee.object, 'Promise') && ['resolve', 'reject'].includes(method)) ||
+          (isUnshadowedGlobalIdentifier(value.callee.object, 'Object') && ['freeze', 'seal', 'preventExtensions'].includes(method))) {
         for (const argument of value.arguments) {
           addContainedReferences(argument, destination, kind + '-transparent-call', origin || value, depth + 1);
         }
@@ -740,7 +742,7 @@ function analyzeFile(root, file) {
     if (expression.type === 'CallExpression') {
       if (expression.callee.type === 'MemberExpression' &&
           expression.callee.object.type === 'Identifier' &&
-          expression.callee.object.name === 'Promise' &&
+          isUnshadowedGlobalIdentifier(expression.callee.object, 'Promise') &&
           propertyName(expression.callee) === 'resolve') {
         return resolveAsyncIterableExpressions(expression.arguments[0], seen);
       }
@@ -766,7 +768,7 @@ function analyzeFile(root, file) {
   const resolveObjectExpression = expression => {
     if (expression?.type === 'AwaitExpression') return resolveObjectExpression(expression.argument);
     if (expression?.type === 'CallExpression' && expression.callee.type === 'MemberExpression' &&
-        expression.callee.object.type === 'Identifier' && expression.callee.object.name === 'Promise' &&
+        isUnshadowedGlobalIdentifier(expression.callee.object, 'Promise') &&
         propertyName(expression.callee) === 'resolve') {
       return resolveObjectExpression(expression.arguments[0]);
     }

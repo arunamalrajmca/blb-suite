@@ -113,16 +113,26 @@ function memberPath(node) {
   if (node && node.type === 'Identifier') parts.unshift(node.name);
   return parts.join('.');
 }
-function isArrayProducer(node) {
+function rootIdentifier(node) {
+  while (node && node.type === 'MemberExpression') node = node.object;
+  return node?.type === 'Identifier' ? node : null;
+}
+function isArrayProducer(node, bindings) {
   node = unwrap(node);
   if (!node) return false;
   if (node.type === 'ArrayExpression') return true;
-  if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Array') return true;
+  if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Array') {
+    return !bindings.get(node.callee);
+  }
   if (node.type !== 'CallExpression') return false;
   const path = memberPath(node.callee);
-  return path === 'Array.from' || path === 'Object.keys' || path === 'Object.values' ||
-    path === 'Object.entries' || path === 'Promise.all' ||
-    (node.callee.type === 'MemberExpression' && ['split','match','map','filter','flatMap','slice','concat','sort','toSorted','reverse','flat'].includes(node.callee.property.name));
+  const root = rootIdentifier(node.callee);
+  const unshadowedBuiltin = root && !bindings.get(root);
+  return (unshadowedBuiltin && (
+    path === 'Array.from' || path === 'Object.keys' || path === 'Object.values' ||
+    path === 'Object.entries' || path === 'Promise.all'
+  )) || (node.callee.type === 'MemberExpression' &&
+    ['split','match','map','filter','flatMap','slice','concat','sort','toSorted','reverse','flat'].includes(node.callee.property.name));
 }
 function isNumericIndexExpression(node) {
   if (!node) return false;
@@ -193,7 +203,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const key = bindings.get(node.id);
         if (key && node.init) {
           definitions.set(key, node.init);
-          if (isArrayProducer(node.init)) arrays.add(key);
+          if (isArrayProducer(node.init, bindings)) arrays.add(key);
           const init = unwrap(node.init);
           if (init?.type === 'CallExpression' && memberPath(init.callee) === 'chrome.storage.local.get') storageResults.add(key);
           for (const storageBinding of storageResults) {
@@ -280,7 +290,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'AssignmentExpression' && node.operator === '=' && node.left.type === 'Identifier') {
         const key = bindings.get(node.left), values = valuesOf(node.right, env, bindings);
-        if (key && isArrayProducer(node.right)) arrays.add(key);
+        if (key && isArrayProducer(node.right, bindings)) arrays.add(key);
         if (key && values) unionInto(env, key, values);
         if (key && node.right.type === 'Identifier') {
           const source = bindings.get(node.right); if (source) aliases.set(key, source);

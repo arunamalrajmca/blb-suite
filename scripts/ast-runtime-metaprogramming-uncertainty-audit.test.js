@@ -36,6 +36,7 @@ test('reports prototype and descriptor mutation APIs', () => {
 
 test('reports higher-order factories and callback contract boundaries', () => {
   const result = run("function factory() { return callback => callback(); } register(factory()); events.on('ready', handler); setTimeout(() => run(), 1);");
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.ok(has(result, 'higher-order-function-factory'));
   assert.ok(has(result, 'callback-contract'));
   assert.ok(has(result, 'higher-order-callback-boundary'));
@@ -53,4 +54,15 @@ test('keeps the census explicitly observational and never emits dead-code claims
   assert.ok(result.summary.total > 0);
   assert.ok(!Object.keys(result).some(key => /dead|deleteCandidate|unusedCode/i.test(key)));
   assert.equal(result.parseErrors.length, 0);
+});
+
+
+test('does not report shadowed Function, Proxy, Object, or Reflect as global metaprogramming', () => {
+  const result = run("function invokeFunction(Function) { Function('return 1'); } function invokeProxy(Proxy) { new Proxy({}, {}); } function invokeObject(Object) { Object.assign({}, {}); } function invokeReflect(Reflect) { Reflect.get({}, 'x'); }");
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(has(result, 'dynamic-code-generation'), false);
+  assert.equal(has(result, 'proxy-construction'), false);
+  assert.equal(has(result, 'reflective-operation'), false);
+  assert.equal(has(result, 'descriptor-or-prototype-mutation'), false);
+  assert.equal(has(result, 'prototype-or-descriptor-api'), false);
 });

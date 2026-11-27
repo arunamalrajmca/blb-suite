@@ -159,3 +159,22 @@ test('records computed-write values and distinguishes property deletion', () => 
   assert.equal(write.valueExpression, 'handler');
   assert.equal(deletion.role, 'delete');
 });
+
+
+test('does not classify shadowed built-in names as array producers', () => {
+  const result = run({
+    'main.js': "function exercise(Array, Object, Promise) { let from, keys, all; from = Array.from(); keys = Object.keys(); all = Promise.all(); const index = getIndex(); from[index]; keys[index]; all[index]; }"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 3);
+  assert.ok(result.observations.every(item => item.receiverKind !== 'array-like'));
+});
+
+test('continues to recognize unshadowed built-in array producers', () => {
+  const result = run({
+    'main.js': "let from; from = Array.from('abc'); const keys = Object.keys({a:1}); const all = Promise.all([]); const index = getIndex(); from[index]; keys[index]; all[index];"
+  });
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.length, 3);
+  assert.ok(result.observations.every(item => item.receiverKind === 'array-like'));
+});

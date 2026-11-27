@@ -14,6 +14,52 @@ test('maps CommonJS exported identifiers to importing modules',()=>{
  const r=analyzeCrossModule(root,[path.join(root,'service.js'),path.join(root,'consumer.js')]);assert.ok(r.links.some(x=>x.to==='service.js'&&x.imported==='default'));}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('resolves immutable aliases of the CommonJS require function',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'require-function-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; load('./worker.js');");
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),JSON.stringify(r.links));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('resolves transitive immutable aliases of the CommonJS require function',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'transitive-require-function-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; const run = load; run('./worker.js');");
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),
+   'an immutable alias chain must retain the CommonJS module edge: '+JSON.stringify(r.links));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not resolve reassigned aliases of the CommonJS require function',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'reassigned-require-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"let load = require; load = customLoader; load('./worker.js');");
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'&&x.commonjs===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not classify shadowed require or module.require calls as module edges',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'shadowed-require-edge-'));
+ try{
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   "function load(require, module) {",
+   "  require('./worker.js');",
+   "  module.require('./worker.js');",
+   "}"
+  ].join('\n'));
+  const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('resolves statically composed dynamic require specifiers',()=>{
  const file=path.join(os.tmpdir(),'audit','main.js'),ast=require('acorn').parse("require('./' + 'worker.js'); path.join(__dirname, 'child.js');",{ecmaVersion:'latest'}),calls=[];
  (function w(n){if(!n||typeof n!=='object')return;if(n.type==='CallExpression')calls.push(n);for(const v of Object.values(n))Array.isArray(v)?v.forEach(w):v&&typeof v.type==='string'&&w(v);})(ast);
@@ -28,6 +74,85 @@ test('resolves child process fork and node argv targets into reachability',()=>{
  assert.ok(r.reachable.includes('scripts/worker.js'));assert.ok(r.reachable.includes('scripts/child.js'));assert.equal(r.resolvedLaunchEdges.length,2);}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('tracks importScripts arguments and immutable worker constructor aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'worker-loader-aliases-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts'));
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  fs.writeFileSync(path.join(root,'scripts/main.js'),[
+   'const WorkerBase = Worker;',
+   'const WorkerAlias = WorkerBase;',
+   "new WorkerAlias('./worker.js');",
+   "importScripts('./one.js', './two.js');"
+  ].join('\n'));
+  for(const file of ['worker.js','one.js','two.js'])fs.writeFileSync(path.join(root,'scripts',file),'export const loaded = true;');
+  const files=['scripts/main.js','scripts/worker.js','scripts/one.js','scripts/two.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.resolvedLaunchEdges.length,3);
+  assert.ok(r.reachable.includes('scripts/worker.js'));
+  assert.ok(r.reachable.includes('scripts/one.js'));
+  assert.ok(r.reachable.includes('scripts/two.js'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('only attributes child-process launches to child_process bindings',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'owned-child-process-api-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts'));
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  fs.writeFileSync(path.join(root,'scripts/main.js'),[
+   "const cp = require('node:child_process');",
+   "const cpAlias = cp;",
+   "const { fork: launch } = require('child_process');",
+   "const fake = { spawn() {} }; fake.spawn('node', ['./fake.js']);",
+   "let changing = require('child_process'); changing = fake; changing.spawn('node', ['./fake.js']);",
+   "cpAlias.fork('./worker.js'); launch('./worker.js');"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'scripts/worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'scripts/fake.js'),'module.exports = false;');
+  const files=['scripts/main.js','scripts/worker.js','scripts/fake.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,2,JSON.stringify(r.launches));
+  assert.equal(r.resolvedLaunchEdges.length,2);
+  assert.ok(r.launches.some(x=>x.kind==='child-process-launch'&&x.method==='fork'&&x.command==='\u002e/worker.js'),
+   'destructured fork aliases retain their original child_process method');
+  assert.equal(r.launches.some(x=>x.kind==='child-process-launch'&&x.command==='\u002e/fake.js'),false,
+   'a reassigned child_process binding must not attribute calls to the replacement object');
+  assert.ok(r.reachable.includes('scripts/worker.js'));
+  assert.equal(r.candidates.find(x=>x.file==='scripts/fake.js')?.status,'candidate-only');
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('tracks nonliteral calls through immutable require aliases as reachable uncertainty',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-require-alias-uncertainty-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts/plugins'),{recursive:true});
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  fs.writeFileSync(path.join(root,'scripts/main.js'),"const load = require; const run = load; run('./plugins/' + process.env.PLUGIN);");
+  fs.writeFileSync(path.join(root,'scripts/plugins/one.js'),'module.exports = 1;');
+  const files=['scripts/main.js','scripts/plugins/one.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.ok(r.launches.some(x=>x.kind==='module-loader'&&x.certainty==='unresolved-dynamic-or-external'),JSON.stringify(r.launches));
+  assert.equal(r.unresolvedReachable.length,1);
+  assert.equal(r.candidates[0].status,'uncertain-dynamic-loader');
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not classify shadowed dynamic loaders or worker constructors as globals',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'shadowed-dynamic-loaders-'));
+ try{
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   'function local(require, module, Worker, load) {',
+   "  require('./worker.js');",
+   "  module.require('./worker.js');",
+   "  load('./worker.js');",
+   "  new Worker('./worker.js');",
+   '}'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  const files=['consumer.js','worker.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.launches.length,0,'lexically shadowed loader names must not be treated as global dynamic execution');
+  assert.equal(r.resolvedLaunchEdges.length,0);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('unknown dynamic loader reachable from an entrypoint suppresses orphan claims',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-unknown-'));
  try{fs.mkdirSync(path.join(root,'scripts/plugins'),{recursive:true});fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
@@ -220,11 +345,55 @@ test('preserves dynamic import source line numbers for resolved and unresolved t
 });
 
 
+test('does not resolve dynamic imports using a shadowed __dirname parameter',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-shadowed-dirname-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"function load(__dirname) { import(__dirname + '/service.js'); }");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('does not treat an unrelated shadowed path object as a Node path module',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-shadowed-path-'));
  try{
   fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
   fs.writeFileSync(path.join(root,'consumer.js'),"const path = { join: (a, b) => a + b };\nimport(path.join(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('resolves path modules loaded through immutable require aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-require-path-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; const path = load('node:path'); import(path.join(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true));
+  assert.equal(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not resolve dynamic imports through a reassigned CommonJS path alias',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-reassigned-path-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"let path = require('node:path'); path = fakePath; import(path.join(__dirname, 'service.js'));");
+  const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
+  assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
+  assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true),false);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('does not use an imported path alias when a nested parameter shadows it',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-import-shadowed-path-alias-'));
+ try{
+  fs.writeFileSync(path.join(root,'service.js'),'export const service = true;');
+  fs.writeFileSync(path.join(root,'consumer.js'),"import path from 'node:path'; function load(path) { import(path.join(__dirname, 'service.js')); }");
   const files=['service.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
   assert.ok(r.unresolved.some(x=>x.file==='consumer.js'&&x.dynamic===true&&x.source===null));
   assert.equal(r.links.some(x=>x.from==='consumer.js'&&x.to==='service.js'&&x.dynamic===true),false);

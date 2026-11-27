@@ -163,6 +163,12 @@ function readManifest(directory, expected) {
   return manifest;
 }
 
+export function isSuccessfulBrowserTestRecord(record) {
+  return record?.status === 'passed' &&
+    record?.overallStatus === 'expected' &&
+    record?.expectedStatus === 'passed';
+}
+
 function collectTestRecords(report) {
   const found = [];
   function visit(suites) {
@@ -214,8 +220,7 @@ function runShard(entries, index, directory, workers) {
     validReport = records.length === entries.length;
     if (validReport) {
       passedEntries = entries.filter((_entry, index) =>
-        (records[index].status === 'passed' && records[index].overallStatus === 'expected') ||
-        (records[index].status === 'skipped' && records[index].overallStatus === 'skipped' && records[index].expectedStatus === 'skipped')
+        isSuccessfulBrowserTestRecord(records[index])
       );
     }
   } catch {}

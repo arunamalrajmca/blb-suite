@@ -13,8 +13,10 @@ for (const [input, expected] of [
   ['faith and hope', 'faith AND hope'],
   ['faith "and or not" hope', 'faith "and or not" hope'],
   ["LORD'S AND GOD", "LORD'S AND GOD"],
-  ['faith\\\\ AND hope', 'faith\\\\ AND hope']
+  ['faith\\\\ and hope', 'faith\\\\ AND hope'],
+  ['faith\\and hope', 'faith\\and hope']
 ]) assert.equal(api.normalizeBooleanOperatorsOutsideQuotes(input), expected, input);
 for (const input of ['faith and hope', "LORD'S AND GOD", 'faith "quoted and phrase" or hope']) assert.equal(api.hasUnquotedBooleanOperator(input), true, input);
-for (const input of ['faith "and or not"', 'ORACLE faith', 'android hope', 'candy hope']) assert.equal(api.hasUnquotedBooleanOperator(input), false, input);
+for (const input of ['faith "and or not"', 'ORACLE faith', 'android hope', 'candy hope', 'faith\\and hope']) assert.equal(api.hasUnquotedBooleanOperator(input), false, input);
+assert.equal(api.hasUnquotedBooleanOperator('faith\\\\and hope'), true, 'an escaped backslash does not escape the following operator');
 console.log('PASS: Omnibox Boolean operator contracts');

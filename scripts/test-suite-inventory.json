@@ -271,6 +271,13 @@
           "requiredText": "node --test scripts/detect-end-user-production-changes.test.mjs"
         }
       ]
+    },
+    {
+      "id": "test-file-inventory-classifier",
+      "pattern": "scripts/test-file-inventory-*.mjs",
+      "owner": ".github/workflows/browser-tests.yml",
+      "requiredText": "node --test scripts/test-file-inventory-helpers.test.mjs",
+      "executionEnvironment": "Node.js unit tests in the HARD-GATE package regression"
     }
   ],
   "manualOnly": [
