@@ -74,6 +74,42 @@ test('resolves child process fork and node argv targets into reachability',()=>{
  assert.ok(r.reachable.includes('scripts/worker.js'));assert.ok(r.reachable.includes('scripts/child.js'));assert.equal(r.resolvedLaunchEdges.length,2);}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('carries composite-action and working-directory shell roots through dynamic process reachability',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'action-dynamic-root-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts'),{recursive:true});
+  fs.mkdirSync(path.join(root,'tools'),{recursive:true});
+  fs.mkdirSync(path.join(root,'.github','actions','nested'),{recursive:true});
+  fs.writeFileSync(path.join(root,'.github','actions','nested','action.yml'),[
+   'name: Dynamic entry',
+   'runs:',
+   '  using: composite',
+   '  steps:',
+   '    - shell: bash',
+   '      run: node scripts/entry.js'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'.github','workflows','ci.yml'),[
+   'jobs:',
+   '  check:',
+   '    steps:',
+   '      - working-directory: tools',
+   '        run: bash run-wrapper.sh'
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'scripts','entry.js'),"require('node:child_process').fork('./worker.js');");
+  fs.writeFileSync(path.join(root,'scripts','worker.js'),"require('./worker-helper.js');");
+  fs.writeFileSync(path.join(root,'scripts','worker-helper.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'tools','run-wrapper.sh'),'node shell-child.js\n');
+  fs.writeFileSync(path.join(root,'tools','shell-child.js'),"require('./shell-helper.js');");
+  fs.writeFileSync(path.join(root,'tools','shell-helper.js'),'module.exports = true;');
+  const files=['scripts/entry.js','scripts/worker.js','scripts/worker-helper.js','tools/shell-child.js','tools/shell-helper.js'].map(x=>path.join(root,x));
+  const graph=buildModuleGraph(root),result=analyzeDynamicExecution(root,files,graph);
+  for(const file of ['scripts/entry.js','scripts/worker.js','scripts/worker-helper.js','tools/shell-child.js','tools/shell-helper.js']) {
+   assert.ok(result.reachable.includes(file),file);
+  }
+  assert.ok(result.resolvedLaunchEdges.some(edge=>edge.from==='scripts/entry.js'&&edge.to==='scripts/worker.js'));
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('tracks importScripts arguments and immutable worker constructor aliases',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'worker-loader-aliases-'));
  try{
