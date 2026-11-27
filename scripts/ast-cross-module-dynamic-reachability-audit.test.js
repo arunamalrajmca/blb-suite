@@ -110,7 +110,7 @@ test('only attributes child-process launches to child_process bindings',()=>{
   fs.writeFileSync(path.join(root,'scripts/worker.js'),'module.exports = true;');
   fs.writeFileSync(path.join(root,'scripts/fake.js'),'module.exports = false;');
   const files=['scripts/main.js','scripts/worker.js','scripts/fake.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
-  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,3);
+  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,3,JSON.stringify(r.launches));
   assert.equal(r.resolvedLaunchEdges.length,3);
   assert.ok(r.reachable.includes('scripts/worker.js'));
   assert.equal(r.candidates.find(x=>x.file==='scripts/fake.js')?.status,'candidate-only');
@@ -125,7 +125,7 @@ test('tracks nonliteral calls through immutable require aliases as reachable unc
   fs.writeFileSync(path.join(root,'scripts/main.js'),"const load = require; const run = load; run('./plugins/' + process.env.PLUGIN);");
   fs.writeFileSync(path.join(root,'scripts/plugins/one.js'),'module.exports = 1;');
   const files=['scripts/main.js','scripts/plugins/one.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
-  assert.ok(r.launches.some(x=>x.kind==='module-loader'&&x.certainty==='unresolved-dynamic-or-external'));
+  assert.ok(r.launches.some(x=>x.kind==='module-loader'&&x.certainty==='unresolved-dynamic-or-external'),JSON.stringify(r.launches));
   assert.equal(r.unresolvedReachable.length,1);
   assert.equal(r.candidates[0].status,'uncertain-dynamic-loader');
  } finally{fs.rmSync(root,{recursive:true,force:true});}
