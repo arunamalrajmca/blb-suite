@@ -106,51 +106,71 @@ jobs:
         run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Verify KJV corpus and search-index integrity
         run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
-      - name: Test and run conservative AST symbol audit
-        if: ${{ steps.audit-scope.outputs.run_symbol == 'true' || steps.audit-scope-manual.outputs.run_symbol == 'true' }}
+      - name: Run selected repository-wide AST audits concurrently
+        if: \${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
+        env:
+          RUN_SYMBOL: \${{ steps.audit-scope.outputs.run_symbol || steps.audit-scope-manual.outputs.run_symbol }}
+          RUN_REPOSITORY: \${{ steps.audit-scope.outputs.run_repository || steps.audit-scope-manual.outputs.run_repository }}
+          RUN_OWNER: \${{ steps.audit-scope.outputs.run_owner || steps.audit-scope-manual.outputs.run_owner }}
+          RUN_CROSS_MODULE: \${{ steps.audit-scope.outputs.run_cross_module || steps.audit-scope-manual.outputs.run_cross_module }}
+          RUN_RUNTIME: \${{ steps.audit-scope.outputs.run_runtime || steps.audit-scope-manual.outputs.run_runtime }}
+          RUN_UNIFIED: \${{ steps.audit-scope.outputs.run_unified || steps.audit-scope-manual.outputs.run_unified }}
+          RUN_COMPUTED: \${{ steps.audit-scope.outputs.run_computed || steps.audit-scope-manual.outputs.run_computed }}
+          RUN_EXECUTABLE_SOURCE: \${{ steps.audit-scope.outputs.run_executable_source || steps.audit-scope-manual.outputs.run_executable_source }}
+          RUN_METAPROGRAMMING: \${{ steps.audit-scope.outputs.run_metaprogramming || steps.audit-scope-manual.outputs.run_metaprogramming }}
+        shell: bash
         run: |
-            node --test scripts/ast-symbol-reference-audit.test.js
-            node scripts/ast-symbol-reference-audit.js
-      - name: Test and run context-aware repository reachability audit
-        if: ${{ steps.audit-scope.outputs.run_repository == 'true' || steps.audit-scope-manual.outputs.run_repository == 'true' }}
-        run: |
-            node --test scripts/ast-repository-reachability-audit.test.js
-            node scripts/ast-repository-reachability-audit.js
-      - name: Test and run owner-aware AST and Node module reachability audit
-        if: ${{ steps.audit-scope.outputs.run_owner == 'true' || steps.audit-scope-manual.outputs.run_owner == 'true' }}
-        run: |
-            node --test scripts/ast-owner-aware-node-reachability-audit.test.js
-            node scripts/ast-owner-aware-node-reachability-audit.js
-      - name: Test and run cross-module and dynamic execution reachability audit
-        if: ${{ steps.audit-scope.outputs.run_cross_module == 'true' || steps.audit-scope-manual.outputs.run_cross_module == 'true' }}
-        run: |
-            node --test scripts/ast-cross-module-dynamic-reachability-audit.test.js
-            node scripts/ast-cross-module-dynamic-reachability-audit.js
-      - name: Test and run conservative runtime-flow reachability audit
-        if: ${{ steps.audit-scope.outputs.run_runtime == 'true' || steps.audit-scope-manual.outputs.run_runtime == 'true' }}
-        run: |
-            node --test scripts/ast-runtime-flow-reachability-audit.test.js
-            node scripts/ast-runtime-flow-reachability-audit.js
-      - name: Test and run unified dynamic/runtime reachability audit
-        if: ${{ steps.audit-scope.outputs.run_unified == 'true' || steps.audit-scope-manual.outputs.run_unified == 'true' }}
-        run: |
-            node --test scripts/ast-unified-dynamic-runtime-reachability-audit.test.js
-            node scripts/ast-unified-dynamic-runtime-reachability-audit.js
-      - name: Test and run computed-property candidate audit
-        if: ${{ steps.audit-scope.outputs.run_computed == 'true' || steps.audit-scope-manual.outputs.run_computed == 'true' }}
-        run: |
-            node --test scripts/ast-computed-property-reachability-audit.test.js
-            node scripts/ast-computed-property-reachability-audit.js
-      - name: Test and run executable-source coverage audit
-        if: ${{ steps.audit-scope.outputs.run_executable_source == 'true' || steps.audit-scope-manual.outputs.run_executable_source == 'true' }}
-        run: |
-            node --test scripts/ast-executable-source-coverage-audit.test.js
-            node scripts/ast-executable-source-coverage-audit.js
-      - name: Test and run runtime-metaprogramming uncertainty audit
-        if: ${{ steps.audit-scope.outputs.run_metaprogramming == 'true' || steps.audit-scope-manual.outputs.run_metaprogramming == 'true' }}
-        run: |
-            node --test scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js
-            node scripts/ast-runtime-metaprogramming-uncertainty-audit.js
+          set -euo pipefail
+          log_dir="$(mktemp -d)"
+          logs=()
+          active=0
+          failed=0
+
+          start_audit() {
+            local name="$1" test_file="$2" audit_file="$3"
+            local log_file="$log_dir/$name.log"
+            logs+=("$log_file")
+            (
+              set -euo pipefail
+              echo "[$name] regression tests"
+              node --test "$test_file"
+              echo "[$name] repository audit"
+              node "$audit_file"
+            ) >"$log_file" 2>&1 &
+            active=$((active + 1))
+          }
+
+          reap_one() {
+            if wait -n; then
+              :
+            else
+              failed=1
+            fi
+            active=$((active - 1))
+          }
+
+          [[ "$RUN_SYMBOL" != "true" ]] || start_audit symbol scripts/ast-symbol-reference-audit.test.js scripts/ast-symbol-reference-audit.js
+          [[ "$RUN_REPOSITORY" != "true" ]] || start_audit repository scripts/ast-repository-reachability-audit.test.js scripts/ast-repository-reachability-audit.js
+          [[ "$RUN_OWNER" != "true" ]] || start_audit owner scripts/ast-owner-aware-node-reachability-audit.test.js scripts/ast-owner-aware-node-reachability-audit.js
+          [[ "$RUN_CROSS_MODULE" != "true" ]] || start_audit cross-module scripts/ast-cross-module-dynamic-reachability-audit.test.js scripts/ast-cross-module-dynamic-reachability-audit.js
+          [[ "$RUN_RUNTIME" != "true" ]] || start_audit runtime scripts/ast-runtime-flow-reachability-audit.test.js scripts/ast-runtime-flow-reachability-audit.js
+          [[ "$RUN_UNIFIED" != "true" ]] || start_audit unified scripts/ast-unified-dynamic-runtime-reachability-audit.test.js scripts/ast-unified-dynamic-runtime-reachability-audit.js
+          [[ "$RUN_COMPUTED" != "true" ]] || start_audit computed scripts/ast-computed-property-reachability-audit.test.js scripts/ast-computed-property-reachability-audit.js
+          [[ "$RUN_EXECUTABLE_SOURCE" != "true" ]] || start_audit executable-source scripts/ast-executable-source-coverage-audit.test.js scripts/ast-executable-source-coverage-audit.js
+          [[ "$RUN_METAPROGRAMMING" != "true" ]] || start_audit metaprogramming scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js scripts/ast-runtime-metaprogramming-uncertainty-audit.js
+
+          while (( active > 0 )); do
+            reap_one
+          done
+
+          for log_file in "\${logs[@]}"; do
+            cat "$log_file"
+          done
+          if (( failed != 0 )); then
+            echo "One or more selected AST audits failed."
+            exit 1
+          fi
+          echo "All selected AST audits passed."
       - name: Validate extension build and module contracts
         run: node scripts/validate-build.js
       - name: Run browser selector decision tests
