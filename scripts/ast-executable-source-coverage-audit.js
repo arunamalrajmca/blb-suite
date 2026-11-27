@@ -358,6 +358,8 @@ function discover(root) {
     };
     const functionName = node => node?.id?.name || '';
     const parameterValues = new Map();
+    const callResultArrays = new Map();
+    const scopedNameKey = (owner, name) => functionName(owner) + ':' + name;
     const parameterKey = (name, index) => name + ':' + index;
     const mergeParameterValues = (name, index, values) => {
       if (!values?.length) return false;
@@ -376,6 +378,8 @@ function discover(root) {
         return functionReturns.get(node.callee.name) || null;
       }
       if (node.type !== 'Identifier' || !owner) return null;
+      const localValues = callResultArrays.get(scopedNameKey(owner, node.name));
+      if (localValues?.size) return [...localValues];
       const params = owner.params || [];
       const index = params.findIndex(param =>
         (param.type === 'Identifier' && param.name === node.name) ||
@@ -393,9 +397,14 @@ function discover(root) {
         if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
             node.init?.type !== 'CallExpression' || node.init.callee.type !== 'Identifier') return;
         const values = functionReturns.get(node.init.callee.name);
-        if (values?.length && !literalArrays.has(node.id.name)) {
-          literalArrays.set(node.id.name, values);
-          changed = true;
+        const owner = enclosingFunction(node);
+        if (values?.length && owner) {
+          const key = scopedNameKey(owner, node.id.name);
+          if (!callResultArrays.has(key)) callResultArrays.set(key, new Set());
+          const local = callResultArrays.get(key);
+          const before = local.size;
+          for (const value of values) local.add(value);
+          if (local.size !== before) changed = true;
         }
       });
       visit(ast, node => {
