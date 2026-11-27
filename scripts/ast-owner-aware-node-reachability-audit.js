@@ -992,9 +992,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'CallExpression' &&
                isRequireExpression(node.callee)) {
-      if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
+      if (node.arguments.length === 1 && staticModuleRequest(node.arguments[0]) !== null) {
+        specifier = staticModuleRequest(node.arguments[0]);
         kind = 'inline-bound-require';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-inline-bound-require' });
