@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { looksLikeTestFileName, extractDeclaredTestTitles } from './test-file-inventory-helpers.mjs';
+import { looksLikeTestFileName, extractDeclaredTestTitles, normalizeTextRequirements } from './test-file-inventory-helpers.mjs';
 
 test('recognizes supported test and spec filename conventions', () => {
   for (const name of [
@@ -28,7 +28,6 @@ test('extracts titles from real test declarations, including nested and multilin
 });
 
 test('normalizes scalar and array coverage evidence without splitting strings into characters', () => {
-  const { normalizeTextRequirements } = testFileInventoryHelpers;
   assert.deepEqual(normalizeTextRequirements('complete test title'), ['complete test title']);
   assert.deepEqual(normalizeTextRequirements(['first title', 'second title']), ['first title', 'second title']);
   assert.deepEqual(normalizeTextRequirements(undefined), []);
