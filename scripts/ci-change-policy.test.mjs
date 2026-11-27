@@ -14,7 +14,11 @@ test('repository audit tooling and workflow-only edits skip the expensive packag
     'scripts/ci-checkpoint-fingerprints.test.mjs',
     'scripts/run-checkpointed-playwright-audit.mjs',
     '.github/workflows/browser-tests.yml',
-    '.github/workflows/ci-command-router.yml'
+    '.github/workflows/ci-command-router.yml',
+    '.github/actions/ci-section-checkpoint/action.yml',
+    'scripts/ci-change-policy.mjs',
+    'scripts/classify-ci-changes.mjs',
+    'scripts/classify-ast-audit-scope.mjs'
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
     assert.equal(requiresPackageValidation(path), false, path);
