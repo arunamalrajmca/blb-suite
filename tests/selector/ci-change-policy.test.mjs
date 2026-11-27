@@ -105,6 +105,9 @@ test("package regression checkpoint is reusable across audit-only commits", () =
   const end = workflow.indexOf("run: BLB_EXPECTED_VERSION=", start);
   assert.ok(start >= 0 && end > start, "package regression checkpoint must remain declared in HARD-GATE");
   const checkpoint = workflow.slice(start, end);
+  const packageStep = workflow.indexOf("section: package-regression");
+  const firstAstAudit = workflow.indexOf("Test and run conservative AST symbol audit");
+  assert.ok(packageStep >= 0 && firstAstAudit > packageStep, "package checkpoint must run before long AST audit sections");
   assert.ok(checkpoint.includes("cache_prefix: blb-ci-v1-hard-gate-package-regression-${{ hashFiles('extension/**', 'regression-suite/**', 'package.json', 'package-lock.json') }}"));
   assert.ok(checkpoint.includes("fingerprint: ${{ hashFiles('extension/**', 'regression-suite/**', 'package.json', 'package-lock.json') }}"));
   for (const unrelatedInput of ["github.sha", "scripts/**", "tests/**", "browser-tests.yml"]) {
