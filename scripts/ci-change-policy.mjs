@@ -40,8 +40,6 @@ export function isNonRuntimePath(path) {
 export function requiresPackageValidation(path) {
   return path.startsWith("tests/selector/")
     || path.startsWith("regression-suite/")
-    || path === "scripts/classify-ast-audit-scope.mjs"
-    || path === "scripts/classify-ast-audit-scope.test.mjs"
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/ci-routing-registry.mjs"
