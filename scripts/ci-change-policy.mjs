@@ -45,6 +45,7 @@ export function requiresPackageValidation(path) {
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/ci-routing-registry.mjs"
+    || path === "scripts/ci-change-policy.mjs"
     || path === "scripts/run-validation-tests.js"
     || path === "scripts/validation-test-manifest.json"
     || path === "scripts/reference-e2e-matrix.json"
