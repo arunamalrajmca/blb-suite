@@ -6,7 +6,8 @@ test('AST audit tooling runs audit validation but skips the expensive package re
   for (const path of [
     'scripts/ast-symbol-reference-audit.js',
     'scripts/ast-cross-module-dynamic-reachability-audit.test.js',
-    'scripts/classify-ast-audit-scope.mjs'
+    'scripts/classify-ast-audit-scope.mjs',
+    'scripts/classify-ast-audit-scope.test.mjs'
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
     assert.equal(requiresPackageValidation(path), true, path);
