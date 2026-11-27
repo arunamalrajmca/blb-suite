@@ -2488,7 +2488,8 @@ test('does not infer event callbacks from accessors or computed descriptor names
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' &&
     item.expression === 'Object.defineProperty'), false);
-});\n
+});
+
 test('recognizes statically named event handlers installed through Reflect.set and Object.assign', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
