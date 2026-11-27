@@ -1268,7 +1268,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const reflectMethodBindings = new Map(), objectMethodBindings = new Map(), proxyRevocableBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
-    const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
+    // Chrome/Firefox extension APIs expose callback-style overloads across
+    // many namespaces (bookmarks, identity, downloads, tabs, runtime, etc.).
+    // Treat a callable final argument as an externally owned callback rather
+    // than relying on a brittle method-name allowlist. For one-argument calls,
+    // require an inline callable or a locally resolved function binding so
+    // ordinary object/data arguments are not mistaken for callbacks.
     const memberPath = node => {
       if (!node) return '';
       if (node.type === 'Identifier') {
@@ -1579,12 +1584,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
         const lastArgument = node.arguments[node.arguments.length - 1];
-        const callbackOnlyExtensionMethods = new Set(['getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'captureVisibleTab']);
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
-        const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) && lastArgumentIsCallable &&
-          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' ||
-            callbackOnlyExtensionMethods.has(method) || functionDefs.has(file + '::' + bindings.get(lastArgument)));
+        const resolvedLastArgumentFunction = lastArgument?.type === 'Identifier' &&
+          functionDefs.has(file + '::' + bindings.get(lastArgument));
+        const extensionCallback = isExtensionApi && lastArgumentIsCallable &&
+          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction);
         const isCallbackCandidate = argument => argument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
