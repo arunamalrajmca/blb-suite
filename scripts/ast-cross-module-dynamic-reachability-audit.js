@@ -107,6 +107,18 @@ function collectExportsAndImports(ast,file){
     for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
   }
   const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
+  const bindingForIdentifier=identifier=>{
+    if(!identifier||identifier.type!=='Identifier')return null;
+    const mapped=variableForIdentifier.get(identifier);
+    if(mapped)return mapped;
+    for(const scope of scopeManager.scopes||[]){
+      const declared=(scope.variables||[]).find(variable=>(variable.identifiers||[]).includes(identifier));
+      if(declared)return declared;
+      const reference=(scope.references||[]).find(item=>item.identifier===identifier&&item.resolved);
+      if(reference)return reference.resolved;
+    }
+    return null;
+  };
   const hasStableBinding=variable=>!!variable&&(variable.references||[]).every(reference=>!reference.isWrite()||reference.init);
   const staticPropertyKey=node=>{
     if(node?.type==='Literal'&&(typeof node.value==='string'||typeof node.value==='number'))return String(node.value);
@@ -674,7 +686,7 @@ function collectExportsAndImports(ast,file){
     }
     if(n.type==='VariableDeclarator'&&n.id.type==='Identifier'&&n.init?.type==='Identifier'
       &&n.init.name==='require'&&isUnboundGlobal(n.init)&&parent?.type==='VariableDeclaration'&&parent.kind==='const'){
-      const variable=variableForIdentifier.get(n.id);
+      const variable=bindingForIdentifier(n.id);
       if(variable&&parent?.kind==='const')requireAliases.add(variable);
     }
   });
@@ -686,7 +698,7 @@ function collectExportsAndImports(ast,file){
     visit(ast,(n,parent)=>{
       if(n.type!=='VariableDeclarator'||n.id.type!=='Identifier'||n.init?.type!=='Identifier'
         ||parent?.kind!=='const')return;
-      const sourceVariable=variableForIdentifier.get(n.init),targetVariable=variableForIdentifier.get(n.id);
+      const sourceVariable=bindingForIdentifier(n.init),targetVariable=bindingForIdentifier(n.id);
       if(sourceVariable&&requireAliases.has(sourceVariable)&&targetVariable&&!requireAliases.has(targetVariable)){
         requireAliases.add(targetVariable);
         addedRequireAlias=true;
@@ -697,7 +709,7 @@ function collectExportsAndImports(ast,file){
   // the first pass has collected loader bindings, independent of declaration order.
   visit(ast,(n)=>{
     if(n.type!=='VariableDeclarator'||n.id.type!=='Identifier'||n.init?.type!=='CallExpression'
-      ||n.init.callee.type!=='Identifier'||!requireAliases.has(variableForIdentifier.get(n.init.callee))
+      ||n.init.callee.type!=='Identifier'||!requireAliases.has(bindingForIdentifier(n.init.callee))
       ||n.init.arguments[0]?.type!=='Literal'||!['path','node:path'].includes(n.init.arguments[0].value))return;
     const variable=variableForIdentifier.get(n.id);
     if(variable&&(variable.references||[]).filter(reference=>reference.isWrite()).length===1)pathIdentifiers.add(variable);
@@ -716,7 +728,7 @@ function collectExportsAndImports(ast,file){
       }else imports.push({source:n.source.value,imported:'*',local:null,sideEffect:true});
     }
     if(n.type==='ImportExpression')imports.push({source:literalString(n.source,file,pathIdentifiers,unboundIdentifiers,variableForIdentifier),imported:'*',local:null,dynamic:true,line:n.loc.start.line});
-    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&((n.callee.name==='require'&&isUnboundGlobal(n.callee))||requireAliases.has(variableForIdentifier.get(n.callee))))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
+    if(n.type==='CallExpression'&&((n.callee.type==='Identifier'&&((n.callee.name==='require'&&isUnboundGlobal(n.callee))||requireAliases.has(bindingForIdentifier(n.callee))))||(n.callee.type==='MemberExpression'&&n.callee.object.type==='Identifier'&&n.callee.object.name==='module'&&isUnboundGlobal(n.callee.object)&&n.callee.property.name==='require'))&&n.arguments[0]?.type==='Literal'&&typeof n.arguments[0].value==='string'){
       const assignedToModuleExports=parent?.type==='AssignmentExpression'&&parent.right===n
         &&parent.left.type==='MemberExpression'&&parent.left.object.type==='Identifier'
         &&parent.left.object.name==='module'&&isUnboundGlobal(parent.left.object)&&memberName(parent.left)==='exports';
