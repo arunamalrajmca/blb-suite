@@ -866,6 +866,43 @@ function analyze(root = path.resolve(__dirname, '..')) {
     return unique.size === 1 ? [...unique.values()][0] : null;
   };
 
+  const handleEventOwner = (file, expression) => {
+    if (expression?.type !== 'ObjectExpression') return null;
+    const handler = expression.properties.find(property => {
+      const key = property.computed
+        ? (property.key?.type === 'Literal' ? property.key.value : null)
+        : property.key?.name || property.key?.value;
+      return key === 'handleEvent' &&
+        (property.type === 'ObjectMethod' ||
+          ['FunctionExpression', 'ArrowFunctionExpression'].includes(property.value?.type));
+    });
+    return handler ? { file, key: 'function@' + handler.loc.start.line, node: handler } : null;
+  };
+  // Resolve named listener objects before callback registration sites are
+  // visited, so declaration order does not affect the result. Mutable bindings
+  // are excluded rather than assuming their original object survives.
+  const listenerObjectOwners = new Map();
+  const reassignedListenerObjects = new Set();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file);
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        const key = bindings?.get(node.id);
+        const owner = handleEventOwner(file, node.init);
+        if (key && owner) listenerObjectOwners.set(file + '::' + key, owner);
+      }
+      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier') {
+        const key = bindings?.get(node.left);
+        if (key) reassignedListenerObjects.add(file + '::' + key);
+      }
+      if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') {
+        const key = bindings?.get(node.argument);
+        if (key) reassignedListenerObjects.add(file + '::' + key);
+      }
+    });
+  }
+  for (const key of reassignedListenerObjects) listenerObjectOwners.delete(key);
+
   const callbackParameterOwners = new Map();
   const callbackParameterFlows = new Map();
   const parameterSlots = new Set();
@@ -976,6 +1013,95 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (destinationOwners.size) callbackParameterOwners.set(destinationSlot, destinationOwners);
     }
+  }
+
+  // Carry listener-object identities through direct helper arguments.
+  // Multiple distinct incoming objects remain unresolved; no caller is chosen
+  // merely because it appears first in the source.
+  const listenerObjectParameterOwners = new Map();
+  const listenerParameterSlots = new Set();
+  const listenerParameterDefinitions = new Map();
+  for (const [file, ast] of asts) {
+    visit(ast, node => {
+      if (!['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+      for (const parameter of node.params || []) {
+        if (parameter.type !== 'Identifier') continue;
+        const key = bindingByFile.get(file)?.get(parameter);
+        if (key) {
+          const slot = file + '::' + key;
+          listenerParameterSlots.add(slot);
+          listenerParameterDefinitions.set(slot, { file, functionNode: node, parameterKey: key });
+        }
+      }
+    });
+  }
+  // Iterate parameter-to-parameter forwarding to a fixed point. This supports
+  // helper chains in either declaration/call order without choosing among
+  // conflicting callers. Every known or unknown callsite contributes evidence.
+  const listenerFlowCalls = [];
+  for (const [file, ast] of asts) {
+    visit(ast, node => {
+      if (node.type !== 'CallExpression') return;
+      const target = resolveCallableOwner(file, node.callee);
+      if (!target) return;
+      const targetBindings = bindingByFile.get(target.file);
+      for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
+        const parameter = target.node.params[index];
+        if (parameter.type !== 'Identifier') continue;
+        const parameterKey = targetBindings?.get(parameter);
+        if (!parameterKey) continue;
+        const argument = node.arguments[index];
+        const targetSlot = target.file + '::' + parameterKey;
+        let sourceSlot = null;
+        if (argument.type === 'Identifier') {
+          const sourceKey = bindingByFile.get(file)?.get(argument);
+          if (sourceKey && listenerParameterSlots.has(file + '::' + sourceKey)) {
+            sourceSlot = file + '::' + sourceKey;
+          }
+        }
+        listenerFlowCalls.push({
+          file, argument, targetSlot, sourceSlot,
+          targetDefinition: listenerParameterDefinitions.get(targetSlot)
+        });
+      }
+    });
+  }
+  const maxListenerFlowPasses = Math.max(1, listenerParameterSlots.size + 1);
+  for (let pass = 0; pass < maxListenerFlowPasses; pass++) {
+    const nextOwners = new Map();
+    const add = (slot, key, owner) => {
+      if (!nextOwners.has(slot)) nextOwners.set(slot, new Map());
+      nextOwners.get(slot).set(key, owner);
+    };
+    for (const call of listenerFlowCalls) {
+      let owner = handleEventOwner(call.file, call.argument);
+      let sourceOwners = null;
+      const targetReassigned = call.targetDefinition &&
+        parameterIsReassigned(call.targetDefinition.file, call.targetDefinition.functionNode,
+          call.targetDefinition.parameterKey);
+      const sourceDefinition = call.sourceSlot && listenerParameterDefinitions.get(call.sourceSlot);
+      const sourceReassigned = sourceDefinition &&
+        parameterIsReassigned(sourceDefinition.file, sourceDefinition.functionNode,
+          sourceDefinition.parameterKey);
+      if (!owner && call.argument.type === 'Identifier') {
+        const sourceKey = bindingByFile.get(call.file)?.get(call.argument);
+        if (sourceKey) owner = listenerObjectOwners.get(call.file + '::' + sourceKey) || null;
+      }
+      if (call.sourceSlot && !sourceReassigned) sourceOwners = listenerObjectParameterOwners.get(call.sourceSlot);
+      if (targetReassigned) {
+        add(call.targetSlot, '[unresolved-reassigned-parameter]', { unresolved: true });
+      } else if (owner) add(call.targetSlot, owner.file + '::' + owner.key, owner);
+      else if (sourceOwners?.size) {
+        for (const [key, value] of sourceOwners) add(call.targetSlot, key, value);
+      } else {
+        add(call.targetSlot, '[unresolved-callsite]', { unresolved: true });
+      }
+    }
+    const changed = JSON.stringify([...nextOwners].map(([slot, owners]) => [slot, [...owners.keys()].sort()]).sort()) !==
+      JSON.stringify([...listenerObjectParameterOwners].map(([slot, owners]) => [slot, [...owners.keys()].sort()]).sort());
+    listenerObjectParameterOwners.clear();
+    for (const [slot, owners] of nextOwners) listenerObjectParameterOwners.set(slot, owners);
+    if (!changed) break;
   }
 
   for (const [file, ast] of asts) {
@@ -1269,6 +1395,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const reflectMethodBindings = new Map(), objectMethodBindings = new Map(), proxyRevocableBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
+    const observerConstructorBindings = new Set();
     // Chrome/Firefox extension APIs expose callback-style overloads across
     // many namespaces (bookmarks, identity, downloads, tabs, runtime, etc.).
     // Treat a callable final argument as an externally owned callback rather
@@ -1355,10 +1482,35 @@ function analyze(root = path.resolve(__dirname, '..')) {
             certainty = 'resolved-interprocedural-callback-argument';
           }
         }
+        const objectOwners = listenerObjectParameterOwners.get(file + '::' + callbackKey);
+        const namedObjectOwner = listenerObjectOwners.get(file + '::' + callbackKey);
+        const resolvedObjectOwners = objectOwners || (namedObjectOwner
+          ? new Map([[namedObjectOwner.file + '::' + namedObjectOwner.key, namedObjectOwner]]) : null);
+        if (resolvedObjectOwners?.size === 1 && ![...resolvedObjectOwners.values()][0].unresolved) {
+          const owner = [...resolvedObjectOwners.values()][0];
+          callbackName = '[handleEvent listener]';
+          callbackTarget = rel(root, owner.file) + '::' + owner.key;
+          certainty = 'resolved-object-event-handler-binding';
+        }
       } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
         callbackName = '[inline callback]';
         callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
         certainty = 'resolved-inline-callback';
+      } else if (callback?.type === 'ObjectExpression') {
+        const handler = callback.properties.find(property => {
+          const key = property.computed ? staticValue(property.key, constants, 0, bindings) :
+            property.key?.name || property.key?.value;
+          return key === 'handleEvent' &&
+            (property.type === 'ObjectMethod' ||
+              ['FunctionExpression', 'ArrowFunctionExpression'].includes(property.value?.type));
+        });
+        if (handler) {
+          callbackName = '[handleEvent listener]';
+          callbackTarget = rel(root, file) + '::function@' + (handler.loc?.start.line || callback.loc.start.line);
+          certainty = 'resolved-object-event-handler';
+        } else {
+          callbackName = '[listener object]';
+        }
       } else if (callback?.type === 'CallExpression') {
         const owner = resolveReturnedCallbackOwner(file, callback);
         if (owner && !owner.unresolved) {
@@ -1389,6 +1541,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const target = node.id.type === 'Identifier' ? bindings.get(node.id) : null;
         if (target && node.init.type === 'Identifier') {
           const source = bindings.get(node.init);
+          if ((!source && observerConstructors.has(node.init.name)) ||
+              (source && observerConstructorBindings.has(source))) {
+            observerConstructorBindings.add(target);
+          }
           if (!source && node.init.name === 'Proxy') proxyConstructorBindings.add(target);
           if (!source && node.init.name === 'Reflect') reflectNamespaceBindings.add(target);
           if (!source && node.init.name === 'Object') objectNamespaceBindings.add(target);
@@ -1591,7 +1747,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback',
           'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback'
         ]);
-        const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
+        const observerBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
+        const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' &&
+          ((!observerBinding && observerConstructors.has(callee.name)) ||
+            (observerBinding && observerConstructorBindings.has(observerBinding)));
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
         const lastArgument = node.arguments[node.arguments.length - 1];
         const lastArgumentIsCallable = lastArgument &&
