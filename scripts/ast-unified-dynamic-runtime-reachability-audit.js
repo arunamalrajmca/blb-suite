@@ -1446,6 +1446,39 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const requireVm = node => node?.type === 'CallExpression' &&
       node.callee.type === 'Identifier' && node.callee.name === 'require' &&
       ['vm', 'node:vm'].includes(node.arguments[0]?.value);
+    // Custom-element lifecycle methods are invoked by the browser after a
+    // registered HTMLElement subclass is defined. Treat only statically
+    // registered, locally declared HTMLElement subclasses as callback roots.
+    const customElementLifecycleMethods = new Set([
+      'connectedCallback', 'disconnectedCallback', 'adoptedCallback', 'attributeChangedCallback'
+    ]);
+    const customElementClasses = new Map();
+    visit(ast, node => {
+      if (node.type !== 'ClassDeclaration' || !node.id || node.superClass?.type !== 'Identifier' ||
+          node.superClass.name !== 'HTMLElement' || bindings.get(node.superClass)) return;
+      const classKey = bindings.get(node.id);
+      if (!classKey) return;
+      const methods = new Map();
+      for (const element of node.body.body || []) {
+        if (element.type !== 'MethodDefinition' || element.computed ||
+            !customElementLifecycleMethods.has(element.key?.name || element.key?.value) ||
+            element.static || element.kind !== 'method') continue;
+        methods.set(element.key.name || element.key.value, element.value);
+      }
+      if (methods.size) customElementClasses.set(classKey, methods);
+    });
+    visit(ast, node => {
+      if (node.type !== 'CallExpression' || memberPath(node.callee) !== 'customElements.define' ||
+          node.callee.type !== 'MemberExpression' || node.arguments[1]?.type !== 'Identifier' ||
+          bindings.get(node.callee.object) || bindings.get(node.arguments[1])) return;
+      const classKey = bindings.get(node.arguments[1]);
+      const methods = classKey && customElementClasses.get(classKey);
+      if (!methods) return;
+      for (const [methodName, method] of methods) {
+        callbackRecord(method, 'custom-element-lifecycle:' + methodName,
+          node.loc.start.line, 'customElements.define');
+      }
+    });
     const callbackRecord = (callback, api, line, expression) => {
       let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
       if (callback?.type === 'Identifier') {
