@@ -835,12 +835,13 @@ test("shared runtime changes retain broad HARD-GATE coverage", () => {
   }
 });
 
-test("workflow changes always require package validation", () => {
+test("workflow-only changes skip package regressions and are validated by workflow contracts", () => {
   withFixture((root, base) => {
     commitChange(root, ".github/workflows/browser-tests.yml", "name: changed workflow\n");
     const output = classify(root, base);
     assert.match(output, /runtime_changed=false/);
-    assert.match(output, /package_validation_required=true/);
+    assert.match(output, /package_validation_required=false/);
+    assert.match(output, /package_regression_required=false/);
   });
 });
 
