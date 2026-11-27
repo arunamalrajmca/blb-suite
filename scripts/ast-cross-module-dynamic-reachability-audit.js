@@ -1398,6 +1398,45 @@ function analyzeDynamicExecution(root,files,graph){
       });
     }
     const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(bindingForIdentifier(node));
+    const childProcessModuleBindings=new Set(),childProcessFunctionBindings=new Set();
+    const isChildProcessSpecifier=node=>node?.type==='Literal'&&['child_process','node:child_process'].includes(node.value);
+    visit(ast,(node,parent)=>{
+      if(node.type==='ImportDeclaration'&&isChildProcessSpecifier(node.source)){
+        for(const specifier of node.specifiers||[]){
+          const variable=bindingForIdentifier(specifier.local);if(!variable)continue;
+          if(specifier.type==='ImportNamespaceSpecifier'||specifier.type==='ImportDefaultSpecifier')childProcessModuleBindings.add(variable);
+          else if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(specifier.imported?.name))childProcessFunctionBindings.add(variable);
+        }
+      }
+      if(node.type!=='VariableDeclarator'||!node.init||node.init.type!=='CallExpression')return;
+      const callee=node.init.callee;
+      const isRequire=(callee.type==='Identifier'&&(isUnboundGlobal(callee)||isRequireAlias(callee)))
+        ||(callee.type==='MemberExpression'&&callee.object.type==='Identifier'&&callee.object.name==='module'&&isUnboundGlobal(callee.object)&&callee.property.name==='require');
+      if(!isRequire||!isChildProcessSpecifier(node.init.arguments[0]))return;
+      if(node.id.type==='Identifier'){
+        const variable=bindingForIdentifier(node.id);if(variable)childProcessModuleBindings.add(variable);
+      }else if(node.id.type==='ObjectPattern'){
+        for(const property of node.id.properties||[]){
+          if(property.type!=='Property'||property.value.type!=='Identifier')continue;
+          const name=property.key.name||property.key.value;
+          if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(name)){
+            const variable=bindingForIdentifier(property.value);if(variable)childProcessFunctionBindings.add(variable);
+          }
+        }
+      }
+    });
+    const isChildProcessMethod=call=>{
+      const callee=call.callee;
+      if(callee.type==='Identifier')return childProcessFunctionBindings.has(bindingForIdentifier(callee));
+      if(callee.type!=='MemberExpression')return false;
+      if(callee.object.type==='Identifier')return childProcessModuleBindings.has(bindingForIdentifier(callee.object));
+      if(callee.object.type==='CallExpression'){
+        const factory=callee.object.callee;
+        const isRequire=factory.type==='Identifier'&&(isUnboundGlobal(factory)||isRequireAlias(factory));
+        return isRequire&&isChildProcessSpecifier(callee.object.arguments[0]);
+      }
+      return false;
+    };
     visit(ast,n=>{
     if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
@@ -1418,7 +1457,7 @@ function analyzeDynamicExecution(root,files,graph){
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
       if(target)extra.push({from:file,to:target});
     }
-    if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(method)){
+    if(isChildProcessMethod(n)&&['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(method)){
       const command=literalString(n.arguments[0],file);let candidate=null,kind=null;
       if(method==='fork'&&command){candidate=path.resolve(path.dirname(file),command);kind='fork-script';}
       else if(command&&/^(?:\.{1,2}\/|\/)/.test(command)){candidate=path.resolve(path.dirname(file),command);kind='direct-script-path';}
