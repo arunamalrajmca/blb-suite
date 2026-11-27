@@ -1430,6 +1430,7 @@ function analyzeDynamicExecution(root,files,graph){
       const isRequire=(callee.type==='Identifier'&&(isUnboundGlobal(callee)||isRequireAlias(callee)))
         ||(callee.type==='MemberExpression'&&callee.object.type==='Identifier'&&callee.object.name==='module'&&isUnboundGlobal(callee.object)&&callee.property.name==='require');
       if(!isRequire||!isChildProcessSpecifier(node.init.arguments[0]))return;
+      if(parent?.kind!=='const')return;
       if(node.id.type==='Identifier'){
         const variable=bindingForIdentifier(node.id);if(variable)childProcessModuleBindings.add(variable);
       }else if(node.id.type==='ObjectPattern'){
@@ -1442,6 +1443,17 @@ function analyzeDynamicExecution(root,files,graph){
         }
       }
     });
+    let childProcessAliasAdded=true;
+    while(childProcessAliasAdded){
+      childProcessAliasAdded=false;
+      visit(ast,(node,parent)=>{
+        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'||parent?.kind!=='const')return;
+        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
+        if(source&&childProcessModuleBindings.has(source)&&target&&!childProcessModuleBindings.has(target)){
+          childProcessModuleBindings.add(target);childProcessAliasAdded=true;
+        }
+      });
+    }
     const isChildProcessMethod=call=>{
       const callee=call.callee;
       if(callee.type==='Identifier')return childProcessFunctionBindings.has(bindingForIdentifier(callee));
