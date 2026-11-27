@@ -325,20 +325,107 @@ function discover(root) {
       }
       return values;
     };
-    const contentScriptFunction = node =>
-      node.type === 'FunctionDeclaration' && /contentScript.*Files/i.test(node.id?.name || '');
-    visit(ast, node => {
-      if (!contentScriptFunction(node)) return;
+    const functionNodes = new Map();
+    const functionReturns = new Map();
+    const parentByNode = new WeakMap();
+    visit(ast, (node, parent) => {
+      if (parent) parentByNode.set(node, parent);
+      if (node.type === 'FunctionDeclaration' && node.id?.name) {
+        functionNodes.set(node.id.name, node);
+      }
+    });
+    const returnsForFunction = node => {
+      const values = new Set();
       visit(node.body, child => {
         if (child.type !== 'ReturnStatement' || !child.argument) return;
-        const values = resolveStaticArray(child.argument);
-        if (!values) return;
-        for (const value of values) {
-          const target = addRequest(value, extension, normalize(root, file), 'runtime-content-script-selection');
-          if (target && !visited.has(target)) queue.push(target);
+        const returned = resolveStaticArray(child.argument);
+        if (returned) for (const value of returned) values.add(value);
+      });
+      return values.size ? [...values] : null;
+    };
+    for (const [name, node] of functionNodes) {
+      const returned = returnsForFunction(node);
+      if (returned) functionReturns.set(name, returned);
+    }
+    const enclosingFunction = node => {
+      let current = node;
+      while (current) {
+        if (current.type === 'FunctionDeclaration' || current.type === 'FunctionExpression' ||
+            current.type === 'ArrowFunctionExpression') return current;
+        current = parentByNode.get(current);
+      }
+      return null;
+    };
+    const functionName = node => node?.id?.name || '';
+    const parameterValues = new Map();
+    const parameterKey = (name, index) => name + ':' + index;
+    const mergeParameterValues = (name, index, values) => {
+      if (!values?.length) return false;
+      const key = parameterKey(name, index);
+      if (!parameterValues.has(key)) parameterValues.set(key, new Set());
+      const current = parameterValues.get(key);
+      const before = current.size;
+      for (const value of values) current.add(value);
+      return current.size !== before;
+    };
+    const resolveForFunction = (node, owner, depth = 0) => {
+      if (!node || depth > 5) return null;
+      const direct = resolveStaticArray(node, depth);
+      if (direct) return direct;
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
+        return functionReturns.get(node.callee.name) || null;
+      }
+      if (node.type !== 'Identifier' || !owner) return null;
+      const params = owner.params || [];
+      const index = params.findIndex(param =>
+        (param.type === 'Identifier' && param.name === node.name) ||
+        (param.type === 'AssignmentPattern' && param.left.type === 'Identifier' && param.left.name === node.name));
+      if (index < 0) return null;
+      const inferred = parameterValues.get(parameterKey(functionName(owner), index));
+      return inferred?.size ? [...inferred] : null;
+    };
+    // Propagate statically known arrays through local selector results and
+    // function parameters. This models the actual files -> ensure -> register
+    // helper chain without assuming a dynamic argument is static.
+    for ((let pass = 0; pass < 6; pass++)) {
+      let changed = false;
+      visit(ast, node => {
+        if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+            node.init?.type !== 'CallExpression' || node.init.callee.type !== 'Identifier') return;
+        const values = functionReturns.get(node.init.callee.name);
+        if (values?.length && !literalArrays.has(node.id.name)) {
+          literalArrays.set(node.id.name, values);
+          changed = true;
         }
       });
-    });
+      visit(ast, node => {
+        if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
+        const callee = functionNodes.get(node.callee.name);
+        if (!callee) return;
+        const caller = enclosingFunction(node);
+        const args = node.arguments || [];
+        for (let index = 0; index < callee.params.length; index++) {
+          const parameter = callee.params[index];
+          const name = parameter.type === 'Identifier' ? parameter.name :
+            parameter.type === 'AssignmentPattern' && parameter.left.type === 'Identifier' ? parameter.left.name : null;
+          if (!name) continue;
+          let values = index < args.length ? resolveForFunction(args[index], caller) : null;
+          if (!values && parameter.type === 'AssignmentPattern') values = resolveForFunction(parameter.right, callee);
+          if (mergeParameterValues(callee.id.name, index, values)) changed = true;
+        }
+      });
+      if (!changed) break;
+    }
+    const contentScriptFunction = node =>
+      node.type === 'FunctionDeclaration' && /contentScript.*Files/i.test(node.id?.name || '');
+    for (const [name, node] of functionNodes) {
+      if (!contentScriptFunction(node)) continue;
+      const values = functionReturns.get(name) || [];
+      for (const value of values) {
+        const target = addRequest(value, extension, normalize(root, file), 'runtime-content-script-selection');
+        if (target && !visited.has(target)) queue.push(target);
+      }
+    }
     visit(ast, (node, parent) => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
@@ -437,7 +524,7 @@ function discover(root) {
               // js/css are optional registration fields. An omitted field is
               // not a dynamic target; only a present but non-static value is.
               if (!source) continue;
-              const values = staticArray(source);
+              const values = staticArray(source) || resolveForFunction(source, enclosingFunction(node));
               if (values) for (const value of values) {
                 const target = addRequest(value, extension, normalize(root, file), 'runtime-registered-' + key);
                 if (target && !visited.has(target) && key === 'js') queue.push(target);
