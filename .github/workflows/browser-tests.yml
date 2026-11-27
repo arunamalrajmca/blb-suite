@@ -220,8 +220,11 @@ jobs:
         uses: ./.github/actions/ci-section-checkpoint
         with:
           section: package-regression
-          cache_prefix: blb-ci-v1-hard-gate-package-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
+          # Reuse a passed package checkpoint across audit-only commits. The
+          # package runner consumes extension + regression-suite inputs, not AST
+          # audit scripts or CI workflow sources; those are validated separately.
+          cache_prefix: blb-ci-v1-hard-gate-package-regression-${{ hashFiles('extension/**', 'regression-suite/**', 'package.json', 'package-lock.json') }}
+          fingerprint: ${{ hashFiles('extension/**', 'regression-suite/**', 'package.json', 'package-lock.json') }}
           run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Verify KJV corpus and search-index integrity
         uses: ./.github/actions/ci-section-checkpoint
