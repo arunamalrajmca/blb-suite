@@ -678,6 +678,21 @@ function collectExportsAndImports(ast,file){
       if(variable&&parent?.kind==='const')requireAliases.add(variable);
     }
   });
+  // Close immutable require aliases transitively (const load = require; const run = load).
+  // Each alias must remain a const binding so reassignment cannot manufacture a loader edge.
+  let addedRequireAlias=true;
+  while(addedRequireAlias){
+    addedRequireAlias=false;
+    visit(ast,(n,parent)=>{
+      if(n.type!=='VariableDeclarator'||n.id.type!=='Identifier'||n.init?.type!=='Identifier'
+        ||parent?.kind!=='const')return;
+      const sourceVariable=variableForIdentifier.get(n.init),targetVariable=variableForIdentifier.get(n.id);
+      if(sourceVariable&&requireAliases.has(sourceVariable)&&targetVariable&&!requireAliases.has(targetVariable)){
+        requireAliases.add(targetVariable);
+        addedRequireAlias=true;
+      }
+    });
+  }
   // Resolve path-module aliases through stable CommonJS loader aliases after
   // the first pass has collected loader bindings, independent of declaration order.
   visit(ast,(n)=>{
