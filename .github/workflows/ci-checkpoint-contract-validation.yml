@@ -69,6 +69,7 @@ jobs:
           node scripts/validate-build.js
           node --test tests/selector/browser-selector-decisions.test.mjs
           node --test scripts/detect-end-user-production-changes.test.mjs
+          node --test scripts/ci-change-policy.test.mjs
 
           # Exercise the exact test-list extraction and delegation checks used by
           # the expensive full audit, without launching a browser.
