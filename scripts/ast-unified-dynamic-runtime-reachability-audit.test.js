@@ -2457,3 +2457,35 @@ test('keeps multi-hop listener forwarding unresolved when one caller is unknown'
   assert.equal(registration.certainty, 'unresolved-callback-owner');
   assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });
+
+test('recognizes event callbacks installed through Object.defineProperty descriptors', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Object.defineProperty(window, "onmessage", { configurable: true, value: onMessage });'
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'Object.defineProperty');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-function-binding');
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not infer event callbacks from accessors or computed descriptor names', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Object.defineProperty(window, runtimeName, { get() { return onMessage; } });',
+      'Object.defineProperty(window, "onmessage", { get() { return onMessage; } });'
+    ].join('\\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'Object.defineProperty'), false);
+});
