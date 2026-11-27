@@ -177,7 +177,7 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
   };
   try {
     write('package.json', JSON.stringify({ scripts: { validate: 'node scripts/cli.js' } }));
-    write('.github/workflows/ci.yml', 'steps:\\n  - working-directory: tools\\n    run: bash run-wrapper.sh\\n  - working-directory: tools\\n    run: node direct-entry.js\\n');
+    write('.github/workflows/ci.yml', 'steps:\n  - working-directory: tools\n    run: bash run-wrapper.sh\n  - working-directory: tools\n    run: node direct-entry.js\n');
     write('.github/actions/nested/verify/action.yaml', [
       'name: Verify action',
       'runs:',
