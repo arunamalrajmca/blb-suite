@@ -58,5 +58,15 @@ export function requiresPackageValidation(path) {
     || path === "package-lock.json"
     || path === "extension/manifest.json"
     || path === "playwright.config.js"
-    || path === "playwright.config.ts";
+    || path === "playwright.config.ts"
+    || isAstAuditToolingPath(path)
+    || path === "scripts/classify-ast-audit-scope.mjs"
+    || path === "scripts/classify-ast-audit-scope.test.mjs";
+}
+
+export function requiresPackageRegression(path) {
+  return path.startsWith("extension/")
+    || path.startsWith("regression-suite/")
+    || path === "package.json"
+    || path === "package-lock.json";
 }
