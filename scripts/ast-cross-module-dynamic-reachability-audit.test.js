@@ -84,7 +84,7 @@ test('does not classify shadowed dynamic loaders or worker constructors as globa
    "  load('./worker.js');",
    "  new Worker('./worker.js');",
    '}'
-  ].join('\\n'));
+  ].join('\n'));
   fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
   const files=['consumer.js','worker.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
   assert.equal(r.launches.length,0,'lexically shadowed loader names must not be treated as global dynamic execution');
