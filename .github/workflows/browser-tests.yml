@@ -138,6 +138,9 @@ jobs:
               node "$audit_file"
             ) >"$log_file" 2>&1 &
             active=$((active + 1))
+            if (( active >= 4 )); then
+              reap_one
+            fi
           }
 
           reap_one() {
