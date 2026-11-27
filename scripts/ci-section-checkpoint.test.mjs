@@ -82,7 +82,7 @@ test('checkpoint inspection reports precise invalidation reasons', () => {
 });
 
 
-test('checkpoint execution rule is correct and HARD-GATE runs sections directly', () => {
+test('checkpoint execution rule is opt-in for the AST audit section only', () => {
   const action = fs.readFileSync(new URL('../.github/actions/ci-section-checkpoint/action.yml', import.meta.url), 'utf8');
   const hardGate = fs.readFileSync(new URL('../.github/workflows/browser-tests.yml', import.meta.url), 'utf8');
   assert.ok(action.includes("  recovery:\n    description: Enable cross-run checkpoint restore/save. Disable for workflows or sections that should always execute directly.\n    required: false\n    default: 'true'"));
@@ -90,9 +90,16 @@ test('checkpoint execution rule is correct and HARD-GATE runs sections directly'
   assert.ok(action.includes("    - name: Preserve completed or partial checkpoint after this attempt\n      if: ${{ inputs.recovery == 'true' && always()"));
   assert.ok(action.includes("if: ${{ inputs.recovery != 'true' || steps.check.outputs.complete != 'true' || inputs.always_run == 'true' }}"));
   const calls = (hardGate.match(/uses: \.\/\.github\/actions\/ci-section-checkpoint/g) || []).length;
-  assert.equal(calls, 0, 'HARD-GATE must not invoke the checkpoint action');
+  assert.equal(calls, 1, 'only the long repository-wide AST audit section uses checkpoints');
+  const astJob = hardGate.slice(hardGate.indexOf('  repository-ast-audits:'), hardGate.indexOf('  regression-package:'));
+  const packageJob = hardGate.slice(hardGate.indexOf('  regression-package:'), hardGate.indexOf('  regression-behavioral:'));
+  assert.match(astJob, /always_run: 'true'/);
+  assert.match(astJob, /cache_prefix: blb-ast-audits-v1/);
+  assert.match(astJob, /ast-audit-input-fingerprint\.mjs/);
+  assert.match(astJob, /All selected AST audits passed or were safely restored/);
+  assert.doesNotMatch(packageJob, /ci-section-checkpoint/);
+  assert.match(packageJob, /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/);
   assert.match(hardGate, /node scripts\/test-suite-inventory\.mjs/);
-  assert.match(hardGate, /start_audit symbol scripts\/ast-symbol-reference-audit\.test\.js scripts\/ast-symbol-reference-audit\.js/);
-  assert.match(hardGate, /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/);
-  assert.doesNotMatch(hardGate, /BLB_CI_CHECKPOINT_DIR/);
+  assert.match(astJob, /start_audit symbol scripts\/ast-symbol-reference-audit\.test\.js scripts\/ast-symbol-reference-audit\.js/);
+  assert.match(packageJob, /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/);
 });
