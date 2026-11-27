@@ -177,7 +177,7 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
   };
   try {
     write('package.json', JSON.stringify({ scripts: { validate: 'node scripts/cli.js' } }));
-    write('.github/workflows/ci.yml', 'steps:\n  - working-directory: tools\n    run: bash run-wrapper.sh\n');
+    write('.github/workflows/ci.yml', 'steps:\\n  - working-directory: tools\\n    run: bash run-wrapper.sh\\n  - working-directory: tools\\n    run: node direct-entry.js\\n');
     write('.github/actions/nested/verify/action.yaml', [
       'name: Verify action',
       'runs:',
@@ -191,6 +191,8 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
     write('tools/run-wrapper.sh', 'node tools/shell-child.js\n');
     write('tools/shell-child.js', 'require("./shell-helper.js");');
     write('tools/shell-helper.js', 'module.exports = true;');
+    write('tools/direct-entry.js', 'require("./direct-helper.js");');
+    write('tools/direct-helper.js', 'module.exports = true;');
     write('tools/action-entry.js', 'require("./action-helper.js");');
     write('tools/action-helper.js', 'module.exports = true;');
 
@@ -199,6 +201,8 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
     for (const file of [
       'tools/shell-child.js',
       'tools/shell-helper.js',
+      'tools/direct-entry.js',
+      'tools/direct-helper.js',
       'tools/action-entry.js',
       'tools/action-helper.js'
     ]) assert.ok(reachable.has(file), file);
