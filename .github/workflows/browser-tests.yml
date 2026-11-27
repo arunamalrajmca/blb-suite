@@ -95,6 +95,7 @@ jobs:
       - name: Verify repository-wide test inventory and production-module coverage
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: test-inventory
           cache_prefix: blb-ci-v1-hard-gate-test-inventory-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -108,6 +109,7 @@ jobs:
       - name: Run deterministic regression gate — package
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: package-regression
           # Reuse a passed package checkpoint across audit-only commits. The
           # package runner consumes extension + regression-suite inputs, not AST
@@ -118,6 +120,7 @@ jobs:
       - name: Verify KJV corpus and search-index integrity
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: kjv-corpus-integrity
           cache_prefix: blb-ci-v1-hard-gate-kjv-corpus-integrity-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -126,6 +129,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_symbol == 'true' || steps.audit-scope-manual.outputs.run_symbol == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-symbol-audit
           cache_prefix: blb-ci-v1-hard-gate-ast-symbol-audit-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -136,6 +140,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_repository == 'true' || steps.audit-scope-manual.outputs.run_repository == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-repository-reachability
           cache_prefix: blb-ci-v1-hard-gate-ast-repository-reachability-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -146,6 +151,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_owner == 'true' || steps.audit-scope-manual.outputs.run_owner == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-owner-aware-node
           cache_prefix: blb-ci-v1-hard-gate-ast-owner-aware-node-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -156,6 +162,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_cross_module == 'true' || steps.audit-scope-manual.outputs.run_cross_module == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-cross-module-dynamic
           cache_prefix: blb-ci-v1-hard-gate-ast-cross-module-dynamic-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -166,6 +173,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_runtime == 'true' || steps.audit-scope-manual.outputs.run_runtime == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-runtime-flow
           cache_prefix: blb-ci-v1-hard-gate-ast-runtime-flow-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -176,6 +184,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_unified == 'true' || steps.audit-scope-manual.outputs.run_unified == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-unified-dynamic-runtime
           cache_prefix: blb-ci-v1-hard-gate-ast-unified-dynamic-runtime-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -186,6 +195,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_computed == 'true' || steps.audit-scope-manual.outputs.run_computed == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-computed-property
           cache_prefix: blb-ci-v1-hard-gate-ast-computed-property-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -196,6 +206,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_executable_source == 'true' || steps.audit-scope-manual.outputs.run_executable_source == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-executable-source-coverage
           cache_prefix: blb-ci-v1-hard-gate-ast-executable-source-coverage-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -206,6 +217,7 @@ jobs:
         if: ${{ steps.audit-scope.outputs.run_metaprogramming == 'true' || steps.audit-scope-manual.outputs.run_metaprogramming == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ast-runtime-metaprogramming-uncertainty
           cache_prefix: blb-ci-v1-hard-gate-ast-runtime-metaprogramming-uncertainty-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -215,6 +227,7 @@ jobs:
       - name: Validate extension build and module contracts
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: build-validation
           cache_prefix: blb-ci-v1-hard-gate-build-validation-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -222,6 +235,7 @@ jobs:
       - name: Run browser selector decision tests
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: selector-tests
           cache_prefix: blb-ci-v1-hard-gate-selector-tests-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -229,6 +243,7 @@ jobs:
       - name: Run CI browser-routing inventory contract
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: ci-routing
           cache_prefix: blb-ci-v1-hard-gate-ci-routing-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
@@ -265,6 +280,7 @@ jobs:
       - name: Run deterministic regression gate — ${{ matrix.group }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
+          recovery: false
           section: behavioral-${{ matrix.group }}
           cache_prefix: blb-ci-v1-hard-gate-behavioral-${{ matrix.group }}-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
           fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
