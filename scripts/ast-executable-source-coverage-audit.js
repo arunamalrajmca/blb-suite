@@ -387,7 +387,7 @@ function discover(root) {
     // Propagate statically known arrays through local selector results and
     // function parameters. This models the actual files -> ensure -> register
     // helper chain without assuming a dynamic argument is static.
-    for ((let pass = 0; pass < 6; pass++)) {
+    for (let pass = 0; pass < 6; pass++) {
       let changed = false;
       visit(ast, node => {
         if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
