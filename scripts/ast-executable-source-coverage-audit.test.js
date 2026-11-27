@@ -84,6 +84,46 @@ test('traces alternative runtime content-script file lists returned by selector 
   }
 });
 
+test('propagates static content-script arrays through registration helper parameters', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "const CORE_FILES = ['core.js'];",
+      "const REDIRECT_FILES = ['redirect.js'];",
+      'function contentScriptFilesForTab(tab) { return [...CORE_FILES, ...REDIRECT_FILES]; }',
+      'async function registerRuntimeContentScriptForPattern(tab, files = CORE_FILES) {',
+      '  await chrome.scripting.registerContentScripts([{ id: "runtime", matches: ["https://example.test/*"], js: files }]);',
+      '}',
+      'async function ensureRuntimeContentScriptRegistered(tab, files) {',
+      '  return registerRuntimeContentScriptForPattern(tab, files);',
+      '}',
+      'async function activate(tab) {',
+      '  const files = contentScriptFilesForTab(tab);',
+      '  return ensureRuntimeContentScriptRegistered(tab, files);',
+      '}'
+    ].join('\n'));
+    for (const name of ['core.js', 'redirect.js']) {
+      f.write('extension/' + name, 'self.loaded = true;');
+    }
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    for (const name of ['core.js', 'redirect.js']) {
+      const entry = byFile.get('extension/' + name);
+      assert.equal(entry.classification, 'statically-rooted-or-imported');
+      assert.ok(entry.roots.some(root => root.kind === 'runtime-registered-js'));
+    }
+    assert.equal(result.dynamicSites.some(site =>
+      site.api === 'registerContentScripts.js' && site.certainty === 'dynamic-registration-target'), false);
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('classifies fetched generated JavaScript payloads as packaged data resources', () => {
   const f = fixture();
   try {
