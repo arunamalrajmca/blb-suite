@@ -793,7 +793,7 @@ test('does not treat shadowed Promise and Object methods as transparent built-in
     '  const wrapped = [Promise.resolve(callback), Object.freeze(callback)];',
     '  return wrapped;',
     '}'
-  ].join('\\n'));
+  ].join('\n'));
   assert.equal(result.flowEdges.some(edge => edge.kind.includes('transparent-call')), false);
 });
 
