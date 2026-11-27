@@ -107,7 +107,7 @@
       "owner": ".github/workflows/manual-full-test-audit.yml",
       "requiredText": "for test_file in scripts/ast-*-audit.test.js",
       "alsoOwnedBy": ".github/workflows/browser-tests.yml",
-      "alsoRequiredText": "node --test scripts/ast-symbol-reference-audit.test.js",
+      "alsoRequiredText": "start_audit symbol scripts/ast-symbol-reference-audit.test.js scripts/ast-symbol-reference-audit.js",
       "runnerChecks": [
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
