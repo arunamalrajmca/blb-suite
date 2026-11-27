@@ -341,7 +341,7 @@ test('discovers nested composite-action Node commands as execution roots', () =>
       '  steps:',
       '    - shell: bash',
       '      run: node scripts/action-verify.mjs'
-    ].join('\\n'),
+    ].join('\n'),
     'scripts/action-audit.js': "const helper = require('./action-helper.js'); helper.run();",
     'scripts/action-helper.js': 'exports.run = () => true;',
     'scripts/action-verify.mjs': 'export const verified = true;'
@@ -349,6 +349,34 @@ test('discovers nested composite-action Node commands as execution roots', () =>
   assert.ok(result.roots.includes('scripts/action-audit.js'));
   assert.ok(result.roots.includes('scripts/action-verify.mjs'));
   assert.ok(edge(result, 'commonjs-require', 'scripts/action-audit.js', 'scripts/action-helper.js'));
+});
+
+test('discovers direct Node entrypoints outside conventional script folders and after shell separators', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'echo begin; node tools/package-audit.js' } }),
+    '.github/workflows/tools.yml': [
+      'jobs:',
+      '  check:',
+      '    steps:',
+      '      - run: node --test ./tools/workflow-audit.test.mjs'
+    ].join('\n'),
+    '.github/actions/tools/action.yml': [
+      'name: Tools action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node ./tools/action-audit.js'
+    ].join('\n'),
+    'tools/package-audit.js': "require('./shared.js');",
+    'tools/shared.js': 'module.exports = true;',
+    'tools/workflow-audit.test.mjs': 'export const workflowTest = true;',
+    'tools/action-audit.js': 'export const actionAudit = true;'
+  });
+  assert.ok(result.roots.includes('tools/package-audit.js'));
+  assert.ok(result.roots.includes('tools/workflow-audit.test.mjs'));
+  assert.ok(result.roots.includes('tools/action-audit.js'));
+  assert.ok(edge(result, 'commonjs-require', 'tools/package-audit.js', 'tools/shared.js'));
 });
 
 test('resolves service-worker global content-script arrays referenced by browser test injections', () => {
