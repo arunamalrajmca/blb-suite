@@ -1377,7 +1377,24 @@ function analyzeDynamicExecution(root,files,graph){
       }
       return null;
     };
-    const requireAliases=new Set();
+    const requireAliases=new Set(),workerConstructorAliases=new Set();
+    visit(ast,(node,parent)=>{
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
+        &&['Worker','SharedWorker'].includes(node.init.name)&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
+        const variable=bindingForIdentifier(node.id);if(variable)workerConstructorAliases.add(variable);
+      }
+    });
+    let workerAliasAdded=true;
+    while(workerAliasAdded){
+      workerAliasAdded=false;
+      visit(ast,(node,parent)=>{
+        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'||parent?.kind!=='const')return;
+        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
+        if(source&&workerConstructorAliases.has(source)&&target&&!workerConstructorAliases.has(target)){
+          workerConstructorAliases.add(target);workerAliasAdded=true;
+        }
+      });
+    }
     visit(ast,(node,parent)=>{
       if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
         &&node.init.name==='require'&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
@@ -1438,7 +1455,7 @@ function analyzeDynamicExecution(root,files,graph){
       return false;
     };
     visit(ast,n=>{
-    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)){
+    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&(isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)||workerConstructorAliases.has(bindingForIdentifier(n.callee)))){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'worker-launch',expression:spec||null,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':'unresolved-worker-target'});
       if(target)extra.push({from:file,to:target}); return;
@@ -1446,16 +1463,19 @@ function analyzeDynamicExecution(root,files,graph){
     if(n.type!=='CallExpression')return;
     const c=n.callee,method=c.type==='MemberExpression'?(c.computed&&c.property.type==='Literal'?c.property.value:c.property.name):c.name;
     const object=c.type==='MemberExpression'&&c.object.type==='Identifier'?c.object.name:null;
-    const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)
+    const loader=['require','load','runInThisContext','runInNewContext','runInContext','importScripts'].includes(method)
       &&((c.type==='Identifier'&&(isUnboundGlobal(c)||isRequireAlias(c)))
         ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
         ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object)));
     if(loader){
-      const spec=literalString(n.arguments[0],file);
-      const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
-      const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
-      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
-      if(target)extra.push({from:file,to:target});
+      const loaderArguments=method==='importScripts'?n.arguments:[n.arguments[0]];
+      for(const argument of loaderArguments){
+        const spec=literalString(argument,file);
+        const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
+        const external=!!spec&&!spec.startsWith('.')&&!path.isAbsolute(spec);
+        launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'module-loader',expression:spec,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':external?'external-static':'unresolved-dynamic-or-external'});
+        if(target)extra.push({from:file,to:target});
+      }
     }
     if(isChildProcessMethod(n)&&['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(method)){
       const command=literalString(n.arguments[0],file);let candidate=null,kind=null;
