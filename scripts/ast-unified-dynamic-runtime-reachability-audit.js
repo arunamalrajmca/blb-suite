@@ -401,7 +401,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   for (const workflowFile of [...collectWorkflowFiles(workflowDir), ...collectWorkflowFiles(compositeActionDir)]) {
     const workflowSource = fs.readFileSync(workflowFile, 'utf8');
     const workingDirectories = [root];
-    for (const match of workflowSource.matchAll(/^\s*working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
+    for (const match of workflowSource.matchAll(/^\s*(?:-\s*)?working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
       const value = match[1] || match[2] || match[3];
       if (value && !value.startsWith('$')) workingDirectories.push(path.resolve(root, value));
     }
