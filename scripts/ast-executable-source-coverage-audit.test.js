@@ -54,6 +54,36 @@ test('accounts for manifest worker, content scripts, HTML scripts, and static wo
   }
 });
 
+test('traces alternative runtime content-script file lists returned by selector functions', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "const CORE_FILES = ['content.js'];",
+      "const REDIRECT_FILES = ['redirect-a.js', 'redirect-b.js'];",
+      'function contentScriptFilesForTab(tab) {',
+      '  if (tab.redirect) return [...CORE_FILES, ...REDIRECT_FILES];',
+      '  return [...CORE_FILES];',
+      '}'
+    ].join('\n'));
+    for (const name of ['content.js', 'redirect-a.js', 'redirect-b.js']) {
+      f.write('extension/' + name, 'self.loaded = true;');
+    }
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    for (const name of ['content.js', 'redirect-a.js', 'redirect-b.js']) {
+      assert.equal(byFile.get('extension/' + name).classification, 'statically-rooted-or-imported');
+      assert.ok(byFile.get('extension/' + name).roots.some(root => root.kind === 'runtime-content-script-selection'));
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('classifies fetched generated JavaScript payloads as packaged data resources', () => {
   const f = fixture();
   try {
