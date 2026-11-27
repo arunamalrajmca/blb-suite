@@ -333,7 +333,7 @@ test('discovers nested composite-action Node commands as execution roots', () =>
       '  steps:',
       '    - shell: bash',
       '      run: node scripts/action-audit.js'
-    ].join('\\n'),
+    ].join('\n'),
     '.github/actions/nested/verify/action.yaml': [
       'name: Nested verify action',
       'runs:',
