@@ -20,6 +20,8 @@ export const auditDefinitions = {
 const all = Object.keys(auditDefinitions);
 const repoWideJs = ["symbol", "repository", "owner", "runtime", "unified", "computed", "metaprogramming"];
 const nonExtensionJs = ["symbol", "repository", "owner", "cross_module", "runtime", "unified", "computed", "metaprogramming"];
+const repoWideModules = ["owner", "runtime", "unified", "computed", "metaprogramming"];
+const nonExtensionModules = ["owner", "cross_module", "runtime", "unified", "computed", "metaprogramming"];
 const metadataRoots = ["owner", "cross_module", "unified"];
 const extensionMetadata = ["repository", "owner", "unified", "executable_source"];
 
@@ -40,6 +42,11 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
     }
 
     if (matched) {
+      // Analyzer/test JavaScript is itself included in the repository-wide
+      // source scans. Re-run every scanner that consumes that extension, in
+      // addition to the directly owned audit.
+      if (/\.js$/i.test(path)) add(selected, nonExtensionJs);
+      else if (/\.(?:cjs|mjs)$/i.test(path)) add(selected, nonExtensionModules);
       if (path === auditDefinitions.owner[0] || path === auditDefinitions.owner[1]) add(selected, ["cross_module", "unified"]);
       if (path === auditDefinitions.runtime[0] || path === auditDefinitions.runtime[1]) selected.add("unified");
       if (path === auditDefinitions.unified[0] || path === auditDefinitions.unified[1]) selected.add("cross_module");
@@ -49,16 +56,21 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
     if (/^scripts\/ast-.*(?:\.js|\.mjs)$/.test(path)) return all;
 
     if (path.startsWith("extension/")) {
-      if (/\.(?:js|cjs|mjs)$/i.test(path)) {
+      if (/\.js$/i.test(path)) {
         add(selected, repoWideJs);
+        selected.add("executable_source");
+      } else if (/\.(?:cjs|mjs)$/i.test(path)) {
+        add(selected, repoWideModules);
         selected.add("executable_source");
       } else if (/\.(?:html|json)$/i.test(path) || path === "extension/manifest.json") {
         add(selected, extensionMetadata);
       }
       // Cross-module Node graph intentionally excludes extension/ sources.
       if (!/\.(?:js|cjs|mjs|html|json)$/i.test(path)) matched = true;
-    } else if (/\.(?:js|cjs|mjs)$/i.test(path)) {
+    } else if (/\.js$/i.test(path)) {
       add(selected, nonExtensionJs);
+    } else if (/\.(?:cjs|mjs)$/i.test(path)) {
+      add(selected, nonExtensionModules);
     } else if (/^tests\/|^regression-suite\//.test(path) && /\.(?:html|json)$/i.test(path)) {
       add(selected, ["repository", "owner", "cross_module", "unified"]);
     } else if (/^\.github\/workflows\/|^\.github\/actions\//.test(path) &&
