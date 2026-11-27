@@ -1361,6 +1361,34 @@ function analyzeDynamicExecution(root,files,graph){
     const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
     const unboundIdentifiers=new Set((scopeManager.globalScope?.through||[]).map(reference=>reference.identifier));
     const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
+    const variableForIdentifier=new Map();
+    for(const scope of scopeManager.scopes||[]){
+      for(const variable of scope.variables||[]){
+        for(const identifier of variable.identifiers||[])variableForIdentifier.set(identifier,variable);
+      }
+      for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
+    }
+    const requireAliases=new Set();
+    visit(ast,(node,parent)=>{
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
+        &&node.init.name==='require'&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
+        const variable=variableForIdentifier.get(node.id);
+        if(variable)requireAliases.add(variable);
+      }
+    });
+    let aliasAdded=true;
+    while(aliasAdded){
+      aliasAdded=false;
+      visit(ast,(node,parent)=>{
+        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'
+          ||parent?.kind!=='const')return;
+        const source=variableForIdentifier.get(node.init),target=variableForIdentifier.get(node.id);
+        if(source&&requireAliases.has(source)&&target&&!requireAliases.has(target)){
+          requireAliases.add(target);aliasAdded=true;
+        }
+      });
+    }
+    const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(variableForIdentifier.get(node));
     visit(ast,n=>{
     if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
@@ -1371,7 +1399,7 @@ function analyzeDynamicExecution(root,files,graph){
     const c=n.callee,method=c.type==='MemberExpression'?(c.computed&&c.property.type==='Literal'?c.property.value:c.property.name):c.name;
     const object=c.type==='MemberExpression'&&c.object.type==='Identifier'?c.object.name:null;
     const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)
-      &&((c.type==='Identifier'&&isUnboundGlobal(c))
+      &&((c.type==='Identifier'&&(isUnboundGlobal(c)||isRequireAlias(c)))
         ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
         ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object)));
     if(loader){
