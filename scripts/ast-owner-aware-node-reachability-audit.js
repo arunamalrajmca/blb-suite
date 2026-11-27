@@ -80,6 +80,12 @@ function staticKey(node, computed = false) {
   return null;
 }
 
+function staticModuleRequest(node) {
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+  return null;
+}
+
 function relative(root, file) {
   return path.relative(root, file).split(path.sep).join('/');
 }
@@ -950,17 +956,16 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       specifier = node.source.value;
       kind = node.type === 'ImportDeclaration' ? 'import' : 're-export';
     } else if (node.type === 'ImportExpression') {
-      if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
-        specifier = node.source.value;
+      if (staticModuleRequest(node.source) !== null) {
+        specifier = staticModuleRequest(node.source);
         kind = 'dynamic-import-literal';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-import-nonliteral' });
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
                isRequireIdentifier(node.callee)) {
-      if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
+      if (node.arguments.length === 1 && staticModuleRequest(node.arguments[0]) !== null) {
+        specifier = staticModuleRequest(node.arguments[0]);
         kind = 'require';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require' });
@@ -979,8 +984,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         ? node.arguments[1]
         : node.arguments[1]?.type === 'ArrayExpression' && node.arguments[1].elements.length === 1
           ? node.arguments[1].elements[0] : null;
-      if (supplied?.type === 'Literal' && typeof supplied.value === 'string') {
-        specifier = supplied.value;
+      if (staticModuleRequest(supplied) !== null) {
+        specifier = staticModuleRequest(supplied);
         kind = method === 'call' ? 'require-call-wrapper' : 'require-apply-wrapper';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require-' + method + '-wrapper' });
@@ -997,9 +1002,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
                node.callee.object.type === 'Identifier' && isNodeModuleIdentifier(node.callee.object) &&
                staticKey(node.callee.property, node.callee.computed) === 'require') {
-      if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
+      if (staticModuleRequest(node.arguments[0]) !== null) {
+        specifier = staticModuleRequest(node.arguments[0]);
         kind = 'module.require';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-module-require' });
@@ -1012,11 +1016,10 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           ? staticKey(node.callee.property, node.callee.computed) : null;
       if (constructorName === 'Worker') {
         const argument = node.arguments[0];
-        let request = argument?.type === 'Literal' && typeof argument.value === 'string' ? argument.value : null;
+        let request = staticModuleRequest(argument);
         let baseFile = path.join(root, 'package.json');
         if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
-          request = argument.arguments[0]?.type === 'Literal' && typeof argument.arguments[0].value === 'string'
-            ? argument.arguments[0].value : null;
+          request = staticModuleRequest(argument.arguments[0]);
           const base = argument.arguments[1];
           if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') baseFile = filename;
         }
