@@ -1370,11 +1370,6 @@ function analyzeDynamicExecution(root,files,graph){
     }
     const bindingForIdentifier=node=>{
       if(node?.type!=='Identifier')return null;
-      const mapped=variableForIdentifier.get(node);
-      if(mapped)return mapped;
-      for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
-        if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
-      }
       let best=null,bestSpan=Infinity;
       for(const scope of scopeManager.scopes||[]){
         const block=scope.block;
@@ -1382,7 +1377,13 @@ function analyzeDynamicExecution(root,files,graph){
         const variable=scope.set?.get(node.name);
         if(variable&&block.end-block.start<bestSpan){best=variable;bestSpan=block.end-block.start;}
       }
-      return best;
+      if(best)return best;
+      const mapped=variableForIdentifier.get(node);
+      if(mapped)return mapped;
+      for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
+        if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
+      }
+      return null;
     };
     const requireAliases=new Set(),workerConstructorAliases=new Set();
     visit(ast,(node,parent)=>{
