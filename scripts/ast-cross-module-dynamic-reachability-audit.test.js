@@ -80,6 +80,7 @@ test('carries composite-action and working-directory shell roots through dynamic
   fs.mkdirSync(path.join(root,'scripts'),{recursive:true});
   fs.mkdirSync(path.join(root,'tools'),{recursive:true});
   fs.mkdirSync(path.join(root,'.github','actions','nested'),{recursive:true});
+  fs.mkdirSync(path.join(root,'.github','workflows'),{recursive:true});
   fs.writeFileSync(path.join(root,'.github','actions','nested','action.yml'),[
    'name: Dynamic entry',
    'runs:',
