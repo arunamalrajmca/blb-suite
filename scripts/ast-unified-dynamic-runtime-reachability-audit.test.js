@@ -323,6 +323,34 @@ test('discovers Playwright specs and GitHub Actions Node commands as execution r
 });
 
 
+test('discovers nested composite-action Node commands as execution roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
+    '.github/actions/audit/action.yml': [
+      'name: Audit action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node scripts/action-audit.js'
+    ].join('\\n'),
+    '.github/actions/nested/verify/action.yaml': [
+      'name: Nested verify action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node scripts/action-verify.mjs'
+    ].join('\\n'),
+    'scripts/action-audit.js': "const helper = require('./action-helper.js'); helper.run();",
+    'scripts/action-helper.js': 'exports.run = () => true;',
+    'scripts/action-verify.mjs': 'export const verified = true;'
+  });
+  assert.ok(result.roots.includes('scripts/action-audit.js'));
+  assert.ok(result.roots.includes('scripts/action-verify.mjs'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/action-audit.js', 'scripts/action-helper.js'));
+});
+
 test('resolves service-worker global content-script arrays referenced by browser test injections', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
