@@ -60,12 +60,23 @@ test('selector and CI routing changes retain their targeted validation without r
   }
 });
 
-test('HARD-GATE runs selected repository AST audits with bounded concurrency', () => {
+test('HARD-GATE separates package validation from bounded concurrent repository AST audits', () => {
   const workflow = readFileSync(new URL('../.github/workflows/browser-tests.yml', import.meta.url), 'utf8');
   assert.match(workflow, /Run selected repository-wide AST audits concurrently/);
   assert.match(workflow, /if \(\( active >= 4 \)\)/);
   assert.match(workflow, /wait -n/);
   assert.match(workflow, /if \(\( failed != 0 \)\)/);
+  const auditJobStart = workflow.indexOf('  repository-ast-audits:\n');
+  const packageJobStart = workflow.indexOf('  regression-package:\n');
+  const behavioralJobStart = workflow.indexOf('  regression-behavioral:\n');
+  const summaryJobStart = workflow.indexOf('  regression-gate-summary:\n');
+  assert.ok(auditJobStart >= 0 && packageJobStart > auditJobStart && behavioralJobStart > packageJobStart);
+  const auditJob = workflow.slice(auditJobStart, packageJobStart);
+  const packageJob = workflow.slice(packageJobStart, behavioralJobStart);
+  const summaryJob = workflow.slice(summaryJobStart);
+  assert.match(auditJob, /Run selected repository-wide AST audits concurrently/);
+  assert.doesNotMatch(packageJob, /Classify repository-wide AST audit scope|Install pinned AST audit dependencies|Run selected repository-wide AST audits concurrently/);
+  assert.match(summaryJob, /repository-ast-audits/);
   for (const [name, testFile, auditFile] of [
     ['symbol', 'scripts/ast-symbol-reference-audit.test.js', 'scripts/ast-symbol-reference-audit.js'],
     ['repository', 'scripts/ast-repository-reachability-audit.test.js', 'scripts/ast-repository-reachability-audit.js'],
