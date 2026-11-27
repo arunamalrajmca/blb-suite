@@ -1620,8 +1620,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (callbackIndex < 0 || callbackIndex >= node.arguments.length) continue;
           const callback = node.arguments[callbackIndex];
           if (['setTimeout', 'setInterval'].includes(method) && callback.type === 'Literal' && typeof callback.value === 'string') continue;
+          // Record the canonical resolved API path, not merely the source
+          // spelling. A direct alias such as queryTabs(...) must remain
+          // attributable to chrome.tabs.query in the reachability inventory.
           callbackRecord(callback, pathName || method, node.loc.start.line,
-            sourceText.slice(callee.start, callee.end).slice(0, 160));
+            pathName || sourceText.slice(callee.start, callee.end).slice(0, 160));
         }
       }
       // DOM-style and browser event property assignments are callback roots too.
