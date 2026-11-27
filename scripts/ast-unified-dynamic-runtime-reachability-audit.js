@@ -349,13 +349,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
   // CI workflows execute repository scripts directly. Include those commands
   // as roots so test/build tooling is not misreported as unreferenced source.
   const workflowDir = path.join(root, '.github', 'workflows');
+  const compositeActionDir = path.join(root, '.github', 'actions');
   function collectWorkflowFiles(dir) {
     const found = [];
     if (!fs.existsSync(dir)) return found;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) found.push(...collectWorkflowFiles(file));
-      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) found.push(file);
+      else if (entry.isFile() && /^(?:action|workflow)\.ya?ml$/i.test(entry.name)) found.push(file);
+      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name) && dir === workflowDir) found.push(file);
     }
     return found;
   }
@@ -378,7 +380,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (target) roots.add(target);
     }
   };
-  for (const workflowFile of collectWorkflowFiles(workflowDir)) {
+  for (const workflowFile of [...collectWorkflowFiles(workflowDir), ...collectWorkflowFiles(compositeActionDir)]) {
     const workflowSource = fs.readFileSync(workflowFile, 'utf8');
     const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:scripts|tests|regression-suite)\/[A-Za-z0-9_.*?/-]+\.(?:js|cjs|mjs))/g;
     let command;
