@@ -9,8 +9,7 @@ function isAstAuditToolingPath(path) {
 
 export function isNonRuntimePath(path) {
   return isAstAuditToolingPath(path)
-    || path === "scripts/classify-ast-audit-scope.mjs"
-    || path === "scripts/classify-ast-audit-scope.test.mjs"
+    || path === ".github/actions/ci-section-checkpoint/action.yml"
     || path === "scripts/ci-change-policy.test.mjs"
     || /^scripts\/(?:ci-(?:section-checkpoint|checkpoint-fingerprints)(?:\.test)?|ci-change-policy)\.mjs$/i.test(path)
     || /^scripts\/run-checkpointed-playwright-[^/]+\.mjs$/i.test(path)
@@ -41,13 +40,11 @@ export function isNonRuntimePath(path) {
 export function requiresPackageValidation(path) {
   return path.startsWith("tests/selector/")
     || path.startsWith("regression-suite/")
-    || path === "scripts/classify-ci-changes.mjs"
     || path === "scripts/classify-ast-audit-scope.mjs"
     || path === "scripts/classify-ast-audit-scope.test.mjs"
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/ci-routing-registry.mjs"
-    || path === "scripts/ci-change-policy.mjs"
     || path === "scripts/run-validation-tests.js"
     || path === "scripts/validation-test-manifest.json"
     || path === "scripts/reference-e2e-matrix.json"
