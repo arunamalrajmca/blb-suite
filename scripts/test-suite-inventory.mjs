@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { looksLikeTestFileName, extractDeclaredTestTitles } from './test-file-inventory-helpers.mjs';
+import { looksLikeTestFileName, extractDeclaredTestTitles, normalizeTextRequirements } from './test-file-inventory-helpers.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'test-suite-inventory.json'), 'utf8'));
@@ -103,7 +103,7 @@ for (const area of productionCoverage) {
     const testContent = readRepoFile(testFile);
     const declaredTitles = extractDeclaredTestTitles(testContent);
     if (!hasAssertionCall(testContent)) fail("Production coverage evidence file contains no assertion call: " + area.id + " -> " + testFile);
-    for (const requiredText of evidence.requiredText || []) {
+    for (const requiredText of normalizeTextRequirements(evidence.requiredText)) {
       if (!declaredTitles.some(title => title.includes(requiredText))) fail('Production coverage evidence does not identify a declared test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
     }
   }
@@ -145,7 +145,7 @@ for (const module of productionModuleCoverage) {
     const testContent = readRepoFile(evidence.path);
     const declaredTitles = extractDeclaredTestTitles(testContent);
     if (!hasAssertionCall(testContent)) fail("Production module evidence file contains no assertion call: " + module.path + " -> " + evidence.path);
-    for (const requiredText of evidence.requiredText || []) {
+    for (const requiredText of normalizeTextRequirements(evidence.requiredText)) {
       if (!declaredTitles.some(title => title.includes(requiredText))) fail('Production module evidence does not identify a declared test: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
     }
     if (module.coverageLevel === 'direct-integration' && !(evidence.requiredText || []).length) {
