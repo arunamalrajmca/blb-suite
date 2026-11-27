@@ -361,32 +361,42 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
     return found;
   }
-  const addWorkflowTarget = spec => {
+  const addWorkflowTarget = (spec, baseDirectories = [root]) => {
     if (!spec) return;
     const normalized = spec.replace(/^\.\//, '');
     if (!normalized.includes('*')) {
-      const target = resolveFile(pkgPath, normalized, fileSet);
-      if (target) roots.add(target);
+      for (const base of baseDirectories) {
+        const target = resolveFile(path.join(base, 'package.json'), normalized, fileSet);
+        if (target) roots.add(target);
+      }
       return;
     }
     // Support simple filename globs used by Node's test runner and shell loops.
-    const directory = path.resolve(root, path.dirname(normalized));
-    if (!fs.existsSync(directory)) return;
-    const pattern = path.basename(normalized);
-    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (!entry.isFile() || !matcher.test(entry.name)) continue;
-      const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
-      if (target) roots.add(target);
+    for (const base of baseDirectories) {
+      const directory = path.resolve(base, path.dirname(normalized));
+      if (!fs.existsSync(directory)) continue;
+      const pattern = path.basename(normalized);
+      const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !matcher.test(entry.name)) continue;
+        const target = resolveFile(path.join(base, 'package.json'), path.posix.join(path.dirname(normalized), entry.name), fileSet);
+        if (target) roots.add(target);
+      }
     }
   };
   for (const workflowFile of [...collectWorkflowFiles(workflowDir), ...collectWorkflowFiles(compositeActionDir)]) {
     const workflowSource = fs.readFileSync(workflowFile, 'utf8');
+    const workingDirectories = [root];
+    for (const match of workflowSource.matchAll(/^\s*working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
+      const value = match[1] || match[2] || match[3];
+      if (value && !value.startsWith('$')) workingDirectories.push(path.resolve(root, value));
+    }
+    const uniqueWorkingDirectories = [...new Set(workingDirectories)];
     const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:js|cjs|mjs))/g;
     let command;
-    while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1]);
+    while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1], uniqueWorkingDirectories);
     const shellGlobPattern = /scripts\/test-[A-Za-z0-9_.*?/-]+\.js(?=[;\s]|$)/g;
-    while ((command = shellGlobPattern.exec(workflowSource))) addWorkflowTarget(command[0]);
+    while ((command = shellGlobPattern.exec(workflowSource))) addWorkflowTarget(command[0], uniqueWorkingDirectories);
   }
   // Playwright reporter modules are loaded by name from configuration rather than static imports.
   if (fileSet.has(playwrightConfig)) {
