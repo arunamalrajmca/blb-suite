@@ -208,6 +208,18 @@
         {
           "file": ".github/workflows/browser-tests.yml",
           "requiredText": "ci-section-checkpoint"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "recovery:"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "inputs.recovery == 'true'"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "recovery: false"
         }
       ]
     },
@@ -278,6 +290,19 @@
       "owner": ".github/workflows/browser-tests.yml",
       "requiredText": "node --test scripts/test-file-inventory-helpers.test.mjs",
       "executionEnvironment": "Node.js unit tests in the HARD-GATE package regression"
+    },
+    {
+      "id": "ci-change-policy-tests",
+      "pattern": "scripts/ci-change-policy.test.mjs",
+      "owner": ".github/workflows/ci-checkpoint-contract-validation.yml",
+      "requiredText": "node --test scripts/ci-change-policy.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/ci-checkpoint-contract-validation.yml",
+          "requiredText": "node --test scripts/ci-change-policy.test.mjs"
+        }
+      ]
     }
   ],
   "manualOnly": [
