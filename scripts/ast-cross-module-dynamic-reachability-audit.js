@@ -1372,7 +1372,7 @@ function analyzeDynamicExecution(root,files,graph){
     visit(ast,(node,parent)=>{
       if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
         &&node.init.name==='require'&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
-        const variable=variableForIdentifier.get(node.id);
+        const variable=bindingForIdentifier(node.id);
         if(variable)requireAliases.add(variable);
       }
     });
@@ -1382,13 +1382,22 @@ function analyzeDynamicExecution(root,files,graph){
       visit(ast,(node,parent)=>{
         if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'
           ||parent?.kind!=='const')return;
-        const source=variableForIdentifier.get(node.init),target=variableForIdentifier.get(node.id);
+        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
         if(source&&requireAliases.has(source)&&target&&!requireAliases.has(target)){
           requireAliases.add(target);aliasAdded=true;
         }
       });
     }
-    const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(variableForIdentifier.get(node));
+    const bindingForIdentifier=node=>{
+      if(node?.type!=='Identifier')return null;
+      const mapped=variableForIdentifier.get(node);
+      if(mapped)return mapped;
+      for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
+        if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
+      }
+      return null;
+    };
+    const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(bindingForIdentifier(node));
     visit(ast,n=>{
     if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
