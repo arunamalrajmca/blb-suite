@@ -1844,6 +1844,36 @@ function analyze(root = path.resolve(__dirname, '..')) {
             node.loc.start.line, memberPath(node.callee));
         }
       }
+      // Reflect.set is another event-property assignment path. Only recognize
+      // literal on* keys and direct callable values; dynamic keys are not roots.
+      if (node.type === 'CallExpression' &&
+          ['Reflect.set', 'globalThis.Reflect.set', 'window.Reflect.set',
+            'self.Reflect.set'].includes(memberPath(node.callee)) &&
+          node.arguments[1]?.type === 'Literal' &&
+          typeof node.arguments[1].value === 'string' &&
+          /^on[a-z0-9_]+$/i.test(node.arguments[1].value) &&
+          ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
+            'CallExpression', 'ObjectExpression'].includes(node.arguments[2]?.type)) {
+        callbackRecord(node.arguments[2], 'event-property-reflect-set:' + node.arguments[1].value,
+          node.loc.start.line, memberPath(node.callee));
+      }
+      // Object.assign can copy statically named event handlers onto a target.
+      if (node.type === 'CallExpression' &&
+          ['Object.assign', 'globalThis.Object.assign', 'window.Object.assign',
+            'self.Object.assign'].includes(memberPath(node.callee))) {
+        for (const source of node.arguments.slice(1)) {
+          if (source?.type !== 'ObjectExpression') continue;
+          for (const property of source.properties) {
+            if (property.type !== 'Property' || property.computed ||
+                !/^on[a-z0-9_]+$/i.test(property.key?.name || property.key?.value || '') ||
+                !['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
+                  'CallExpression', 'ObjectExpression'].includes(property.value?.type)) continue;
+            const eventName = property.key.name || property.key.value;
+            callbackRecord(property.value, 'event-property-assign:' + eventName,
+              node.loc.start.line, memberPath(node.callee));
+          }
+        }
+      }
       if (node.type === 'AssignmentExpression' && node.operator === '=' &&
           node.left.type === 'Identifier') {
         const target = bindings.get(node.left), source = bindings.get(node.right);
