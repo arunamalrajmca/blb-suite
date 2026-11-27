@@ -46,6 +46,8 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
       continue;
     }
 
+    if (/^scripts\/ast-.*(?:\.js|\.mjs)$/.test(path)) return all;
+
     if (path.startsWith("extension/")) {
       if (/\.(?:js|cjs|mjs)$/i.test(path)) {
         add(selected, repoWideJs);
