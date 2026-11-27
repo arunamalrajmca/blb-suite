@@ -1423,14 +1423,14 @@ function analyzeDynamicExecution(root,files,graph){
       });
     }
     const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(bindingForIdentifier(node));
-    const childProcessModuleBindings=new Set(),childProcessFunctionBindings=new Set();
+    const childProcessModuleBindings=new Set(),childProcessFunctionBindings=new Map();
     const isChildProcessSpecifier=node=>node?.type==='Literal'&&['child_process','node:child_process'].includes(node.value);
     visit(ast,(node,parent)=>{
       if(node.type==='ImportDeclaration'&&isChildProcessSpecifier(node.source)){
         for(const specifier of node.specifiers||[]){
           const variable=bindingForIdentifier(specifier.local);if(!variable)continue;
           if(specifier.type==='ImportNamespaceSpecifier'||specifier.type==='ImportDefaultSpecifier')childProcessModuleBindings.add(variable);
-          else if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(specifier.imported?.name))childProcessFunctionBindings.add(variable);
+          else if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(specifier.imported?.name))childProcessFunctionBindings.set(variable,specifier.imported.name);
         }
       }
       if(node.type!=='VariableDeclarator'||!node.init||node.init.type!=='CallExpression')return;
@@ -1446,7 +1446,7 @@ function analyzeDynamicExecution(root,files,graph){
           if(property.type!=='Property'||property.value.type!=='Identifier')continue;
           const name=property.key.name||property.key.value;
           if(['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(name)){
-            const variable=bindingForIdentifier(property.value);if(variable)childProcessFunctionBindings.add(variable);
+            const variable=bindingForIdentifier(property.value);if(variable)childProcessFunctionBindings.set(variable,String(name));
           }
         }
       }
@@ -1462,17 +1462,18 @@ function analyzeDynamicExecution(root,files,graph){
         }
       });
     }
-    const isChildProcessMethod=call=>{
+    const childProcessMethodForCall=call=>{
       const callee=call.callee;
-      if(callee.type==='Identifier')return childProcessFunctionBindings.has(bindingForIdentifier(callee));
-      if(callee.type!=='MemberExpression')return false;
-      if(callee.object.type==='Identifier')return childProcessModuleBindings.has(bindingForIdentifier(callee.object));
+      if(callee.type==='Identifier')return childProcessFunctionBindings.get(bindingForIdentifier(callee))||null;
+      if(callee.type!=='MemberExpression')return null;
+      const method=callee.computed&&callee.property.type==='Literal'?String(callee.property.value):callee.property.name;
+      if(callee.object.type==='Identifier'&&childProcessModuleBindings.has(bindingForIdentifier(callee.object)))return method;
       if(callee.object.type==='CallExpression'){
         const factory=callee.object.callee;
         const isRequire=factory.type==='Identifier'&&(isUnboundGlobal(factory)||isRequireAlias(factory));
-        return isRequire&&isChildProcessSpecifier(callee.object.arguments[0]);
+        if(isRequire&&isChildProcessSpecifier(callee.object.arguments[0]))return method;
       }
-      return false;
+      return null;
     };
     visit(ast,n=>{
     if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&(isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)||workerConstructorAliases.has(bindingForIdentifier(n.callee)))){
@@ -1483,10 +1484,11 @@ function analyzeDynamicExecution(root,files,graph){
     if(n.type!=='CallExpression')return;
     const c=n.callee,method=c.type==='MemberExpression'?(c.computed&&c.property.type==='Literal'?c.property.value:c.property.name):c.name;
     const object=c.type==='MemberExpression'&&c.object.type==='Identifier'?c.object.name:null;
-    const loader=['require','load','runInThisContext','runInNewContext','runInContext','importScripts'].includes(method)
-      &&((c.type==='Identifier'&&(isUnboundGlobal(c)||isRequireAlias(c)))
-        ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
-        ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object)));
+    const loader=(c.type==='Identifier'&&isRequireAlias(c))
+      ||(['require','load','runInThisContext','runInNewContext','runInContext','importScripts'].includes(method)
+        &&((c.type==='Identifier'&&isUnboundGlobal(c))
+          ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
+          ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object))));
     if(loader){
       const loaderArguments=method==='importScripts'?n.arguments:[n.arguments[0]];
       for(const argument of loaderArguments){
@@ -1497,9 +1499,10 @@ function analyzeDynamicExecution(root,files,graph){
         if(target)extra.push({from:file,to:target});
       }
     }
-    if(isChildProcessMethod(n)&&['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(method)){
+    const childProcessMethod=childProcessMethodForCall(n);
+    if(childProcessMethod&&['fork','spawn','spawnSync','execFile','execFileSync','exec','execSync'].includes(childProcessMethod)){
       const command=literalString(n.arguments[0],file);let candidate=null,kind=null;
-      if(method==='fork'&&command){candidate=path.resolve(path.dirname(file),command);kind='fork-script';}
+      if(childProcessMethod==='fork'&&command){candidate=path.resolve(path.dirname(file),command);kind='fork-script';}
       else if(command&&/^(?:\.{1,2}\/|\/)/.test(command)){candidate=path.resolve(path.dirname(file),command);kind='direct-script-path';}
       else if(command&&/^(?:node|nodejs)$/.test(command)&&n.arguments[1]?.type==='ArrayExpression'){
         const arg=literalString(n.arguments[1].elements[0],file);if(arg){candidate=path.resolve(path.dirname(file),arg);kind='node-argv-script';}
@@ -1507,7 +1510,7 @@ function analyzeDynamicExecution(root,files,graph){
         const m=/^(?:node|nodejs)\s+["']?([^ "';]+)/.exec(command);if(m){candidate=path.resolve(path.dirname(file),m[1]);kind='shell-node-command';}
       }
       const target=candidate&&set.has(candidate)?candidate:null;
-      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'child-process-launch',method,command,resolved:target?path.relative(root,target):null,certainty:target?kind:'unresolved-process-target'});
+      launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'child-process-launch',method:childProcessMethod,command,resolved:target?path.relative(root,target):null,certainty:target?kind:'unresolved-process-target'});
       if(target)extra.push({from:file,to:target});
     }
     });
