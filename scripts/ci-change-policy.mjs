@@ -61,9 +61,7 @@ export function requiresPackageValidation(path) {
     || path === "extension/manifest.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
-    || isAstAuditToolingPath(path)
-    || path === "scripts/classify-ast-audit-scope.mjs"
-    || path === "scripts/classify-ast-audit-scope.test.mjs";
+    || path === "scripts/test-ci-routing-selector.js";
 }
 
 export function requiresPackageRegression(path) {
