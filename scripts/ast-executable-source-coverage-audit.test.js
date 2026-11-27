@@ -98,6 +98,32 @@ test('records dynamic registration and injection sites as unresolved ownership b
   }
 });
 
+test('follows importScripts filenames iterated from a static array', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "const startupFiles = ['first.js', 'second.js'];",
+      'for (const scriptFile of startupFiles) {',
+      '  importScripts(scriptFile);',
+      '}'
+    ].join('\\n'));
+    f.write('extension/first.js', 'self.first = true;');
+    f.write('extension/second.js', 'self.second = true;');
+
+    const result = discover(f.root);
+    const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
+    assert.ok(rooted.has('extension/first.js'));
+    assert.ok(rooted.has('extension/second.js'));
+    assert.equal(result.dynamicSites.some(item => item.api === 'importScripts' && item.certainty === 'dynamic-script-target'), false);
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('recognizes computed literal dynamic script API properties', () => {
   const f = fixture();
   try {
