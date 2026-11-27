@@ -2582,3 +2582,15 @@ test('recognizes Vue Composition API lifecycle callback registrations', () => {
   assert.equal(result.uncertainty.filter(item =>
     item.kind === 'unresolved-external-callback-owner').length, 0);
 });
+
+test('does not classify same-named local functions as Vue lifecycle registrations', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMounted(callback) { return callback(); }',
+      'onMounted(() => cleanup());'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'onMounted'), false);
+});
