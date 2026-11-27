@@ -1,3 +1,9 @@
+// Diagnostic counter in the isolated world: background activation uses this to avoid
+// re-evaluating the classic-script bundle while a document's first injection is
+// still initializing. A second evaluation would redeclare top-level lexical bindings.
+globalThis.__blbSuiteContentBundleEvaluationCountV1 =
+  Number(globalThis.__blbSuiteContentBundleEvaluationCountV1 || 0) + 1;
+
 /* Shared, named patterns and constants for the BLB Suite extension.
  * Load this file before background.js, content.js, or popup.js.
  * Use factories for RegExp values so stateful flags never leak lastIndex
