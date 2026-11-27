@@ -4,8 +4,8 @@
  *
  * Only changes that cannot affect extension behavior are exempt from the
  * expensive behavioral regression suites. Unknown paths are treated as runtime
- * changes. Package validation is required for runtime, packaging, classifier,
- * selector-test, and workflow changes; clearly unrelated changes can skip it.
+ * changes. Audit tooling is validated separately from the expensive package
+ * regression runner; unknown paths remain conservative.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
