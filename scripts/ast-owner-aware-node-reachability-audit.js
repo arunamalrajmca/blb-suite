@@ -1171,7 +1171,15 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
     const workingDirectories = [root];
     for (const match of source.matchAll(/^\s*working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
       const value = match[1] || match[2] || match[3];
-      if (value && !value.startsWith('
+      if (value && value.charAt(0) !== String.fromCharCode(36)) workingDirectories.push(path.resolve(root, value));
+    }
+    const uniqueWorkingDirectories = [...new Set(workingDirectories)];
+    for (const match of source.matchAll(/(?:node|npm\s+exec\s+node|npx\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      const candidates = [...new Set(uniqueWorkingDirectories.map(directory => path.resolve(directory, match[1])))];
+      const existing = candidates.filter(candidate => files.has(candidate));
+      if (existing.length) for (const candidate of existing) add(candidate, 'workflow:' + relative(root, workflow));
+      else add(candidates[0], 'workflow:' + relative(root, workflow));
+    }
     for (const match of source.matchAll(/(?:bash|sh)\s+(?:-[^\s]+\s+)*(?:"([^"]+\.sh)"|'([^']+\.sh)'|([A-Za-z0-9_./-]+\.sh))\b/g)) {
       const spec = match[1] || match[2] || match[3];
       const candidates = [...new Set(uniqueWorkingDirectories.map(directory => path.resolve(directory, spec)))];
