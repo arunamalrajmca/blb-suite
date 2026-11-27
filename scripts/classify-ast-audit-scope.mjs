@@ -27,8 +27,8 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
     if (path === "package.json" || path === "package-lock.json"
       || path === "scripts/classify-ast-audit-scope.mjs"
       || path === "scripts/ast-shared-utils.js"
-      || path === ".github/workflows/browser-tests.yml"
-      || path.startsWith(".github/actions/ci-section-checkpoint/")) {
+      || path.startsWith(".github/workflows/")
+      || (path.startsWith(".github/actions/") && /\/action\.ya?ml$/i.test(path))) {
       return all;
     }
     let matched = false;
