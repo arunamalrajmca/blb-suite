@@ -177,7 +177,7 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
   };
   try {
     write('package.json', JSON.stringify({ scripts: { validate: 'node scripts/cli.js' } }));
-    write('.github/workflows/ci.yml', 'steps:\n  - run: bash tools/run-wrapper.sh\n');
+    write('.github/workflows/ci.yml', 'steps:\n  - working-directory: tools\n    run: bash run-wrapper.sh\n');
     write('.github/actions/nested/verify/action.yaml', [
       'name: Verify action',
       'runs:',
@@ -197,7 +197,6 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
     const graph = buildModuleGraph(root);
     const reachable = new Set(graph.reachable);
     for (const file of [
-      'tools/run-wrapper.sh',
       'tools/shell-child.js',
       'tools/shell-helper.js',
       'tools/action-entry.js',
