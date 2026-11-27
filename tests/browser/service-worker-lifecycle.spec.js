@@ -2089,7 +2089,8 @@ async function contentScriptLoaded(extensionWorker, tabId) {
         func:() => ({
           fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true,
           initialized:window.__blbSuiteContentScriptLoadedV2 === true,
-          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+          doubleClickBound:typeof window.__blbSuiteDoubleClickBoundV2 === 'function',
+          bundleEvaluationCount:Number(globalThis.__blbSuiteContentBundleEvaluationCountV1 || 0)
         })
       });
       return injection?.result || null;
@@ -2702,6 +2703,9 @@ test('first X.com document activates Floating Button and Double-click without a 
   await expect.poll(() => contentScriptLoaded(extensionWorker, tabId), {
     message:'the first x.com document must receive and initialize the runtime bundle, including the Double-click handler, without reloading'
   }).toMatchObject({fileExecuted:true, initialized:true, doubleClickBound:true});
+  expect(await contentScriptLoaded(extensionWorker, tabId)).toMatchObject({
+    bundleEvaluationCount:1
+  });
 
   // Exercise the actual floating action on the first document.
   await page.evaluate(() => {
