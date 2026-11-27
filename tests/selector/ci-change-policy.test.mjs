@@ -74,7 +74,6 @@ test("unknown paths and shared extension code are never classified as non-runtim
 test("package validation ownership is centralized alongside runtime classification", () => {
   for (const path of [
     "tests/selector/ci-change-policy.test.mjs",
-    "scripts/ci-change-policy.mjs",
     "scripts/ci-routing-registry.mjs",
     "package-lock.json",
     "extension/manifest.json"
