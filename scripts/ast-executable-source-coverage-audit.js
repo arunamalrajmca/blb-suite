@@ -257,6 +257,29 @@ function discover(root) {
         }
       }
     });
+    // Resolve simple for-of loader loops when their iterable is a statically
+    // declared literal filename array. Restrict propagation to a uniquely
+    // declared loop variable so shadowed bindings remain conservative.
+    const declarationCounts = new Map();
+    visit(ast, node => {
+      const identifiers = [];
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') identifiers.push(node.id.name);
+      if (['FunctionDeclaration', 'FunctionExpression', 'ClassDeclaration', 'ClassExpression'].includes(node.type) && node.id) identifiers.push(node.id.name);
+      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+        for (const parameter of node.params || []) if (parameter.type === 'Identifier') identifiers.push(parameter.name);
+      }
+      if (node.type === 'CatchClause' && node.param?.type === 'Identifier') identifiers.push(node.param.name);
+      for (const name of identifiers) declarationCounts.set(name, (declarationCounts.get(name) || 0) + 1);
+    });
+    const loopLiteralArrays = new Map();
+    visit(ast, node => {
+      if (node.type !== 'ForOfStatement' || node.left.type !== 'VariableDeclaration' ||
+          node.left.declarations.length !== 1 || node.left.declarations[0].id.type !== 'Identifier' ||
+          node.right.type !== 'Identifier') return;
+      const name = node.left.declarations[0].id.name;
+      const values = literalArrays.get(node.right.name);
+      if (values && declarationCounts.get(name) === 1) loopLiteralArrays.set(name, values);
+    });
     visit(ast, (node, parent) => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
@@ -274,7 +297,7 @@ function discover(root) {
           const requests = arg.type === 'SpreadElement' && arg.argument.type === 'ArrayExpression'
             ? staticArray(arg.argument)
             : arg.type === 'SpreadElement' && arg.argument.type === 'Identifier'
-              ? literalArrays.get(arg.argument.name) || null
+              ? literalArrays.get(arg.argument.name) || loopLiteralArrays.get(arg.argument.name) || null
               : (() => { const value = literal(arg); return value === null ? null : [value]; })();
           if (requests) {
             for (const request of requests) {
