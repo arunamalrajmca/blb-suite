@@ -1160,9 +1160,11 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
   }
 
   const workflowRoot = path.join(root, '.github', 'workflows');
-  const workflowFiles = fs.existsSync(workflowRoot)
-    ? walkFiles(workflowRoot, file => /\.(?:yml|yaml)$/.test(file))
-    : [];
+  const actionRoot = path.join(root, '.github', 'actions');
+  const workflowFiles = [
+    ...(fs.existsSync(workflowRoot) ? walkFiles(workflowRoot, file => /\.(?:yml|yaml)$/i.test(file)) : []),
+    ...(fs.existsSync(actionRoot) ? walkFiles(actionRoot, file => /^action\.ya?ml$/i.test(path.basename(file))) : [])
+  ];
   const shellEntrypoints = new Set();
   for (const workflow of workflowFiles) {
     const text = fs.readFileSync(workflow, 'utf8');
@@ -1179,11 +1181,19 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
   for (const shellFile of shellEntrypoints) {
     if (!fs.existsSync(shellFile)) continue;
     const text = fs.readFileSync(shellFile, 'utf8');
-    for (const match of text.matchAll(/(?:node|npm\s+exec\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-      add(path.resolve(path.dirname(shellFile), match[1]), 'shell-wrapper:' + relative(root, shellFile));
+    const reason = 'shell-wrapper:' + relative(root, shellFile);
+    for (const match of text.matchAll(/(?:node|npm\s+exec\s+node)\s+(?:--[^\s]+\s+)*((?:\.\/)?[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      const script = match[1];
+      const candidates = [...new Set([path.resolve(root, script), path.resolve(path.dirname(shellFile), script)])];
+      const existing = candidates.filter(candidate => files.has(candidate));
+      if (existing.length) for (const candidate of existing) add(candidate, reason);
+      else add(candidates[0], reason);
     }
-    for (const match of text.matchAll(/((?:scripts|tests|regression-suite)\/[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-      add(path.resolve(root, match[1]), 'shell-wrapper-path:' + relative(root, shellFile));
+    // Shell wrappers may refer to a Node script path without invoking it
+    // directly (for example through a variable or another command wrapper).
+    for (const match of text.matchAll(/((?:\.\/)?[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      const candidate = path.resolve(root, match[1]);
+      if (files.has(candidate)) add(candidate, 'shell-wrapper-path:' + relative(root, shellFile));
     }
   }
 
