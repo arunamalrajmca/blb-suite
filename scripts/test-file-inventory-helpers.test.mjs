@@ -14,3 +14,16 @@ test('does not classify ordinary source filenames as tests', () => {
     assert.equal(looksLikeTestFileName(name), false, name);
   }
 });
+
+test('extracts titles from real test declarations, including nested and multiline declarations', () => {
+  const { extractDeclaredTestTitles } = requireForTestHelpers;
+  assert.deepEqual(extractDeclaredTestTitles([
+    "test('first declared test', async () => {});",
+    "test.describe('group', () => { test(\"nested declared test\", () => {}); });",
+    "it(\n  'multiline declaration',\n  () => {}\n);"
+  ].join("\\n")), [
+    'first declared test',
+    'nested declared test',
+    'multiline declaration'
+  ]);
+});
