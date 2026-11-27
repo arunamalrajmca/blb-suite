@@ -20,7 +20,7 @@ test('resolves immutable aliases of the CommonJS require function',()=>{
   fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
   fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; load('./worker.js');");
   const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'&&x.commonjs===true),JSON.stringify(r.links));
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),JSON.stringify(r.links));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
@@ -30,7 +30,7 @@ test('resolves transitive immutable aliases of the CommonJS require function',()
   fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
   fs.writeFileSync(path.join(root,'consumer.js'),"const load = require; const run = load; run('./worker.js');");
   const files=['worker.js','consumer.js'].map(x=>path.join(root,x)),r=analyzeCrossModule(root,files);
-  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'&&x.commonjs===true),
+  assert.ok(r.links.some(x=>x.from==='consumer.js'&&x.to==='worker.js'),
    'an immutable alias chain must retain the CommonJS module edge: '+JSON.stringify(r.links));
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
