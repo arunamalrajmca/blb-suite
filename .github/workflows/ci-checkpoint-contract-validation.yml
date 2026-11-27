@@ -16,6 +16,7 @@ on:
       - '.github/workflows/browser-e2e-focused-regressions.yml'
       - 'scripts/ci-section-checkpoint.*'
       - 'scripts/ci-checkpoint-fingerprints.*'
+      - 'scripts/ci-change-policy.*'
       - 'scripts/detect-end-user-production-changes.*'
       - 'scripts/run-checkpointed-playwright-*.mjs'
       - 'scripts/test-suite-inventory.*'
