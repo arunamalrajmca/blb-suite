@@ -54,6 +54,33 @@ test('accounts for manifest worker, content scripts, HTML scripts, and static wo
   }
 });
 
+test('classifies fetched generated JavaScript payloads as packaged data resources', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "async function load() {",
+      "  await fetchPackagedJsonAssignment('direct-data.js', 'const DATA = ', ';');",
+      "}",
+      "const fallbackAssignments = { 'compressed.json.gz': ['fallback-data.js', 'const FALLBACK = ', ';'] };"
+    ].join('\\n'));
+    f.write('extension/direct-data.js', 'const DATA = [];');
+    f.write('extension/fallback-data.js', 'const FALLBACK = [];');
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    assert.equal(byFile.get('extension/direct-data.js').classification, 'packaged-data-resource');
+    assert.equal(byFile.get('extension/fallback-data.js').classification, 'packaged-data-resource');
+    assert.equal(result.summary.packagedDataResources, 2);
+    assert.equal(result.summary.unaccountedFor, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('reports JavaScript without a discovered execution root instead of calling it unused', () => {
   const f = fixture();
   try {
