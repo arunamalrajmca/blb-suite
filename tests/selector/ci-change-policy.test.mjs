@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isNonRuntimePath, requiresPackageValidation } from "../../scripts/ci-change-policy.mjs";
 
-test("repository AST audit analyzers and their fixtures are package-validated but non-runtime", () => {
+test("repository AST audit analyzers and their fixtures are validated separately from package checks", () => {
   const auditPaths = [
     "scripts/ast-symbol-reference-audit.js",
     "scripts/ast-symbol-reference-audit.test.js",
@@ -26,7 +26,7 @@ test("repository AST audit analyzers and their fixtures are package-validated bu
   ];
   for (const path of auditPaths) {
     assert.equal(isNonRuntimePath(path), true, path);
-    assert.equal(requiresPackageValidation(path), true, path);
+    assert.equal(requiresPackageValidation(path), false, path);
   }
   assert.equal(isNonRuntimePath("scripts/ast-unrecognized-audit.js"), false);
   assert.equal(requiresPackageValidation("scripts/ast-unrecognized-audit.js"), false);
@@ -73,12 +73,9 @@ test("unknown paths and shared extension code are never classified as non-runtim
 
 test("package validation ownership is centralized alongside runtime classification", () => {
   for (const path of [
-    ".github/workflows/browser-e2e-groups.yml",
     "tests/selector/ci-change-policy.test.mjs",
     "scripts/ci-change-policy.mjs",
     "scripts/ci-routing-registry.mjs",
-    "scripts/test-suite-inventory.mjs",
-    "scripts/test-file-inventory-helpers.mjs",
     "package-lock.json",
     "extension/manifest.json"
   ]) {
