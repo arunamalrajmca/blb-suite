@@ -82,7 +82,7 @@ test('checkpoint inspection reports precise invalidation reasons', () => {
 });
 
 
-test('checkpoint recovery can be disabled without skipping the section runner', () => {
+test('checkpoint execution rule is correct and HARD-GATE runs sections directly', () => {
   const action = fs.readFileSync(new URL('../.github/actions/ci-section-checkpoint/action.yml', import.meta.url), 'utf8');
   const hardGate = fs.readFileSync(new URL('../.github/workflows/browser-tests.yml', import.meta.url), 'utf8');
   assert.ok(action.includes("  recovery:\n    description: Enable cross-run checkpoint restore/save. Disable for workflows or sections that should always execute directly.\n    required: false\n    default: 'true'"));
@@ -90,7 +90,9 @@ test('checkpoint recovery can be disabled without skipping the section runner', 
   assert.ok(action.includes("    - name: Preserve completed or partial checkpoint after this attempt\n      if: ${{ inputs.recovery == 'true' && always()"));
   assert.ok(action.includes("if: ${{ inputs.recovery != 'true' || steps.check.outputs.complete != 'true' || inputs.always_run == 'true' }}"));
   const calls = (hardGate.match(/uses: \.\/\.github\/actions\/ci-section-checkpoint/g) || []).length;
-  const disabled = (hardGate.match(/recovery: false/g) || []).length;
-  assert.ok(calls > 0, 'HARD-GATE should retain the reusable runner action');
-  assert.equal(disabled, calls, 'every HARD-GATE section must bypass cross-run restore/save');
+  assert.equal(calls, 0, 'HARD-GATE must not invoke the checkpoint action');
+  assert.match(hardGate, /node scripts\/test-suite-inventory\.mjs/);
+  assert.match(hardGate, /node scripts\/ast-symbol-reference-audit\.js/);
+  assert.match(hardGate, /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/);
+  assert.doesNotMatch(hardGate, /BLB_CI_CHECKPOINT_DIR/);
 });
