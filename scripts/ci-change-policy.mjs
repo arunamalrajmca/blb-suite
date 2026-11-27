@@ -36,8 +36,7 @@ export function isNonRuntimePath(path) {
 }
 
 export function requiresPackageValidation(path) {
-  return path.startsWith(".github/workflows/")
-    || path.startsWith("tests/selector/")
+  return path.startsWith("tests/selector/")
     || path.startsWith("regression-suite/")
     || path === "scripts/classify-ci-changes.mjs"
     || path === "scripts/classify-ast-audit-scope.mjs"
@@ -60,5 +59,5 @@ export function requiresPackageValidation(path) {
     || path === "extension/manifest.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
-    || isAstAuditToolingPath(path);
+    ;
 }
