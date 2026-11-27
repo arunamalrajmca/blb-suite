@@ -2488,4 +2488,32 @@ test('does not infer event callbacks from accessors or computed descriptor names
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' &&
     item.expression === 'Object.defineProperty'), false);
+});\n
+test('recognizes statically named event handlers installed through Reflect.set and Object.assign', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Reflect.set(window, "onmessage", onMessage);',
+      'Object.assign(window, { onerror: onMessage });'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    (item.expression === 'Reflect.set' || item.expression === 'Object.assign'));
+  assert.equal(registrations.length, 2, JSON.stringify(registrations));
+  assert.ok(registrations.every(item => item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.every(item => item.callbackTarget.endsWith('::onMessage@1:9')));
+});
+
+test('keeps dynamic Reflect.set event names outside resolved callback ownership', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Reflect.set(window, eventName, onMessage);'
+    ].join('\\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'Reflect.set'), false);
 });
