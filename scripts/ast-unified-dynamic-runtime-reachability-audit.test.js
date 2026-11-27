@@ -895,6 +895,29 @@ test('covers Chrome and browser callback APIs beyond the common method-name allo
   }
 });
 
+test('traces aliased and destructured extension API callback roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onTabs(tabs) { return tabs.length; }',
+      'function onTree(nodes) { return nodes.length; }',
+      'const queryTabs = chrome.tabs.query;',
+      'queryTabs({}, onTabs);',
+      'const tabs = chrome.tabs;',
+      'tabs.query({}, onTabs);',
+      'const { getTree } = chrome.bookmarks;',
+      'getTree(onTree);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item =>
+    item.expression === 'chrome.tabs.query' && item.callback === 'onTabs' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item =>
+    item.expression === 'chrome.bookmarks.getTree' && item.callback === 'onTree' &&
+    item.certainty === 'resolved-function-binding'));
+});
+
 test('records observer constructors, event-property handlers, and browser API callback ownership', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
