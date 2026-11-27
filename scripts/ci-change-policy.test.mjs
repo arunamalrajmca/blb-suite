@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { isNonRuntimePath, requiresPackageValidation, requiresPackageRegression } from './ci-change-policy.mjs';
 
-test('AST audit tooling runs audit validation but skips the expensive package regression', () => {
+test('AST audit tooling is validated in its separate job without package validation', () => {
   for (const path of [
     'scripts/ast-symbol-reference-audit.js',
     'scripts/ast-cross-module-dynamic-reachability-audit.test.js',
@@ -11,7 +11,7 @@ test('AST audit tooling runs audit validation but skips the expensive package re
     'scripts/classify-ast-audit-scope.test.mjs'
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
-    assert.equal(requiresPackageValidation(path), true, path);
+    assert.equal(requiresPackageValidation(path), false, path);
     assert.equal(requiresPackageRegression(path), false, path);
   }
 });
