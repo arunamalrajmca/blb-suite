@@ -9,6 +9,8 @@ function isAstAuditToolingPath(path) {
 
 export function isNonRuntimePath(path) {
   return isAstAuditToolingPath(path)
+    || path === "scripts/classify-ast-audit-scope.mjs"
+    || path === "scripts/classify-ast-audit-scope.test.mjs"
     || path === ".github/actions/ci-section-checkpoint/action.yml"
     || path === "scripts/ci-change-policy.test.mjs"
     || /^scripts\/(?:ci-(?:section-checkpoint|checkpoint-fingerprints)(?:\.test)?|ci-change-policy)\.mjs$/i.test(path)
