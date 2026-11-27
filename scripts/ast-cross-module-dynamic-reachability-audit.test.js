@@ -110,8 +110,12 @@ test('only attributes child-process launches to child_process bindings',()=>{
   fs.writeFileSync(path.join(root,'scripts/worker.js'),'module.exports = true;');
   fs.writeFileSync(path.join(root,'scripts/fake.js'),'module.exports = false;');
   const files=['scripts/main.js','scripts/worker.js','scripts/fake.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
-  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,3,JSON.stringify(r.launches));
-  assert.equal(r.resolvedLaunchEdges.length,3);
+  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,2,JSON.stringify(r.launches));
+  assert.equal(r.resolvedLaunchEdges.length,2);
+  assert.ok(r.launches.some(x=>x.kind==='child-process-launch'&&x.method==='fork'&&x.command==='\u002e/worker.js'),
+   'destructured fork aliases retain their original child_process method');
+  assert.equal(r.launches.some(x=>x.kind==='child-process-launch'&&x.command==='\u002e/fake.js'),false,
+   'a reassigned child_process binding must not attribute calls to the replacement object');
   assert.ok(r.reachable.includes('scripts/worker.js'));
   assert.equal(r.candidates.find(x=>x.file==='scripts/fake.js')?.status,'candidate-only');
  } finally{fs.rmSync(root,{recursive:true,force:true});}
