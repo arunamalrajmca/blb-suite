@@ -380,6 +380,19 @@ test('discovers direct Node entrypoints outside conventional script folders and 
   assert.ok(edge(result, 'commonjs-require', 'tools/package-audit.js', 'tools/shared.js'));
 });
 
+test('expands question-mark workflow Node entrypoint globs', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
+    '.github/workflows/ci.yml': 'steps:\\n  - run: node --test scripts/check?.test.mjs\\n',
+    'scripts/check1.test.mjs': 'export const one = true;',
+    'scripts/check2.test.mjs': 'export const two = true;',
+    'scripts/check-extra.test.mjs': 'export const extra = true;'
+  });
+  assert.ok(result.roots.includes('scripts/check1.test.mjs'));
+  assert.ok(result.roots.includes('scripts/check2.test.mjs'));
+  assert.equal(result.roots.includes('scripts/check-extra.test.mjs'), false);
+});
+
 test('expands package-script Node test globs into unified execution roots', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { test: 'node --test scripts/*.test.js' } }),
