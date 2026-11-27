@@ -1368,6 +1368,15 @@ function analyzeDynamicExecution(root,files,graph){
       }
       for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
     }
+    const bindingForIdentifier=node=>{
+      if(node?.type!=='Identifier')return null;
+      const mapped=variableForIdentifier.get(node);
+      if(mapped)return mapped;
+      for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
+        if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
+      }
+      return null;
+    };
     const requireAliases=new Set();
     visit(ast,(node,parent)=>{
       if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
@@ -1388,15 +1397,6 @@ function analyzeDynamicExecution(root,files,graph){
         }
       });
     }
-    const bindingForIdentifier=node=>{
-      if(node?.type!=='Identifier')return null;
-      const mapped=variableForIdentifier.get(node);
-      if(mapped)return mapped;
-      for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
-        if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
-      }
-      return null;
-    };
     const isRequireAlias=node=>node?.type==='Identifier'&&requireAliases.has(bindingForIdentifier(node));
     visit(ast,n=>{
     if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)){
