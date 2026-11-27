@@ -975,6 +975,40 @@ test('resolves named and helper-passed object event listener handlers', () => {
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
+test('resolves bound handleEvent method callbacks without losing their object owner', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const boundListener = { handleEvent(event) { return event.type; } };',
+      'document.addEventListener("click", boundListener.handleEvent.bind(boundListener));'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.callback, '[bound handleEvent listener]');
+  assert.equal(registration.certainty, 'resolved-bound-object-event-handler');
+  assert.ok(registration.callbackTarget?.includes('function@'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps bound handleEvent callbacks unresolved when their listener object is reassigned', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let listener = { handleEvent(event) { return event.type; } };',
+      'listener = replacement;',
+      'document.addEventListener("click", listener.handleEvent.bind(listener));'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.notEqual(registration.certainty, 'resolved-bound-object-event-handler');
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
 test('keeps helper listener parameters unresolved when callers disagree', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
