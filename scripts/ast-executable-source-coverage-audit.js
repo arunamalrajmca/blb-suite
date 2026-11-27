@@ -304,6 +304,41 @@ function discover(root) {
       const values = literalArrays.get(node.right.name);
       if (values && declarationCounts.get(name) === 1) loopLiteralArrays.set(name, values);
     });
+    // contentScriptFilesForTab returns alternative statically-known file lists
+    // selected by site and toggle state. Record every possible script as a
+    // runtime root without pretending that every file is injected on every tab.
+    const resolveStaticArray = (node, depth = 0) => {
+      if (!node || depth > 4) return null;
+      if (node.type === 'Identifier') return literalArrays.get(node.name) || null;
+      if (node.type !== 'ArrayExpression') return null;
+      const values = [];
+      for (const item of node.elements) {
+        if (item?.type === 'SpreadElement') {
+          const spread = resolveStaticArray(item.argument, depth + 1);
+          if (!spread) return null;
+          values.push(...spread);
+        } else {
+          const value = literal(item);
+          if (value === null) return null;
+          values.push(value);
+        }
+      }
+      return values;
+    };
+    const contentScriptFunction = node =>
+      node.type === 'FunctionDeclaration' && /contentScript.*Files/i.test(node.id?.name || '');
+    visit(ast, node => {
+      if (!contentScriptFunction(node)) return;
+      visit(node.body, child => {
+        if (child.type !== 'ReturnStatement' || !child.argument) return;
+        const values = resolveStaticArray(child.argument);
+        if (!values) return;
+        for (const value of values) {
+          const target = addRequest(value, extension, normalize(root, file), 'runtime-content-script-selection');
+          if (target && !visited.has(target)) queue.push(target);
+        }
+      });
+    });
     visit(ast, (node, parent) => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
