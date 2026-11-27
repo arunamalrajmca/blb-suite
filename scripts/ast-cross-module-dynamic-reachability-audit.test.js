@@ -101,15 +101,17 @@ test('only attributes child-process launches to child_process bindings',()=>{
   fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
   fs.writeFileSync(path.join(root,'scripts/main.js'),[
    "const cp = require('node:child_process');",
+   "const cpAlias = cp;",
    "const { fork: launch } = require('child_process');",
    "const fake = { spawn() {} }; fake.spawn('node', ['./fake.js']);",
-   "cp.fork('./worker.js'); launch('./worker.js');"
+   "let changing = require('child_process'); changing = fake; changing.spawn('node', ['./fake.js']);",
+   "cpAlias.fork('./worker.js'); launch('./worker.js');"
   ].join('\n'));
   fs.writeFileSync(path.join(root,'scripts/worker.js'),'module.exports = true;');
   fs.writeFileSync(path.join(root,'scripts/fake.js'),'module.exports = false;');
   const files=['scripts/main.js','scripts/worker.js','scripts/fake.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
-  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,2);
-  assert.equal(r.resolvedLaunchEdges.length,2);
+  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,3);
+  assert.equal(r.resolvedLaunchEdges.length,3);
   assert.ok(r.reachable.includes('scripts/worker.js'));
   assert.equal(r.candidates.find(x=>x.file==='scripts/fake.js')?.status,'candidate-only');
  } finally{fs.rmSync(root,{recursive:true,force:true});}
