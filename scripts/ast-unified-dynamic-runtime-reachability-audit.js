@@ -1475,6 +1475,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (node.init?.type === 'Identifier') {
             const source = bindings.get(node.init);
             if (target && source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
+            if (target && source && extensionApiPathBindings.has(source)) extensionApiPathBindings.set(target, extensionApiPathBindings.get(source));
             if (target && source) {
               if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
               if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
