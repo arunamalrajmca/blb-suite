@@ -1512,13 +1512,42 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callbackName = '[listener object]';
         }
       } else if (callback?.type === 'CallExpression') {
-        const owner = resolveReturnedCallbackOwner(file, callback);
-        if (owner && !owner.unresolved) {
-          callbackName = '[factory callback]';
-          callbackTarget = rel(root, owner.file) + '::' + owner.key;
-          certainty = 'resolved-factory-return';
+        const callee = callback.callee;
+        const calleeProperty = callee?.type === 'MemberExpression'
+          ? (callee.computed
+            ? (callee.property.type === 'Literal' ? String(callee.property.value) : null)
+            : callee.property.name)
+          : null;
+        const methodExpression = calleeProperty === 'bind' &&
+          callee?.type === 'MemberExpression' ? callee.object : null;
+        const methodProperty = methodExpression?.type === 'MemberExpression'
+          ? (methodExpression.computed
+            ? (methodExpression.property.type === 'Literal' ? String(methodExpression.property.value) : null)
+            : methodExpression.property.name)
+          : null;
+        const listenerExpression = methodProperty === 'handleEvent'
+          ? methodExpression.object : null;
+        const boundReceiver = callback.arguments?.[0];
+        const listenerKey = listenerExpression?.type === 'Identifier'
+          ? bindings.get(listenerExpression) : null;
+        const receiverKey = boundReceiver?.type === 'Identifier'
+          ? bindings.get(boundReceiver) : null;
+        const listenerIdentity = listenerKey ? file + '::' + listenerKey : null;
+        const boundHandlerOwner = listenerIdentity && listenerKey === receiverKey
+          ? listenerObjectOwners.get(listenerIdentity) : null;
+        if (boundHandlerOwner && !reassignedListenerObjects.has(listenerIdentity)) {
+          callbackName = '[bound handleEvent listener]';
+          callbackTarget = rel(root, boundHandlerOwner.file) + '::' + boundHandlerOwner.key;
+          certainty = 'resolved-bound-object-event-handler';
         } else {
-          callbackName = '[factory callback]';
+          const owner = resolveReturnedCallbackOwner(file, callback);
+          if (owner && !owner.unresolved) {
+            callbackName = '[factory callback]';
+            callbackTarget = rel(root, owner.file) + '::' + owner.key;
+            certainty = 'resolved-factory-return';
+          } else {
+            callbackName = '[factory callback]';
+          }
         }
       }
       sites.push({
