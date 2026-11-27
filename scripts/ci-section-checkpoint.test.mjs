@@ -85,10 +85,10 @@ test('checkpoint inspection reports precise invalidation reasons', () => {
 test('checkpoint recovery can be disabled without skipping the section runner', () => {
   const action = fs.readFileSync(new URL('../.github/actions/ci-section-checkpoint/action.yml', import.meta.url), 'utf8');
   const hardGate = fs.readFileSync(new URL('../.github/workflows/browser-tests.yml', import.meta.url), 'utf8');
-  assert.match(action, /recovery:\\n    description:[^\\n]*\\n    required: false\\n    default: 'true'/);
-  assert.match(action, /Restore the newest compatible section checkpoint\\n      if: \\$\\{\\{ inputs\\.recovery == 'true' \\}\\}/);
-  assert.match(action, /Preserve completed or partial checkpoint after this attempt\\n      if: \\$\\{\\{ inputs\\.recovery == 'true' && always\\(\\)/);
-  assert.match(action, /inputs\\.recovery != 'true' \\|\\| steps\\.check\\.outputs\\.complete/);
+  assert.ok(action.includes("  recovery:\n    description: Enable cross-run checkpoint restore/save. Disable for workflows or sections that should always execute directly.\n    required: false\n    default: 'true'"));
+  assert.ok(action.includes("    - name: Restore the newest compatible section checkpoint\n      if: ${{ inputs.recovery == 'true' }}"));
+  assert.ok(action.includes("    - name: Preserve completed or partial checkpoint after this attempt\n      if: ${{ inputs.recovery == 'true' && always()"));
+  assert.ok(action.includes("if: ${{ inputs.recovery != 'true' || steps.check.outputs.complete != 'true' || inputs.always_run == 'true' }}"));
   const calls = (hardGate.match(/uses: \.\/\.github\/actions\/ci-section-checkpoint/g) || []).length;
   const disabled = (hardGate.match(/recovery: false/g) || []).length;
   assert.ok(calls > 0, 'HARD-GATE should retain the reusable runner action');
