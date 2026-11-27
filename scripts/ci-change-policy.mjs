@@ -11,6 +11,7 @@ export function isNonRuntimePath(path) {
   return isAstAuditToolingPath(path)
     || path === "scripts/classify-ast-audit-scope.mjs"
     || path === "scripts/classify-ast-audit-scope.test.mjs"
+    || path === "scripts/ci-change-policy.test.mjs"
     || /^scripts\\/(?:ci-(?:section-checkpoint|checkpoint-fingerprints)(?:\\.test)?|ci-change-policy)\\.mjs$/i.test(path)
     || /^scripts\\/run-checkpointed-playwright-[^/]+\\.mjs$/i.test(path)
     || /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
