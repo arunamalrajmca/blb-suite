@@ -7,6 +7,12 @@ test('repository audit tooling and workflow-only edits skip the expensive packag
     'scripts/ast-symbol-reference-audit.js',
     'scripts/ast-cross-module-dynamic-reachability-audit.test.js',
     'scripts/classify-ast-audit-scope.mjs',
+    'scripts/ci-change-policy.test.mjs',
+    'scripts/ci-section-checkpoint.mjs',
+    'scripts/ci-section-checkpoint.test.mjs',
+    'scripts/ci-checkpoint-fingerprints.mjs',
+    'scripts/ci-checkpoint-fingerprints.test.mjs',
+    'scripts/run-checkpointed-playwright-audit.mjs',
     '.github/workflows/browser-tests.yml',
     '.github/workflows/ci-command-router.yml'
   ]) {
