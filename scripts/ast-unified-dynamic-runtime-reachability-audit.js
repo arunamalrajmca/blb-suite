@@ -1807,18 +1807,37 @@ function analyze(root = path.resolve(__dirname, '..')) {
           'addListener', 'addEventListener', 'on', 'once', 'subscribe',
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
           'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback',
-          'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback',
-          // Vue Composition API lifecycle hooks receive callbacks that Vue
-          // invokes later; include the full public lifecycle registration set.
+          'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback'
+        ]);
+        const vueLifecycleHooks = new Set([
           'onBeforeMount', 'onMounted', 'onBeforeUpdate', 'onUpdated',
           'onBeforeUnmount', 'onUnmounted', 'onErrorCaptured', 'onRenderTracked',
           'onRenderTriggered', 'onActivated', 'onDeactivated', 'onServerPrefetch'
         ]);
+        const vueHookBindings = new Map();
+        const vueNamespaceBindings = new Set();
+        for (const declaration of ast.body || []) {
+          if (declaration.type !== 'ImportDeclaration' || declaration.source.value !== 'vue') continue;
+          for (const specifier of declaration.specifiers || []) {
+            const key = bindings.get(specifier.local);
+            if (!key) continue;
+            if (specifier.type === 'ImportNamespaceSpecifier') vueNamespaceBindings.add(key);
+            else if (specifier.type === 'ImportSpecifier') {
+              const importedName = specifier.imported.name || specifier.imported.value;
+              if (vueLifecycleHooks.has(importedName)) vueHookBindings.set(key, importedName);
+            }
+          }
+        }
         const observerBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' &&
           ((!observerBinding && observerConstructors.has(callee.name)) ||
             (observerBinding && observerConstructorBindings.has(observerBinding)));
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
+        const calleeBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
+        const vueHookName = calleeBinding && vueHookBindings.get(calleeBinding) ||
+          (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' &&
+            vueNamespaceBindings.has(bindings.get(callee.object)) && vueLifecycleHooks.has(method) ? method : null);
+        const isVueLifecycleHook = Boolean(vueHookName);
         const lastArgument = node.arguments[node.arguments.length - 1];
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
@@ -1841,7 +1860,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         } else if (method === 'then') {
           callbackIndices = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
         } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
-        else if (callbackApis.has(method)) callbackIndices = [0];
+        else if (callbackApis.has(method) || isVueLifecycleHook) callbackIndices = [0];
         for (const callbackIndex of callbackIndices) {
           if (callbackIndex < 0 || callbackIndex >= node.arguments.length) continue;
           const callback = node.arguments[callbackIndex];
