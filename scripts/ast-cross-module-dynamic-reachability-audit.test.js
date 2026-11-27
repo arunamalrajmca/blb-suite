@@ -74,6 +74,26 @@ test('resolves child process fork and node argv targets into reachability',()=>{
  assert.ok(r.reachable.includes('scripts/worker.js'));assert.ok(r.reachable.includes('scripts/child.js'));assert.equal(r.resolvedLaunchEdges.length,2);}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('tracks importScripts arguments and immutable worker constructor aliases',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'worker-loader-aliases-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts'));
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  fs.writeFileSync(path.join(root,'scripts/main.js'),[
+   'const WorkerBase = Worker;',
+   'const WorkerAlias = WorkerBase;',
+   "new WorkerAlias('./worker.js');",
+   "importScripts('./one.js', './two.js');"
+  ].join('\n'));
+  for(const file of ['worker.js','one.js','two.js'])fs.writeFileSync(path.join(root,'scripts',file),'export const loaded = true;');
+  const files=['scripts/main.js','scripts/worker.js','scripts/one.js','scripts/two.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.resolvedLaunchEdges.length,3);
+  assert.ok(r.reachable.includes('scripts/worker.js'));
+  assert.ok(r.reachable.includes('scripts/one.js'));
+  assert.ok(r.reachable.includes('scripts/two.js'));
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('only attributes child-process launches to child_process bindings',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'owned-child-process-api-'));
  try{
