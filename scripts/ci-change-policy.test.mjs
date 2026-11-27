@@ -17,11 +17,11 @@ test('repository audit tooling and workflow-only edits skip the expensive packag
     '.github/workflows/ci-command-router.yml',
     '.github/actions/ci-section-checkpoint/action.yml',
     'scripts/ci-change-policy.mjs',
-    'scripts/classify-ci-changes.mjs',
-    'scripts/classify-ast-audit-scope.mjs'
+    'scripts/classify-ci-changes.mjs'
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
-    assert.equal(requiresPackageValidation(path), false, path);
+    assert.equal(requiresPackageValidation(path), true, path);
+    assert.equal(requiresPackageRegression(path), false, path);
   }
 });
 
@@ -39,7 +39,6 @@ test('selector and CI routing policy changes retain their targeted package valid
   for (const path of [
     'tests/selector/browser-selector-decisions.test.mjs',
     'scripts/select-browser-specs.mjs',
-    'scripts/ci-change-policy.mjs',
     'scripts/test-ci-routing-selector.js'
   ]) assert.equal(requiresPackageValidation(path), true, path);
 });
