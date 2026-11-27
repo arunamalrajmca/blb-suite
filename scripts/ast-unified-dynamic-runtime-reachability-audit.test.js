@@ -936,6 +936,78 @@ test('records observer constructors, event-property handlers, and browser API ca
 });
 
 
+test('traces aliased observer constructors and object-based event listener handlers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onResize(entries) { return entries.length; }',
+      'const BaseObserver = ResizeObserver;',
+      'const Observer = BaseObserver;',
+      'new Observer(onResize);',
+      'document.addEventListener("click", { handleEvent(event) { return event.type; } });',
+      'document.addEventListener("keydown", { handleEvent: function(event) { return event.key; } });'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item =>
+    item.expression === 'Observer' && item.callback === 'onResize' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(registrations.filter(item =>
+    item.certainty === 'resolved-object-event-handler').length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves named and helper-passed object event listener handlers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const namedListener = { handleEvent(event) { return event.type; } };',
+      'document.addEventListener("click", namedListener);',
+      'const delegatedListener = { handleEvent(event) { return event.key; } };',
+      'function installListener(listener) { document.addEventListener("keydown", listener); }',
+      'installListener(delegatedListener);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.equal(registrations.filter(item =>
+    item.certainty === 'resolved-object-event-handler-binding').length, 2);
+  assert.ok(registrations.every(item => item.callbackTarget?.includes('function@')));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps helper listener parameters unresolved when callers disagree', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const knownListener = { handleEvent(event) { return event.type; } };',
+      'function installListener(listener) { document.addEventListener("click", listener); }',
+      'installListener(knownListener);',
+      'installListener(runtimeValue);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.notEqual(registration.certainty, 'resolved-object-event-handler-binding');
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+});
+
+test('keeps reassigned named listener objects unresolved', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let listener = { handleEvent(event) { return event.type; } };',
+      'listener = replacement;',
+      'document.addEventListener("click", listener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
 test('resolves delegated event handlers, both Promise handlers, and React hook callbacks', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -2297,4 +2369,57 @@ test('does not treat a shadowed nested parameter as reassignment of an imported 
   assert.equal(result.uncertainty.some(item =>
     item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
   ), false);
+});
+
+test('resolves listener objects forwarded through multiple helper layers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const listener = { handleEvent(event) { return event.type; } };',
+      'function installAtFinalLayer(value) { document.addEventListener("click", value); }',
+      'function forwardOneLayer(value) { installAtFinalLayer(value); }',
+      'function forwardAnotherLayer(value) { forwardOneLayer(value); }',
+      'forwardAnotherLayer(listener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-object-event-handler-binding');
+  assert.ok(registration.callbackTarget?.includes('function@'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps reassigned listener helper parameters unresolved across forwarding', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const listener = { handleEvent(event) { return event.type; } };',
+      'function install(value) { value = replacement; document.addEventListener("click", value); }',
+      'install(listener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
+});
+
+test('keeps multi-hop listener forwarding unresolved when one caller is unknown', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const listener = { handleEvent(event) { return event.type; } };',
+      'function install(value) { document.addEventListener("click", value); }',
+      'function forward(value) { install(value); }',
+      'forward(listener);',
+      'forward(runtimeListener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });
