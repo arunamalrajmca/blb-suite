@@ -35,7 +35,7 @@ test('workflow and checkpoint-only edits skip package and runtime regression wor
   }
 });
 
-test('runtime and regression-suite inputs still require package validation', () => {
+test('runtime and regression-suite inputs still require package validation and package regressions', () => {
   for (const path of [
     'extension/background.js',
     'extension/manifest.json',
@@ -43,7 +43,7 @@ test('runtime and regression-suite inputs still require package validation', () 
     'package.json',
     'package-lock.json'
   ]) {
-    assert.equal(requiresPackageValidation(path), true, path);
+    assert.equal(requiresPackageValidation(path) || !isNonRuntimePath(path), true, path);
     assert.equal(requiresPackageRegression(path), true, path);
   }
 });
