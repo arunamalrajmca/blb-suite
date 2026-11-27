@@ -110,7 +110,7 @@ test('follows importScripts filenames iterated from a static array', () => {
       'for (const scriptFile of startupFiles) {',
       '  importScripts(scriptFile);',
       '}'
-    ].join('\\n'));
+    ].join('\n'));
     f.write('extension/first.js', 'self.first = true;');
     f.write('extension/second.js', 'self.second = true;');
 
