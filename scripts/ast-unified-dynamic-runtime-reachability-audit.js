@@ -336,7 +336,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const directory = path.resolve(root, path.dirname(normalized));
         if (!fs.existsSync(directory)) return;
         const pattern = path.basename(normalized);
-        const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + '
+        const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + String.fromCharCode(36));
+        for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+          if (!entry.isFile() || !matcher.test(entry.name)) continue;
+          const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
+          if (target) roots.add(target);
+        }
+      };
+      for (const command of Object.values(pkg.scripts || {})) {
+        const match = /(?:^|&&|\|\||;)\s*(?:node|nodejs)\s+(?:--[^ ]+\s+)*([^\s;&|]+)/g;
+        let found;
+        while ((found = match.exec(command))) addPackageScriptTarget(found[1]);
+      }
     } catch (error) { errors.push({ file: 'package.json', error: error.message }); }
   }
   // Playwright loads its config and test specs as independent execution
