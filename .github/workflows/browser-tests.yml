@@ -58,7 +58,7 @@ jobs:
   repository-ast-audits:
     name: Repository AST audits
     needs: change-detection
-    if: ${{ needs.change-detection.result == 'success' && (github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
+    if: \${{ needs.change-detection.result == 'success' && (github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -72,88 +72,92 @@ jobs:
           node-version: 22
       - name: Classify repository-wide AST audit scope
         id: audit-scope
-        if: ${{ github.event_name != 'workflow_dispatch' }}
+        if: \${{ github.event_name != 'workflow_dispatch' }}
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: \${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/classify-ast-audit-scope.mjs "$BASE_SHA"
       - name: Select all repository-wide AST audits for manual full run
         id: audit-scope-manual
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        if: \${{ github.event_name == 'workflow_dispatch' }}
         run: |
           for name in symbol repository owner cross_module runtime unified computed executable_source metaprogramming; do
             echo "run_$name=true" >> "$GITHUB_OUTPUT"
           done
           echo "run_any=true" >> "$GITHUB_OUTPUT"
       - name: Install pinned AST audit dependencies
-        if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
+        if: \${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
       - name: Test AST audit scope selector
         run: node --test scripts/classify-ast-audit-scope.test.mjs
-      - name: Run selected repository-wide AST audits concurrently
-        if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
-        env:
-          RUN_SYMBOL: ${{ steps.audit-scope.outputs.run_symbol || steps.audit-scope-manual.outputs.run_symbol }}
-          RUN_REPOSITORY: ${{ steps.audit-scope.outputs.run_repository || steps.audit-scope-manual.outputs.run_repository }}
-          RUN_OWNER: ${{ steps.audit-scope.outputs.run_owner || steps.audit-scope-manual.outputs.run_owner }}
-          RUN_CROSS_MODULE: ${{ steps.audit-scope.outputs.run_cross_module || steps.audit-scope-manual.outputs.run_cross_module }}
-          RUN_RUNTIME: ${{ steps.audit-scope.outputs.run_runtime || steps.audit-scope-manual.outputs.run_runtime }}
-          RUN_UNIFIED: ${{ steps.audit-scope.outputs.run_unified || steps.audit-scope-manual.outputs.run_unified }}
-          RUN_COMPUTED: ${{ steps.audit-scope.outputs.run_computed || steps.audit-scope-manual.outputs.run_computed }}
-          RUN_EXECUTABLE_SOURCE: ${{ steps.audit-scope.outputs.run_executable_source || steps.audit-scope-manual.outputs.run_executable_source }}
-          RUN_METAPROGRAMMING: ${{ steps.audit-scope.outputs.run_metaprogramming || steps.audit-scope-manual.outputs.run_metaprogramming }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          log_dir="$(mktemp -d)"
-          active=0
-          failed=0
+      - name: Test AST audit input fingerprinting
+        run: node --test scripts/ast-audit-input-fingerprint.test.mjs
+      - name: Run selected repository-wide AST audits with per-audit checkpoints
+        if: \${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: repository-ast-audits
+          cache_prefix: blb-ast-audits-v1
+          fingerprint: \${{ hashFiles('.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml', 'scripts/ci-section-checkpoint.mjs', 'scripts/ast-audit-input-fingerprint.mjs', 'scripts/classify-ast-audit-scope.mjs') }}
+          always_run: 'true'
+          run: |
+            set -euo pipefail
+            log_dir="$(mktemp -d)"
+            active=0
+            failed=0
 
-          start_audit() {
-            local name="$1" test_file="$2" audit_file="$3"
-            local log_file="$log_dir/$name.log"
-            (
-              set -euo pipefail
-              {
-                echo "regression tests"
-                node --test "$test_file"
-                echo "repository audit"
-                node "$audit_file"
-              } 2>&1 | tee "$log_file" | sed -u "s/^/[$name] /"
-            ) &
-            active=$((active + 1))
-            if (( active >= 4 )); then
-              reap_one
+            reap_one() {
+              if wait -n; then :; else failed=1; fi
+              active=$((active - 1))
+            }
+
+            start_audit() {
+              local name="$1" test_file="$2" audit_file="$3"
+              local marker_dir="$BLB_CI_CHECKPOINT_DIR/audits/$name"
+              local fingerprint
+              fingerprint="$(node scripts/ast-audit-input-fingerprint.mjs "$name" | sed -n 's/^fingerprint=//p')"
+              if [[ ! "$fingerprint" =~ ^[a-f0-9]{64}$ ]]; then
+                echo "::error::Could not calculate input fingerprint for $name"
+                failed=1
+                return
+              fi
+              local decision
+              decision="$(node scripts/ci-section-checkpoint.mjs check "$marker_dir" "ast-$name" "$BLB_CI_CHECKPOINT_SOURCE_SHA" "$fingerprint" "$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT")"
+              if grep -q '^complete=true$' <<< "$decision"; then
+                echo "[$name] Reusing completed audit; all fingerprinted inputs are unchanged."
+                return
+              fi
+              echo "[$name] Running audit (checkpoint reason: $(sed -n 's/^reason=//p' <<< "$decision"))."
+              (
+                set -euo pipefail
+                {
+                  echo "regression tests"
+                  node --test "$test_file"
+                  echo "repository audit"
+                  node "$audit_file"
+                  node scripts/ci-section-checkpoint.mjs write "$marker_dir" "ast-$name" "$BLB_CI_CHECKPOINT_SOURCE_SHA" "$fingerprint" "$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT"
+                  echo "completed and checkpointed"
+                } 2>&1 | tee "$log_dir/$name.log" | sed -u "s/^/[$name] /"
+              ) &
+              active=$((active + 1))
+              if (( active >= 4 )); then reap_one; fi
+            }
+
+            [[ "$RUN_SYMBOL" != "true" ]] || start_audit symbol scripts/ast-symbol-reference-audit.test.js scripts/ast-symbol-reference-audit.js
+            [[ "$RUN_REPOSITORY" != "true" ]] || start_audit repository scripts/ast-repository-reachability-audit.test.js scripts/ast-repository-reachability-audit.js
+            [[ "$RUN_OWNER" != "true" ]] || start_audit owner scripts/ast-owner-aware-node-reachability-audit.test.js scripts/ast-owner-aware-node-reachability-audit.js
+            [[ "$RUN_CROSS_MODULE" != "true" ]] || start_audit cross_module scripts/ast-cross-module-dynamic-reachability-audit.test.js scripts/ast-cross-module-dynamic-reachability-audit.js
+            [[ "$RUN_RUNTIME" != "true" ]] || start_audit runtime scripts/ast-runtime-flow-reachability-audit.test.js scripts/ast-runtime-flow-reachability-audit.js
+            [[ "$RUN_UNIFIED" != "true" ]] || start_audit unified scripts/ast-unified-dynamic-runtime-reachability-audit.test.js scripts/ast-unified-dynamic-runtime-reachability-audit.js
+            [[ "$RUN_COMPUTED" != "true" ]] || start_audit computed scripts/ast-computed-property-reachability-audit.test.js scripts/ast-computed-property-reachability-audit.js
+            [[ "$RUN_EXECUTABLE_SOURCE" != "true" ]] || start_audit executable_source scripts/ast-executable-source-coverage-audit.test.js scripts/ast-executable-source-coverage-audit.js
+            [[ "$RUN_METAPROGRAMMING" != "true" ]] || start_audit metaprogramming scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js scripts/ast-runtime-metaprogramming-uncertainty-audit.js
+
+            while (( active > 0 )); do reap_one; done
+            if (( failed != 0 )); then
+              echo "One or more selected AST audits failed."
+              exit 1
             fi
-          }
-
-          reap_one() {
-            if wait -n; then
-              :
-            else
-              failed=1
-            fi
-            active=$((active - 1))
-          }
-
-          [[ "$RUN_SYMBOL" != "true" ]] || start_audit symbol scripts/ast-symbol-reference-audit.test.js scripts/ast-symbol-reference-audit.js
-          [[ "$RUN_REPOSITORY" != "true" ]] || start_audit repository scripts/ast-repository-reachability-audit.test.js scripts/ast-repository-reachability-audit.js
-          [[ "$RUN_OWNER" != "true" ]] || start_audit owner scripts/ast-owner-aware-node-reachability-audit.test.js scripts/ast-owner-aware-node-reachability-audit.js
-          [[ "$RUN_CROSS_MODULE" != "true" ]] || start_audit cross-module scripts/ast-cross-module-dynamic-reachability-audit.test.js scripts/ast-cross-module-dynamic-reachability-audit.js
-          [[ "$RUN_RUNTIME" != "true" ]] || start_audit runtime scripts/ast-runtime-flow-reachability-audit.test.js scripts/ast-runtime-flow-reachability-audit.js
-          [[ "$RUN_UNIFIED" != "true" ]] || start_audit unified scripts/ast-unified-dynamic-runtime-reachability-audit.test.js scripts/ast-unified-dynamic-runtime-reachability-audit.js
-          [[ "$RUN_COMPUTED" != "true" ]] || start_audit computed scripts/ast-computed-property-reachability-audit.test.js scripts/ast-computed-property-reachability-audit.js
-          [[ "$RUN_EXECUTABLE_SOURCE" != "true" ]] || start_audit executable-source scripts/ast-executable-source-coverage-audit.test.js scripts/ast-executable-source-coverage-audit.js
-          [[ "$RUN_METAPROGRAMMING" != "true" ]] || start_audit metaprogramming scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js scripts/ast-runtime-metaprogramming-uncertainty-audit.js
-
-          while (( active > 0 )); do
-            reap_one
-          done
-
-          if (( failed != 0 )); then
-            echo "One or more selected AST audits failed."
-            exit 1
-          fi
-          echo "All selected AST audits passed."
+            echo "All selected AST audits passed or were safely restored from matching input checkpoints."
 
   regression-package:
     name: Package validation
