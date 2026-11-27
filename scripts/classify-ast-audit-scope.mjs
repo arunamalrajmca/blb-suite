@@ -39,6 +39,13 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
       if (paths.includes(path)) { selected.add(name); matched = true; }
     }
 
+    if (matched) {
+      if (path === auditDefinitions.owner[0] || path === auditDefinitions.owner[1]) add(selected, ["cross_module", "unified"]);
+      if (path === auditDefinitions.runtime[0] || path === auditDefinitions.runtime[1]) selected.add("unified");
+      if (path === auditDefinitions.unified[0] || path === auditDefinitions.unified[1]) selected.add("cross_module");
+      continue;
+    }
+
     if (path.startsWith("extension/")) {
       if (/\.(?:js|cjs|mjs)$/i.test(path)) {
         add(selected, repoWideJs);
