@@ -20,6 +20,7 @@ on:
       - 'scripts/detect-end-user-production-changes.*'
       - 'scripts/run-checkpointed-playwright-*.mjs'
       - 'scripts/test-suite-inventory.*'
+      - 'scripts/test-file-inventory-helpers.*'
       - 'scripts/validate-build.js'
       - 'scripts/test-ci-routing-selector.js'
       - 'scripts/run-validation-tests.js'
@@ -71,6 +72,7 @@ jobs:
           node --test tests/selector/browser-selector-decisions.test.mjs
           node --test scripts/detect-end-user-production-changes.test.mjs
           node --test scripts/ci-change-policy.test.mjs
+          node --test scripts/test-file-inventory-helpers.test.mjs
 
           # Exercise the exact test-list extraction and delegation checks used by
           # the expensive full audit, without launching a browser.
