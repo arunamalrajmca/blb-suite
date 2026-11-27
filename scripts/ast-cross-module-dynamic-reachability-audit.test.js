@@ -74,6 +74,27 @@ test('resolves child process fork and node argv targets into reachability',()=>{
  assert.ok(r.reachable.includes('scripts/worker.js'));assert.ok(r.reachable.includes('scripts/child.js'));assert.equal(r.resolvedLaunchEdges.length,2);}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('only attributes child-process launches to child_process bindings',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'owned-child-process-api-'));
+ try{
+  fs.mkdirSync(path.join(root,'scripts'));
+  fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
+  fs.writeFileSync(path.join(root,'scripts/main.js'),[
+   "const cp = require('node:child_process');",
+   "const { fork: launch } = require('child_process');",
+   "const fake = { spawn() {} }; fake.spawn('node', ['./fake.js']);",
+   "cp.fork('./worker.js'); launch('./worker.js');"
+  ].join('\n'));
+  fs.writeFileSync(path.join(root,'scripts/worker.js'),'module.exports = true;');
+  fs.writeFileSync(path.join(root,'scripts/fake.js'),'module.exports = false;');
+  const files=['scripts/main.js','scripts/worker.js','scripts/fake.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.launches.filter(x=>x.kind==='child-process-launch').length,2);
+  assert.equal(r.resolvedLaunchEdges.length,2);
+  assert.ok(r.reachable.includes('scripts/worker.js'));
+  assert.equal(r.candidates.find(x=>x.file==='scripts/fake.js')?.status,'candidate-only');
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('tracks nonliteral calls through immutable require aliases as reachable uncertainty',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-require-alias-uncertainty-'));
  try{
