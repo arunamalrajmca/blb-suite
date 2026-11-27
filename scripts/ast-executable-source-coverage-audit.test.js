@@ -66,7 +66,7 @@ test('classifies fetched generated JavaScript payloads as packaged data resource
       "  await fetchPackagedJsonAssignment('direct-data.js', 'const DATA = ', ';');",
       "}",
       "const fallbackAssignments = { 'compressed.json.gz': ['fallback-data.js', 'const FALLBACK = ', ';'] };"
-    ].join('\\n'));
+    ].join('\n'));
     f.write('extension/direct-data.js', 'const DATA = [];');
     f.write('extension/fallback-data.js', 'const FALLBACK = [];');
 
