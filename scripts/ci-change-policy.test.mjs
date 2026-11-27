@@ -89,7 +89,7 @@ test('HARD-GATE separates package validation from bounded concurrent repository 
     ['symbol', 'scripts/ast-symbol-reference-audit.test.js', 'scripts/ast-symbol-reference-audit.js'],
     ['repository', 'scripts/ast-repository-reachability-audit.test.js', 'scripts/ast-repository-reachability-audit.js'],
     ['owner', 'scripts/ast-owner-aware-node-reachability-audit.test.js', 'scripts/ast-owner-aware-node-reachability-audit.js'],
-    ['cross-module', 'scripts/ast-cross-module-dynamic-reachability-audit.test.js', 'scripts/ast-cross-module-dynamic-reachability-audit.js'],
+    ['cross_module', 'scripts/ast-cross-module-dynamic-reachability-audit.test.js', 'scripts/ast-cross-module-dynamic-reachability-audit.js'],
     ['runtime', 'scripts/ast-runtime-flow-reachability-audit.test.js', 'scripts/ast-runtime-flow-reachability-audit.js'],
     ['unified', 'scripts/ast-unified-dynamic-runtime-reachability-audit.test.js', 'scripts/ast-unified-dynamic-runtime-reachability-audit.js'],
     ['computed', 'scripts/ast-computed-property-reachability-audit.test.js', 'scripts/ast-computed-property-reachability-audit.js'],
