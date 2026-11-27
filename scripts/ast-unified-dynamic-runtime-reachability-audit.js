@@ -1586,7 +1586,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     visit(ast, node => {
       if (node.type !== 'CallExpression' || memberPath(node.callee) !== 'customElements.define' ||
           node.callee.type !== 'MemberExpression' || node.arguments[1]?.type !== 'Identifier' ||
-          bindings.get(node.callee.object) || bindings.get(node.arguments[1])) return;
+          bindings.get(node.callee.object)) return;
       const classKey = bindings.get(node.arguments[1]);
       const methods = classKey && customElementClasses.get(classKey);
       if (!methods) return;
