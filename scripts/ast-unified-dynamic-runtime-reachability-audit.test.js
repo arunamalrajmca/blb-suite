@@ -323,6 +323,88 @@ test('discovers Playwright specs and GitHub Actions Node commands as execution r
 });
 
 
+test('discovers nested composite-action Node commands as execution roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
+    '.github/actions/audit/action.yml': [
+      'name: Audit action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node scripts/action-audit.js'
+    ].join('\n'),
+    '.github/actions/nested/verify/action.yaml': [
+      'name: Nested verify action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node scripts/action-verify.mjs'
+    ].join('\n'),
+    'scripts/action-audit.js': "const helper = require('./action-helper.js'); helper.run();",
+    'scripts/action-helper.js': 'exports.run = () => true;',
+    'scripts/action-verify.mjs': 'export const verified = true;'
+  });
+  assert.ok(result.roots.includes('scripts/action-audit.js'));
+  assert.ok(result.roots.includes('scripts/action-verify.mjs'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/action-audit.js', 'scripts/action-helper.js'));
+});
+
+test('discovers direct Node entrypoints outside conventional script folders and after shell separators', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'echo begin; node tools/package-audit.js' } }),
+    '.github/workflows/tools.yml': [
+      'jobs:',
+      '  check:',
+      '    steps:',
+      '      - working-directory: tools',
+      '        run: node --test workflow-audit.test.mjs'
+    ].join('\n'),
+    '.github/actions/tools/action.yml': [
+      'name: Tools action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node ./tools/action-audit.js'
+    ].join('\n'),
+    'tools/package-audit.js': "require('./shared.js');",
+    'tools/shared.js': 'module.exports = true;',
+    'tools/workflow-audit.test.mjs': 'export const workflowTest = true;',
+    'tools/action-audit.js': 'export const actionAudit = true;'
+  });
+  assert.ok(result.roots.includes('tools/package-audit.js'));
+  assert.ok(result.roots.includes('tools/workflow-audit.test.mjs'));
+  assert.ok(result.roots.includes('tools/action-audit.js'));
+  assert.ok(edge(result, 'commonjs-require', 'tools/package-audit.js', 'tools/shared.js'));
+});
+
+test('expands question-mark workflow Node entrypoint globs', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
+    '.github/workflows/ci.yml': 'steps:\n  - run: node --test scripts/check?.test.mjs\n',
+    'scripts/check1.test.mjs': 'export const one = true;',
+    'scripts/check2.test.mjs': 'export const two = true;',
+    'scripts/check-extra.test.mjs': 'export const extra = true;'
+  });
+  assert.ok(result.roots.includes('scripts/check1.test.mjs'));
+  assert.ok(result.roots.includes('scripts/check2.test.mjs'));
+  assert.equal(result.roots.includes('scripts/check-extra.test.mjs'), false);
+});
+
+test('expands package-script Node test globs into unified execution roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'node --test scripts/*.test.js' } }),
+    'scripts/alpha.test.js': "require('./helper.js');",
+    'scripts/beta.test.js': 'module.exports = true;',
+    'scripts/helper.js': 'module.exports = true;'
+  });
+  assert.ok(result.roots.includes('scripts/alpha.test.js'));
+  assert.ok(result.roots.includes('scripts/beta.test.js'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/alpha.test.js', 'scripts/helper.js'));
+});
+
 test('resolves service-worker global content-script arrays referenced by browser test injections', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
@@ -786,6 +868,54 @@ test('tracks aliased global eval, reassigned Function constructors, and imported
   assert.ok(boundaries.some(item => item.executionBoundary === 'function-constructor'));
   assert.ok(boundaries.some(item => item.executionBoundary === 'node-vm'));
   assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
+});
+
+test('covers Chrome and browser callback APIs beyond the common method-name allowlist', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onBookmarkTree(nodes) { return nodes.length; }',
+      'function onToken(token) { return token; }',
+      'function onMessage(response) { return response; }',
+      'chrome.bookmarks.getTree(onBookmarkTree);',
+      'chrome.identity.getAuthToken({ interactive: false }, onToken);',
+      'browser.runtime.sendMessage({ type: "ping" }, onMessage);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  for (const [expression, callback] of [
+    ['chrome.bookmarks.getTree', 'onBookmarkTree'],
+    ['chrome.identity.getAuthToken', 'onToken'],
+    ['browser.runtime.sendMessage', 'onMessage']
+  ]) {
+    assert.ok(registrations.some(item =>
+      item.expression === expression && item.callback === callback &&
+      item.certainty === 'resolved-function-binding'),
+    'expected callback ownership for ' + expression);
+  }
+});
+
+test('traces aliased and destructured extension API callback roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onTabs(tabs) { return tabs.length; }',
+      'function onTree(nodes) { return nodes.length; }',
+      'const queryTabs = chrome.tabs.query;',
+      'queryTabs({}, onTabs);',
+      'const tabs = chrome.tabs;',
+      'tabs.query({}, onTabs);',
+      'const { getTree } = chrome.bookmarks;',
+      'getTree(onTree);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item =>
+    item.expression === 'chrome.tabs.query' && item.callback === 'onTabs' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item =>
+    item.expression === 'chrome.bookmarks.getTree' && item.callback === 'onTree' &&
+    item.certainty === 'resolved-function-binding'));
 });
 
 test('records observer constructors, event-property handlers, and browser API callback ownership', () => {
@@ -2022,4 +2152,149 @@ test('does not propagate static imported arguments when a dynamic-import paramet
     item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
     item.certainty === 'unresolved-dynamic-import'
   ));
+});
+
+
+test('propagates imported dynamic-import arguments through a same-module wrapper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      'function wrapper(specifier) { return load(specifier); }',
+      "wrapper('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
+});
+
+test('propagates imported dynamic-import arguments through multiple module wrapper layers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { wrap } from './wrapper.js';",
+      "wrap('./target.js');"
+    ].join('\n'),
+    'scripts/wrapper.js': [
+      "import { load } from './loader.js';",
+      'export function wrap(specifier) { return load(specifier); }'
+    ].join('\n'),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
+});
+
+test('keeps imported dynamic-import arguments uncertain when an intermediate wrapper has an unknown callsite', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      'function wrapper(specifier) { return load(specifier); }',
+      "wrapper('./target.js');",
+      'wrapper(runtimeSpecifier);'
+    ].join('\n'),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate imported dynamic-import arguments when a nested closure can reassign the parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  const replace = () => { specifier = runtimeOverride; };',
+      '  replace();',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate imported dynamic-import arguments when destructuring assigns to the parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  ({ value: specifier } = runtimeOverride);',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate imported dynamic-import arguments when a loop writes to the parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  for (specifier of runtimeSpecifiers) {}',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not treat a shadowed nested parameter as reassignment of an imported loader parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  const replace = specifier => { specifier = runtimeOverride; };',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
 });

@@ -54,6 +54,137 @@ test('accounts for manifest worker, content scripts, HTML scripts, and static wo
   }
 });
 
+test('traces alternative runtime content-script file lists returned by selector functions', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "const CORE_FILES = ['content.js'];",
+      "const REDIRECT_FILES = ['redirect-a.js', 'redirect-b.js'];",
+      'function contentScriptFilesForTab(tab) {',
+      '  if (tab.redirect) return [...CORE_FILES, ...REDIRECT_FILES];',
+      '  return [...CORE_FILES];',
+      '}'
+    ].join('\n'));
+    for (const name of ['content.js', 'redirect-a.js', 'redirect-b.js']) {
+      f.write('extension/' + name, 'self.loaded = true;');
+    }
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    for (const name of ['content.js', 'redirect-a.js', 'redirect-b.js']) {
+      assert.equal(byFile.get('extension/' + name).classification, 'statically-rooted-or-imported');
+      assert.ok(byFile.get('extension/' + name).roots.some(root => root.kind === 'runtime-content-script-selection'));
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('propagates static content-script arrays through registration helper parameters', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "const CORE_FILES = ['core.js'];",
+      "const REDIRECT_FILES = ['redirect.js'];",
+      'function contentScriptFilesForTab(tab) { return [...CORE_FILES, ...REDIRECT_FILES]; }',
+      'async function registerRuntimeContentScriptForPattern(tab, files = CORE_FILES) {',
+      '  await chrome.scripting.registerContentScripts([{ id: "runtime", matches: ["https://example.test/*"], js: files }]);',
+      '}',
+      'async function ensureRuntimeContentScriptRegistered(tab, files) {',
+      '  return registerRuntimeContentScriptForPattern(tab, files);',
+      '}',
+      'async function activate(tab) {',
+      '  const files = contentScriptFilesForTab(tab);',
+      '  return ensureRuntimeContentScriptRegistered(tab, files);',
+      '}'
+    ].join('\n'));
+    for (const name of ['core.js', 'redirect.js']) {
+      f.write('extension/' + name, 'self.loaded = true;');
+    }
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    for (const name of ['core.js', 'redirect.js']) {
+      const entry = byFile.get('extension/' + name);
+      assert.equal(entry.classification, 'statically-rooted-or-imported');
+      assert.ok(entry.roots.some(root => root.kind === 'runtime-registered-js'));
+    }
+    assert.equal(result.dynamicSites.some(site =>
+      site.api === 'registerContentScripts.js' && site.certainty === 'dynamic-registration-target'), false);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('keeps inferred registration arrays isolated between same-named locals', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "function coreFiles() { return ['core.js']; }",
+      "function redirectFiles() { return ['redirect.js']; }",
+      "function registerCore() {",
+      "  const files = coreFiles();",
+      "  chrome.scripting.registerContentScripts([{ id: 'core', js: files }]);",
+      "}",
+      "function registerRedirect() {",
+      "  const files = redirectFiles();",
+      "  chrome.scripting.registerContentScripts([{ id: 'redirect', js: files }]);",
+      "}"
+    ].join('\n'));
+    f.write('extension/core.js', 'self.core = true;');
+    f.write('extension/redirect.js', 'self.redirect = true;');
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    for (const name of ['core.js', 'redirect.js']) {
+      const entry = byFile.get('extension/' + name);
+      assert.equal(entry.classification, 'statically-rooted-or-imported');
+      assert.ok(entry.roots.some(root => root.kind === 'runtime-registered-js'));
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('classifies fetched generated JavaScript payloads as packaged data resources', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "async function load() {",
+      "  await fetchPackagedJsonAssignment('direct-data.js', 'const DATA = ', ';');",
+      "}",
+      "const fallbackAssignments = { 'compressed.json.gz': ['fallback-data.js', 'const FALLBACK = ', ';'] };"
+    ].join('\n'));
+    f.write('extension/direct-data.js', 'const DATA = [];');
+    f.write('extension/fallback-data.js', 'const FALLBACK = [];');
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    assert.equal(byFile.get('extension/direct-data.js').classification, 'packaged-data-resource');
+    assert.equal(byFile.get('extension/fallback-data.js').classification, 'packaged-data-resource');
+    assert.equal(result.summary.packagedDataResources, 2);
+    assert.equal(result.summary.unaccountedFor, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('reports JavaScript without a discovered execution root instead of calling it unused', () => {
   const f = fixture();
   try {
@@ -93,6 +224,32 @@ test('records dynamic registration and injection sites as unresolved ownership b
       'executeScript'
     ]);
     assert.ok(result.dynamicSites.every(item => item.line > 0));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('follows importScripts filenames iterated from a static array', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "const startupFiles = ['first.js', 'second.js'];",
+      'for (const scriptFile of startupFiles) {',
+      '  importScripts(scriptFile);',
+      '}'
+    ].join('\n'));
+    f.write('extension/first.js', 'self.first = true;');
+    f.write('extension/second.js', 'self.second = true;');
+
+    const result = discover(f.root);
+    const rooted = new Set(result.entries.filter(item => item.roots.length).map(item => item.file));
+    assert.ok(rooted.has('extension/first.js'));
+    assert.ok(rooted.has('extension/second.js'));
+    assert.equal(result.dynamicSites.some(item => item.api === 'importScripts' && item.certainty === 'dynamic-script-target'), false);
   } finally {
     f.cleanup();
   }

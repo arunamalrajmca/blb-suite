@@ -134,6 +134,27 @@ test('collects literal require, import, re-export and dynamic-loading edges', ()
   }
 });
 
+test('resolves literal no-substitution template strings as static Node loader targets', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-module-edges-'));
+  try {
+    const from = path.join(root, 'entry.js');
+    const target = path.join(root, 'helper.js');
+    fs.writeFileSync(from, '');
+    fs.writeFileSync(target, '');
+    const files = new Set([from, target]);
+    const result = collectModuleEdges([
+      'import(`./helper.js`);',
+      'require(`./helper`);',
+      'require(`./${name}`);'
+    ].join('\n'), from, files);
+    assert.equal(result.edges.length, 2);
+    assert.ok(result.edges.every(edge => edge.file === target));
+    assert.deepEqual(result.dynamic.map(item => item.kind), ['dynamic-require']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('builds transitive Node module reachability from package, workflow and Playwright roots', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'node-module-graph-'));
   const write = (name, value) => {
@@ -163,6 +184,72 @@ test('builds transitive Node module reachability from package, workflow and Play
     assert.ok(reachable.has('tests/browser/example.spec.js'));
     assert.ok(reachable.has('tests/support.js'));
     assert.deepEqual(graph.candidates.map(item => item.file), ['scripts/orphan.js']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('includes composite-action and workflow shell-wrapper Node roots in module reachability', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'action-shell-roots-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { validate: 'node scripts/cli.js' } }));
+    write('.github/workflows/ci.yml', 'steps:\n  - working-directory: tools\n    run: bash run-wrapper.sh\n  - working-directory: tools\n    run: node direct-entry.js\n');
+    write('.github/actions/nested/verify/action.yaml', [
+      'name: Verify action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node tools/action-entry.js'
+    ].join('\n'));
+    write('scripts/cli.js', 'require("./cli-helper.js");');
+    write('scripts/cli-helper.js', 'module.exports = true;');
+    write('tools/run-wrapper.sh', 'node tools/shell-child.js\n');
+    write('tools/shell-child.js', 'require("./shell-helper.js");');
+    write('tools/shell-helper.js', 'module.exports = true;');
+    write('tools/direct-entry.js', 'require("./direct-helper.js");');
+    write('tools/direct-helper.js', 'module.exports = true;');
+    write('tools/action-entry.js', 'require("./action-helper.js");');
+    write('tools/action-helper.js', 'module.exports = true;');
+
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const file of [
+      'tools/shell-child.js',
+      'tools/shell-helper.js',
+      'tools/direct-entry.js',
+      'tools/direct-helper.js',
+      'tools/action-entry.js',
+      'tools/action-helper.js'
+    ]) assert.ok(reachable.has(file), file);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('expands package-script Node test globs into module entrypoints', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'package-script-glob-roots-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { test: 'node --test scripts/*.test.js' } }));
+    write('scripts/alpha.test.js', "require('./helper.js');");
+    write('scripts/beta.test.js', 'module.exports = true;');
+    write('scripts/helper.js', 'module.exports = true;');
+    const graph = buildModuleGraph(root);
+    const roots = new Set(graph.roots.map(item => item.file));
+    const reachable = new Set(graph.reachable);
+    assert.ok(roots.has('scripts/alpha.test.js'));
+    assert.ok(roots.has('scripts/beta.test.js'));
+    assert.ok(reachable.has('scripts/helper.js'));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

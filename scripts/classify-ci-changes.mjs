@@ -4,12 +4,12 @@
  *
  * Only changes that cannot affect extension behavior are exempt from the
  * expensive behavioral regression suites. Unknown paths are treated as runtime
- * changes. Package validation is required for runtime, packaging, classifier,
- * selector-test, and workflow changes; clearly unrelated changes can skip it.
+ * changes. Audit tooling is validated separately from the expensive package
+ * regression runner; unknown paths remain conservative.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { isNonRuntimePath, requiresPackageValidation } from "./ci-change-policy.mjs";
+import { isNonRuntimePath, requiresPackageValidation, requiresPackageRegression } from "./ci-change-policy.mjs";
 
 const base = process.argv[2];
 if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
@@ -45,12 +45,14 @@ function sameExceptVersion(path) {
 }
 let runtimeChanged = false;
 let packageValidationRequired = false;
+let packageRegressionRequired = false;
 const regressionSuiteChanged = changed.some(path =>
   path.startsWith("regression-suite/tests/") || path === "regression-suite/Run-BLB-Regression.ps1"
 );
 const reasons = [];
 for (const path of changed) {
   if (requiresPackageValidation(path)) packageValidationRequired = true;
+  if (requiresPackageRegression(path) || !isNonRuntimePath(path)) packageRegressionRequired = true;
   if (isNonRuntimePath(path)) continue;
   if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) {
     // Version-only changes still need manifest/build/package validation.
@@ -64,9 +66,10 @@ for (const path of changed) {
 
 const behavioralValidationRequired = runtimeChanged || regressionSuiteChanged;
 const output = process.env.GITHUB_OUTPUT;
-if (output) appendFileSync(output, `runtime_changed=${runtimeChanged}\nbehavioral_validation_required=${behavioralValidationRequired}\npackage_validation_required=${packageValidationRequired}\n`);
+if (output) appendFileSync(output, `runtime_changed=${runtimeChanged}\nbehavioral_validation_required=${behavioralValidationRequired}\npackage_validation_required=${packageValidationRequired}\npackage_regression_required=${packageRegressionRequired}\n`);
 console.log(`runtime_changed=${runtimeChanged}`);
 console.log(`behavioral_validation_required=${behavioralValidationRequired}`);
 console.log(`package_validation_required=${packageValidationRequired}`);
+console.log(`package_regression_required=${packageRegressionRequired}`);
 console.log(`changed_files=${changed.length}`);
 if (reasons.length) console.log(`runtime_or_unknown_paths:\n- ${reasons.join("\n- ")}`);

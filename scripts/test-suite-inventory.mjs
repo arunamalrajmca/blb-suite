@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { looksLikeTestFileName } from './test-file-inventory-helpers.mjs';
+import { looksLikeTestFileName, extractDeclaredTestTitles, normalizeTextRequirements } from './test-file-inventory-helpers.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'test-suite-inventory.json'), 'utf8'));
@@ -29,10 +29,19 @@ function listPattern(pattern) {
     .map(entry => path.posix.join(directory, entry.name)).sort();
 }
 const classified = new Set();
+const classifiedOwners = new Map();
+const suiteIds = new Set();
 for (const suite of manifest.suites) {
+  if (!suite.id || suiteIds.has(suite.id)) fail('Missing or duplicate test suite id: ' + suite.id);
+  suiteIds.add(suite.id);
   const files = listPattern(suite.pattern);
   if (!files.length) fail('Suite pattern matched no files: ' + suite.id + ' (' + suite.pattern + ')');
-  for (const file of files) classified.add(file);
+  for (const file of files) {
+    const priorOwner = classifiedOwners.get(file);
+    if (priorOwner && priorOwner !== suite.id) fail('Test file has multiple automated suite owners: ' + file + ' (' + priorOwner + ', ' + suite.id + ')');
+    classifiedOwners.set(file, suite.id);
+    classified.add(file);
+  }
   const ownerContent = readRepoFile(suite.owner);
   if (suite.requiredText && !ownerContent.includes(suite.requiredText)) fail('Execution owner lacks declared runner command for ' + suite.id + ': ' + suite.owner);
   if (suite.alsoOwnedBy && !readRepoFile(suite.alsoOwnedBy).includes(suite.alsoRequiredText)) fail('Secondary execution owner no longer runs ' + suite.id + ': ' + suite.alsoOwnedBy);
@@ -55,9 +64,10 @@ for (const suite of manifest.suites) {
   for (const delegation of suite.delegations || []) {
     if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
     const delegatedSpec = readRepoFile(delegation.testFile);
+    const declaredTitles = extractDeclaredTestTitles(delegatedSpec);
     const testIsDeclared = delegation.testTitlePattern
-      ? new RegExp(delegation.testTitlePattern).test(delegatedSpec)
-      : delegatedSpec.includes(delegation.testTitle);
+      ? declaredTitles.some(title => new RegExp(delegation.testTitlePattern).test(title))
+      : declaredTitles.some(title => title.includes(delegation.testTitle));
     if (!testIsDeclared) fail('Delegated test title or pattern is missing from its declared spec: ' + delegation.testFile);
     const delegatedWorkflow = readRepoFile(delegation.workflow);
     if (!delegatedWorkflow.includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
@@ -68,7 +78,13 @@ for (const suite of manifest.suites) {
   }
   counts.push({ id:suite.id, count:files.length });
 }
-const manualOnly = new Map(manifest.manualOnly.map(item => [item.path,item]));
+const manualOnlyEntries = manifest.manualOnly || [];
+const manualOnly = new Map(manualOnlyEntries.map(item => [item.path,item]));
+if (manualOnly.size !== manualOnlyEntries.length) fail('Manual-only harness inventory contains duplicate paths.');
+for (const item of manualOnlyEntries) {
+  if (!item.path || !item.reason || !item.reason.trim()) fail('Manual-only harness requires a path and explicit reason: ' + String(item.path));
+  if (classified.has(item.path)) fail('A test file cannot be both automated and manual-only: ' + item.path);
+}
 const ignoredNames = new Set(['fixtures.js','extension-test-helpers.js','progress-reporter.js','test-suite-inventory.json']);
 const candidates = [];
 function walk(directory) {
@@ -100,9 +116,10 @@ for (const area of productionCoverage) {
     const testFile = evidence.path;
     if (!testFile || !classified.has(testFile)) fail('Production coverage evidence is not owned by an automated suite: ' + area.id + ' -> ' + testFile);
     const testContent = readRepoFile(testFile);
+    const declaredTitles = extractDeclaredTestTitles(testContent);
     if (!hasAssertionCall(testContent)) fail("Production coverage evidence file contains no assertion call: " + area.id + " -> " + testFile);
-    for (const requiredText of evidence.requiredText || []) {
-      if (!testContent.includes(requiredText)) fail('Production coverage evidence no longer matches its regression test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
+    for (const requiredText of normalizeTextRequirements(evidence.requiredText)) {
+      if (!declaredTitles.some(title => title.includes(requiredText))) fail('Production coverage evidence does not identify a declared test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
     }
   }
 }
@@ -141,9 +158,10 @@ for (const module of productionModuleCoverage) {
       continue;
     }
     const testContent = readRepoFile(evidence.path);
+    const declaredTitles = extractDeclaredTestTitles(testContent);
     if (!hasAssertionCall(testContent)) fail("Production module evidence file contains no assertion call: " + module.path + " -> " + evidence.path);
-    for (const requiredText of evidence.requiredText || []) {
-      if (!testContent.includes(requiredText)) fail('Production module evidence no longer matches its regression assertion: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
+    for (const requiredText of normalizeTextRequirements(evidence.requiredText)) {
+      if (!declaredTitles.some(title => title.includes(requiredText))) fail('Production module evidence does not identify a declared test: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
     }
     if (module.coverageLevel === 'direct-integration' && !(evidence.requiredText || []).length) {
       fail('Direct integration evidence must identify its exact regression assertion: ' + module.path + ' -> ' + evidence.path);

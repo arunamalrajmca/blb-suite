@@ -80,6 +80,12 @@ function staticKey(node, computed = false) {
   return null;
 }
 
+function staticModuleRequest(node) {
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+  return null;
+}
+
 function relative(root, file) {
   return path.relative(root, file).split(path.sep).join('/');
 }
@@ -950,17 +956,16 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
       specifier = node.source.value;
       kind = node.type === 'ImportDeclaration' ? 'import' : 're-export';
     } else if (node.type === 'ImportExpression') {
-      if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
-        specifier = node.source.value;
+      if (staticModuleRequest(node.source) !== null) {
+        specifier = staticModuleRequest(node.source);
         kind = 'dynamic-import-literal';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-import-nonliteral' });
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
                isRequireIdentifier(node.callee)) {
-      if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
+      if (node.arguments.length === 1 && staticModuleRequest(node.arguments[0]) !== null) {
+        specifier = staticModuleRequest(node.arguments[0]);
         kind = 'require';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require' });
@@ -979,17 +984,16 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
         ? node.arguments[1]
         : node.arguments[1]?.type === 'ArrayExpression' && node.arguments[1].elements.length === 1
           ? node.arguments[1].elements[0] : null;
-      if (supplied?.type === 'Literal' && typeof supplied.value === 'string') {
-        specifier = supplied.value;
+      if (staticModuleRequest(supplied) !== null) {
+        specifier = staticModuleRequest(supplied);
         kind = method === 'call' ? 'require-call-wrapper' : 'require-apply-wrapper';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-require-' + method + '-wrapper' });
       }
     } else if (node.type === 'CallExpression' && node.callee.type === 'CallExpression' &&
                isRequireExpression(node.callee)) {
-      if (node.arguments.length === 1 && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
+      if (node.arguments.length === 1 && staticModuleRequest(node.arguments[0]) !== null) {
+        specifier = staticModuleRequest(node.arguments[0]);
         kind = 'inline-bound-require';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-inline-bound-require' });
@@ -997,9 +1001,8 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
     } else if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
                node.callee.object.type === 'Identifier' && isNodeModuleIdentifier(node.callee.object) &&
                staticKey(node.callee.property, node.callee.computed) === 'require') {
-      if (node.arguments[0] && node.arguments[0].type === 'Literal' &&
-          typeof node.arguments[0].value === 'string') {
-        specifier = node.arguments[0].value;
+      if (staticModuleRequest(node.arguments[0]) !== null) {
+        specifier = staticModuleRequest(node.arguments[0]);
         kind = 'module.require';
       } else {
         dynamic.push({ file: filename, line: node.loc.start.line, kind: 'dynamic-module-require' });
@@ -1012,11 +1015,10 @@ function collectModuleEdges(source, filename, files, root = process.cwd()) {
           ? staticKey(node.callee.property, node.callee.computed) : null;
       if (constructorName === 'Worker') {
         const argument = node.arguments[0];
-        let request = argument?.type === 'Literal' && typeof argument.value === 'string' ? argument.value : null;
+        let request = staticModuleRequest(argument);
         let baseFile = path.join(root, 'package.json');
         if (argument?.type === 'NewExpression' && argument.callee.type === 'Identifier' && argument.callee.name === 'URL') {
-          request = argument.arguments[0]?.type === 'Literal' && typeof argument.arguments[0].value === 'string'
-            ? argument.arguments[0].value : null;
+          request = staticModuleRequest(argument.arguments[0]);
           const base = argument.arguments[1];
           if (base?.type === 'MemberExpression' && base.object.type === 'MetaProperty') baseFile = filename;
         }
@@ -1152,38 +1154,76 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
     };
     collectExportTargets(pkg.exports);
     for (const [name, command] of Object.entries(pkg.scripts || {})) {
-      for (const match of String(command).matchAll(/(?:^|\s)(\.{0,2}\/)?([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-        const candidate = path.resolve(path.dirname(packageFile), match[1] || '', match[2]);
-        add(candidate, 'package-script:' + name + ':' + packageName);
+      for (const match of String(command).matchAll(/(?:^|\s)(\.{0,2}\/)?([A-Za-z_.*?/-]+\.(?:c?js|mjs))\b/g)) {
+        const spec = path.join(match[1] || '', match[2]);
+        const reason = 'package-script:' + name + ':' + packageName;
+        if (!spec.includes('*') && !spec.includes('?')) {
+          add(path.resolve(path.dirname(packageFile), spec), reason);
+          continue;
+        }
+        const directory = path.resolve(path.dirname(packageFile), path.dirname(spec));
+        const pattern = path.basename(spec);
+        const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + String.fromCharCode(36));
+        const matches = [...files].filter(file => path.dirname(file) === directory && matcher.test(path.basename(file)));
+        if (matches.length) for (const candidate of matches) add(candidate, reason);
+        else unresolvedEntrypoints.push({ file: relative(root, path.resolve(directory, pattern)), reason, kind: 'unmatched-package-script-glob' });
       }
     }
   }
 
   const workflowRoot = path.join(root, '.github', 'workflows');
-  const workflowFiles = fs.existsSync(workflowRoot)
-    ? walkFiles(workflowRoot, file => /\.(?:yml|yaml)$/.test(file))
-    : [];
-  const shellEntrypoints = new Set();
+  const actionRoot = path.join(root, '.github', 'actions');
+  const workflowFiles = [
+    ...(fs.existsSync(workflowRoot) ? walkFiles(workflowRoot, file => /\.(?:yml|yaml)$/i.test(file)) : []),
+    ...(fs.existsSync(actionRoot) ? walkFiles(actionRoot, file => /^action\.ya?ml$/i.test(path.basename(file))) : [])
+  ];
+  const shellEntrypoints = new Map();
   for (const workflow of workflowFiles) {
-    const text = fs.readFileSync(workflow, 'utf8');
-    for (const match of text.matchAll(/(?:node|npm\s+exec\s+node|npx\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-      add(path.resolve(root, match[1]), 'workflow:' + relative(root, workflow));
+    const source = fs.readFileSync(workflow, 'utf8');
+    const workingDirectories = [root];
+    for (const match of source.matchAll(/^\s*(?:-\s*)?working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
+      const value = match[1] || match[2] || match[3];
+      if (value && value.charAt(0) !== String.fromCharCode(36)) workingDirectories.push(path.resolve(root, value));
     }
-    for (const match of text.matchAll(/(?:bash|sh)\s+([A-Za-z0-9_./-]+\.sh)\b/g)) {
-      shellEntrypoints.add(path.resolve(root, match[1]));
+    const uniqueWorkingDirectories = [...new Set(workingDirectories)];
+    for (const match of source.matchAll(/(?:node|npm\s+exec\s+node|npx\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      const candidates = [...new Set(uniqueWorkingDirectories.map(directory => path.resolve(directory, match[1])))];
+      const existing = candidates.filter(candidate => files.has(candidate));
+      if (existing.length) for (const candidate of existing) add(candidate, 'workflow:' + relative(root, workflow));
+      else add(candidates[0], 'workflow:' + relative(root, workflow));
+    }
+    for (const match of source.matchAll(/(?:bash|sh)\s+(?:-[^\s]+\s+)*(?:"([^"]+\.sh)"|'([^']+\.sh)'|([A-Za-z0-9_./-]+\.sh))\b/g)) {
+      const spec = match[1] || match[2] || match[3];
+      const candidates = [...new Set(uniqueWorkingDirectories.map(directory => path.resolve(directory, spec)))];
+      const existing = candidates.filter(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+      if (existing.length) for (const shellFile of existing) {
+        if (!shellEntrypoints.has(shellFile)) shellEntrypoints.set(shellFile, new Set());
+        for (const directory of uniqueWorkingDirectories) shellEntrypoints.get(shellFile).add(directory);
+      } else {
+        unresolvedEntrypoints.push({ file: relative(root, candidates[0]), reason: 'workflow-shell-wrapper:' + relative(root, workflow), kind: 'unresolved-shell-wrapper' });
+      }
     }
   }
-  // Shell wrappers invoked by CI can launch Node scripts that are not imported
-  // into the wrapper's own module graph. Recognize root-relative script paths
-  // even when the shell expands a variable such as $ROOT_DIR before execution.
-  for (const shellFile of shellEntrypoints) {
+  // Shell wrappers can invoke Node files relative to the workflow working
+  // directory, the repository root, or their own location. Preserve every
+  // existing candidate rather than guessing one execution base.
+  for (const [shellFile, workingDirectories] of shellEntrypoints) {
     if (!fs.existsSync(shellFile)) continue;
-    const text = fs.readFileSync(shellFile, 'utf8');
-    for (const match of text.matchAll(/(?:node|npm\s+exec\s+node)\s+(?:--[^\s]+\s+)*([A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-      add(path.resolve(path.dirname(shellFile), match[1]), 'shell-wrapper:' + relative(root, shellFile));
+    const source = fs.readFileSync(shellFile, 'utf8');
+    const reason = 'shell-wrapper:' + relative(root, shellFile);
+    const bases = [...new Set([root, path.dirname(shellFile), ...workingDirectories])];
+    for (const match of source.matchAll(/(?:node|npm\s+exec\s+node)\s+(?:--[^\s]+\s+)*((?:\.\/)?[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      const script = match[1];
+      const candidates = [...new Set(bases.map(base => path.resolve(base, script)))];
+      const existing = candidates.filter(candidate => files.has(candidate));
+      if (existing.length) for (const candidate of existing) add(candidate, reason);
+      else add(candidates[0], reason);
     }
-    for (const match of text.matchAll(/((?:scripts|tests|regression-suite)\/[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
-      add(path.resolve(root, match[1]), 'shell-wrapper-path:' + relative(root, shellFile));
+    for (const match of source.matchAll(/((?:\.\/)?[A-Za-z0-9_./-]+\.(?:c?js|mjs))\b/g)) {
+      for (const base of bases) {
+        const candidate = path.resolve(base, match[1]);
+        if (files.has(candidate)) add(candidate, 'shell-wrapper-path:' + relative(root, shellFile));
+      }
     }
   }
 

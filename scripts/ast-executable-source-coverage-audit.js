@@ -106,6 +106,19 @@ function discover(root) {
       item.isDirectory ? 'internal-directory-symlink-not-traversed' : 'internal-file-symlink'
   }));
   const parsed = new Map();
+  // Some generated .js files are fetched as text and parsed as JSON; they are
+  // packaged data resources, not executable entrypoints. Track those separately.
+  const packagedDataResources = new Map();
+  const addPackagedDataResource = (request, owner, kind) => {
+    if (typeof request !== 'string' || !request.trim()) return;
+    const target = localPath(extension, extension, request);
+    if (!target || !known.has(target)) return;
+    if (!packagedDataResources.has(target)) packagedDataResources.set(target, []);
+    const record = { owner, kind };
+    if (!packagedDataResources.get(target).some(item => item.owner === owner && item.kind === kind)) {
+      packagedDataResources.get(target).push(record);
+    }
+  };
   const add = (file, owner, kind) => {
     if (!file || !known.has(file)) return;
     if (!roots.has(file)) roots.set(file, []);
@@ -230,6 +243,17 @@ function discover(root) {
       'navigator.serviceWorker.register'
     ]);
     visit(ast, node => {
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          node.callee.name === 'fetchPackagedJsonAssignment') {
+        addPackagedDataResource(literal(node.arguments[0]), normalize(root, file), 'packaged-data-text-fallback');
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.id.name === 'fallbackAssignments' && node.init?.type === 'ObjectExpression') {
+        for (const entry of node.init.properties) {
+          if (entry.type !== 'Property' || entry.value?.type !== 'ArrayExpression') continue;
+          addPackagedDataResource(literal(entry.value.elements[0]), normalize(root, file), 'packaged-data-text-fallback');
+        }
+      }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         if (node.init?.type === 'Identifier' &&
             (node.init.name === 'importScripts' || loaderAliases.has(node.init.name))) {
@@ -257,6 +281,160 @@ function discover(root) {
         }
       }
     });
+    // Resolve simple for-of loader loops when their iterable is a statically
+    // declared literal filename array. Restrict propagation to a uniquely
+    // declared loop variable so shadowed bindings remain conservative.
+    const declarationCounts = new Map();
+    visit(ast, node => {
+      const identifiers = [];
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') identifiers.push(node.id.name);
+      if (['FunctionDeclaration', 'FunctionExpression', 'ClassDeclaration', 'ClassExpression'].includes(node.type) && node.id) identifiers.push(node.id.name);
+      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+        for (const parameter of node.params || []) if (parameter.type === 'Identifier') identifiers.push(parameter.name);
+      }
+      if (node.type === 'CatchClause' && node.param?.type === 'Identifier') identifiers.push(node.param.name);
+      for (const name of identifiers) declarationCounts.set(name, (declarationCounts.get(name) || 0) + 1);
+    });
+    const loopLiteralArrays = new Map();
+    visit(ast, node => {
+      if (node.type !== 'ForOfStatement' || node.left.type !== 'VariableDeclaration' ||
+          node.left.declarations.length !== 1 || node.left.declarations[0].id.type !== 'Identifier' ||
+          node.right.type !== 'Identifier') return;
+      const name = node.left.declarations[0].id.name;
+      const values = literalArrays.get(node.right.name);
+      if (values && declarationCounts.get(name) === 1) loopLiteralArrays.set(name, values);
+    });
+    // contentScriptFilesForTab returns alternative statically-known file lists
+    // selected by site and toggle state. Record every possible script as a
+    // runtime root without pretending that every file is injected on every tab.
+    const resolveStaticArray = (node, depth = 0) => {
+      if (!node || depth > 4) return null;
+      if (node.type === 'Identifier') return literalArrays.get(node.name) || null;
+      if (node.type !== 'ArrayExpression') return null;
+      const values = [];
+      for (const item of node.elements) {
+        if (item?.type === 'SpreadElement') {
+          const spread = resolveStaticArray(item.argument, depth + 1);
+          if (!spread) return null;
+          values.push(...spread);
+        } else {
+          const value = literal(item);
+          if (value === null) return null;
+          values.push(value);
+        }
+      }
+      return values;
+    };
+    const functionNodes = new Map();
+    const functionReturns = new Map();
+    const parentByNode = new WeakMap();
+    visit(ast, (node, parent) => {
+      if (parent) parentByNode.set(node, parent);
+      if (node.type === 'FunctionDeclaration' && node.id?.name) {
+        functionNodes.set(node.id.name, node);
+      }
+    });
+    const returnsForFunction = node => {
+      const values = new Set();
+      visit(node.body, child => {
+        if (child.type !== 'ReturnStatement' || !child.argument) return;
+        const returned = resolveStaticArray(child.argument);
+        if (returned) for (const value of returned) values.add(value);
+      });
+      return values.size ? [...values] : null;
+    };
+    for (const [name, node] of functionNodes) {
+      const returned = returnsForFunction(node);
+      if (returned) functionReturns.set(name, returned);
+    }
+    const enclosingFunction = node => {
+      let current = node;
+      while (current) {
+        if (current.type === 'FunctionDeclaration' || current.type === 'FunctionExpression' ||
+            current.type === 'ArrowFunctionExpression') return current;
+        current = parentByNode.get(current);
+      }
+      return null;
+    };
+    const functionName = node => node?.id?.name || '';
+    const parameterValues = new Map();
+    const callResultArrays = new Map();
+    const scopedNameKey = (owner, name) => functionName(owner) + ':' + name;
+    const parameterKey = (name, index) => name + ':' + index;
+    const mergeParameterValues = (name, index, values) => {
+      if (!values?.length) return false;
+      const key = parameterKey(name, index);
+      if (!parameterValues.has(key)) parameterValues.set(key, new Set());
+      const current = parameterValues.get(key);
+      const before = current.size;
+      for (const value of values) current.add(value);
+      return current.size !== before;
+    };
+    const resolveForFunction = (node, owner, depth = 0) => {
+      if (!node || depth > 5) return null;
+      const direct = resolveStaticArray(node, depth);
+      if (direct) return direct;
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
+        return functionReturns.get(node.callee.name) || null;
+      }
+      if (node.type !== 'Identifier' || !owner) return null;
+      const localValues = callResultArrays.get(scopedNameKey(owner, node.name));
+      if (localValues?.size) return [...localValues];
+      const params = owner.params || [];
+      const index = params.findIndex(param =>
+        (param.type === 'Identifier' && param.name === node.name) ||
+        (param.type === 'AssignmentPattern' && param.left.type === 'Identifier' && param.left.name === node.name));
+      if (index < 0) return null;
+      const inferred = parameterValues.get(parameterKey(functionName(owner), index));
+      return inferred?.size ? [...inferred] : null;
+    };
+    // Propagate statically known arrays through local selector results and
+    // function parameters. This models the actual files -> ensure -> register
+    // helper chain without assuming a dynamic argument is static.
+    for (let pass = 0; pass < 6; pass++) {
+      let changed = false;
+      visit(ast, node => {
+        if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+            node.init?.type !== 'CallExpression' || node.init.callee.type !== 'Identifier') return;
+        const values = functionReturns.get(node.init.callee.name);
+        const owner = enclosingFunction(node);
+        if (values?.length && owner) {
+          const key = scopedNameKey(owner, node.id.name);
+          if (!callResultArrays.has(key)) callResultArrays.set(key, new Set());
+          const local = callResultArrays.get(key);
+          const before = local.size;
+          for (const value of values) local.add(value);
+          if (local.size !== before) changed = true;
+        }
+      });
+      visit(ast, node => {
+        if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
+        const callee = functionNodes.get(node.callee.name);
+        if (!callee) return;
+        const caller = enclosingFunction(node);
+        const args = node.arguments || [];
+        for (let index = 0; index < callee.params.length; index++) {
+          const parameter = callee.params[index];
+          const name = parameter.type === 'Identifier' ? parameter.name :
+            parameter.type === 'AssignmentPattern' && parameter.left.type === 'Identifier' ? parameter.left.name : null;
+          if (!name) continue;
+          let values = index < args.length ? resolveForFunction(args[index], caller) : null;
+          if (!values && parameter.type === 'AssignmentPattern') values = resolveForFunction(parameter.right, callee);
+          if (mergeParameterValues(callee.id.name, index, values)) changed = true;
+        }
+      });
+      if (!changed) break;
+    }
+    const contentScriptFunction = node =>
+      node.type === 'FunctionDeclaration' && /contentScript.*Files/i.test(node.id?.name || '');
+    for (const [name, node] of functionNodes) {
+      if (!contentScriptFunction(node)) continue;
+      const values = functionReturns.get(name) || [];
+      for (const value of values) {
+        const target = addRequest(value, extension, normalize(root, file), 'runtime-content-script-selection');
+        if (target && !visited.has(target)) queue.push(target);
+      }
+    }
     visit(ast, (node, parent) => {
       if (node.type === 'ImportDeclaration' || node.type === 'ExportAllDeclaration' ||
           (node.type === 'ExportNamedDeclaration' && node.source)) {
@@ -274,8 +452,10 @@ function discover(root) {
           const requests = arg.type === 'SpreadElement' && arg.argument.type === 'ArrayExpression'
             ? staticArray(arg.argument)
             : arg.type === 'SpreadElement' && arg.argument.type === 'Identifier'
-              ? literalArrays.get(arg.argument.name) || null
-              : (() => { const value = literal(arg); return value === null ? null : [value]; })();
+              ? literalArrays.get(arg.argument.name) || loopLiteralArrays.get(arg.argument.name) || null
+              : arg.type === 'Identifier'
+                ? loopLiteralArrays.get(arg.name) || literalArrays.get(arg.name) || null
+                : (() => { const value = literal(arg); return value === null ? null : [value]; })();
           if (requests) {
             for (const request of requests) {
               const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-importScripts');
@@ -353,7 +533,7 @@ function discover(root) {
               // js/css are optional registration fields. An omitted field is
               // not a dynamic target; only a present but non-static value is.
               if (!source) continue;
-              const values = staticArray(source);
+              const values = staticArray(source) || resolveForFunction(source, enclosingFunction(node));
               if (values) for (const value of values) {
                 const target = addRequest(value, extension, normalize(root, file), 'runtime-registered-' + key);
                 if (target && !visited.has(target) && key === 'js') queue.push(target);
@@ -469,8 +649,10 @@ function discover(root) {
   const entries = jsFiles.map(file => ({
     file: normalize(root, file),
     roots: roots.get(file) || [],
+    dataReferences: packagedDataResources.get(file) || [],
     parseStatus: parsed.has(file) ? 'parsed' : 'unparsed',
-    classification: roots.has(file) ? 'statically-rooted-or-imported' : 'unaccounted-for'
+    classification: roots.has(file) ? 'statically-rooted-or-imported' :
+      packagedDataResources.has(file) ? 'packaged-data-resource' : 'unaccounted-for'
   }));
   return {
     entries, dynamicSites,
@@ -478,7 +660,8 @@ function discover(root) {
       javascriptFiles: jsFiles.length,
       parsedFiles: parsed.size,
       rootedOrImported: entries.filter(item => item.roots.length).length,
-      unaccountedFor: entries.filter(item => !item.roots.length).length,
+      packagedDataResources: entries.filter(item => item.classification === 'packaged-data-resource').length,
+      unaccountedFor: entries.filter(item => item.classification === 'unaccounted-for').length,
       dynamicSites: dynamicSites.length
     }
   };
@@ -489,8 +672,12 @@ function run(root = path.resolve(__dirname, '..')) {
   console.log('JavaScript files: ' + result.summary.javascriptFiles);
   console.log('Parsed files: ' + result.summary.parsedFiles);
   console.log('Statically rooted/imported: ' + result.summary.rootedOrImported);
+  console.log('Packaged data resources: ' + result.summary.packagedDataResources);
   console.log('Unaccounted for: ' + result.summary.unaccountedFor);
   console.log('Dynamic/uncertain sites: ' + result.summary.dynamicSites);
+  for (const item of result.entries) if (item.classification === 'packaged-data-resource') {
+    console.log('DATA RESOURCE ' + item.file + ' — fetched as text/parsed data; not an executable root');
+  }
   for (const item of result.entries) if (item.classification === 'unaccounted-for') {
     console.log('UNACCOUNTED ' + item.file + ' — requires ownership review; not classified as unused');
   }

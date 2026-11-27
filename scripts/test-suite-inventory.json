@@ -107,7 +107,7 @@
       "owner": ".github/workflows/manual-full-test-audit.yml",
       "requiredText": "for test_file in scripts/ast-*-audit.test.js",
       "alsoOwnedBy": ".github/workflows/browser-tests.yml",
-      "alsoRequiredText": "node --test scripts/ast-symbol-reference-audit.test.js",
+      "alsoRequiredText": "start_audit symbol scripts/ast-symbol-reference-audit.test.js scripts/ast-symbol-reference-audit.js",
       "runnerChecks": [
         {
           "file": ".github/workflows/manual-full-test-audit.yml",
@@ -206,8 +206,36 @@
           "requiredText": "actions/cache/save@v5"
         },
         {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "recovery:"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "inputs.recovery == 'true'"
+        },
+        {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "inputs.recovery != 'true' || steps.check.outputs.complete != 'true' || inputs.always_run == 'true'"
+        },
+        {
           "file": ".github/workflows/browser-tests.yml",
-          "requiredText": "ci-section-checkpoint"
+          "requiredText": "uses: ./.github/actions/ci-section-checkpoint"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "always_run: 'true'"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "cache_prefix: blb-ast-audits-v1"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "node --test scripts/ast-audit-input-fingerprint.test.mjs"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "node regression-suite/tests/kjv-corpus-integrity.mjs extension"
         }
       ]
     },
@@ -250,7 +278,21 @@
       "pattern": "scripts/classify-ast-audit-scope.test.mjs",
       "owner": ".github/workflows/browser-tests.yml",
       "requiredText": "node --test scripts/classify-ast-audit-scope.test.mjs",
-      "executionEnvironment": "node"
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": "scripts/classify-ast-audit-scope.mjs",
+          "requiredText": "const repoWideJs ="
+        },
+        {
+          "file": "scripts/classify-ast-audit-scope.mjs",
+          "requiredText": "const metadataRoots ="
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "node --test scripts/classify-ast-audit-scope.test.mjs"
+        }
+      ]
     },
     {
       "id": "ci-checkpoint-fingerprint-tests",
@@ -278,6 +320,40 @@
       "owner": ".github/workflows/browser-tests.yml",
       "requiredText": "node --test scripts/test-file-inventory-helpers.test.mjs",
       "executionEnvironment": "Node.js unit tests in the HARD-GATE package regression"
+    },
+    {
+      "id": "ci-change-policy-tests",
+      "pattern": "scripts/ci-change-policy.test.mjs",
+      "owner": ".github/workflows/ci-checkpoint-contract-validation.yml",
+      "requiredText": "node --test scripts/ci-change-policy.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": ".github/workflows/ci-checkpoint-contract-validation.yml",
+          "requiredText": "node --test scripts/ci-change-policy.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ci-ast-audit-input-fingerprint-tests",
+      "pattern": "scripts/ast-audit-input-fingerprint.test.mjs",
+      "owner": ".github/workflows/browser-tests.yml",
+      "requiredText": "node --test scripts/ast-audit-input-fingerprint.test.mjs",
+      "executionEnvironment": "node",
+      "runnerChecks": [
+        {
+          "file": "scripts/ast-audit-input-fingerprint.mjs",
+          "requiredText": "export function auditInputPaths"
+        },
+        {
+          "file": "scripts/ast-audit-input-fingerprint.mjs",
+          "requiredText": "export function createAuditInputFingerprint"
+        },
+        {
+          "file": ".github/workflows/browser-tests.yml",
+          "requiredText": "ast-audit-input-fingerprint.mjs"
+        }
+      ]
     }
   ],
   "manualOnly": [

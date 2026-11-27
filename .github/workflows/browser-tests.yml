@@ -33,6 +33,7 @@ jobs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       behavioral_validation_required: ${{ steps.classify.outputs.behavioral_validation_required }}
       package_validation_required: ${{ steps.classify.outputs.package_validation_required }}
+      package_regression_required: ${{ steps.classify.outputs.package_regression_required }}
     steps:
       - name: Checkout for change classification
         uses: actions/checkout@v5
@@ -54,10 +55,10 @@ jobs:
             node scripts/classify-ci-changes.mjs "$BASE"
           fi
 
-  regression-package:
-    name: Regression — package
+  repository-ast-audits:
+    name: Repository AST audits
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.package_validation_required == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
+    if: ${{ needs.change-detection.result == 'success' && (github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -86,150 +87,126 @@ jobs:
       - name: Install pinned AST audit dependencies
         if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
         run: npm install --no-save --package-lock=false --ignore-scripts acorn@8.15.0 eslint-scope@8.4.0
-      - name: Test reusable CI section checkpoint helper
-        run: node --test scripts/ci-section-checkpoint.test.mjs
       - name: Test AST audit scope selector
         run: node --test scripts/classify-ast-audit-scope.test.mjs
+      - name: Test AST audit input fingerprinting
+        run: node --test scripts/ast-audit-input-fingerprint.test.mjs
+      - name: Run selected repository-wide AST audits with per-audit checkpoints
+        env:
+          RUN_SYMBOL: ${{ steps.audit-scope.outputs.run_symbol || steps.audit-scope-manual.outputs.run_symbol }}
+          RUN_REPOSITORY: ${{ steps.audit-scope.outputs.run_repository || steps.audit-scope-manual.outputs.run_repository }}
+          RUN_OWNER: ${{ steps.audit-scope.outputs.run_owner || steps.audit-scope-manual.outputs.run_owner }}
+          RUN_CROSS_MODULE: ${{ steps.audit-scope.outputs.run_cross_module || steps.audit-scope-manual.outputs.run_cross_module }}
+          RUN_RUNTIME: ${{ steps.audit-scope.outputs.run_runtime || steps.audit-scope-manual.outputs.run_runtime }}
+          RUN_UNIFIED: ${{ steps.audit-scope.outputs.run_unified || steps.audit-scope-manual.outputs.run_unified }}
+          RUN_COMPUTED: ${{ steps.audit-scope.outputs.run_computed || steps.audit-scope-manual.outputs.run_computed }}
+          RUN_EXECUTABLE_SOURCE: ${{ steps.audit-scope.outputs.run_executable_source || steps.audit-scope-manual.outputs.run_executable_source }}
+          RUN_METAPROGRAMMING: ${{ steps.audit-scope.outputs.run_metaprogramming || steps.audit-scope-manual.outputs.run_metaprogramming }}
+        if: ${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
+        uses: ./.github/actions/ci-section-checkpoint
+        with:
+          section: repository-ast-audits
+          cache_prefix: blb-ast-audits-v1
+          fingerprint: ${{ hashFiles('.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml', 'scripts/ci-section-checkpoint.mjs', 'scripts/ast-audit-input-fingerprint.mjs', 'scripts/classify-ast-audit-scope.mjs') }}
+          always_run: 'true'
+          run: |
+            set -euo pipefail
+            log_dir="$(mktemp -d)"
+            active=0
+            failed=0
+
+            reap_one() {
+              if wait -n; then :; else failed=1; fi
+              active=$((active - 1))
+            }
+
+            start_audit() {
+              local name="$1" test_file="$2" audit_file="$3"
+              local marker_dir="$BLB_CI_CHECKPOINT_DIR/audits/$name"
+              local fingerprint
+              fingerprint="$(node scripts/ast-audit-input-fingerprint.mjs "$name" | sed -n 's/^fingerprint=//p')"
+              if [[ ! "$fingerprint" =~ ^[a-f0-9]{64}$ ]]; then
+                echo "::error::Could not calculate input fingerprint for $name"
+                failed=1
+                return
+              fi
+              local decision
+              decision="$(node scripts/ci-section-checkpoint.mjs check "$marker_dir" "ast-$name" "$BLB_CI_CHECKPOINT_SOURCE_SHA" "$fingerprint" "$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT")"
+              if grep -q '^complete=true$' <<< "$decision"; then
+                echo "[$name] Reusing completed audit; all fingerprinted inputs are unchanged."
+                return
+              fi
+              echo "[$name] Running audit (checkpoint reason: $(sed -n 's/^reason=//p' <<< "$decision"))."
+              (
+                set -euo pipefail
+                {
+                  echo "regression tests"
+                  node --test "$test_file"
+                  echo "repository audit"
+                  node "$audit_file"
+                  node scripts/ci-section-checkpoint.mjs write "$marker_dir" "ast-$name" "$BLB_CI_CHECKPOINT_SOURCE_SHA" "$fingerprint" "$BLB_CI_CHECKPOINT_ENVIRONMENT_FINGERPRINT"
+                  echo "completed and checkpointed"
+                } 2>&1 | tee "$log_dir/$name.log" | sed -u "s/^/[$name] /"
+              ) &
+              active=$((active + 1))
+              if (( active >= 4 )); then reap_one; fi
+            }
+
+            [[ "$RUN_SYMBOL" != "true" ]] || start_audit symbol scripts/ast-symbol-reference-audit.test.js scripts/ast-symbol-reference-audit.js
+            [[ "$RUN_REPOSITORY" != "true" ]] || start_audit repository scripts/ast-repository-reachability-audit.test.js scripts/ast-repository-reachability-audit.js
+            [[ "$RUN_OWNER" != "true" ]] || start_audit owner scripts/ast-owner-aware-node-reachability-audit.test.js scripts/ast-owner-aware-node-reachability-audit.js
+            [[ "$RUN_CROSS_MODULE" != "true" ]] || start_audit cross_module scripts/ast-cross-module-dynamic-reachability-audit.test.js scripts/ast-cross-module-dynamic-reachability-audit.js
+            [[ "$RUN_RUNTIME" != "true" ]] || start_audit runtime scripts/ast-runtime-flow-reachability-audit.test.js scripts/ast-runtime-flow-reachability-audit.js
+            [[ "$RUN_UNIFIED" != "true" ]] || start_audit unified scripts/ast-unified-dynamic-runtime-reachability-audit.test.js scripts/ast-unified-dynamic-runtime-reachability-audit.js
+            [[ "$RUN_COMPUTED" != "true" ]] || start_audit computed scripts/ast-computed-property-reachability-audit.test.js scripts/ast-computed-property-reachability-audit.js
+            [[ "$RUN_EXECUTABLE_SOURCE" != "true" ]] || start_audit executable_source scripts/ast-executable-source-coverage-audit.test.js scripts/ast-executable-source-coverage-audit.js
+            [[ "$RUN_METAPROGRAMMING" != "true" ]] || start_audit metaprogramming scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js scripts/ast-runtime-metaprogramming-uncertainty-audit.js
+
+            while (( active > 0 )); do reap_one; done
+            if (( failed != 0 )); then
+              echo "One or more selected AST audits failed."
+              exit 1
+            fi
+            echo "All selected AST audits passed or were safely restored from matching input checkpoints."
+
+  regression-package:
+    name: Package validation
+    needs: change-detection
+    if: ${{ needs.change-detection.outputs.package_validation_required == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Test reusable CI section checkpoint helper
+        run: node --test scripts/ci-section-checkpoint.test.mjs
       - name: Test test-file inventory filename classification
         run: node --test scripts/test-file-inventory-helpers.test.mjs
       - name: Verify repository-wide test inventory and production-module coverage
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: test-inventory
-          cache_prefix: blb-ci-v1-hard-gate-test-inventory-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: node scripts/test-suite-inventory.mjs
-      - name: Test and run conservative AST symbol audit
-        if: ${{ steps.audit-scope.outputs.run_symbol == 'true' || steps.audit-scope-manual.outputs.run_symbol == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-symbol-audit
-          cache_prefix: blb-ci-v1-hard-gate-ast-symbol-audit-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-symbol-reference-audit.test.js
-            node scripts/ast-symbol-reference-audit.js
-      - name: Test and run context-aware repository reachability audit
-        if: ${{ steps.audit-scope.outputs.run_repository == 'true' || steps.audit-scope-manual.outputs.run_repository == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-repository-reachability
-          cache_prefix: blb-ci-v1-hard-gate-ast-repository-reachability-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-repository-reachability-audit.test.js
-            node scripts/ast-repository-reachability-audit.js
-      - name: Test and run owner-aware AST and Node module reachability audit
-        if: ${{ steps.audit-scope.outputs.run_owner == 'true' || steps.audit-scope-manual.outputs.run_owner == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-owner-aware-node
-          cache_prefix: blb-ci-v1-hard-gate-ast-owner-aware-node-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-owner-aware-node-reachability-audit.test.js
-            node scripts/ast-owner-aware-node-reachability-audit.js
-      - name: Test and run cross-module and dynamic execution reachability audit
-        if: ${{ steps.audit-scope.outputs.run_cross_module == 'true' || steps.audit-scope-manual.outputs.run_cross_module == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-cross-module-dynamic
-          cache_prefix: blb-ci-v1-hard-gate-ast-cross-module-dynamic-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-cross-module-dynamic-reachability-audit.test.js
-            node scripts/ast-cross-module-dynamic-reachability-audit.js
-      - name: Test and run conservative runtime-flow reachability audit
-        if: ${{ steps.audit-scope.outputs.run_runtime == 'true' || steps.audit-scope-manual.outputs.run_runtime == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-runtime-flow
-          cache_prefix: blb-ci-v1-hard-gate-ast-runtime-flow-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-runtime-flow-reachability-audit.test.js
-            node scripts/ast-runtime-flow-reachability-audit.js
-      - name: Test and run unified dynamic/runtime reachability audit
-        if: ${{ steps.audit-scope.outputs.run_unified == 'true' || steps.audit-scope-manual.outputs.run_unified == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-unified-dynamic-runtime
-          cache_prefix: blb-ci-v1-hard-gate-ast-unified-dynamic-runtime-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-unified-dynamic-runtime-reachability-audit.test.js
-            node scripts/ast-unified-dynamic-runtime-reachability-audit.js
-      - name: Test and run computed-property candidate audit
-        if: ${{ steps.audit-scope.outputs.run_computed == 'true' || steps.audit-scope-manual.outputs.run_computed == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-computed-property
-          cache_prefix: blb-ci-v1-hard-gate-ast-computed-property-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-computed-property-reachability-audit.test.js
-            node scripts/ast-computed-property-reachability-audit.js
-      - name: Test and run executable-source coverage audit
-        if: ${{ steps.audit-scope.outputs.run_executable_source == 'true' || steps.audit-scope-manual.outputs.run_executable_source == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-executable-source-coverage
-          cache_prefix: blb-ci-v1-hard-gate-ast-executable-source-coverage-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-executable-source-coverage-audit.test.js
-            node scripts/ast-executable-source-coverage-audit.js
-      - name: Test and run runtime-metaprogramming uncertainty audit
-        if: ${{ steps.audit-scope.outputs.run_metaprogramming == 'true' || steps.audit-scope-manual.outputs.run_metaprogramming == 'true' }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ast-runtime-metaprogramming-uncertainty
-          cache_prefix: blb-ci-v1-hard-gate-ast-runtime-metaprogramming-uncertainty-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: |
-            node --test scripts/ast-runtime-metaprogramming-uncertainty-audit.test.js
-            node scripts/ast-runtime-metaprogramming-uncertainty-audit.js
+        run: node scripts/test-suite-inventory.mjs
       - name: Read manifest version
         id: version
         shell: bash
         run: |
           VERSION=$(node -p "require('./extension/manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Validate extension build and module contracts
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: build-validation
-          cache_prefix: blb-ci-v1-hard-gate-build-validation-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: node scripts/validate-build.js
-      - name: Run browser selector decision tests
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: selector-tests
-          cache_prefix: blb-ci-v1-hard-gate-selector-tests-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: node --test tests/selector/*.test.mjs
-      - name: Run CI browser-routing inventory contract
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: ci-routing
-          cache_prefix: blb-ci-v1-hard-gate-ci-routing-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: node scripts/test-ci-routing-selector.js
       - name: Run deterministic regression gate — package
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: package-regression
-          cache_prefix: blb-ci-v1-hard-gate-package-regression-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
+        if: ${{ needs.change-detection.outputs.package_regression_required == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
+        run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Verify KJV corpus and search-index integrity
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: kjv-corpus-integrity
-          cache_prefix: blb-ci-v1-hard-gate-kjv-corpus-integrity-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
+        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
+      - name: Validate extension build and module contracts
+        run: node scripts/validate-build.js
+      - name: Run browser selector decision tests
+        run: node --test tests/selector/*.test.mjs
+      - name: Run CI browser-routing inventory contract
+        run: node scripts/test-ci-routing-selector.js
   regression-behavioral:
     name: Regression — ${{ matrix.group }}
     needs: change-detection
@@ -260,18 +237,14 @@ jobs:
           VERSION=$(node -p "require('./extension/manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Run deterministic regression gate — ${{ matrix.group }}
-        uses: ./.github/actions/ci-section-checkpoint
-        with:
-          section: behavioral-${{ matrix.group }}
-          cache_prefix: blb-ci-v1-hard-gate-behavioral-${{ matrix.group }}-${{ github.sha }}-${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          fingerprint: ${{ hashFiles('extension/**', 'tests/**', 'scripts/**', 'regression-suite/**', 'package.json', 'package-lock.json', 'playwright.config.js', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml') }}
-          run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group='${{ matrix.group }}'
+        run: BLB_EXPECTED_VERSION='${{ steps.version.outputs.version }}' node regression-suite/tests/run-regression.mjs extension --group='${{ matrix.group }}'
   regression-gate-summary:
     name: regression-gate
     needs:
       - change-detection
       - regression-package
       - regression-behavioral
+      - repository-ast-audits
     if: ${{ always() && !(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit')) }}
     runs-on: ubuntu-latest
     permissions:
@@ -282,8 +255,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.behavioral_validation_required == 'false')) && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.behavioral_validation_required == 'false')) && 'success' || 'failure' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.behavioral_validation_required == 'false')) && needs.repository-ast-audits.result == 'success' && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.behavioral_validation_required == 'false')) && needs.repository-ast-audits.result == 'success' && 'success' || 'failure' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
@@ -297,7 +270,7 @@ jobs:
       - name: Require all regression groups to pass
         shell: bash
         run: |
-          if [ "${{ needs.change-detection.result }}" != "success" ] || ( [ "${{ needs.regression-package.result }}" != "success" ] && ! ( [ "${{ needs.regression-package.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.package_validation_required }}" = "false" ] ) ) || [ "${{ needs.regression-behavioral.result }}" = "failure" ] || ( [ "${{ needs.regression-behavioral.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.behavioral_validation_required }}" != "false" ] ) || [ "${{ needs.regression-behavioral.result }}" = "cancelled" ]; then
+          if [ "${{ needs.change-detection.result }}" != "success" ] || ( [ "${{ needs.regression-package.result }}" != "success" ] && ! ( [ "${{ needs.regression-package.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.package_validation_required }}" = "false" ] ) ) || [ "${{ needs.regression-behavioral.result }}" = "failure" ] || ( [ "${{ needs.regression-behavioral.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.behavioral_validation_required }}" != "false" ] ) || [ "${{ needs.regression-behavioral.result }}" = "cancelled" ] || [ "${{ needs.repository-ast-audits.result }}" != "success" ]; then
             echo "Package: ${{ needs.regression-package.result }}"
             echo "Behavioral: ${{ needs.regression-behavioral.result }}"
             exit 1

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { isNonRuntimePath, requiresPackageValidation } from "../../scripts/ci-change-policy.mjs";
 
-test("repository AST audit analyzers and their fixtures are package-validated but non-runtime", () => {
+test("repository AST audit analyzers and their fixtures are validated separately from package checks", () => {
   const auditPaths = [
     "scripts/ast-symbol-reference-audit.js",
     "scripts/ast-symbol-reference-audit.test.js",
@@ -26,7 +26,7 @@ test("repository AST audit analyzers and their fixtures are package-validated bu
   ];
   for (const path of auditPaths) {
     assert.equal(isNonRuntimePath(path), true, path);
-    assert.equal(requiresPackageValidation(path), true, path);
+    assert.equal(requiresPackageValidation(path), false, path);
   }
   assert.equal(isNonRuntimePath("scripts/ast-unrecognized-audit.js"), false);
   assert.equal(requiresPackageValidation("scripts/ast-unrecognized-audit.js"), false);
@@ -36,11 +36,11 @@ test("the shared CI path policy keeps documentation, CI, selector and browser-sp
   for (const path of [
     "README.md",
     "docs/ci-routing.md",
-    ".github/workflows/browser-e2e-groups.yml",
     "tests/selector/browser-selector-decisions.test.mjs",
     "tests/browser/omnibox-command-routing.spec.js",
     "scripts/ci-routing-registry.mjs",
-    "scripts/ci-change-policy.mjs"
+    "scripts/ci-change-policy.mjs",
+    "scripts/test-file-inventory-helpers.test.mjs"
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
   }
@@ -74,9 +74,7 @@ test("unknown paths and shared extension code are never classified as non-runtim
 
 test("package validation ownership is centralized alongside runtime classification", () => {
   for (const path of [
-    ".github/workflows/browser-e2e-groups.yml",
     "tests/selector/ci-change-policy.test.mjs",
-    "scripts/ci-change-policy.mjs",
     "scripts/ci-routing-registry.mjs",
     "package-lock.json",
     "extension/manifest.json"
@@ -91,4 +89,35 @@ test("both CI selectors consume the same path-policy module", () => {
   const browserSelector = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
   assert.match(classifier, /from "\.\/ci-change-policy\.mjs"/);
   assert.match(browserSelector, /from "\.\/ci-change-policy\.mjs"/);
+});
+
+test("repository AST audits run separately from package validation with bounded concurrency", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/browser-tests.yml", import.meta.url), "utf8");
+  const auditStart = workflow.indexOf("  repository-ast-audits:");
+  const packageStart = workflow.indexOf("  regression-package:");
+  const behavioralStart = workflow.indexOf("  regression-behavioral:");
+  const summaryStart = workflow.indexOf("  regression-gate-summary:");
+  assert.ok(auditStart >= 0 && packageStart > auditStart && behavioralStart > packageStart);
+  const auditJob = workflow.slice(auditStart, packageStart);
+  const packageJob = workflow.slice(packageStart, behavioralStart);
+  const summaryJob = workflow.slice(summaryStart);
+  assert.match(auditJob, /Run selected repository-wide AST audits with per-audit checkpoints/);
+  assert.match(auditJob, /cache_prefix: blb-ast-audits-v1/);
+  assert.match(auditJob, /always_run: 'true'/);
+  assert.match(auditJob, /ast-audit-input-fingerprint\.mjs/);
+  assert.match(auditJob, /Reusing completed audit/);
+  assert.match(auditJob, /safely restored from matching input checkpoints/);
+  assert.match(auditJob, /if \(\( active >= 4 \)\)/);
+  assert.match(auditJob, /wait -n/);
+  assert.ok(auditJob.includes('tee "$log_dir/$name.log" | sed -u'));
+  assert.doesNotMatch(packageJob, /Classify repository-wide AST audit scope|Install pinned AST audit dependencies|Run selected repository-wide AST audits with per-audit checkpoints/);
+  assert.match(packageJob, /name: Package validation/);
+  assert.match(packageJob, /needs\.change-detection\.outputs\.package_regression_required/);
+  assert.match(summaryJob, /repository-ast-audits/);
+});
+
+test("workflow-only validation contracts do not force package regression validation", () => {
+  const workflowPath = ".github/workflows/browser-e2e-groups.yml";
+  assert.equal(isNonRuntimePath(workflowPath), true);
+  assert.equal(requiresPackageValidation(workflowPath), false);
 });

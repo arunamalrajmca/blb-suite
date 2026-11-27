@@ -326,13 +326,27 @@ function analyze(root = path.resolve(__dirname, '..')) {
   if (fs.existsSync(pkgPath)) {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-      for (const command of Object.values(pkg.scripts || {})) {
-        const match = /(?:^|&&|\|\|)\s*(?:node|nodejs)\s+(?:--[^ ]+\s+)*([^\s;&|]+)/g;
-        let found;
-        while ((found = match.exec(command))) {
-          const target = resolveFile(path.join(root, 'package.json'), found[1], fileSet);
+      const addPackageScriptTarget = spec => {
+        const normalized = spec.replace(/^\.\//, '');
+        if (!normalized.includes('*') && !normalized.includes('?')) {
+          const target = resolveFile(pkgPath, normalized, fileSet);
+          if (target) roots.add(target);
+          return;
+        }
+        const directory = path.resolve(root, path.dirname(normalized));
+        if (!fs.existsSync(directory)) return;
+        const pattern = path.basename(normalized);
+      const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + String.fromCharCode(36));
+        for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+          if (!entry.isFile() || !matcher.test(entry.name)) continue;
+          const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
           if (target) roots.add(target);
         }
+      };
+      for (const command of Object.values(pkg.scripts || {})) {
+        const match = /(?:^|&&|\|\||;)\s*(?:node|nodejs)\s+(?:--[^ ]+\s+)*([^\s;&|]+)/g;
+        let found;
+        while ((found = match.exec(command))) addPackageScriptTarget(found[1]);
       }
     } catch (error) { errors.push({ file: 'package.json', error: error.message }); }
   }
@@ -349,42 +363,54 @@ function analyze(root = path.resolve(__dirname, '..')) {
   // CI workflows execute repository scripts directly. Include those commands
   // as roots so test/build tooling is not misreported as unreferenced source.
   const workflowDir = path.join(root, '.github', 'workflows');
+  const compositeActionDir = path.join(root, '.github', 'actions');
   function collectWorkflowFiles(dir) {
     const found = [];
     if (!fs.existsSync(dir)) return found;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) found.push(...collectWorkflowFiles(file));
-      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) found.push(file);
+      else if (entry.isFile() && /^(?:action|workflow)\.ya?ml$/i.test(entry.name)) found.push(file);
+      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name) && dir === workflowDir) found.push(file);
     }
     return found;
   }
-  const addWorkflowTarget = spec => {
+  const addWorkflowTarget = (spec, baseDirectories = [root]) => {
     if (!spec) return;
     const normalized = spec.replace(/^\.\//, '');
-    if (!normalized.includes('*')) {
-      const target = resolveFile(pkgPath, normalized, fileSet);
-      if (target) roots.add(target);
+    if (!normalized.includes('*') && !normalized.includes('?')) {
+      for (const base of baseDirectories) {
+        const target = resolveFile(path.join(base, 'package.json'), normalized, fileSet);
+        if (target) roots.add(target);
+      }
       return;
     }
     // Support simple filename globs used by Node's test runner and shell loops.
-    const directory = path.resolve(root, path.dirname(normalized));
-    if (!fs.existsSync(directory)) return;
-    const pattern = path.basename(normalized);
-    const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (!entry.isFile() || !matcher.test(entry.name)) continue;
-      const target = resolveFile(pkgPath, path.posix.join(path.dirname(normalized), entry.name), fileSet);
-      if (target) roots.add(target);
+    for (const base of baseDirectories) {
+      const directory = path.resolve(base, path.dirname(normalized));
+      if (!fs.existsSync(directory)) continue;
+      const pattern = path.basename(normalized);
+      const matcher = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + String.fromCharCode(36));
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !matcher.test(entry.name)) continue;
+        const target = resolveFile(path.join(base, 'package.json'), path.posix.join(path.dirname(normalized), entry.name), fileSet);
+        if (target) roots.add(target);
+      }
     }
   };
-  for (const workflowFile of collectWorkflowFiles(workflowDir)) {
+  for (const workflowFile of [...collectWorkflowFiles(workflowDir), ...collectWorkflowFiles(compositeActionDir)]) {
     const workflowSource = fs.readFileSync(workflowFile, 'utf8');
-    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:scripts|tests|regression-suite)\/[A-Za-z0-9_.*?/-]+\.(?:js|cjs|mjs))/g;
+    const workingDirectories = [root];
+    for (const match of workflowSource.matchAll(/^\s*(?:-\s*)?working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
+      const value = match[1] || match[2] || match[3];
+      if (value && !value.startsWith('$')) workingDirectories.push(path.resolve(root, value));
+    }
+    const uniqueWorkingDirectories = [...new Set(workingDirectories)];
+    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:[A-Za-z0-9_.*?-]+\/)*[A-Za-z0-9_.*?-]+\.(?:js|cjs|mjs))/g;
     let command;
-    while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1]);
+    while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1], uniqueWorkingDirectories);
     const shellGlobPattern = /scripts\/test-[A-Za-z0-9_.*?/-]+\.js(?=[;\s]|$)/g;
-    while ((command = shellGlobPattern.exec(workflowSource))) addWorkflowTarget(command[0]);
+    while ((command = shellGlobPattern.exec(workflowSource))) addWorkflowTarget(command[0], uniqueWorkingDirectories);
   }
   // Playwright reporter modules are loaded by name from configuration rather than static imports.
   if (fileSet.has(playwrightConfig)) {
@@ -682,59 +708,123 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
     return objectKey && objectMethodDefsByFile.get(file)?.get(objectKey + '::' + property) || null;
   };
-  // Propagate a single statically known string argument into imported
-  // functions that perform import(specifier). This is intentionally all-callsite
-  // conservative: any unknown or disagreeing callsite prevents propagation.
-  const crossModuleStringArguments = new Map();
-  for (const [callerFile, callerAst] of asts) {
-    const callerBindings = bindingByFile.get(callerFile);
-    const callerConstants = constantsByFile.get(callerFile);
-    visit(callerAst, node => {
-      if (node.type !== 'CallExpression') return;
-      const target = resolveCallableOwner(callerFile, node.callee);
-      if (!target || target.file === callerFile) return;
-      for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
-        const parameter = target.node.params[index];
-        if (parameter.type !== 'Identifier') continue;
-        const parameterKey = bindingByFile.get(target.file)?.get(parameter);
-        if (!parameterKey) continue;
-        const slot = target.file + '::' + parameterKey;
-        if (!crossModuleStringArguments.has(slot)) crossModuleStringArguments.set(slot, []);
-        const value = staticValue(node.arguments[index], callerConstants, 0, callerBindings);
-        crossModuleStringArguments.get(slot).push(typeof value === 'string' && value.length ? value : undefined);
-      }
-    });
-  }
-  for (const [slot, values] of crossModuleStringArguments) {
-    if (!values.length || values.some(value => typeof value !== 'string')) continue;
-    const unique = [...new Set(values)];
-    if (unique.length !== 1) continue;
-    const separator = slot.indexOf('::');
-    const targetFile = slot.slice(0, separator), parameterKey = slot.slice(separator + 2);
-    const target = [...functionDefs.entries()].find(([identity]) =>
-      identity.startsWith(targetFile + '::') &&
-      bindingByFile.get(targetFile)?.get(functionDefs.get(identity).node.params.find(parameter =>
-        parameter.type === 'Identifier' && bindingByFile.get(targetFile)?.get(parameter) === parameterKey
-      )) === parameterKey
-    )?.[1];
-    if (!target) continue;
+  // Propagate statically known string arguments through local and imported
+  // function wrappers until the call graph reaches a fixed point. Any unknown
+  // or disagreeing callsite keeps the target parameter unresolved.
+  const parameterReassignmentCache = new Map();
+  const parameterIsReassigned = (file, functionNode, parameterKey) => {
+    const identity = file + '::' + parameterKey;
+    if (parameterReassignmentCache.has(identity)) return parameterReassignmentCache.get(identity);
+    const bindings = bindingByFile.get(file);
+    const writesBinding = pattern => {
+      if (!pattern) return false;
+      if (pattern.type === 'Identifier') return bindings?.get(pattern) === parameterKey;
+      if (pattern.type === 'RestElement') return writesBinding(pattern.argument);
+      if (pattern.type === 'AssignmentPattern') return writesBinding(pattern.left);
+      if (pattern.type === 'ArrayPattern') return pattern.elements.some(writesBinding);
+      if (pattern.type === 'ObjectPattern') return pattern.properties.some(property =>
+        property.type === 'RestElement'
+          ? writesBinding(property.argument)
+          : writesBinding(property.value)
+      );
+      return false;
+    };
     let reassigned = false;
     const inspect = node => {
-      if (!node || typeof node !== 'object' || reassigned) return;
-      if (node !== target.node.body &&
-          ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
-      if (node.type === 'AssignmentExpression' && node.left.type === 'Identifier' &&
-          bindingByFile.get(targetFile)?.get(node.left) === parameterKey) reassigned = true;
-      if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier' &&
-          bindingByFile.get(targetFile)?.get(node.argument) === parameterKey) reassigned = true;
+      if (!node || typeof node !== 'object' || typeof node.type !== 'string' || reassigned) return;
+      if ((node.type === 'AssignmentExpression' && writesBinding(node.left)) ||
+          (node.type === 'UpdateExpression' && writesBinding(node.argument)) ||
+          ((node.type === 'ForInStatement' || node.type === 'ForOfStatement') && writesBinding(node.left))) {
+        reassigned = true;
+        return;
+      }
+      // Direct eval can mutate a function parameter in non-module script
+      // scopes. A shadowed eval binding is not treated as the global API.
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          node.callee.name === 'eval' && !bindings?.get(node.callee)) {
+        reassigned = true;
+        return;
+      }
+      // Inspect nested closures too: binding identities distinguish a captured
+      // outer parameter from a shadowing nested parameter with the same name.
       for (const [key, value] of Object.entries(node)) {
         if (['loc', 'start', 'end', 'range'].includes(key)) continue;
         if (Array.isArray(value)) value.forEach(inspect);
         else if (value && typeof value.type === 'string') inspect(value);
       }
     };
-    inspect(target.node.body);
-    if (!reassigned) constantsByFile.get(targetFile)?.set(parameterKey, unique[0]);
+    inspect(functionNode.body);
+    parameterReassignmentCache.set(identity, reassigned);
+    return reassigned;
+  };
+
+  const inferredStringArguments = new Map();
+  const maxStringArgumentPasses = Math.max(
+    1,
+    functionDefs.size + [...objectMethodDefsByFile.values()].reduce((sum, methods) => sum + methods.size, 0) + 1
+  );
+  for (let pass = 0; pass < maxStringArgumentPasses; pass++) {
+    const effectiveConstantsByFile = new Map();
+    for (const [file, constants] of constantsByFile) {
+      const effective = new Map(constants);
+      for (const [slot, value] of inferredStringArguments) {
+        const separator = slot.indexOf('::');
+        if (slot.slice(0, separator) === file) effective.set(slot.slice(separator + 2), value);
+      }
+      effectiveConstantsByFile.set(file, effective);
+    }
+
+    const callsitesByParameter = new Map();
+    for (const [callerFile, callerAst] of asts) {
+      const callerBindings = bindingByFile.get(callerFile);
+      const callerConstants = effectiveConstantsByFile.get(callerFile);
+      visit(callerAst, node => {
+        if (node.type !== 'CallExpression') return;
+        const target = resolveCallableOwner(callerFile, node.callee);
+        if (!target) return;
+        for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
+          const parameter = target.node.params[index];
+          if (parameter.type !== 'Identifier') continue;
+          const parameterKey = bindingByFile.get(target.file)?.get(parameter);
+          if (!parameterKey) continue;
+          const slot = target.file + '::' + parameterKey;
+          if (!callsitesByParameter.has(slot)) {
+            callsitesByParameter.set(slot, {
+              file: target.file,
+              functionNode: target.node,
+              parameterKey,
+              values: []
+            });
+          }
+          const value = staticValue(node.arguments[index], callerConstants, 0, callerBindings);
+          callsitesByParameter.get(slot).values.push(
+            typeof value === 'string' && value.length ? value : undefined
+          );
+        }
+      });
+    }
+
+    const nextInferred = new Map();
+    for (const [slot, callsites] of callsitesByParameter) {
+      const values = callsites.values;
+      if (!values.length || values.some(value => typeof value !== 'string')) continue;
+      const unique = [...new Set(values)];
+      if (unique.length !== 1 ||
+          parameterIsReassigned(callsites.file, callsites.functionNode, callsites.parameterKey)) continue;
+      nextInferred.set(slot, unique[0]);
+    }
+    const changed = nextInferred.size !== inferredStringArguments.size ||
+      [...nextInferred].some(([slot, value]) => inferredStringArguments.get(slot) !== value);
+    inferredStringArguments.clear();
+    for (const [slot, value] of nextInferred) inferredStringArguments.set(slot, value);
+    if (!changed) break;
+  }
+
+  for (const [slot, value] of inferredStringArguments) {
+    const separator = slot.indexOf('::');
+    const targetFile = slot.slice(0, separator);
+    const parameterKey = slot.slice(separator + 2);
+    constantsByFile.get(targetFile)?.set(parameterKey, value);
   }
 
   // Resolve callback factories whose direct return values are functions.
@@ -1174,15 +1264,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
     const scriptingNamespaceBindings = new Set(), scriptingLoaderMethodBindings = new Map();
+    const extensionApiPathBindings = new Map();
     const proxyConstructorBindings = new Set(), reflectNamespaceBindings = new Set(), objectNamespaceBindings = new Set();
     const reflectMethodBindings = new Map(), objectMethodBindings = new Map(), proxyRevocableBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
     const observerConstructors = new Set(['MutationObserver', 'IntersectionObserver', 'ResizeObserver', 'PerformanceObserver']);
-    const extensionCallbackMethods = new Set(['query', 'get', 'set', 'remove', 'clear', 'sendMessage', 'executeScript', 'getAll', 'create', 'update', 'captureVisibleTab', 'getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'download']);
+    // Chrome/Firefox extension APIs expose callback-style overloads across
+    // many namespaces (bookmarks, identity, downloads, tabs, runtime, etc.).
+    // Treat a callable final argument as an externally owned callback rather
+    // than relying on a brittle method-name allowlist. For one-argument calls,
+    // require an inline callable or a locally resolved function binding so
+    // ordinary object/data arguments are not mistaken for callbacks.
     const memberPath = node => {
       if (!node) return '';
       if (node.type === 'Identifier') {
         const key = bindings.get(node);
+        if (key && extensionApiPathBindings.has(key)) return extensionApiPathBindings.get(key);
         return key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : node.name;
       }
       if (node.type === 'ThisExpression') return 'this';
@@ -1378,6 +1475,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (node.init?.type === 'Identifier') {
             const source = bindings.get(node.init);
             if (target && source && scriptingNamespaceBindings.has(source)) scriptingNamespaceBindings.add(target);
+            if (target && source && extensionApiPathBindings.has(source)) extensionApiPathBindings.set(target, extensionApiPathBindings.get(source));
             if (target && source) {
               if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
               if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
@@ -1391,7 +1489,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
           if (target && node.init?.type === 'MemberExpression') {
             const initPath = memberPath(node.init);
-            if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
+            if (/^(?:chrome|browser)\./.test(initPath)) extensionApiPathBindings.set(target, initPath);
+          if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
             if (['chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts'].includes(initPath)) scriptingLoaderMethodBindings.set(target, initPath.split('.').pop());
             if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
             if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
@@ -1402,12 +1501,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const sourceMethod = initPath.split('.').pop();
             if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
           }
-        } else if (node.id.type === 'ObjectPattern' && memberPath(node.init) === 'chrome.scripting') {
+        } else if (node.id.type === 'ObjectPattern' && /^(?:chrome|browser)\./.test(memberPath(node.init))) {
+          const namespacePath = memberPath(node.init);
           for (const item of node.id.properties || []) {
-            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
-            const importedName = item.key.name || item.key.value;
+            if (item.type !== 'Property' || item.value.type !== 'Identifier' ||
+                (item.computed && staticValue(item.key, constants, 0, bindings) === undefined)) continue;
+            const importedName = item.computed ? String(staticValue(item.key, constants, 0, bindings)) : item.key.name || item.key.value;
             const target = bindings.get(item.value);
-            if (target && ['executeScript', 'registerContentScripts'].includes(importedName)) scriptingLoaderMethodBindings.set(target, importedName);
+            if (!target) continue;
+            extensionApiPathBindings.set(target, namespacePath + '.' + importedName);
+            if (namespacePath === 'chrome.scripting' && ['executeScript', 'registerContentScripts'].includes(importedName)) {
+              scriptingLoaderMethodBindings.set(target, importedName);
+            }
           }
         } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
           for (const item of node.id.properties || []) {
@@ -1489,12 +1594,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' && observerConstructors.has(callee.name);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
         const lastArgument = node.arguments[node.arguments.length - 1];
-        const callbackOnlyExtensionMethods = new Set(['getCurrent', 'getLastFocused', 'getPlatformInfo', 'getManifest', 'captureVisibleTab']);
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
-        const extensionCallback = isExtensionApi && extensionCallbackMethods.has(method) && lastArgumentIsCallable &&
-          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' ||
-            callbackOnlyExtensionMethods.has(method) || functionDefs.has(file + '::' + bindings.get(lastArgument)));
+        const resolvedLastArgumentFunction = lastArgument?.type === 'Identifier' &&
+          (functionDefs.has(file + '::' + bindings.get(lastArgument)) ||
+            [...functionDefs.values()].filter(definition =>
+              definition.file === file && definition.node.id?.name === lastArgument.name
+            ).length === 1);
+        const extensionCallback = isExtensionApi && lastArgumentIsCallable &&
+          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction);
         const isCallbackCandidate = argument => argument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
@@ -1512,8 +1620,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (callbackIndex < 0 || callbackIndex >= node.arguments.length) continue;
           const callback = node.arguments[callbackIndex];
           if (['setTimeout', 'setInterval'].includes(method) && callback.type === 'Literal' && typeof callback.value === 'string') continue;
+          // Record the canonical resolved API path, not merely the source
+          // spelling. A direct alias such as queryTabs(...) must remain
+          // attributable to chrome.tabs.query in the reachability inventory.
           callbackRecord(callback, pathName || method, node.loc.start.line,
-            sourceText.slice(callee.start, callee.end).slice(0, 160));
+            pathName || sourceText.slice(callee.start, callee.end).slice(0, 160));
         }
       }
       // DOM-style and browser event property assignments are callback roots too.
@@ -1531,6 +1642,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const target = bindings.get(node.left), source = bindings.get(node.right);
         if (target && source) {
           aliases.set(target, source);
+          if (extensionApiPathBindings.has(source)) extensionApiPathBindings.set(target, extensionApiPathBindings.get(source));
           if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
           if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
           if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
@@ -1538,6 +1650,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction', 'setTimeout', 'setInterval'].includes(node.right.name)) {
           dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
             ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
+        }
+        if (target && node.right.type === 'MemberExpression') {
+          const apiPath = memberPath(node.right);
+          if (/^(?:chrome|browser)\./.test(apiPath)) extensionApiPathBindings.set(target, apiPath);
         }
         if (target && node.right.type === 'Identifier') {
           const source = bindings.get(node.right);

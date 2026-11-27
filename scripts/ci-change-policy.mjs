@@ -11,14 +11,26 @@ export function isNonRuntimePath(path) {
   return isAstAuditToolingPath(path)
     || path === "scripts/classify-ast-audit-scope.mjs"
     || path === "scripts/classify-ast-audit-scope.test.mjs"
+    || path === "scripts/ast-audit-input-fingerprint.mjs"
+    || path === "scripts/ast-audit-input-fingerprint.test.mjs"
+    || path === ".github/actions/ci-section-checkpoint/action.yml"
+    || path === "scripts/ci-change-policy.test.mjs"
+    || /^scripts\/(?:ci-(?:section-checkpoint|checkpoint-fingerprints)(?:\.test)?|ci-change-policy)\.mjs$/i.test(path)
+    || /^scripts\/run-checkpointed-playwright-[^/]+\.mjs$/i.test(path)
     || /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
     || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
     || path === "scripts/package-release.sh"
     || path === "regression-suite/Verify-BLB-Zip.ps1"
     || path === "scripts/validate-build.js"
     || path === "scripts/run-validation-tests.js"
+    || path === "scripts/test-suite-inventory.mjs"
+    || path === "scripts/test-file-inventory-helpers.mjs"
+    || path === "scripts/test-file-inventory-helpers.test.mjs"
     || path === "scripts/validation-test-manifest.json"
     || path === "scripts/test-suite-inventory.json"
+    || path === "scripts/test-suite-inventory.mjs"
+    || path === "scripts/test-file-inventory-helpers.mjs"
+    || path === "scripts/test-file-inventory-helpers.test.mjs"
     || path === "regression-suite/Run-BLB-Regression.ps1"
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
@@ -30,12 +42,8 @@ export function isNonRuntimePath(path) {
 }
 
 export function requiresPackageValidation(path) {
-  return path.startsWith(".github/workflows/")
-    || path.startsWith("tests/selector/")
+  return path.startsWith("tests/selector/")
     || path.startsWith("regression-suite/")
-    || path === "scripts/classify-ci-changes.mjs"
-    || path === "scripts/classify-ast-audit-scope.mjs"
-    || path === "scripts/classify-ast-audit-scope.test.mjs"
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/ci-routing-registry.mjs"
@@ -53,6 +61,12 @@ export function requiresPackageValidation(path) {
     || path === "package-lock.json"
     || path === "extension/manifest.json"
     || path === "playwright.config.js"
-    || path === "playwright.config.ts"
-    || isAstAuditToolingPath(path);
+    || path === "playwright.config.ts";
+}
+
+export function requiresPackageRegression(path) {
+  return path.startsWith("extension/")
+    || path.startsWith("regression-suite/")
+    || path === "package.json"
+    || path === "package-lock.json";
 }
