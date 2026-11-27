@@ -105,7 +105,6 @@ jobs:
         run: |
           set -euo pipefail
           log_dir="$(mktemp -d)"
-          logs=()
           active=0
           failed=0
 
