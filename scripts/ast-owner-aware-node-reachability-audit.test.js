@@ -146,7 +146,7 @@ test('resolves literal no-substitution template strings as static Node loader ta
       'import(`./helper.js`);',
       'require(`./helper`);',
       'require(`./${name}`);'
-    ].join('\\n'), from, files);
+    ].join('\n'), from, files);
     assert.equal(result.edges.length, 2);
     assert.ok(result.edges.every(edge => edge.file === target));
     assert.deepEqual(result.dynamic.map(item => item.kind), ['dynamic-require']);
