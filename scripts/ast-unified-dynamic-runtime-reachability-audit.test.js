@@ -380,6 +380,18 @@ test('discovers direct Node entrypoints outside conventional script folders and 
   assert.ok(edge(result, 'commonjs-require', 'tools/package-audit.js', 'tools/shared.js'));
 });
 
+test('expands package-script Node test globs into unified execution roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { test: 'node --test scripts/*.test.js' } }),
+    'scripts/alpha.test.js': "require('./helper.js');",
+    'scripts/beta.test.js': 'module.exports = true;',
+    'scripts/helper.js': 'module.exports = true;'
+  });
+  assert.ok(result.roots.includes('scripts/alpha.test.js'));
+  assert.ok(result.roots.includes('scripts/beta.test.js'));
+  assert.ok(edge(result, 'commonjs-require', 'scripts/alpha.test.js', 'scripts/helper.js'));
+});
+
 test('resolves service-worker global content-script arrays referenced by browser test injections', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
