@@ -106,6 +106,19 @@ function discover(root) {
       item.isDirectory ? 'internal-directory-symlink-not-traversed' : 'internal-file-symlink'
   }));
   const parsed = new Map();
+  // Some generated .js files are fetched as text and parsed as JSON; they are
+  // packaged data resources, not executable entrypoints. Track those separately.
+  const packagedDataResources = new Map();
+  const addPackagedDataResource = (request, owner, kind) => {
+    if (typeof request !== 'string' || !request.trim()) return;
+    const target = localPath(extension, extension, request);
+    if (!target || !known.has(target)) return;
+    if (!packagedDataResources.has(target)) packagedDataResources.set(target, []);
+    const record = { owner, kind };
+    if (!packagedDataResources.get(target).some(item => item.owner === owner && item.kind === kind)) {
+      packagedDataResources.get(target).push(record);
+    }
+  };
   const add = (file, owner, kind) => {
     if (!file || !known.has(file)) return;
     if (!roots.has(file)) roots.set(file, []);
@@ -230,6 +243,17 @@ function discover(root) {
       'navigator.serviceWorker.register'
     ]);
     visit(ast, node => {
+      if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+          node.callee.name === 'fetchPackagedJsonAssignment') {
+        addPackagedDataResource(literal(node.arguments[0]), normalize(root, file), 'packaged-data-text-fallback');
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.id.name === 'fallbackAssignments' && node.init?.type === 'ObjectExpression') {
+        for (const entry of node.init.properties) {
+          if (entry.type !== 'Property' || entry.value?.type !== 'ArrayExpression') continue;
+          addPackagedDataResource(literal(entry.value.elements[0]), normalize(root, file), 'packaged-data-text-fallback');
+        }
+      }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
         if (node.init?.type === 'Identifier' &&
             (node.init.name === 'importScripts' || loaderAliases.has(node.init.name))) {
@@ -494,8 +518,10 @@ function discover(root) {
   const entries = jsFiles.map(file => ({
     file: normalize(root, file),
     roots: roots.get(file) || [],
+    dataReferences: packagedDataResources.get(file) || [],
     parseStatus: parsed.has(file) ? 'parsed' : 'unparsed',
-    classification: roots.has(file) ? 'statically-rooted-or-imported' : 'unaccounted-for'
+    classification: roots.has(file) ? 'statically-rooted-or-imported' :
+      packagedDataResources.has(file) ? 'packaged-data-resource' : 'unaccounted-for'
   }));
   return {
     entries, dynamicSites,
@@ -503,7 +529,8 @@ function discover(root) {
       javascriptFiles: jsFiles.length,
       parsedFiles: parsed.size,
       rootedOrImported: entries.filter(item => item.roots.length).length,
-      unaccountedFor: entries.filter(item => !item.roots.length).length,
+      packagedDataResources: entries.filter(item => item.classification === 'packaged-data-resource').length,
+      unaccountedFor: entries.filter(item => item.classification === 'unaccounted-for').length,
       dynamicSites: dynamicSites.length
     }
   };
@@ -514,8 +541,12 @@ function run(root = path.resolve(__dirname, '..')) {
   console.log('JavaScript files: ' + result.summary.javascriptFiles);
   console.log('Parsed files: ' + result.summary.parsedFiles);
   console.log('Statically rooted/imported: ' + result.summary.rootedOrImported);
+  console.log('Packaged data resources: ' + result.summary.packagedDataResources);
   console.log('Unaccounted for: ' + result.summary.unaccountedFor);
   console.log('Dynamic/uncertain sites: ' + result.summary.dynamicSites);
+  for (const item of result.entries) if (item.classification === 'packaged-data-resource') {
+    console.log('DATA RESOURCE ' + item.file + ' — fetched as text/parsed data; not an executable root');
+  }
   for (const item of result.entries) if (item.classification === 'unaccounted-for') {
     console.log('UNACCOUNTED ' + item.file + ' — requires ownership review; not classified as unused');
   }
