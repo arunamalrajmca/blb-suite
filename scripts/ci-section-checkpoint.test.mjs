@@ -89,7 +89,7 @@ test('checkpoint recovery can be disabled without skipping the section runner', 
   assert.match(action, /Restore the newest compatible section checkpoint\\n      if: \\$\\{\\{ inputs\\.recovery == 'true' \\}\\}/);
   assert.match(action, /Preserve completed or partial checkpoint after this attempt\\n      if: \\$\\{\\{ inputs\\.recovery == 'true' && always\\(\\)/);
   assert.match(action, /inputs\\.recovery != 'true' \\|\\| steps\\.check\\.outputs\\.complete/);
-  const calls = (hardGate.match(/uses: \\\.\\/\\.github\\/actions\\/ci-section-checkpoint/g) || []).length;
+  const calls = (hardGate.match(/uses: \.\/\.github\/actions\/ci-section-checkpoint/g) || []).length;
   const disabled = (hardGate.match(/recovery: false/g) || []).length;
   assert.ok(calls > 0, 'HARD-GATE should retain the reusable runner action');
   assert.equal(disabled, calls, 'every HARD-GATE section must bypass cross-run restore/save');
