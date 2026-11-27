@@ -1179,7 +1179,7 @@ function discoverNodeEntrypoints(root, files, sourceByFile) {
   for (const workflow of workflowFiles) {
     const source = fs.readFileSync(workflow, 'utf8');
     const workingDirectories = [root];
-    for (const match of source.matchAll(/^\s*working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
+    for (const match of source.matchAll(/^\s*(?:-\s*)?working-directory:\s*(?:"([^"]+)"|'([^']+)'|([^\s#]+))\s*$/gm)) {
       const value = match[1] || match[2] || match[3];
       if (value && value.charAt(0) !== String.fromCharCode(36)) workingDirectories.push(path.resolve(root, value));
     }
