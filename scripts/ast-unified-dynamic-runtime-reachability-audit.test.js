@@ -870,6 +870,31 @@ test('tracks aliased global eval, reassigned Function constructors, and imported
   assert.ok(boundaries.some(item => item.executionBoundary === 'string-timer'));
 });
 
+test('covers Chrome and browser callback APIs beyond the common method-name allowlist', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onBookmarkTree(nodes) { return nodes.length; }',
+      'function onToken(token) { return token; }',
+      'function onMessage(response) { return response; }',
+      'chrome.bookmarks.getTree(onBookmarkTree);',
+      'chrome.identity.getAuthToken({ interactive: false }, onToken);',
+      'browser.runtime.sendMessage({ type: "ping" }, onMessage);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  for (const [expression, callback] of [
+    ['chrome.bookmarks.getTree', 'onBookmarkTree'],
+    ['chrome.identity.getAuthToken', 'onToken'],
+    ['browser.runtime.sendMessage', 'onMessage']
+  ]) {
+    assert.ok(registrations.some(item =>
+      item.expression === expression && item.callback === callback &&
+      item.certainty === 'resolved-function-binding'),
+    'expected callback ownership for ' + expression);
+  }
+});
+
 test('records observer constructors, event-property handlers, and browser API callback ownership', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
