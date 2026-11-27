@@ -1264,6 +1264,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
     const scriptingNamespaceBindings = new Set(), scriptingLoaderMethodBindings = new Map();
+    const extensionApiPathBindings = new Map();
     const proxyConstructorBindings = new Set(), reflectNamespaceBindings = new Set(), objectNamespaceBindings = new Set();
     const reflectMethodBindings = new Map(), objectMethodBindings = new Map(), proxyRevocableBindings = new Set();
     const vmMethods = new Set(['runInContext', 'runInNewContext', 'runInThisContext', 'compileFunction', 'Script', 'SourceTextModule', 'SyntheticModule']);
@@ -1278,6 +1279,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (!node) return '';
       if (node.type === 'Identifier') {
         const key = bindings.get(node);
+        if (key && extensionApiPathBindings.has(key)) return extensionApiPathBindings.get(key);
         return key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : node.name;
       }
       if (node.type === 'ThisExpression') return 'this';
@@ -1486,7 +1488,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (target && requireVm(node.init)) vmNamespaceBindings.add(target);
           if (target && node.init?.type === 'MemberExpression') {
             const initPath = memberPath(node.init);
-            if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
+            if (/^(?:chrome|browser)\./.test(initPath)) extensionApiPathBindings.set(target, initPath);
+          if (initPath === 'chrome.scripting') scriptingNamespaceBindings.add(target);
             if (['chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts'].includes(initPath)) scriptingLoaderMethodBindings.set(target, initPath.split('.').pop());
             if (['globalThis.eval', 'window.eval', 'self.eval', 'global.eval'].includes(initPath)) dynamicCallableBindings.set(target, 'eval-alias');
             if (['globalThis.Function', 'window.Function', 'self.Function'].includes(initPath)) dynamicCallableBindings.set(target, 'function-constructor-alias');
@@ -1497,12 +1500,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
             const sourceMethod = initPath.split('.').pop();
             if (sourceObject && vmNamespaceBindings.has(sourceObject) && vmMethods.has(sourceMethod)) vmMethodBindings.set(target, sourceMethod);
           }
-        } else if (node.id.type === 'ObjectPattern' && memberPath(node.init) === 'chrome.scripting') {
+        } else if (node.id.type === 'ObjectPattern' && /^(?:chrome|browser)\./.test(memberPath(node.init))) {
+          const namespacePath = memberPath(node.init);
           for (const item of node.id.properties || []) {
-            if (item.type !== 'Property' || item.value.type !== 'Identifier') continue;
-            const importedName = item.key.name || item.key.value;
+            if (item.type !== 'Property' || item.value.type !== 'Identifier' ||
+                (item.computed && staticValue(item.key, constants, 0, bindings) === undefined)) continue;
+            const importedName = item.computed ? String(staticValue(item.key, constants, 0, bindings)) : item.key.name || item.key.value;
             const target = bindings.get(item.value);
-            if (target && ['executeScript', 'registerContentScripts'].includes(importedName)) scriptingLoaderMethodBindings.set(target, importedName);
+            if (!target) continue;
+            extensionApiPathBindings.set(target, namespacePath + '.' + importedName);
+            if (namespacePath === 'chrome.scripting' && ['executeScript', 'registerContentScripts'].includes(importedName)) {
+              scriptingLoaderMethodBindings.set(target, importedName);
+            }
           }
         } else if (node.id.type === 'ObjectPattern' && requireVm(node.init)) {
           for (const item of node.id.properties || []) {
@@ -1626,6 +1635,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const target = bindings.get(node.left), source = bindings.get(node.right);
         if (target && source) {
           aliases.set(target, source);
+          if (extensionApiPathBindings.has(source)) extensionApiPathBindings.set(target, extensionApiPathBindings.get(source));
           if (dynamicCallableBindings.has(source)) dynamicCallableBindings.set(target, dynamicCallableBindings.get(source));
           if (vmNamespaceBindings.has(source)) vmNamespaceBindings.add(target);
           if (vmMethodBindings.has(source)) vmMethodBindings.set(target, vmMethodBindings.get(source));
@@ -1633,6 +1643,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (target && ['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'AsyncGeneratorFunction', 'setTimeout', 'setInterval'].includes(node.right.name)) {
           dynamicCallableBindings.set(target, node.right.name === 'eval' ? 'eval-alias' :
             ['setTimeout', 'setInterval'].includes(node.right.name) ? 'string-timer-alias' : 'function-constructor-alias');
+        }
+        if (target && node.right.type === 'MemberExpression') {
+          const apiPath = memberPath(node.right);
+          if (/^(?:chrome|browser)\./.test(apiPath)) extensionApiPathBindings.set(target, apiPath);
         }
         if (target && node.right.type === 'Identifier') {
           const source = bindings.get(node.right);
