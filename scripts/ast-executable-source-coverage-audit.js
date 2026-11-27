@@ -298,7 +298,9 @@ function discover(root) {
             ? staticArray(arg.argument)
             : arg.type === 'SpreadElement' && arg.argument.type === 'Identifier'
               ? literalArrays.get(arg.argument.name) || loopLiteralArrays.get(arg.argument.name) || null
-              : (() => { const value = literal(arg); return value === null ? null : [value]; })();
+              : arg.type === 'Identifier'
+                ? loopLiteralArrays.get(arg.name) || literalArrays.get(arg.name) || null
+                : (() => { const value = literal(arg); return value === null ? null : [value]; })();
           if (requests) {
             for (const request of requests) {
               const target = addRequest(request, path.dirname(file), normalize(root, file), 'static-importScripts');
