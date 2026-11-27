@@ -33,6 +33,7 @@ jobs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       behavioral_validation_required: ${{ steps.classify.outputs.behavioral_validation_required }}
       package_validation_required: ${{ steps.classify.outputs.package_validation_required }}
+      package_regression_required: ${{ steps.classify.outputs.package_regression_required }}
     steps:
       - name: Checkout for change classification
         uses: actions/checkout@v5
@@ -107,6 +108,7 @@ jobs:
           VERSION=$(node -p "require('./extension/manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Run deterministic regression gate — package
+        if: ${{ needs.change-detection.outputs.package_regression_required == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
           recovery: false
