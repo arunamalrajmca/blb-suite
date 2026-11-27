@@ -12,3 +12,8 @@ export function extractDeclaredTestTitles(source) {
   for (const match of String(source || '').matchAll(declaration)) titles.push(match[2]);
   return titles;
 }
+
+export function normalizeTextRequirements(value) {
+  if (value == null) return [];
+  return Array.isArray(value) ? value : [value];
+}
