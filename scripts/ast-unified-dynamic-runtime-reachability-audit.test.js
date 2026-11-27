@@ -383,7 +383,7 @@ test('discovers direct Node entrypoints outside conventional script folders and 
 test('expands question-mark workflow Node entrypoint globs', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { test: 'playwright test' } }),
-    '.github/workflows/ci.yml': 'steps:\\n  - run: node --test scripts/check?.test.mjs\\n',
+    '.github/workflows/ci.yml': 'steps:\n  - run: node --test scripts/check?.test.mjs\n',
     'scripts/check1.test.mjs': 'export const one = true;',
     'scripts/check2.test.mjs': 'export const two = true;',
     'scripts/check-extra.test.mjs': 'export const extra = true;'
