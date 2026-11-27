@@ -50,6 +50,13 @@ test("non-extension JavaScript changes select all repository-wide source consume
   assert.deepEqual(selectAstAudits(["tests/browser/example.spec.js"]), nonExtensionJs);
 });
 
+
+test("standalone HTML and JSON changes select the consumers that inspect those inputs", () => {
+  assert.deepEqual(selectAstAudits(["docs/reference.html"]), ["repository"]);
+  assert.deepEqual(selectAstAudits(["scripts/runtime-data.json"]), ["owner", "cross_module", "unified"]);
+  assert.deepEqual(selectAstAudits(["scripts/manifest-data.json"]), ["repository", "owner", "cross_module", "unified"]);
+});
+
 test("workflow and composite-action execution roots select only graph-root consumers", () => {
   assert.deepEqual(selectAstAudits([".github/workflows/browser-tests.yml"]), ["owner", "cross_module", "unified"]);
   assert.deepEqual(selectAstAudits([".github/actions/nested/action/action.yaml"]), ["owner", "cross_module", "unified"]);
