@@ -1375,7 +1375,14 @@ function analyzeDynamicExecution(root,files,graph){
       for(const scope of scopeManager.scopes||[])for(const variable of scope.variables||[]){
         if((variable.identifiers||[]).includes(node)||(variable.references||[]).some(reference=>reference.identifier===node))return variable;
       }
-      return null;
+      let best=null,bestSpan=Infinity;
+      for(const scope of scopeManager.scopes||[]){
+        const block=scope.block;
+        if(!block||typeof block.start!=='number'||typeof block.end!=='number'||node.start<block.start||node.end>block.end)continue;
+        const variable=scope.set?.get(node.name);
+        if(variable&&block.end-block.start<bestSpan){best=variable;bestSpan=block.end-block.start;}
+      }
+      return best;
     };
     const requireAliases=new Set(),workerConstructorAliases=new Set();
     visit(ast,(node,parent)=>{
