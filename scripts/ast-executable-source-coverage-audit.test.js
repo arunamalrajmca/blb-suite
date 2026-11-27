@@ -124,6 +124,40 @@ test('propagates static content-script arrays through registration helper parame
   }
 });
 
+test('keeps inferred registration arrays isolated between same-named locals', () => {
+  const f = fixture();
+  try {
+    f.write('extension/manifest.json', JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }));
+    f.write('extension/background.js', [
+      "function coreFiles() { return ['core.js']; }",
+      "function redirectFiles() { return ['redirect.js']; }",
+      "function registerCore() {",
+      "  const files = coreFiles();",
+      "  chrome.scripting.registerContentScripts([{ id: 'core', js: files }]);",
+      "}",
+      "function registerRedirect() {",
+      "  const files = redirectFiles();",
+      "  chrome.scripting.registerContentScripts([{ id: 'redirect', js: files }]);",
+      "}"
+    ].join('\\n'));
+    f.write('extension/core.js', 'self.core = true;');
+    f.write('extension/redirect.js', 'self.redirect = true;');
+
+    const result = discover(f.root);
+    const byFile = new Map(result.entries.map(item => [item.file, item]));
+    for (const name of ['core.js', 'redirect.js']) {
+      const entry = byFile.get('extension/' + name);
+      assert.equal(entry.classification, 'statically-rooted-or-imported');
+      assert.ok(entry.roots.some(root => root.kind === 'runtime-registered-js'));
+    }
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('classifies fetched generated JavaScript payloads as packaged data resources', () => {
   const f = fixture();
   try {
