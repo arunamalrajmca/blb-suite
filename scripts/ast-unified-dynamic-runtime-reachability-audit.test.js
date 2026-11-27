@@ -2567,7 +2567,7 @@ test('recognizes Vue Composition API lifecycle callback registrations', () => {
       'onMounted(mounted);',
       'onBeforeUnmount(() => cleanup());',
       'onErrorCaptured((error, instance, info) => report(error));'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' &&
