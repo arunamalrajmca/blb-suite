@@ -40,7 +40,10 @@ test("the shared CI path policy keeps documentation, CI, selector and browser-sp
     "tests/selector/browser-selector-decisions.test.mjs",
     "tests/browser/omnibox-command-routing.spec.js",
     "scripts/ci-routing-registry.mjs",
-    "scripts/ci-change-policy.mjs"
+    "scripts/ci-change-policy.mjs",
+    "scripts/test-suite-inventory.mjs",
+    "scripts/test-file-inventory-helpers.mjs",
+    "scripts/test-file-inventory-helpers.test.mjs"
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
   }
@@ -78,6 +81,9 @@ test("package validation ownership is centralized alongside runtime classificati
     "tests/selector/ci-change-policy.test.mjs",
     "scripts/ci-change-policy.mjs",
     "scripts/ci-routing-registry.mjs",
+    "scripts/test-suite-inventory.mjs",
+    "scripts/test-file-inventory-helpers.mjs",
+    "scripts/test-file-inventory-helpers.test.mjs",
     "package-lock.json",
     "extension/manifest.json"
   ]) {
