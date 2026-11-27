@@ -47,6 +47,11 @@ export function selectAstAudits(changedPaths, { full = false } = {}) {
     if (path === auditDefinitions.runtime[0] || path === auditDefinitions.runtime[1]) {
       selected.add("unified");
     }
+    // The cross-module audit imports resolveModuleFile from the unified
+    // analyzer, so changes to that resolver must also exercise its consumer.
+    if (path === auditDefinitions.unified[0] || path === auditDefinitions.unified[1]) {
+      selected.add("cross_module");
+    }
     // Any unclassified AST audit source/test could be a shared dependency.
     if (!matched && /^scripts\/ast-.*(?:\.js|\.mjs)$/.test(path)) return all;
   }
