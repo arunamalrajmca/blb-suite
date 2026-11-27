@@ -36,13 +36,9 @@ test("the shared CI path policy keeps documentation, CI, selector and browser-sp
   for (const path of [
     "README.md",
     "docs/ci-routing.md",
-    ".github/workflows/browser-e2e-groups.yml",
     "tests/selector/browser-selector-decisions.test.mjs",
     "tests/browser/omnibox-command-routing.spec.js",
     "scripts/ci-routing-registry.mjs",
-    "scripts/ci-change-policy.mjs",
-    "scripts/test-suite-inventory.mjs",
-    "scripts/test-file-inventory-helpers.mjs",
     "scripts/test-file-inventory-helpers.test.mjs"
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
@@ -83,7 +79,6 @@ test("package validation ownership is centralized alongside runtime classificati
     "scripts/ci-routing-registry.mjs",
     "scripts/test-suite-inventory.mjs",
     "scripts/test-file-inventory-helpers.mjs",
-    "scripts/test-file-inventory-helpers.test.mjs",
     "package-lock.json",
     "extension/manifest.json"
   ]) {
@@ -99,18 +94,28 @@ test("both CI selectors consume the same path-policy module", () => {
   assert.match(browserSelector, /from "\.\/ci-change-policy\.mjs"/);
 });
 
-test("package regression checkpoint is reusable across audit-only commits", () => {
+test("repository AST audits run separately from package validation with bounded concurrency", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-tests.yml", import.meta.url), "utf8");
-  const start = workflow.indexOf("section: package-regression");
-  const end = workflow.indexOf("run: BLB_EXPECTED_VERSION=", start);
-  assert.ok(start >= 0 && end > start, "package regression checkpoint must remain declared in HARD-GATE");
-  const checkpoint = workflow.slice(start, end);
-  const packageStep = workflow.indexOf("section: package-regression");
-  const firstAstAudit = workflow.indexOf("Test and run conservative AST symbol audit");
-  assert.ok(packageStep >= 0 && firstAstAudit > packageStep, "package checkpoint must run before long AST audit sections");
-  assert.ok(checkpoint.includes("cache_prefix: blb-ci-v1-hard-gate-package-regression-${{ hashFiles('extension/**', 'regression-suite/**', 'package.json', 'package-lock.json') }}"));
-  assert.ok(checkpoint.includes("fingerprint: ${{ hashFiles('extension/**', 'regression-suite/**', 'package.json', 'package-lock.json') }}"));
-  for (const unrelatedInput of ["github.sha", "scripts/**", "tests/**", "browser-tests.yml"]) {
-    assert.equal(checkpoint.includes(unrelatedInput), false, unrelatedInput);
-  }
+  const auditStart = workflow.indexOf("  repository-ast-audits:");
+  const packageStart = workflow.indexOf("  regression-package:");
+  const behavioralStart = workflow.indexOf("  regression-behavioral:");
+  const summaryStart = workflow.indexOf("  regression-gate-summary:");
+  assert.ok(auditStart >= 0 && packageStart > auditStart && behavioralStart > packageStart);
+  const auditJob = workflow.slice(auditStart, packageStart);
+  const packageJob = workflow.slice(packageStart, behavioralStart);
+  const summaryJob = workflow.slice(summaryStart);
+  assert.match(auditJob, /Run selected repository-wide AST audits concurrently/);
+  assert.match(auditJob, /if \(\( active >= 4 \)\)/);
+  assert.match(auditJob, /wait -n/);
+  assert.ok(auditJob.includes('tee "$log_file" | sed -u'));
+  assert.doesNotMatch(packageJob, /Classify repository-wide AST audit scope|Install pinned AST audit dependencies|Run selected repository-wide AST audits concurrently/);
+  assert.match(packageJob, /name: Package validation/);
+  assert.match(packageJob, /needs\.change-detection\.outputs\.package_regression_required/);
+  assert.match(summaryJob, /repository-ast-audits/);
+});
+
+test("workflow-only validation contracts do not force package regression validation", () => {
+  const workflowPath = ".github/workflows/browser-e2e-groups.yml";
+  assert.equal(isNonRuntimePath(workflowPath), true);
+  assert.equal(requiresPackageValidation(workflowPath), false);
 });
