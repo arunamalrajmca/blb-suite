@@ -2557,3 +2557,28 @@ test('keeps dynamic Reflect.set event names outside resolved callback ownership'
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' && item.expression === 'Reflect.set'), false);
 });
+
+test('recognizes Vue Composition API lifecycle callback registrations', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'import { onMounted, onBeforeUnmount, onErrorCaptured } from "vue";',
+      'function mounted() { return ready(); }',
+      'onMounted(mounted);',
+      'onBeforeUnmount(() => cleanup());',
+      'onErrorCaptured((error, instance, info) => report(error));'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    ['onMounted', 'onBeforeUnmount', 'onErrorCaptured'].includes(item.expression));
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.some(item =>
+    item.expression === 'onMounted' &&
+    item.callback === 'mounted' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(registrations.filter(item =>
+    item.certainty === 'resolved-inline-callback').length, 2);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
