@@ -168,6 +168,46 @@ test('builds transitive Node module reachability from package, workflow and Play
   }
 });
 
+test('includes composite-action and workflow shell-wrapper Node roots in module reachability', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'action-shell-roots-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { validate: 'node scripts/cli.js' } }));
+    write('.github/workflows/ci.yml', 'steps:\n  - run: bash tools/run-wrapper.sh\n');
+    write('.github/actions/nested/verify/action.yaml', [
+      'name: Verify action',
+      'runs:',
+      '  using: composite',
+      '  steps:',
+      '    - shell: bash',
+      '      run: node tools/action-entry.js'
+    ].join('\n'));
+    write('scripts/cli.js', 'require("./cli-helper.js");');
+    write('scripts/cli-helper.js', 'module.exports = true;');
+    write('tools/run-wrapper.sh', 'node tools/shell-child.js\n');
+    write('tools/shell-child.js', 'require("./shell-helper.js");');
+    write('tools/shell-helper.js', 'module.exports = true;');
+    write('tools/action-entry.js', 'require("./action-helper.js");');
+    write('tools/action-helper.js', 'module.exports = true;');
+
+    const graph = buildModuleGraph(root);
+    const reachable = new Set(graph.reachable);
+    for (const file of [
+      'tools/run-wrapper.sh',
+      'tools/shell-child.js',
+      'tools/shell-helper.js',
+      'tools/action-entry.js',
+      'tools/action-helper.js'
+    ]) assert.ok(reachable.has(file), file);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('reports dynamic module loading without treating it as a resolved dependency', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dynamic-module-'));
   const write = (name, value) => {
