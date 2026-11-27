@@ -3592,7 +3592,61 @@ async function ensureContentScriptInTab(tabId) {
         tab = await getCurrentEligibleTab();
         if (!tab) return false;
         const injectionFiles = files.includes('content.js') ? primaryFiles : files;
-        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
+
+        if (files.includes('content.js')) {
+          // Runtime registrations and current-document fallback can converge
+          // on the same document during first-load activation. The classic
+          // scripts contain top-level lexical declarations, so evaluating the
+          // bundle a second time in one isolated world throws "already been
+          // declared". Probe after the failed refresh handshake. If the first
+          // bundle has started, let its initializer finish and retry through
+          // the shared activation path; never evaluate dependencies again.
+          await new Promise(resolve => setTimeout(resolve, 75));
+          const [bundleProbe] = await chrome.scripting.executeScript({
+            target:{tabId},
+            world:'ISOLATED',
+            func:() => ({
+              evaluationCount:Number(globalThis.__blbSuiteContentBundleEvaluationCountV1 || 0),
+              fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true
+            })
+          });
+          if (Number(bundleProbe?.result?.evaluationCount || 0) > 0 ||
+              bundleProbe?.result?.fileExecuted === true) {
+            // The registered bundle may have executed its first dependency
+            // before content.js installs the refresh listener. Wait for that
+            // same document to finish initialization instead of returning to
+            // the short outer activation retry loop (or reinjecting it).
+            for (let attempt = 0; attempt < 36; attempt++) {
+              if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100));
+              try {
+                const response = await chrome.tabs.sendMessage(tabId, {
+                  type:'blbSuiteRefreshSiteFeatures'
+                });
+                if (response?.ok === true) {
+                  tab = await getCurrentEligibleTab();
+                  if (!tab) return false;
+                  await injectOptionalRedirectFiles();
+                  return true;
+                }
+              } catch (_) {}
+            }
+            return false;
+          }
+          // Pin the core bundle to the inspected document. A same-origin
+          // navigation must not redirect an outgoing activation into a new
+          // document that may already have received registered scripts.
+          const documentId = bundleProbe?.documentId;
+          if (typeof documentId !== 'string' || !documentId) return false;
+          await chrome.scripting.executeScript({
+            target:{tabId,documentIds:[documentId]},
+            files:injectionFiles
+          });
+        } else {
+          // Redirect-only handlers are intentionally injected independently
+          // from the core bundle and may be refreshed while a core bundle is
+          // resident. Keep their established tab-targeted activation path.
+          await chrome.scripting.executeScript({target:{tabId},files:injectionFiles});
+        }
         // executeScript may complete as a navigation commits. Do not report
         // activation success for a document on a different origin.
         tab = await getCurrentEligibleTab();

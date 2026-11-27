@@ -39,10 +39,25 @@ test('enabling global redirects activates BibleRef visible-range routing on an a
 
   expect(await rangeHandlerLoaded()).toBe(false);
 
+  const readCoreBundleEvaluationCount = () => extensionWorker.evaluate(async tabId => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId},
+      world:'ISOLATED',
+      func:() => Number(globalThis.__blbSuiteContentBundleEvaluationCountV1 || 0)
+    });
+    return result?.result ?? 0;
+  }, sourceTabId);
+  const coreBundleEvaluationCountBeforeRedirectEnable = await readCoreBundleEvaluationCount();
+
   // This storage change must activate the redirect-only content scripts in
   // tabs that were already open when the global redirect setting was OFF.
   await extensionStorage.set({redirectEnabled:true});
   await expect.poll(rangeHandlerLoaded, {timeout:10000}).toBe(true);
+
+  // Redirect-only activation must not evaluate the core classic-script
+  // dependency bundle in addition to whatever was already resident.
+  expect(await readCoreBundleEvaluationCount())
+    .toBe(coreBundleEvaluationCountBeforeRedirectEnable);
 
   await page.evaluate(() => {
     const link = document.createElement('a');
