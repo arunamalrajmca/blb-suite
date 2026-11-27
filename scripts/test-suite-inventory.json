@@ -206,10 +206,6 @@
           "requiredText": "actions/cache/save@v5"
         },
         {
-          "file": ".github/workflows/browser-tests.yml",
-          "requiredText": "ci-section-checkpoint"
-        },
-        {
           "file": ".github/actions/ci-section-checkpoint/action.yml",
           "requiredText": "recovery:"
         },
@@ -218,8 +214,12 @@
           "requiredText": "inputs.recovery == 'true'"
         },
         {
+          "file": ".github/actions/ci-section-checkpoint/action.yml",
+          "requiredText": "inputs.recovery != 'true' || steps.check.outputs.complete != 'true' || inputs.always_run == 'true'"
+        },
+        {
           "file": ".github/workflows/browser-tests.yml",
-          "requiredText": "recovery: false"
+          "requiredText": "node --test scripts/ci-section-checkpoint.test.mjs"
         }
       ]
     },
