@@ -92,3 +92,13 @@ test("both CI selectors consume the same path-policy module", () => {
   assert.match(classifier, /from "\.\/ci-change-policy\.mjs"/);
   assert.match(browserSelector, /from "\.\/ci-change-policy\.mjs"/);
 });
+
+test("package regression checkpoint is reusable across audit-only commits", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/browser-tests.yml", import.meta.url), "utf8");
+  const match = workflow.match(/section: package-regression([\\s\\S]*?)run: BLB_EXPECTED_VERSION=/);
+  assert.ok(match, "package regression checkpoint must remain declared in HARD-GATE");
+  const checkpoint = match[1];
+  assert.match(checkpoint, /cache_prefix: blb-ci-v1-hard-gate-package-regression-\\$\\{\\{ hashFiles\\('extension\/\\*\\*', 'regression-suite\/\\*\\*', 'package\\.json', 'package-lock\\.json'\\) \\}\\}/);
+  assert.match(checkpoint, /fingerprint: \\$\\{\\{ hashFiles\\('extension\/\\*\\*', 'regression-suite\/\\*\\*', 'package\\.json', 'package-lock\\.json'\\) \\}\\}/);
+  assert.doesNotMatch(checkpoint, /github\\.sha|scripts\/\\*\\*|tests\/\\*\\*|browser-tests\\.yml/);
+});
