@@ -358,7 +358,8 @@ test('discovers direct Node entrypoints outside conventional script folders and 
       'jobs:',
       '  check:',
       '    steps:',
-      '      - run: node --test ./tools/workflow-audit.test.mjs'
+      '      - working-directory: tools',
+      '        run: node --test workflow-audit.test.mjs'
     ].join('\n'),
     '.github/actions/tools/action.yml': [
       'name: Tools action',
