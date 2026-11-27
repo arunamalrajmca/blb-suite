@@ -3592,7 +3592,40 @@ async function ensureContentScriptInTab(tabId) {
         tab = await getCurrentEligibleTab();
         if (!tab) return false;
         const injectionFiles = files.includes('content.js') ? primaryFiles : files;
-        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
+
+        // Runtime registrations and current-document fallback can converge on
+        // the same document during first-load activation. The classic scripts
+        // contain top-level lexical declarations, so evaluating the bundle a
+        // second time in one isolated world throws "already been declared".
+        // Probe the current document after the failed refresh handshake. If
+        // the first bundle has started, let its initializer finish and retry
+        // the handshake through the shared activation retry path; never
+        // evaluate the dependencies again in that document.
+        await new Promise(resolve => setTimeout(resolve, 75));
+        const [bundleProbe] = await chrome.scripting.executeScript({
+          target:{tabId},
+          world:'ISOLATED',
+          func:() => ({
+            evaluationCount:Number(globalThis.__blbSuiteContentBundleEvaluationCountV1 || 0),
+            fileExecuted:window.__blbSuiteContentScriptFileExecutedV3 === true,
+            handshakeReady:window.__blbSuiteRefreshHandshakeReadyV1 === true
+          })
+        });
+        if (Number(bundleProbe?.result?.evaluationCount || 0) > 0 ||
+            bundleProbe?.result?.fileExecuted === true) {
+          return false;
+        }
+        // Pin fallback injection to the exact document inspected above. If
+        // same-origin navigation replaces it while eligibility checks or the
+        // probe are in flight, Chrome must not inject the outgoing bundle into
+        // the newly committed document (which may already have its registered
+        // content scripts).
+        const documentId = bundleProbe?.documentId;
+        if (typeof documentId !== 'string' || !documentId) return false;
+        await chrome.scripting.executeScript({
+          target:{tabId,documentIds:[documentId]},
+          files:injectionFiles
+        });
         // executeScript may complete as a navigation commits. Do not report
         // activation success for a document on a different origin.
         tab = await getCurrentEligibleTab();
