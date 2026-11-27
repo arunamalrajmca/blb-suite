@@ -2,20 +2,41 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { selectAstAudits } from "./classify-ast-audit-scope.mjs";
 
-test("analyzer changes select only their own audit plus declared graph consumers", () => {
-  assert.deepEqual(selectAstAudits(["scripts/ast-symbol-reference-audit.js"]), ["symbol"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-repository-reachability-audit.test.js"]), ["repository"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-runtime-flow-reachability-audit.js"]), ["runtime", "unified"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-unified-dynamic-runtime-reachability-audit.js"]), ["cross_module", "unified"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-owner-aware-node-reachability-audit.js"]), ["owner", "cross_module", "unified"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-computed-property-reachability-audit.js"]), ["computed"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-executable-source-coverage-audit.js"]), ["executable_source"]);
-  assert.deepEqual(selectAstAudits(["scripts/ast-runtime-metaprogramming-uncertainty-audit.js"]), ["metaprogramming"]);
+const nonExtensionJs = ["symbol", "repository", "owner", "cross_module", "runtime", "unified", "computed", "metaprogramming"];
+const nonExtensionModules = ["owner", "cross_module", "runtime", "unified", "computed", "metaprogramming"];
+
+test("analyzer JavaScript changes rerun every whole-repository scanner that parses them", () => {
+  for (const path of [
+    "scripts/ast-symbol-reference-audit.js",
+    "scripts/ast-repository-reachability-audit.test.js",
+    "scripts/ast-owner-aware-node-reachability-audit.js",
+    "scripts/ast-cross-module-dynamic-reachability-audit.test.js",
+    "scripts/ast-runtime-flow-reachability-audit.js",
+    "scripts/ast-unified-dynamic-runtime-reachability-audit.test.js",
+    "scripts/ast-computed-property-reachability-audit.js",
+    "scripts/ast-runtime-metaprogramming-uncertainty-audit.js"
+  ]) assert.deepEqual(selectAstAudits([path]), nonExtensionJs, path);
+});
+
+test("the executable-source analyzer's own source change also selects its extension-only audit", () => {
+  assert.deepEqual(selectAstAudits(["scripts/ast-executable-source-coverage-audit.js"]),
+    ["symbol", "repository", "owner", "cross_module", "runtime", "unified", "computed", "executable_source", "metaprogramming"]);
+});
+
+test("module-format changes select only scanners that parse CJS/MJS files", () => {
+  assert.deepEqual(selectAstAudits(["scripts/helper.mjs"]), nonExtensionModules);
+  assert.deepEqual(selectAstAudits(["scripts/helper.cjs"]), nonExtensionModules);
+  assert.deepEqual(selectAstAudits(["scripts/classify-ast-audit-scope.test.mjs"]), nonExtensionModules);
 });
 
 test("extension JavaScript changes select every whole-repository JS consumer but not the Node-only graph", () => {
   assert.deepEqual(selectAstAudits(["extension/background.js"]),
     ["symbol", "repository", "owner", "runtime", "unified", "computed", "executable_source", "metaprogramming"]);
+});
+
+test("extension module-format changes select consumers of extension CJS/MJS plus executable-source", () => {
+  assert.deepEqual(selectAstAudits(["extension/background.mjs"]),
+    ["owner", "runtime", "unified", "computed", "executable_source", "metaprogramming"]);
 });
 
 test("extension manifest and HTML changes select only metadata/execution-root consumers", () => {
@@ -26,10 +47,7 @@ test("extension manifest and HTML changes select only metadata/execution-root co
 });
 
 test("non-extension JavaScript changes select all repository-wide source consumers", () => {
-  assert.deepEqual(selectAstAudits(["tests/browser/example.spec.js"]),
-    ["symbol", "repository", "owner", "cross_module", "runtime", "unified", "computed", "metaprogramming"]);
-  assert.deepEqual(selectAstAudits(["scripts/helper.mjs"]),
-    ["symbol", "repository", "owner", "cross_module", "runtime", "unified", "computed", "metaprogramming"]);
+  assert.deepEqual(selectAstAudits(["tests/browser/example.spec.js"]), nonExtensionJs);
 });
 
 test("workflow and composite-action execution roots select only graph-root consumers", () => {
