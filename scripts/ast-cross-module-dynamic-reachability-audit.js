@@ -1344,8 +1344,13 @@ function analyzeInterproceduralObjectFlow(root,files,asts,meta){
 
 function analyzeDynamicExecution(root,files,graph){
   const set=new Set(files),launches=[],extra=[];
-  for(const file of files)visit(parse(fs.readFileSync(file,'utf8'),file),n=>{
-    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&['Worker','SharedWorker'].includes(n.callee.name)){
+  for(const file of files){
+    const ast=parse(fs.readFileSync(file,'utf8'),file);
+    const scopeManager=require('eslint-scope').analyze(ast,{ecmaVersion:2022,sourceType:ast.sourceType||'script',optimistic:false,ignoreEval:false,impliedStrict:false});
+    const unboundIdentifiers=new Set((scopeManager.globalScope?.through||[]).map(reference=>reference.identifier));
+    const isUnboundGlobal=node=>!!node&&node.type==='Identifier'&&unboundIdentifiers.has(node);
+    visit(ast,n=>{
+    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'worker-launch',expression:spec||null,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':'unresolved-worker-target'});
       if(target)extra.push({from:file,to:target}); return;
@@ -1353,7 +1358,10 @@ function analyzeDynamicExecution(root,files,graph){
     if(n.type!=='CallExpression')return;
     const c=n.callee,method=c.type==='MemberExpression'?(c.computed&&c.property.type==='Literal'?c.property.value:c.property.name):c.name;
     const object=c.type==='MemberExpression'&&c.object.type==='Identifier'?c.object.name:null;
-    const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)&&(c.type==='Identifier'||object==='module'||object==='Module');
+    const loader=['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)
+      &&((c.type==='Identifier'&&isUnboundGlobal(c))
+        ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
+        ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object)));
     if(loader){
       const spec=literalString(n.arguments[0],file);
       const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
@@ -1374,7 +1382,8 @@ function analyzeDynamicExecution(root,files,graph){
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'child-process-launch',method,command,resolved:target?path.relative(root,target):null,certainty:target?kind:'unresolved-process-target'});
       if(target)extra.push({from:file,to:target});
     }
-  });
+    });
+  }
   const outgoing=new Map();
   for(const e of graph.edges)if(e.to){const from=path.resolve(root,e.from),to=path.resolve(root,e.to);if(!outgoing.has(from))outgoing.set(from,[]);outgoing.get(from).push(to);}
   for(const e of extra){if(!outgoing.has(e.from))outgoing.set(e.from,[]);outgoing.get(e.from).push(e.to);}
