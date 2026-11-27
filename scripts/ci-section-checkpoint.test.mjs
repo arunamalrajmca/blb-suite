@@ -80,3 +80,17 @@ test('checkpoint inspection reports precise invalidation reasons', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test('checkpoint recovery can be disabled without skipping the section runner', () => {
+  const action = fs.readFileSync(new URL('../.github/actions/ci-section-checkpoint/action.yml', import.meta.url), 'utf8');
+  const hardGate = fs.readFileSync(new URL('../.github/workflows/browser-tests.yml', import.meta.url), 'utf8');
+  assert.match(action, /recovery:\\n    description:[^\\n]*\\n    required: false\\n    default: 'true'/);
+  assert.match(action, /Restore the newest compatible section checkpoint\\n      if: \\$\\{\\{ inputs\\.recovery == 'true' \\}\\}/);
+  assert.match(action, /Preserve completed or partial checkpoint after this attempt\\n      if: \\$\\{\\{ inputs\\.recovery == 'true' && always\\(\\)/);
+  assert.match(action, /inputs\\.recovery != 'true' \\|\\| steps\\.check\\.outputs\\.complete/);
+  const calls = (hardGate.match(/uses: \\\.\\/\\.github\\/actions\\/ci-section-checkpoint/g) || []).length;
+  const disabled = (hardGate.match(/recovery: false/g) || []).length;
+  assert.ok(calls > 0, 'HARD-GATE should retain the reusable runner action');
+  assert.equal(disabled, calls, 'every HARD-GATE section must bypass cross-run restore/save');
+});
