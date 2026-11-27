@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { looksLikeTestFileName } from './test-file-inventory-helpers.mjs';
+import { looksLikeTestFileName, extractDeclaredTestTitles } from './test-file-inventory-helpers.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(here, 'test-suite-inventory.json'), 'utf8'));
@@ -55,9 +55,10 @@ for (const suite of manifest.suites) {
   for (const delegation of suite.delegations || []) {
     if (!ownerContent.includes(delegation.testTitle)) fail('Primary browser inventory no longer names delegated test: ' + delegation.testTitle);
     const delegatedSpec = readRepoFile(delegation.testFile);
+    const declaredTitles = extractDeclaredTestTitles(delegatedSpec);
     const testIsDeclared = delegation.testTitlePattern
-      ? new RegExp(delegation.testTitlePattern).test(delegatedSpec)
-      : delegatedSpec.includes(delegation.testTitle);
+      ? declaredTitles.some(title => new RegExp(delegation.testTitlePattern).test(title))
+      : declaredTitles.some(title => title.includes(delegation.testTitle));
     if (!testIsDeclared) fail('Delegated test title or pattern is missing from its declared spec: ' + delegation.testFile);
     const delegatedWorkflow = readRepoFile(delegation.workflow);
     if (!delegatedWorkflow.includes(delegation.requiredText)) fail('Delegated test is not owned by declared workflow: ' + delegation.workflow);
@@ -100,9 +101,10 @@ for (const area of productionCoverage) {
     const testFile = evidence.path;
     if (!testFile || !classified.has(testFile)) fail('Production coverage evidence is not owned by an automated suite: ' + area.id + ' -> ' + testFile);
     const testContent = readRepoFile(testFile);
+    const declaredTitles = extractDeclaredTestTitles(testContent);
     if (!hasAssertionCall(testContent)) fail("Production coverage evidence file contains no assertion call: " + area.id + " -> " + testFile);
     for (const requiredText of evidence.requiredText || []) {
-      if (!testContent.includes(requiredText)) fail('Production coverage evidence no longer matches its regression test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
+      if (!declaredTitles.some(title => title.includes(requiredText))) fail('Production coverage evidence does not identify a declared test: ' + area.id + ' -> ' + testFile + ' -> ' + requiredText);
     }
   }
 }
@@ -141,9 +143,10 @@ for (const module of productionModuleCoverage) {
       continue;
     }
     const testContent = readRepoFile(evidence.path);
+    const declaredTitles = extractDeclaredTestTitles(testContent);
     if (!hasAssertionCall(testContent)) fail("Production module evidence file contains no assertion call: " + module.path + " -> " + evidence.path);
     for (const requiredText of evidence.requiredText || []) {
-      if (!testContent.includes(requiredText)) fail('Production module evidence no longer matches its regression assertion: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
+      if (!declaredTitles.some(title => title.includes(requiredText))) fail('Production module evidence does not identify a declared test: ' + module.path + ' -> ' + evidence.path + ' -> ' + requiredText);
     }
     if (module.coverageLevel === 'direct-integration' && !(evidence.requiredText || []).length) {
       fail('Direct integration evidence must identify its exact regression assertion: ' + module.path + ' -> ' + evidence.path);
