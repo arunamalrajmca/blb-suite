@@ -211,6 +211,29 @@ test('includes composite-action and workflow shell-wrapper Node roots in module 
   }
 });
 
+test('expands package-script Node test globs into module entrypoints', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'package-script-glob-roots-'));
+  const write = (name, value) => {
+    const file = path.join(root, name);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, value);
+  };
+  try {
+    write('package.json', JSON.stringify({ scripts: { test: 'node --test scripts/*.test.js' } }));
+    write('scripts/alpha.test.js', "require('./helper.js');");
+    write('scripts/beta.test.js', 'module.exports = true;');
+    write('scripts/helper.js', 'module.exports = true;');
+    const graph = buildModuleGraph(root);
+    const roots = new Set(graph.roots.map(item => item.file));
+    const reachable = new Set(graph.reachable);
+    assert.ok(roots.has('scripts/alpha.test.js'));
+    assert.ok(roots.has('scripts/beta.test.js'));
+    assert.ok(reachable.has('scripts/helper.js'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('reports dynamic module loading without treating it as a resolved dependency', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dynamic-module-'));
   const write = (name, value) => {
