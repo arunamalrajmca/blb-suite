@@ -142,7 +142,7 @@ test('keeps inferred registration arrays isolated between same-named locals', ()
       "  const files = redirectFiles();",
       "  chrome.scripting.registerContentScripts([{ id: 'redirect', js: files }]);",
       "}"
-    ].join('\\n'));
+    ].join('\n'));
     f.write('extension/core.js', 'self.core = true;');
     f.write('extension/redirect.js', 'self.redirect = true;');
 
