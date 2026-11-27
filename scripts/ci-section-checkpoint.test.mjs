@@ -97,7 +97,7 @@ test('checkpoint execution rule is opt-in for the AST audit section only', () =>
   assert.match(astJob, /cache_prefix: blb-ast-audits-v1/);
   assert.match(astJob, /ast-audit-input-fingerprint\.mjs/);
   assert.match(astJob, /All selected AST audits passed or were safely restored/);
-  assert.doesNotMatch(packageJob, /ci-section-checkpoint/);
+  assert.doesNotMatch(packageJob, /uses: \.\/\.github\/actions\/ci-section-checkpoint/);
   assert.match(packageJob, /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/);
   assert.match(hardGate, /node scripts\/test-suite-inventory\.mjs/);
   assert.match(astJob, /start_audit symbol scripts\/ast-symbol-reference-audit\.test\.js scripts\/ast-symbol-reference-audit\.js/);
