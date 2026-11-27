@@ -1467,18 +1467,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (methods.size) customElementClasses.set(classKey, methods);
     });
-    visit(ast, node => {
-      if (node.type !== 'CallExpression' || memberPath(node.callee) !== 'customElements.define' ||
-          node.callee.type !== 'MemberExpression' || node.arguments[1]?.type !== 'Identifier' ||
-          bindings.get(node.callee.object) || bindings.get(node.arguments[1])) return;
-      const classKey = bindings.get(node.arguments[1]);
-      const methods = classKey && customElementClasses.get(classKey);
-      if (!methods) return;
-      for (const [methodName, method] of methods) {
-        callbackRecord(method, 'custom-element-lifecycle:' + methodName,
-          node.loc.start.line, 'customElements.define');
-      }
-    });
     const callbackRecord = (callback, api, line, expression) => {
       let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
       if (callback?.type === 'Identifier') {
@@ -1595,6 +1583,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
         });
       }
     };
+    visit(ast, node => {
+      if (node.type !== 'CallExpression' || memberPath(node.callee) !== 'customElements.define' ||
+          node.callee.type !== 'MemberExpression' || node.arguments[1]?.type !== 'Identifier' ||
+          bindings.get(node.callee.object) || bindings.get(node.arguments[1])) return;
+      const classKey = bindings.get(node.arguments[1]);
+      const methods = classKey && customElementClasses.get(classKey);
+      if (!methods) return;
+      for (const [methodName, method] of methods) {
+        callbackRecord(method, 'custom-element-lifecycle:' + methodName,
+          node.loc.start.line, 'customElements.define');
+      }
+    });
     visit(ast, (node, parent) => {
       if (parent) parents.set(node, parent);
       // Track direct aliases of reflective primitives without promoting
