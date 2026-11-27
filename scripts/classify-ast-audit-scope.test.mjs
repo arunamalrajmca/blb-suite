@@ -47,6 +47,14 @@ test("parser/dependency/workflow/shared checkpoint changes run every audit", () 
   }
 });
 
+test("workflow and composite-action metadata changes run the complete connected audit set", () => {
+  for (const path of [
+    ".github/workflows/reusable-checks.yml",
+    ".github/actions/nested/verify/action.yaml",
+    ".github/actions/audit/action.yml"
+  ]) assert.equal(selectAstAudits([path]).length, 9, path);
+});
+
 test("manual full audit selection runs every audit", () => {
   assert.equal(selectAstAudits([], { full: true }).length, 9);
 });
