@@ -1365,8 +1365,8 @@ function analyzeDynamicExecution(root,files,graph){
     for(const scope of scopeManager.scopes||[]){
       for(const variable of scope.variables||[]){
         for(const identifier of variable.identifiers||[])variableForIdentifier.set(identifier,variable);
+        for(const reference of variable.references||[])variableForIdentifier.set(reference.identifier,variable);
       }
-      for(const reference of scope.references||[])if(reference.resolved)variableForIdentifier.set(reference.identifier,reference.resolved);
     }
     const bindingForIdentifier=node=>{
       if(node?.type!=='Identifier')return null;
