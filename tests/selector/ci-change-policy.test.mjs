@@ -39,6 +39,7 @@ test("the shared CI path policy keeps documentation, CI, selector and browser-sp
     "tests/selector/browser-selector-decisions.test.mjs",
     "tests/browser/omnibox-command-routing.spec.js",
     "scripts/ci-routing-registry.mjs",
+    "scripts/ci-change-policy.mjs",
     "scripts/test-file-inventory-helpers.test.mjs"
   ]) {
     assert.equal(isNonRuntimePath(path), true, path);
