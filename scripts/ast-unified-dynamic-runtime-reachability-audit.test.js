@@ -2105,3 +2105,148 @@ test('does not propagate static imported arguments when a dynamic-import paramet
     item.certainty === 'unresolved-dynamic-import'
   ));
 });
+
+
+test('propagates imported dynamic-import arguments through a same-module wrapper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      'function wrapper(specifier) { return load(specifier); }',
+      "wrapper('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
+});
+
+test('propagates imported dynamic-import arguments through multiple module wrapper layers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { wrap } from './wrapper.js';",
+      "wrap('./target.js');"
+    ].join('\n'),
+    'scripts/wrapper.js': [
+      "import { load } from './loader.js';",
+      'export function wrap(specifier) { return load(specifier); }'
+    ].join('\n'),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
+});
+
+test('keeps imported dynamic-import arguments uncertain when an intermediate wrapper has an unknown callsite', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      'function wrapper(specifier) { return load(specifier); }',
+      "wrapper('./target.js');",
+      'wrapper(runtimeSpecifier);'
+    ].join('\n'),
+    'scripts/loader.js': 'export function load(specifier) { return import(specifier); }',
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate imported dynamic-import arguments when a nested closure can reassign the parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  const replace = () => { specifier = runtimeOverride; };',
+      '  replace();',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate imported dynamic-import arguments when destructuring assigns to the parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  ({ value: specifier } = runtimeOverride);',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not propagate imported dynamic-import arguments when a loop writes to the parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  for (specifier of runtimeSpecifiers) {}',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.equal(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import' &&
+    item.certainty === 'unresolved-dynamic-import'
+  ));
+});
+
+test('does not treat a shadowed nested parameter as reassignment of an imported loader parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ type: 'module', scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "import { load } from './loader.js';",
+      "load('./target.js');"
+    ].join('\n'),
+    'scripts/loader.js': [
+      'export function load(specifier) {',
+      '  const replace = specifier => { specifier = runtimeOverride; };',
+      '  return import(specifier);',
+      '}'
+    ].join('\n'),
+    'scripts/target.js': 'export const loaded = true;'
+  });
+  assert.ok(edge(result, 'dynamic-import', 'scripts/loader.js', 'scripts/target.js'));
+  assert.equal(result.uncertainty.some(item =>
+    item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
+  ), false);
+});
