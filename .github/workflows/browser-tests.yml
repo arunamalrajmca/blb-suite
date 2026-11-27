@@ -112,14 +112,15 @@ jobs:
           start_audit() {
             local name="$1" test_file="$2" audit_file="$3"
             local log_file="$log_dir/$name.log"
-            logs+=("$log_file")
             (
               set -euo pipefail
-              echo "[$name] regression tests"
-              node --test "$test_file"
-              echo "[$name] repository audit"
-              node "$audit_file"
-            ) >"$log_file" 2>&1 &
+              {
+                echo "regression tests"
+                node --test "$test_file"
+                echo "repository audit"
+                node "$audit_file"
+              } 2>&1 | tee "$log_file" | sed -u "s/^/[$name] /"
+            ) &
             active=$((active + 1))
             if (( active >= 4 )); then
               reap_one
@@ -149,9 +150,6 @@ jobs:
             reap_one
           done
 
-          for log_file in "${logs[@]}"; do
-            cat "$log_file"
-          done
           if (( failed != 0 )); then
             echo "One or more selected AST audits failed."
             exit 1
