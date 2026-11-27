@@ -406,7 +406,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (value && !value.startsWith('$')) workingDirectories.push(path.resolve(root, value));
     }
     const uniqueWorkingDirectories = [...new Set(workingDirectories)];
-    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:js|cjs|mjs))/g;
+    const commandPattern = /\bnode(?:js)?\s+(?:--[^\s]+\s+)*(?:\.\/)?((?:[A-Za-z0-9_.*?-]+\/)*[A-Za-z0-9_.*?-]+\.(?:js|cjs|mjs))/g;
     let command;
     while ((command = commandPattern.exec(workflowSource))) addWorkflowTarget(command[1], uniqueWorkingDirectories);
     const shellGlobPattern = /scripts\/test-[A-Za-z0-9_.*?/-]+\.js(?=[;\s]|$)/g;
