@@ -21,7 +21,6 @@ test('workflow and checkpoint-only edits skip package and runtime regression wor
     '.github/workflows/browser-tests.yml',
     '.github/workflows/ci-command-router.yml',
     '.github/actions/ci-section-checkpoint/action.yml',
-    'scripts/ci-change-policy.mjs',
     'scripts/ci-change-policy.test.mjs',
     'scripts/classify-ci-changes.mjs',
     'scripts/ci-section-checkpoint.mjs',
@@ -53,7 +52,8 @@ test('selector and CI routing changes retain their targeted validation without r
   for (const path of [
     'tests/selector/browser-selector-decisions.test.mjs',
     'scripts/select-browser-specs.mjs',
-    'scripts/test-ci-routing-selector.js'
+    'scripts/test-ci-routing-selector.js',
+    'scripts/ci-change-policy.mjs'
   ]) {
     assert.equal(requiresPackageValidation(path), true, path);
     assert.equal(requiresPackageRegression(path), false, path);
