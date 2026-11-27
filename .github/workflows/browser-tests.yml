@@ -90,6 +90,8 @@ jobs:
         run: node --test scripts/ci-section-checkpoint.test.mjs
       - name: Test AST audit scope selector
         run: node --test scripts/classify-ast-audit-scope.test.mjs
+      - name: Test test-file inventory filename classification
+        run: node --test scripts/test-file-inventory-helpers.test.mjs
       - name: Verify repository-wide test inventory and production-module coverage
         uses: ./.github/actions/ci-section-checkpoint
         with:
