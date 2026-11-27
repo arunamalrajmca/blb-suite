@@ -92,6 +92,16 @@ jobs:
       - name: Test AST audit input fingerprinting
         run: node --test scripts/ast-audit-input-fingerprint.test.mjs
       - name: Run selected repository-wide AST audits with per-audit checkpoints
+        env:
+          RUN_SYMBOL: \${{ steps.audit-scope.outputs.run_symbol || steps.audit-scope-manual.outputs.run_symbol }}
+          RUN_REPOSITORY: \${{ steps.audit-scope.outputs.run_repository || steps.audit-scope-manual.outputs.run_repository }}
+          RUN_OWNER: \${{ steps.audit-scope.outputs.run_owner || steps.audit-scope-manual.outputs.run_owner }}
+          RUN_CROSS_MODULE: \${{ steps.audit-scope.outputs.run_cross_module || steps.audit-scope-manual.outputs.run_cross_module }}
+          RUN_RUNTIME: \${{ steps.audit-scope.outputs.run_runtime || steps.audit-scope-manual.outputs.run_runtime }}
+          RUN_UNIFIED: \${{ steps.audit-scope.outputs.run_unified || steps.audit-scope-manual.outputs.run_unified }}
+          RUN_COMPUTED: \${{ steps.audit-scope.outputs.run_computed || steps.audit-scope-manual.outputs.run_computed }}
+          RUN_EXECUTABLE_SOURCE: \${{ steps.audit-scope.outputs.run_executable_source || steps.audit-scope-manual.outputs.run_executable_source }}
+          RUN_METAPROGRAMMING: \${{ steps.audit-scope.outputs.run_metaprogramming || steps.audit-scope-manual.outputs.run_metaprogramming }}
         if: \${{ steps.audit-scope.outputs.run_any == 'true' || steps.audit-scope-manual.outputs.run_any == 'true' }}
         uses: ./.github/actions/ci-section-checkpoint
         with:
