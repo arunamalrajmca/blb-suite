@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNonRuntimePath, requiresPackageValidation } from './ci-change-policy.mjs';
+import { isNonRuntimePath, requiresPackageValidation, requiresPackageRegression } from './ci-change-policy.mjs';
 
 test('repository audit tooling and workflow-only edits skip the expensive package regression suite', () => {
   for (const path of [
@@ -42,4 +42,14 @@ test('selector and CI routing policy changes retain their targeted package valid
     'scripts/ci-change-policy.mjs',
     'scripts/test-ci-routing-selector.js'
   ]) assert.equal(requiresPackageValidation(path), true, path);
+});
+
+
+test('the package regression runner is limited to its actual source and dependency inputs', () => {
+  for (const path of ['extension/background.js', 'extension/manifest.json', 'regression-suite/tests/package-tests.mjs', 'package.json', 'package-lock.json']) {
+    assert.equal(requiresPackageRegression(path), true, path);
+  }
+  for (const path of ['scripts/ast-symbol-reference-audit.js', 'scripts/ci-change-policy.mjs', 'scripts/ci-section-checkpoint.test.mjs', '.github/workflows/browser-tests.yml', '.github/actions/ci-section-checkpoint/action.yml', 'tests/selector/browser-selector-decisions.test.mjs']) {
+    assert.equal(requiresPackageRegression(path), false, path);
+  }
 });
