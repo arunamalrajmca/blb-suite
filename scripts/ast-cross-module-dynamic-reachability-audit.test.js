@@ -74,6 +74,24 @@ test('resolves child process fork and node argv targets into reachability',()=>{
  assert.ok(r.reachable.includes('scripts/worker.js'));assert.ok(r.reachable.includes('scripts/child.js'));assert.equal(r.resolvedLaunchEdges.length,2);}
  finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+test('does not classify shadowed dynamic loaders or worker constructors as globals',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'shadowed-dynamic-loaders-'));
+ try{
+  fs.writeFileSync(path.join(root,'consumer.js'),[
+   'function local(require, module, Worker, load) {',
+   "  require('./worker.js');",
+   "  module.require('./worker.js');",
+   "  load('./worker.js');",
+   "  new Worker('./worker.js');",
+   '}'
+  ].join('\\n'));
+  fs.writeFileSync(path.join(root,'worker.js'),'module.exports = true;');
+  const files=['consumer.js','worker.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.launches.length,0,'lexically shadowed loader names must not be treated as global dynamic execution');
+  assert.equal(r.resolvedLaunchEdges.length,0);
+ } finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('unknown dynamic loader reachable from an entrypoint suppresses orphan claims',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dynamic-unknown-'));
  try{fs.mkdirSync(path.join(root,'scripts/plugins'),{recursive:true});fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({scripts:{run:'node scripts/main.js'}}));
