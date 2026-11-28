@@ -2302,6 +2302,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'CallExpression') {
         const callee = node.callee;
         const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') { const key = bindings.get(n); parts.unshift(key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : n.name); } return parts.filter(Boolean).join('.'); };
+        const fullPath = memberPath(callee);
         const documentWrite = ['document.write', 'document.writeln', 'window.document.write',
           'window.document.writeln', 'globalThis.document.write', 'globalThis.document.writeln'].includes(fullPath);
         if (documentWrite) {
@@ -2336,7 +2337,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callee.type === 'Identifier' ? scriptingLoaderMethodBindings.get(bindings.get(callee)) : null;
         const object = callee.type === 'MemberExpression' ? memberPath(callee.object) :
           callee.type === 'Identifier' && scriptingLoaderMethodBindings.has(bindings.get(callee)) ? 'chrome.scripting' : null;
-        const fullPath = memberPath(callee);
         const serviceWorkerRegister = method === 'register' &&
           ['navigator.serviceWorker.register', 'window.navigator.serviceWorker.register',
             'globalThis.navigator.serviceWorker.register', 'self.navigator.serviceWorker.register'].includes(fullPath);
