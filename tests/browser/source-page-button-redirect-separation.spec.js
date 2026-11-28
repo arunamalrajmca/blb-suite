@@ -1218,16 +1218,23 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     await expect.poll(() => extensionWorker.evaluate(target =>
       globalThis.__blbObservedTabUrls.includes(target), destinationUrl
     )).toBe(true);
-    await expect.poll(() => extensionWorker.evaluate(async expectedTabId => {
+    await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
       const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
       return {count:tabs.length, activeId:active?.id ?? null, matchId:tabs[0]?.id ?? null};
-    }, firstDestinationTab)).toEqual({
+    })).toEqual({
       count:1,
       activeId:firstDestinationTab,
       matchId:firstDestinationTab
     });
 
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbObservedTabListener) {
+        chrome.tabs.onUpdated.removeListener(globalThis.__blbObservedTabListener);
+      }
+      delete globalThis.__blbObservedTabListener;
+      delete globalThis.__blbObservedTabUrls;
+    });
     await expect(page).toHaveURL(article);
   }
 });
