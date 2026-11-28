@@ -465,7 +465,7 @@ test('traces immediate invocation of callbacks retrieved from a Map', () => {
     'const registry = new Map();',
     "registry.set('ready', callback);",
     "registry.get('ready')();"
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-invocation' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@4'));
 });
