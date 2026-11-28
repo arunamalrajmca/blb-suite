@@ -1467,6 +1467,68 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (methods.size) customElementClasses.set(classKey, methods);
     });
+    // Resolve callbacks stored in static local object/array registries when
+    // later passed directly as a callback (for example handlers.ready or
+    // handlers[0]). Any reassignment or visible mutation invalidates the
+    // registry rather than assuming the original function is still present.
+    const storedCallbackOwners = new Map();
+    const invalidStoredCallbackBindings = new Set();
+    const storedCallbackOwner = (value) => {
+      if (value?.type === 'Identifier') return resolveFunctionOwner(file, value);
+      if (value?.type === 'ArrowFunctionExpression' || value?.type === 'FunctionExpression') {
+        return { file, key: 'function@' + value.loc.start.line, node: value };
+      }
+      return null;
+    };
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          (node.init?.type === 'ObjectExpression' || node.init?.type === 'ArrayExpression')) {
+        const binding = bindings.get(node.id);
+        if (!binding) return;
+        const entries = node.init.type === 'ArrayExpression'
+          ? node.init.elements.map((value, index) => [String(index), value])
+          : node.init.properties.filter(property => property.type === 'Property' && !property.method)
+            .map(property => {
+              const key = property.computed ? staticValue(property.key, constants, 0, bindings)
+                : property.key?.name ?? property.key?.value;
+              return [key === undefined || key === null ? null : String(key), property.value];
+            });
+        for (const [key, value] of entries) {
+          if (key === null || !value || value.type === 'SpreadElement') continue;
+          const owner = storedCallbackOwner(value);
+          if (owner) storedCallbackOwners.set(binding + '::' + key, owner);
+        }
+      }
+      if (node.type === 'AssignmentExpression') {
+        if (node.left.type === 'Identifier') {
+          const binding = bindings.get(node.left);
+          if (binding) invalidStoredCallbackBindings.add(binding);
+        } else if (node.left.type === 'MemberExpression' && node.left.object.type === 'Identifier') {
+          const binding = bindings.get(node.left.object);
+          if (binding) invalidStoredCallbackBindings.add(binding);
+        }
+      }
+      if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') {
+        const binding = bindings.get(node.argument);
+        if (binding) invalidStoredCallbackBindings.add(binding);
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier') {
+        const method = node.callee.computed
+          ? staticValue(node.callee.property, constants, 0, bindings)
+          : node.callee.property.name;
+        if (['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin', 'set', 'delete', 'clear'].includes(method)) {
+          const binding = bindings.get(node.callee.object);
+          if (binding) invalidStoredCallbackBindings.add(binding);
+        }
+      }
+    });
+    for (const binding of invalidStoredCallbackBindings) {
+      for (const key of storedCallbackOwners.keys()) {
+        if (key.startsWith(binding + '::')) storedCallbackOwners.delete(key);
+      }
+    }
+
     const callbackRecord = (callback, api, line, expression) => {
       let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
       if (callback?.type === 'Identifier') {
@@ -1512,6 +1574,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callbackName = '[handleEvent listener]';
           callbackTarget = rel(root, owner.file) + '::' + owner.key;
           certainty = 'resolved-object-event-handler-binding';
+        }
+      } else if (callback?.type === 'MemberExpression' && callback.object.type === 'Identifier') {
+        const binding = bindings.get(callback.object);
+        const property = callback.computed
+          ? staticValue(callback.property, constants, 0, bindings)
+          : callback.property.name;
+        const owner = binding && property !== undefined && property !== null
+          ? storedCallbackOwners.get(binding + '::' + String(property)) : null;
+        if (owner) {
+          callbackName = '[stored callback]';
+          callbackTarget = rel(root, owner.file) + '::' + owner.key;
+          certainty = 'resolved-stored-callback-binding';
         }
       } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
         callbackName = '[inline callback]';
