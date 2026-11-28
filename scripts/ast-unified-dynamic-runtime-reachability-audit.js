@@ -1996,6 +1996,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const callee = node.callee;
         const pathName = memberPath(callee);
         const method = pathName.split('.').pop();
+        // A top-level function declaration can shadow an otherwise native
+        // scheduler even when the binding index has no identifier entry.
+        const locallyDeclaredScheduler = callee.type === 'Identifier' &&
+          [...functionDefs.values()].some(definition =>
+            definition.file === file && definition.node.id?.name === callee.name);
         const callbackApis = new Set([
           'addListener', 'addEventListener', 'on', 'once', 'subscribe',
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
@@ -2057,7 +2062,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
         else if ((callbackApis.has(method) && !['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method)) ||
           (['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method) &&
-            ((callee.type === 'Identifier' && !calleeBinding && pathName === method) ||
+            ((callee.type === 'Identifier' && !calleeBinding && !locallyDeclaredScheduler && pathName === method) ||
               (callee.type === 'MemberExpression' &&
                 ['globalThis.', 'window.', 'self.'].some(prefix => pathName === prefix + method) &&
                 callee.object.type === 'Identifier' && !bindings.get(callee.object))))) {
@@ -2207,7 +2212,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
           ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'].includes(node.callee.name) &&
-          !bindings.get(node.callee)) {
+          !bindings.get(node.callee) &&
+          ![...functionDefs.values()].some(definition =>
+            definition.file === file && definition.node.id?.name === node.callee.name)) {
         for (const arg of node.arguments) if (arg.type === 'Identifier') {
           const key = bindings.get(arg); if (key) callbackBindings.add(key);
         }
