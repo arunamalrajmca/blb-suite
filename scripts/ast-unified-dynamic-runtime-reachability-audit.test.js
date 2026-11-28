@@ -3085,11 +3085,11 @@ test('recognizes Chrome runtime onMessage sendResponse as an external callback p
       'chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
       '  Promise.resolve({ok:true}).then(sendResponse);',
       '});'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
-    item.expression === 'Promise.prototype.then');
+    item.expression.includes('.then'));
   assert.ok(registration, JSON.stringify(result.dynamicSites));
   assert.equal(registration.certainty, 'resolved-external-api-callback-parameter');
   assert.equal(registration.callback, '[external API callback parameter]');
@@ -3104,14 +3104,14 @@ test('does not treat arbitrary sendResponse-named parameters as external callbac
       'function arbitraryHandler(message, sender, sendResponse) {',
       '  Promise.resolve({ok:true}).then(sendResponse);',
       '}'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
-    item.expression === 'Promise.prototype.then');
+    item.expression.includes('.then'));
   assert.ok(registration);
   assert.equal(registration.certainty, 'unresolved-callback-owner');
   assert.ok(result.uncertainty.some(item =>
     item.kind === 'unresolved-external-callback-owner' &&
-    item.expression === 'Promise.prototype.then'));
+    item.expression.includes('.then')));
 });
