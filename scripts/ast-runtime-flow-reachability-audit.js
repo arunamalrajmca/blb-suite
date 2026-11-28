@@ -2368,7 +2368,7 @@ function analyzeFile(root, file) {
         ...write, container:target, key:null, node:copy.node
       });
       for (const write of propertyWritesByObjectForContainers.get(source) || []) {
-        if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
+        if (write.property !== null && !/^\d+$/.test(write.property)) continue;
         copied.push({
           container:target,key:null,stored:write.stored,node:copy.node,
           objectValue:!String(write.stored).startsWith('function@')
