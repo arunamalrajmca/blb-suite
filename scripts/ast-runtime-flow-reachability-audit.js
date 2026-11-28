@@ -936,7 +936,7 @@ function analyzeFile(root, file) {
   }
 
   const callbackSchedulers = new Set([
-    'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask',
+    'setTimeout', 'setInterval', 'queueMicrotask',
     'then', 'catch', 'finally', 'addEventListener', 'removeListener',
     'addListener', 'on', 'once', 'subscribe', 'observe', 'watch',
     'requestAnimationFrame', 'requestIdleCallback', 'addEventListener', 'addListener', 'subscribe', 'observe', 'watch'
@@ -960,6 +960,9 @@ function analyzeFile(root, file) {
     }
     return false;
   };
+  const isNativeSetImmediateCall = node =>
+    node?.type === 'CallExpression' && node.callee?.type === 'Identifier' &&
+    node.callee.name === 'setImmediate' && !variableForNode.has(node.callee);
   const isNativeProcessNextTickCall = node => {
     if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' ||
         propertyName(node.callee) !== 'nextTick') return false;
@@ -1112,7 +1115,7 @@ function analyzeFile(root, file) {
       for (let index = 0; index < node.arguments.length; index++) {
         const argument = node.arguments[index];
         if (isFunction(argument)) {
-          const scheduler = callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeProcessNextTickCall(node) || name === 'addListener' ||
+          const scheduler = callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeSetImmediateCall(node) || isNativeProcessNextTickCall(node) || name === 'addListener' ||
             (name === 'addEventListener' && index === 1);
           if (scheduler) {
             add('callbacks', 'callback-registration', argument,
