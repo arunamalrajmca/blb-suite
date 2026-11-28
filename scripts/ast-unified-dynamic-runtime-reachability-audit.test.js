@@ -2958,3 +2958,39 @@ test('produces deterministic reachability results when module discovery order ch
   });
   assert.deepEqual(stableView(first), stableView(second));
 });
+
+test('recognizes native Node setImmediate and process.nextTick callback roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'setImmediate(onReady);',
+      'process.nextTick(() => onReady());',
+      'globalThis.process.nextTick(onReady);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    ['setImmediate', 'process.nextTick', 'globalThis.process.nextTick'].includes(item.expression));
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.every(item => item.certainty === 'resolved-inline-callback' ||
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat shadowed setImmediate or process.nextTick methods as native roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function setImmediate(callback) { return callback; }',
+      'const process = { nextTick(callback) { return callback; } };',
+      'setImmediate(() => work());',
+      'process.nextTick(() => work());',
+      'function local(process) { process.nextTick(() => work()); }'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    ['setImmediate', 'process.nextTick'].includes(item.expression)).length, 0);
+});
