@@ -942,7 +942,7 @@ function analyzeFile(root, file) {
     'requestAnimationFrame', 'requestIdleCallback', 'addEventListener', 'addListener', 'subscribe', 'observe', 'watch'
   ]);
   const asyncSchedulers = new Set([
-    'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask',
+    'setTimeout', 'setInterval', 'queueMicrotask',
     'then', 'catch', 'finally', 'requestAnimationFrame',
     'requestIdleCallback', 'postMessage', 'sendMessage'
   ]);
