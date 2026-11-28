@@ -1129,7 +1129,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
       else if (sourceOwners?.size) {
         for (const [key, value] of sourceOwners) add(call.targetSlot, key, value);
       } else {
-        add(call.targetSlot, '[unresolved-callsite]', { unresolved: true });
+        const argumentKey = call.argument.type === 'Identifier'
+          ? bindingByFile.get(call.file)?.get(call.argument) : null;
+        const callbackOwners = argumentKey
+          ? callbackParameterOwners.get(call.file + '::' + argumentKey) : null;
+        const knownFunctionArgument =
+          ['ArrowFunctionExpression', 'FunctionExpression'].includes(call.argument.type) ||
+          (call.argument.type === 'Identifier' && Boolean(resolveFunctionOwner(call.file, call.argument))) ||
+          (callbackOwners?.size && [...callbackOwners.values()].every(owner => owner && !owner.unresolved));
+        // Function callbacks are not listener objects. Do not create a false
+        // unresolved handleEvent owner just because this separate listener
+        // object pass cannot resolve a normal function argument.
+        if (!knownFunctionArgument) add(call.targetSlot, '[unresolved-callsite]', { unresolved: true });
       }
     }
     const changed = JSON.stringify([...nextOwners].map(([slot, owners]) => [slot, [...owners.keys()].sort()]).sort()) !==
