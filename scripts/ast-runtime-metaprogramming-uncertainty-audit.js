@@ -72,7 +72,7 @@ function needsScopeAnalysis(ast) {
     }
     if ((node.type === 'NewExpression' || node.type === 'CallExpression') &&
         node.callee.type === 'Identifier' &&
-        ['Proxy', 'eval', 'Function'].includes(node.callee.name)) {
+        ['Proxy', 'eval', 'Function', 'MutationObserver'].includes(node.callee.name)) {
       needed = true;
       return;
     }
@@ -134,17 +134,24 @@ function analyze(root = path.resolve(__dirname, '..')) {
       catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
     }
     // CDP sessions expose a documented EventEmitter-style .on(event, listener) contract.
-    // Recognize variables initialized by Playwright's newBrowserCDPSession() factory;
-    // leave unrelated .on() receivers conservative.
+    // MutationObserver.observe(target, options) is not a callback-registration API; its
+    // callback belongs to the constructor. Track only direct, unshadowed global instances.
+    // Leave unrelated .on() and .observe() receivers conservative.
     const cdpSessionNames = new Set();
+    const mutationObserverNames = new Set();
     visit(ast, node => {
-      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
-          node.init?.type === 'AwaitExpression' &&
+      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier') return;
+      if (node.init?.type === 'AwaitExpression' &&
           node.init.argument?.type === 'CallExpression' &&
           node.init.argument.callee?.type === 'MemberExpression' &&
           !node.init.argument.callee.computed &&
           node.init.argument.callee.property.name === 'newBrowserCDPSession') {
         cdpSessionNames.add(node.id.name);
+      }
+      if (node.init?.type === 'NewExpression' && node.init.callee?.type === 'Identifier' &&
+          node.init.callee.name === 'MutationObserver' &&
+          unresolved.has(node.init.callee.start + ':' + node.init.callee.end)) {
+        mutationObserverNames.add(node.id.name);
       }
     });
     visit(ast, (node, parent) => {
@@ -186,7 +193,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // evidence, their callback semantics may still be supplied by an external runtime.
         const knownCDPSessionEventListener = method === 'on' &&
           node.callee.object?.type === 'Identifier' && cdpSessionNames.has(node.callee.object.name);
-        if (method && !knownCDPSessionEventListener &&
+        const knownMutationObserverObserve = method === 'observe' &&
+          node.callee.object?.type === 'Identifier' && mutationObserverNames.has(node.callee.object.name);
+        if (method && !knownCDPSessionEventListener && !knownMutationObserverObserve &&
             /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) || arg.type === 'Identifier' || arg.type === 'MemberExpression') {
