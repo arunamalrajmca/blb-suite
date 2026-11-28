@@ -519,7 +519,7 @@ test('traces callbacks returned from object registries through later invocation'
     'function getHandler() { return registry.onReady; }',
     'const handler = getHandler();',
     'handler();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-callback-invocation' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
 });
@@ -530,7 +530,7 @@ test('traces callbacks retrieved from array literal slots through later invocati
     'const callbacks = [callback];',
     'const handler = callbacks[0];',
     'handler();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-callback-invocation' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@4'));
 });
