@@ -1718,7 +1718,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // ESLint scope can leave a callback identifier unresolved in unusual
         // script/global scopes. Keep the fallback local to this source file
         // and exact function name; never resolve by repository-wide spelling.
-        if (!definition) {
+        if (!definition && !callbackKey) {
           const sameFileMatches = [...functionDefs].filter(([key, candidate]) =>
             candidate.file === file &&
             (candidate.node.id?.name === callback.name || key.startsWith(file + '::' + callback.name + '@')));
