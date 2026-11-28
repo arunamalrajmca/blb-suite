@@ -3220,3 +3220,24 @@ test('does not resolve a callback cleared to null before its registration', () =
   assert.ok(result.uncertainty.some(item =>
     item.kind === 'unresolved-external-callback-owner'));
 });
+
+
+test('does not retain the Chrome sendResponse contract after its parameter is reassigned', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
+      '  sendResponse = fallbackResponder;',
+      '  Promise.resolve({ok:true}).then(sendResponse);',
+      '});'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression.includes('.then'));
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.expression.includes('.then')));
+});
