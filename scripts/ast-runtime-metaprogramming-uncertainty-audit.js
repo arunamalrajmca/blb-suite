@@ -57,10 +57,34 @@ function unresolvedReferences(ast) {
   }
   return unresolved;
 }
-function visitFunctionBody(node, fn) {
+function bindingPatternHasName(pattern, name) {
+  if (!pattern) return false;
+  if (pattern.type === 'Identifier') return pattern.name === name;
+  if (pattern.type === 'RestElement') return bindingPatternHasName(pattern.argument, name);
+  if (pattern.type === 'AssignmentPattern') return bindingPatternHasName(pattern.left, name);
+  if (pattern.type === 'ArrayPattern') return pattern.elements.some(item => bindingPatternHasName(item, name));
+  if (pattern.type === 'ObjectPattern') return pattern.properties.some(property =>
+    property.type === 'RestElement'
+      ? bindingPatternHasName(property.argument, name)
+      : bindingPatternHasName(property.value, name)
+  );
+  return false;
+}
+function functionDeclaresName(fn, name) {
+  if (fn.params.some(parameter => bindingPatternHasName(parameter, name))) return true;
+  let declared = false;
+  visit(fn.body, node => {
+    if (node.type === 'VariableDeclarator' && bindingPatternHasName(node.id, name)) declared = true;
+    if (['FunctionDeclaration', 'ClassDeclaration'].includes(node.type) && node.id?.name === name) declared = true;
+    if (node.type === 'CatchClause' && bindingPatternHasName(node.param, name)) declared = true;
+  });
+  return declared;
+}
+function visitFunctionBody(node, fn, capturedName = null) {
   function descend(current, root = false) {
     if (!current || typeof current !== 'object' || typeof current.type !== 'string') return;
-    if (!root && ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(current.type)) return;
+    if (!root && ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(current.type) &&
+        (!capturedName || functionDeclaresName(current, capturedName))) return;
     fn(current);
     for (const [key, value] of Object.entries(current)) {
       if (['loc', 'start', 'end', 'range'].includes(key)) continue;
@@ -318,11 +342,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
       }
     });
-    // Resolve callback parameters of local helpers when the helper itself
-    // invokes the parameter or forwards it to a Promise callback contract.
-    // Keep helpers that merely pass callbacks to unknown callees conservative.
+    // Resolve callback parameters of local helpers when they invoke a
+    // captured parameter, forward it to a Promise callback contract, or pass
+    // it through another locally-resolved helper. Shadowed closures and
+    // ambiguous same-name helpers remain conservative.
     const localFunctionDefinitions = new Map();
-    const ambiguousLocalFunctionNames = new Set();
     visit(ast, node => {
       let name = null;
       let fn = null;
@@ -335,35 +359,69 @@ function analyze(root = path.resolve(__dirname, '..')) {
         fn = node.init;
       }
       if (!name || !fn) return;
-      if (localFunctionDefinitions.has(name)) ambiguousLocalFunctionNames.add(name);
-      else localFunctionDefinitions.set(name, fn);
+      if (!localFunctionDefinitions.has(name)) localFunctionDefinitions.set(name, []);
+      localFunctionDefinitions.get(name).push({fn, parameterCount:fn.params.length, positions:new Set()});
     });
-    const localCallbackParameterPositions = new Map();
-    for (const [name, fn] of localFunctionDefinitions) {
-      if (ambiguousLocalFunctionNames.has(name)) continue;
-      const positions = new Set();
-      fn.params.forEach((parameter, index) => {
-        if (parameter.type !== 'Identifier') return;
-        let invokedOrForwarded = false;
-        let reassigned = false;
-        visitFunctionBody(fn.body, child => {
-          if (child.type === 'AssignmentExpression' && child.left?.type === 'Identifier' &&
-              child.left.name === parameter.name) reassigned = true;
-          if (child.type !== 'CallExpression') return;
-          if (child.callee?.type === 'Identifier' && child.callee.name === parameter.name) {
-            invokedOrForwarded = true;
-            return;
-          }
-          if (child.callee?.type === 'MemberExpression' && !child.callee.computed &&
-              ['then', 'catch', 'finally'].includes(child.callee.property.name) &&
-              child.arguments.some(argument => argument.type === 'Identifier' && argument.name === parameter.name)) {
-            invokedOrForwarded = true;
-          }
+    for (const definitions of localFunctionDefinitions.values()) {
+      for (const definition of definitions) {
+        definition.fn.params.forEach((parameter, index) => {
+          if (parameter.type !== 'Identifier') return;
+          let invokedOrForwarded = false;
+          let reassigned = false;
+          visitFunctionBody(definition.fn.body, child => {
+            if (child.type === 'AssignmentExpression' && child.left?.type === 'Identifier' &&
+                child.left.name === parameter.name) reassigned = true;
+            if (child.type !== 'CallExpression') return;
+            if (child.callee?.type === 'Identifier' && child.callee.name === parameter.name) {
+              invokedOrForwarded = true;
+              return;
+            }
+            if (child.callee?.type === 'MemberExpression' && !child.callee.computed &&
+                ['then', 'catch', 'finally'].includes(child.callee.property.name) &&
+                child.arguments.some(argument => argument.type === 'Identifier' && argument.name === parameter.name)) {
+              invokedOrForwarded = true;
+            }
+          }, parameter.name);
+          if (invokedOrForwarded && !reassigned) definition.positions.add(index);
         });
-        if (invokedOrForwarded && !reassigned) positions.add(index);
-      });
-      if (positions.size) localCallbackParameterPositions.set(name, positions);
+      }
     }
+    // Fixed-point propagation recognizes thin local wrappers such as
+    // safeRuntimeSendMessage -> sendRuntimeMessageWithRetry without assuming
+    // that callbacks passed to arbitrary external callees are invoked.
+    let callbackContractChanged = true;
+    while (callbackContractChanged) {
+      callbackContractChanged = false;
+      for (const definitions of localFunctionDefinitions.values()) {
+        for (const definition of definitions) {
+          definition.fn.params.forEach((parameter, index) => {
+            if (parameter.type !== 'Identifier' || definition.positions.has(index)) return;
+            let forwardedToKnownLocalContract = false;
+            visitFunctionBody(definition.fn.body, child => {
+              if (child.type !== 'CallExpression' || child.callee?.type !== 'Identifier') return;
+              const targetDefinitions = localFunctionDefinitions.get(child.callee.name) || [];
+              const argumentIndex = child.arguments.findIndex(argument =>
+                argument.type === 'Identifier' && argument.name === parameter.name
+              );
+              if (argumentIndex < 0 || !targetDefinitions.length) return;
+              if (targetDefinitions.every(target =>
+                target.parameterCount > argumentIndex && target.positions.has(argumentIndex)
+              )) forwardedToKnownLocalContract = true;
+            }, parameter.name);
+            if (forwardedToKnownLocalContract) {
+              definition.positions.add(index);
+              callbackContractChanged = true;
+            }
+          });
+        }
+      }
+    }
+    const hasKnownLocalCallbackContract = (name, index) => {
+      const definitions = localFunctionDefinitions.get(name) || [];
+      return definitions.length > 0 && definitions.every(definition =>
+        definition.parameterCount > index && definition.positions.has(index)
+      );
+    };
 
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
@@ -430,10 +488,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
           unresolved.has(node.callee.start + ':' + node.callee.end);
         if (node.callee.type === 'Identifier' && !['require', 'import', 'test'].includes(node.callee.name) &&
             !knownPlaywrightTestDeclaration && !knownGlobalCallbackAPI) {
-          const knownLocalCallbackPositions = localCallbackParameterPositions.get(node.callee.name) || new Set();
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) &&
-                !knownLocalCallbackPositions.has(index)) {
+                !hasKnownLocalCallbackContract(node.callee.name, index)) {
               add(file, arg, 'higher-order-callback-boundary', 'callback passed to ' + node.callee.name + ' argument[' + index + ']; callee contract is project-defined or external');
             }
           }
