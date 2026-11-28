@@ -3440,7 +3440,7 @@ test('resolves a uniquely assigned globalThis callback property before listener 
     item.expression === 'chrome.runtime.onMessage.addListener');
   assert.ok(registration);
   assert.equal(registration.certainty, 'resolved-stored-global-callback-binding');
-  assert.match(registration.callbackTarget, /scripts\\/main\\.js::function@1/);
+  assert.match(registration.callbackTarget, /scripts\/main\.js::function@1/);
   assert.equal(result.uncertainty.filter(item =>
     item.kind === 'unresolved-external-callback-owner').length, 0);
 });
