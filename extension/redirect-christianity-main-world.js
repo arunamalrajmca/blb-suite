@@ -7,13 +7,6 @@
   window.__blbSourcePassageClickGuardInstalled = true;
 
   window.addEventListener("click", event => {
-    const diagnose = state => {
-      if (window.__blbSourcePassageClickGuardDiagnostics === true) {
-        window.__blbSourcePassageClickGuardLast = state;
-      }
-    };
-    diagnose({stage:'click',button:event.button,metaKey:event.metaKey,ctrlKey:event.ctrlKey,
-      shiftKey:event.shiftKey,altKey:event.altKey,targetType:event.target?.constructor?.name || null});
     if (event.button !== 0 || event.metaKey || event.ctrlKey ||
         event.shiftKey || event.altKey) return;
 
@@ -21,16 +14,10 @@
       ? event.target
       : event.target && event.target.parentElement;
     const anchor = node && node.closest ? node.closest("a[href]") : null;
-    diagnose({stage:'anchor-resolution',nodeName:node?.nodeName || null,
-      anchorFound:Boolean(anchor),hrefAttribute:anchor?.getAttribute('href') || null,
-      hasDownload:anchor?.hasAttribute('download') || false});
     if (!anchor || anchor.hasAttribute("download")) return;
 
     let url;
-    try { url = new URL(anchor.href, location.href); } catch (error) {
-      diagnose({stage:'url-error',message:String(error)});
-      return;
-    }
+    try { url = new URL(anchor.href, location.href); } catch (_) { return; }
     const host = location.hostname.toLowerCase().replace(/^www\./, "");
     const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
     const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
@@ -57,8 +44,6 @@
       ["blueletterbible.org", "blueletterbible.com"].includes(targetHost) &&
       (/^\/search\/preSearch\.cfm$/i.test(url.pathname) ||
        /^\/kjv\/[^/]+\/\d+(?:\/\d+(?:-\d+)?)?\/?$/i.test(url.pathname));
-    diagnose({stage:'candidate',isChristianityPassage,isChurchOfJesusChristVerse,
-      isMercyHouseVerse,isSarataVerse,isReferenceLabel,isBlbReferenceDestination});
     if (!isChristianityPassage && !isChurchOfJesusChristVerse &&
         !isMercyHouseVerse && !isSarataVerse && !isReferenceLabel && !isBlbReferenceDestination) return;
 
@@ -67,7 +52,6 @@
       cancelable: true
     });
     const handled = !window.dispatchEvent(request);
-    diagnose({stage:'dispatched',handled,defaultPrevented:request.defaultPrevented,href:url.href,label});
     if (!handled) return;
 
     event.preventDefault();
