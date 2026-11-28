@@ -2225,10 +2225,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
           addSite(file, node, 'dom-script-src-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection', [], staticPrefix(node.right, constants, bindings));
           const generatedBlobUrl = node.right.type === 'CallExpression' &&
             node.right.callee.type === 'MemberExpression' &&
+            node.right.callee.object.type === 'Identifier' &&
+            node.right.callee.object.name === 'URL' && !bindings.get(node.right.callee.object) &&
             node.right.callee.property.name === 'createObjectURL' &&
             node.right.arguments[0]?.type === 'NewExpression' &&
             node.right.arguments[0].callee.type === 'Identifier' &&
-            node.right.arguments[0].callee.name === 'Blob';
+            node.right.arguments[0].callee.name === 'Blob' &&
+            !bindings.get(node.right.arguments[0].callee);
           if (generatedBlobUrl) addSite(file, node, 'generated-script-source', null, null,
             'unresolved-generated-source', [], null);
         }
@@ -2283,10 +2286,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
             target ? 'resolved-local' : 'unresolved-worker-target', [], staticPrefix(sourceNode, constants, bindings));
           const generatedBlobUrl = sourceNode?.type === 'CallExpression' &&
             sourceNode.callee.type === 'MemberExpression' &&
+            sourceNode.callee.object.type === 'Identifier' &&
+            sourceNode.callee.object.name === 'URL' && !bindings.get(sourceNode.callee.object) &&
             sourceNode.callee.property.name === 'createObjectURL' &&
             sourceNode.arguments[0]?.type === 'NewExpression' &&
             sourceNode.arguments[0].callee.type === 'Identifier' &&
-            sourceNode.arguments[0].callee.name === 'Blob';
+            sourceNode.arguments[0].callee.name === 'Blob' &&
+            !bindings.get(sourceNode.arguments[0].callee);
           if (generatedBlobUrl) addSite(file, node, 'generated-worker-source', null, null,
             'unresolved-generated-source', [], null);
         }
@@ -2344,7 +2350,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callee.type === 'Identifier' ? scriptingLoaderMethodBindings.get(bindings.get(callee)) : null;
         const object = callee.type === 'MemberExpression' ? memberPath(callee.object) :
           callee.type === 'Identifier' && scriptingLoaderMethodBindings.has(bindings.get(callee)) ? 'chrome.scripting' : null;
-        const serviceWorkerRegister = method === 'register' &&
+        let serviceWorkerRoot = callee;
+        while (serviceWorkerRoot?.type === 'MemberExpression') serviceWorkerRoot = serviceWorkerRoot.object;
+        const serviceWorkerGlobalRoot = serviceWorkerRoot?.type === 'Identifier' &&
+          ['navigator', 'window', 'globalThis', 'self'].includes(serviceWorkerRoot.name) &&
+          !bindings.get(serviceWorkerRoot);
+        const serviceWorkerRegister = method === 'register' && serviceWorkerGlobalRoot &&
           ['navigator.serviceWorker.register', 'window.navigator.serviceWorker.register',
             'globalThis.navigator.serviceWorker.register', 'self.navigator.serviceWorker.register'].includes(fullPath);
         const workletModule = method === 'addModule' &&
