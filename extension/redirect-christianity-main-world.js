@@ -21,16 +21,25 @@
       ? event.target
       : event.target && event.target.parentElement;
     const anchor = node && node.closest ? node.closest("a[href]") : null;
+    diagnose({stage:'anchor-resolution',nodeName:node?.nodeName || null,
+      anchorFound:Boolean(anchor),hrefAttribute:anchor?.getAttribute('href') || null,
+      hasDownload:anchor?.hasAttribute('download') || false});
     if (!anchor || anchor.hasAttribute("download")) return;
 
     let url;
-    try { url = new URL(anchor.href, location.href); } catch (_) { return; }
+    try { url = new URL(anchor.href, location.href); } catch (error) {
+      diagnose({stage:'url-error',message:String(error)});
+      return;
+    }
     const host = location.hostname.toLowerCase().replace(/^www\./, "");
-    if (globalThis.BLBSourcePageCollectorSites?.[host]?.mainWorldClickGuard !== true) return;
     const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
     const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
-    diagnose({stage:'anchor',host,targetHost,href:url.href,path:url.pathname,label,
-      registryGuard:globalThis.BLBSourcePageCollectorSites?.[host]?.mainWorldClickGuard === true});
+    const registry = globalThis.BLBSourcePageCollectorSites;
+    const registryEntry = registry?.[host] || null;
+    diagnose({stage:'registry-check',host,targetHost,href:url.href,path:url.pathname,label,
+      registryPresent:Boolean(registry),registryEntry,
+      registryGuard:registryEntry?.mainWorldClickGuard === true});
+    if (registryEntry?.mainWorldClickGuard !== true) return;
     const isChristianityPassage = host === "christianity.com" &&
       targetHost === "christianity.com" &&
       /^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname);
