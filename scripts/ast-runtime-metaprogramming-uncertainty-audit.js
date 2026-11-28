@@ -365,23 +365,25 @@ function analyze(root = path.resolve(__dirname, '..')) {
     for (const definitions of localFunctionDefinitions.values()) {
       for (const definition of definitions) {
         definition.fn.params.forEach((parameter, index) => {
-          if (parameter.type !== 'Identifier') return;
+          const parameterIdentifier = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
+          if (parameterIdentifier?.type !== 'Identifier') return;
+          const parameterName = parameterIdentifier.name;
           let invokedOrForwarded = false;
           let reassigned = false;
           visitFunctionBody(definition.fn.body, child => {
             if (child.type === 'AssignmentExpression' && child.left?.type === 'Identifier' &&
-                child.left.name === parameter.name) reassigned = true;
+                child.left.name === parameterName) reassigned = true;
             if (child.type !== 'CallExpression') return;
-            if (child.callee?.type === 'Identifier' && child.callee.name === parameter.name) {
+            if (child.callee?.type === 'Identifier' && child.callee.name === parameterName) {
               invokedOrForwarded = true;
               return;
             }
             if (child.callee?.type === 'MemberExpression' && !child.callee.computed &&
                 ['then', 'catch', 'finally'].includes(child.callee.property.name) &&
-                child.arguments.some(argument => argument.type === 'Identifier' && argument.name === parameter.name)) {
+                child.arguments.some(argument => argument.type === 'Identifier' && argument.name === parameterName)) {
               invokedOrForwarded = true;
             }
-          }, parameter.name);
+          }, parameterName);
           if (invokedOrForwarded && !reassigned) definition.positions.add(index);
         });
       }
@@ -395,19 +397,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
       for (const definitions of localFunctionDefinitions.values()) {
         for (const definition of definitions) {
           definition.fn.params.forEach((parameter, index) => {
-            if (parameter.type !== 'Identifier' || definition.positions.has(index)) return;
+            const parameterIdentifier = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
+            if (parameterIdentifier?.type !== 'Identifier' || definition.positions.has(index)) return;
+            const parameterName = parameterIdentifier.name;
             let forwardedToKnownLocalContract = false;
             visitFunctionBody(definition.fn.body, child => {
               if (child.type !== 'CallExpression' || child.callee?.type !== 'Identifier') return;
               const targetDefinitions = localFunctionDefinitions.get(child.callee.name) || [];
               const argumentIndex = child.arguments.findIndex(argument =>
-                argument.type === 'Identifier' && argument.name === parameter.name
+                argument.type === 'Identifier' && argument.name === parameterName
               );
               if (argumentIndex < 0 || !targetDefinitions.length) return;
               if (targetDefinitions.every(target =>
                 target.parameterCount > argumentIndex && target.positions.has(argumentIndex)
               )) forwardedToKnownLocalContract = true;
-            }, parameter.name);
+            }, parameterName);
             if (forwardedToKnownLocalContract) {
               definition.positions.add(index);
               callbackContractChanged = true;
