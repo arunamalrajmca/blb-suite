@@ -2207,3 +2207,27 @@ test('does not treat shadowed or arbitrary postTask methods as native scheduler 
   assert.equal(result.findings.filter(item =>
     item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
 });
+
+test('traces native process.nextTick callbacks through callback and async edges', () => {
+  const result = audit([
+    'function onReady() { return true; }',
+    'process.nextTick(onReady);',
+    'globalThis.process.nextTick(() => onReady());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 2);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 2);
+});
+
+test('does not treat shadowed process.nextTick methods as native callback roots', () => {
+  const result = audit([
+    'const process = { nextTick(callback) { return callback; } };',
+    'process.nextTick(() => work());',
+    'function local(process) { process.nextTick(() => work()); }'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
