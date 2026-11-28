@@ -61,7 +61,7 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
   const registry = registryGlobal.BLBSourcePageCollectorSites;
   expect(registry).toBeTruthy();
   const registrationStart = background.indexOf('let hostname = \'\';');
-  const registrationEnd = background.indexOf('const mainWorldId', registrationStart);
+  const registrationEnd = background.indexOf('const mainWorldFiles', registrationStart);
   expect(registrationStart).toBeGreaterThanOrEqual(0);
   expect(registrationEnd).toBeGreaterThan(registrationStart);
   const registration = background.slice(registrationStart, registrationEnd);

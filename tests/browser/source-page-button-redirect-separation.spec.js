@@ -929,16 +929,21 @@ test('same-tab redirect re-enable restores source-page buttons on every register
       return scripts.some(script => script.id === id + '-main-world');
     }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
 
-    await expect.poll(() => extensionWorker.evaluate(async pattern => {
-      const [tab] = await chrome.tabs.query({url:pattern});
-      if (tab?.id == null) return false;
-      const [result] = await chrome.scripting.executeScript({
-        target:{tabId:tab.id},
-        world:'MAIN',
-        func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
-      });
-      return result?.result === true;
-    }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
+    // A page-world marker can outlive a same-tab navigation in the reused
+    // browser context. Registration presence is authoritative for hosts that
+    // must not receive the guard; verify the page marker only when required.
+    if (mainWorldClickGuard) {
+      await expect.poll(() => extensionWorker.evaluate(async pattern => {
+        const [tab] = await chrome.tabs.query({url:pattern});
+        if (tab?.id == null) return false;
+        const [result] = await chrome.scripting.executeScript({
+          target:{tabId:tab.id},
+          world:'MAIN',
+          func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
+        });
+        return result?.result === true;
+      }, originPattern), {timeout:10000}).toBe(true);
+    }
 
     const guardState = await extensionWorker.evaluate(async pattern => {
       const id = runtimeContentScriptIdForPattern(pattern);
@@ -961,11 +966,11 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     }, originPattern);
     expect(guardState.isolated?.js).toContain('content.js');
     expect(Boolean(guardState.mainWorld), originPattern).toBe(mainWorldClickGuard);
-    expect(guardState.mainWorldMarker, originPattern).toBe(mainWorldClickGuard);
+    if (mainWorldClickGuard) expect(guardState.mainWorldMarker, originPattern).toBe(true);
     if (mainWorldClickGuard) {
       expect(guardState.mainWorld).toMatchObject({
         matches:[originPattern],
-        js:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
+        js:['redirect-christianity-main-world.js'],
         runAt:'document_start',
         world:'MAIN',
         persistAcrossSessions:true
@@ -1147,7 +1152,7 @@ test('Suite master opt-out removes both registered worlds for guarded source hos
 });
 
 test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB destination tab', async ({
-  page, extensionStorage, extensionWorker
+  page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -1166,17 +1171,12 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       ? 'https://sagacityweb.com/the-digital-harlot-resisting-the-seduction-of-modern-babylon/'
       : 'https://rediscover.bible/acts_intro.html';
 
-    await page.route('https://' + host + '/**', route => route.fulfill({
+    await context.route('https://' + host + '/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
       body:'<!doctype html><html><head><title>Source reference fixture</title></head><body>' +
         '<main><a id="bible-reference" target="_blank" href="' + destinationUrl +
         '">' + referenceLabel + '</a></main></body></html>'
-    }));
-    await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
-      status:200,
-      contentType:'text/html; charset=utf-8',
-      body:'<!doctype html><html><head><title>BLB destination</title></head><body>John 3:16 KJV</body></html>'
     }));
 
     await page.goto(homepage, {waitUntil:'domcontentloaded'});
@@ -1196,31 +1196,60 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     await expect.poll(() => page.evaluate(() =>
       globalThis.__blbSourcePassageClickGuardInstalled === true
     ), {timeout:10000}).toBe(true);
+    // The MAIN-world guard is installed before the isolated-world settings
+    // read completes. Wait for that read so the first click is not mistaken
+    // for a native target=_blank navigation while redirectEnabled is unknown.
+    await expect.poll(() => page.evaluate(() =>
+      document.documentElement?.getAttribute('data-blb-source-redirect-settings-ready') === 'true'
+    ), {timeout:10000}).toBe(true);
 
+    await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
-    await expect.poll(() => extensionWorker.evaluate(async target => {
+    await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.filter(tab => tab.url === target || tab.pendingUrl === target).length;
-    }, destinationUrl)).toBe(1);
-
-    const firstDestinationTab = await extensionWorker.evaluate(async target => {
+      return tabs.length;
+    })).toBe(1);
+    const firstDestinationTab = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.find(tab => tab.url === target || tab.pendingUrl === target)?.id ?? null;
-    }, destinationUrl);
+      return tabs[0]?.id ?? null;
+    });
     expect(firstDestinationTab).not.toBeNull();
+    // Capture the extension's actual destination identity after the first
+    // tab appears; include live URLs if the click bypassed the tab manager.
+    const firstRegistryState = await extensionWorker.evaluate(async ({target, tabId}) => ({
+      targetKey:canonicalBlbTabKey(target),
+      entries:[...blbLogicalTabRegistry.entries()],
+      liveTabs:(await chrome.tabs.query({url:'https://www.blueletterbible.org/*'})).map(tab =>
+        ({id:tab.id,url:tab.url,pendingUrl:tab.pendingUrl}))
+    }), {target:destinationUrl,tabId:firstDestinationTab});
+    const firstRegistryEntry = firstRegistryState.entries.find(([,id]) => id === firstDestinationTab);
+    if (!firstRegistryEntry) {
+      throw new Error('First BLB tab has no logical registry entry: ' + JSON.stringify({
+        host,targetKey:firstRegistryState.targetKey,firstDestinationTab,
+        entries:firstRegistryState.entries,liveTabs:firstRegistryState.liveTabs
+      }));
+    }
+    expect(firstRegistryEntry[0]).toBe(firstRegistryState.targetKey);
 
+    await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
-    await expect.poll(() => extensionWorker.evaluate(async target => {
+    await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      const matches = tabs.filter(tab => tab.url === target || tab.pendingUrl === target);
       const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-      return {count:matches.length, activeId:active?.id ?? null, matchId:matches[0]?.id ?? null};
-    }, destinationUrl)).toEqual({
+      return {count:tabs.length, activeId:active?.id ?? null, matchId:tabs[0]?.id ?? null};
+    })).toEqual({
       count:1,
       activeId:firstDestinationTab,
       matchId:firstDestinationTab
     });
 
+    // The next host uses a different BLB destination URL and should be tested
+    // independently; remove this host's tab so it cannot affect its tab count.
+    await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId), firstDestinationTab);
+    await expect.poll(() => extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      return tabs.length;
+    })).toBe(0);
     await expect(page).toHaveURL(article);
   }
 });

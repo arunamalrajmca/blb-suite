@@ -34,12 +34,19 @@ test('reports prototype and descriptor mutation APIs', () => {
   assert.ok(has(result, 'descriptor-or-prototype-mutation'));
 });
 
-test('reports higher-order factories and callback contract boundaries', () => {
-  const result = run("function factory() { return callback => callback(); } register(factory()); events.on('ready', handler); setTimeout(() => run(), 1);");
+test('reports unknown higher-order callbacks but recognizes standard timer callback APIs', () => {
+  const result = run("function factory() { return callback => callback(); } register(handler); events.on('ready', handler); schedule(() => run()); setTimeout(() => run(), 1);");
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.ok(has(result, 'higher-order-function-factory'));
   assert.ok(has(result, 'callback-contract'));
   assert.ok(has(result, 'higher-order-callback-boundary'));
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary' && /setTimeout/.test(item.detail)).length, 0);
+});
+
+test('keeps shadowed timer-like functions as unknown callback boundaries', () => {
+  const result = run("function schedule(setTimeout, callback) { setTimeout(() => callback(), 1); }");
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary' && /setTimeout/.test(item.detail)).length, 1);
 });
 
 test('surfaces dynamic code generation, dynamic imports, and dynamic scope', () => {
@@ -65,4 +72,219 @@ test('does not report shadowed Function, Proxy, Object, or Reflect as global met
   assert.equal(has(result, 'reflective-operation'), false);
   assert.equal(has(result, 'descriptor-or-prototype-mutation'), false);
   assert.equal(has(result, 'prototype-or-descriptor-api'), false);
+});
+
+test('skips global-shadow scope analysis when no reflective globals are candidates', () => {
+  const result = run("test('example', () => { callback(); });");
+  assert.equal(result.scopeAnalysisFiles, 0);
+});
+
+test('keeps scope analysis for shadowed metaprogramming globals', () => {
+  const result = run("function invokeReflect(Reflect) { Reflect.get({}, 'x'); }");
+  assert.equal(result.scopeAnalysisFiles, 1);
+  assert.equal(has(result, 'reflective-operation'), false);
+});
+
+test('does not classify Playwright test declaration callbacks as unknown higher-order boundaries', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-audit-'));
+  const file = path.join(root, 'tests', 'browser', 'omnibox-dictionary-routing.spec.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, "const { test } = require('./fixtures'); test('routes', async () => {});");
+    const result = analyze(root);
+    assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 0);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('does not label standard Array iteration callbacks as external callback contracts', () => {
+  const result = run("const nodes = [1, 2, 3]; nodes.map(value => value * 2); nodes.filter(value => value > 1); nodes.forEach(value => consume(value));");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('does not treat the standard test runner callback as an unknown higher-order boundary', () => {
+  const result = run("test('case', async () => { assert.equal(1, 1); });");
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('does not classify specified Promise and DOM event callbacks as uncertain contracts', () => {
+  const result = run("promise.then(onFulfilled).catch(onRejected).finally(onSettled); target.addEventListener('click', onClick); target.removeEventListener('click', onClick);");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('recognizes Playwright CDP session event listeners without suppressing generic .on contracts', () => {
+  const result = run("async function observe(browser, events, listener) { const cdp = await browser.newBrowserCDPSession(); cdp.on('Target.targetDestroyed', listener); events.on('ready', listener); }");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 1);
+  assert.ok(findings[0].detail.includes('argument[1]'));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('recognizes MutationObserver.observe as a target/options method, not a callback contract', () => {
+  const result = run("const observer = new MutationObserver(onMutation); observer.observe(document.documentElement, { childList: true, subtree: true }); other.observe(handler);");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 1);
+  assert.ok(findings[0].detail.includes('observe argument[0]'));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('does not suppress observe contracts when MutationObserver is shadowed', () => {
+  const result = run("function setup(MutationObserver, observer) { const local = new MutationObserver(handler); local.observe(target, { childList: true }); }");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 1);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('recognizes MutationObserver instances assigned after declaration', () => {
+  const result = run("let observer = null; observer = new MutationObserver(handler); observer.observe(target, { childList: true });");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('keeps reassigned observer-like bindings conservative', () => {
+  const result = run("let observer; observer = new MutationObserver(handler); observer = replacement; observer.observe(target, { childList: true });");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.ok(findings[0].detail.includes('observe argument[0]'));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('keeps shadowed MutationObserver assignments conservative', () => {
+  const result = run("function setup(MutationObserver) { let local; local = new MutationObserver(handler); local.observe(target, { childList: true }); }");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.ok(findings[0].detail.includes('observe argument[0]'));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('recognizes Playwright Page, BrowserContext, popup, and service-worker event listeners', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-playwright-events-'));
+  const file = path.join(root, 'tests', 'browser', 'playwright-events.spec.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, [
+      "const { test } = require('@playwright/test');",
+      "test('events', async ({ page, context }) => {",
+      "  const observeWorker = worker => { worker.on('close', handler); };",
+      "  page.on('console', handler);",
+      "  context.on('serviceworker', observeWorker);",
+      "  const destination = await page.waitForEvent('popup');",
+      "  destination.once('pageerror', handler);",
+      "  unrelated.on('ready', handler);",
+      "});"
+    ].join('\n'));
+    const result = analyze(root);
+    const findings = result.observations.filter(item => item.kind === 'callback-contract');
+    assert.equal(findings.length, 1, JSON.stringify(findings));
+    assert.ok(findings[0].detail.includes('on argument[1]'));
+    assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('recognizes Playwright pages returned by context.newPage and awaited popup promises', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-playwright-created-pages-'));
+  const file = path.join(root, 'tests', 'browser', 'created-pages.spec.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, [
+      "const { test } = require('@playwright/test');",
+      "test('created pages', async ({ page, context }) => {",
+      "  const createdPage = await context.newPage();",
+      "  const popupPromise = page.waitForEvent('popup');",
+      "  const popup = await popupPromise;",
+      "  createdPage.on('dialog', handler);",
+      "  popup.once('pageerror', handler);",
+      "  unrelated.on('ready', handler);",
+      "});"
+    ].join('\n'));
+    const result = analyze(root);
+    const findings = result.observations.filter(item => item.kind === 'callback-contract');
+    assert.equal(findings.length, 1, JSON.stringify(findings));
+    assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('recognizes Node HTTP, child-process, stream, and process event contracts', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-node-events-'));
+  const file = path.join(root, 'scripts', 'node-events.mjs');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, [
+      "import { spawn as importedSpawn } from 'node:child_process';",
+      "const http = require('node:http');",
+      "const { spawn } = require('node:child_process');",
+      "const server = http.createServer((request, response) => { response.once('finish', handler); });",
+      "server.once('error', handler);",
+      "const child = spawn('node', []);",
+      "child.stdout.on('data', handler);",
+      "child.stderr.on('data', handler);",
+      "child.once('close', handler);",
+      "const importedChild = importedSpawn('node', []);",
+      "importedChild.once('close', handler);",
+      "process.on('exit', handler);",
+      "unknown.on('ready', handler);",
+      "function shadowed(process) { process.on('ready', handler); }"
+    ].join('\n'));
+    const result = analyze(root);
+    const findings = result.observations.filter(item => item.kind === 'callback-contract');
+    assert.deepEqual(findings.map(item => item.line), [12, 13, 14], JSON.stringify(findings));
+    assert.ok(findings.every(item => item.detail.includes('argument[1]')));
+    assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('recognizes local helpers that invoke or Promise-forward callback parameters', () => {
+  const result = run([
+    "function invoke(callback) { return callback('ready'); }",
+    "function forward(callback) { return pending.then(callback); }",
+    "function delegate(callback) { externalRegistry.register(callback); }",
+    "invoke(() => run());",
+    "forward(() => run());",
+    "delegate(() => run());",
+    "schedule(() => run());"
+  ].join('\n'));
+  const findings = result.observations.filter(item => item.kind === 'higher-order-callback-boundary');
+  assert.equal(findings.length, 2, JSON.stringify(findings));
+  assert.ok(findings.every(item => ['delegate', 'schedule'].some(name => item.detail.includes(name))));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('keeps reassigned callback parameters conservative in local helpers', () => {
+  const result = run("function invoke(callback) { callback = replacement; callback(); } invoke(() => run());");
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 1);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+
+test('tracks callback capture through nested closures and local wrapper chains', () => {
+  const result = run([
+    "function capture(callback) { return pending.then(() => callback()); }",
+    "function captureDefault(callback = noop) { return pending.then(() => callback()); }",
+    "function invoke(callback) { callback(); }",
+    "function forward(callback) { invoke(callback); }",
+    "function shadow(callback) { return pending.then(callback => callback()); }",
+    "function delegate(callback) { externalRegistry.register(callback); }",
+    "capture(() => run());",
+    "captureDefault(() => run());",
+    "forward(() => run());",
+    "shadow(() => run());",
+    "delegate(() => run());",
+    "schedule(() => run());"
+  ].join('\n'));
+  const findings = result.observations.filter(item => item.kind === 'higher-order-callback-boundary');
+  assert.equal(findings.length, 3, JSON.stringify(findings));
+  assert.ok(findings.some(item => item.detail.includes('shadow')));
+  assert.ok(findings.some(item => item.detail.includes('delegate')));
+  assert.ok(findings.some(item => item.detail.includes('schedule')));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });

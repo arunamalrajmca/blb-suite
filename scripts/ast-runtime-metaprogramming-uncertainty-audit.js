@@ -9,6 +9,8 @@ const eslintScope = require('eslint-scope');
 
 const SKIP = new Set(['.git', 'node_modules', 'coverage', 'test-results', 'playwright-report', 'dist']);
 const EXT = new Set(['.js', '.cjs', '.mjs']);
+// Standard global APIs with specified callback execution semantics.
+const KNOWN_GLOBAL_CALLBACK_APIS = new Set(['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback']);
 function walk(root) {
   const files = [];
   function visit(dir) {
@@ -55,6 +57,81 @@ function unresolvedReferences(ast) {
   }
   return unresolved;
 }
+function bindingPatternHasName(pattern, name) {
+  if (!pattern) return false;
+  if (pattern.type === 'Identifier') return pattern.name === name;
+  if (pattern.type === 'RestElement') return bindingPatternHasName(pattern.argument, name);
+  if (pattern.type === 'AssignmentPattern') return bindingPatternHasName(pattern.left, name);
+  if (pattern.type === 'ArrayPattern') return pattern.elements.some(item => bindingPatternHasName(item, name));
+  if (pattern.type === 'ObjectPattern') return pattern.properties.some(property =>
+    property.type === 'RestElement'
+      ? bindingPatternHasName(property.argument, name)
+      : bindingPatternHasName(property.value, name)
+  );
+  return false;
+}
+function functionDeclaresName(fn, name) {
+  if (fn.params.some(parameter => bindingPatternHasName(parameter, name))) return true;
+  let declared = false;
+  visit(fn.body, node => {
+    if (node.type === 'VariableDeclarator' && bindingPatternHasName(node.id, name)) declared = true;
+    if (['FunctionDeclaration', 'ClassDeclaration'].includes(node.type) && node.id?.name === name) declared = true;
+    if (node.type === 'CatchClause' && bindingPatternHasName(node.param, name)) declared = true;
+  });
+  return declared;
+}
+function visitFunctionBody(node, fn, capturedName = null) {
+  function descend(current, root = false) {
+    if (!current || typeof current !== 'object' || typeof current.type !== 'string') return;
+    if (!root && ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(current.type) &&
+        (!capturedName || functionDeclaresName(current, capturedName))) return;
+    fn(current);
+    for (const [key, value] of Object.entries(current)) {
+      if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+      if (Array.isArray(value)) value.forEach(child => descend(child));
+      else if (value && typeof value.type === 'string') descend(value);
+    }
+  }
+  descend(node, true);
+}
+function needsScopeAnalysis(ast) {
+  let needed = false;
+  const descriptorMethods = new Set([
+    'defineProperty', 'defineProperties', 'setPrototypeOf', 'assign', 'create',
+    'freeze', 'seal', 'preventExtensions'
+  ]);
+  visit(ast, node => {
+    if (needed) return;
+    if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+        KNOWN_GLOBAL_CALLBACK_APIS.has(node.callee.name)) {
+      needed = true;
+      return;
+    }
+    if ((node.type === 'NewExpression' || node.type === 'CallExpression') &&
+        node.callee.type === 'Identifier' &&
+        ['Proxy', 'eval', 'Function', 'MutationObserver'].includes(node.callee.name)) {
+      needed = true;
+      return;
+    }
+    if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+      const root = rootIdentifier(node.callee);
+      const property = node.callee.computed
+        ? (node.callee.property.type === 'Literal' ? String(node.callee.property.value) : null)
+        : node.callee.property.name;
+      if (root?.name === 'Reflect' || (root?.name === 'Object' && descriptorMethods.has(property))) {
+        needed = true;
+      }
+    }
+    if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
+        node.left.object.type === 'Identifier' && node.left.object.name === 'Object') {
+      const property = node.left.computed
+        ? (node.left.property.type === 'Literal' ? String(node.left.property.value) : null)
+        : node.left.property.name;
+      if (property === 'setPrototypeOf') needed = true;
+    }
+  });
+  return needed;
+}
 function rootIdentifier(node) {
   while (node && node.type === 'MemberExpression') node = node.object;
   return node?.type === 'Identifier' ? node : null;
@@ -79,6 +156,7 @@ function keyShape(node) {
 }
 function analyze(root = path.resolve(__dirname, '..')) {
   const files = walk(root), observations = [], parseErrors = [];
+  let scopeAnalysisFiles = 0;
   const add = (file, node, kind, detail, certainty = 'unresolved-runtime-semantics') => observations.push({
     file: path.relative(root, file).split(path.sep).join('/'),
     line: node.loc?.start.line || null, kind, detail, certainty
@@ -86,9 +164,269 @@ function analyze(root = path.resolve(__dirname, '..')) {
   for (const file of files) {
     let ast;
     try { ast = parse(file); } catch (error) { parseErrors.push({ file: path.relative(root, file), error: error.message }); continue; }
-    let unresolved;
-    try { unresolved = unresolvedReferences(ast); }
-    catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
+    let unresolved = new Set();
+    if (needsScopeAnalysis(ast)) {
+      scopeAnalysisFiles += 1;
+      try { unresolved = unresolvedReferences(ast); }
+      catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
+    }
+    // CDP sessions expose a documented EventEmitter-style .on(event, listener) contract.
+    // MutationObserver.observe(target, options) is not a callback-registration API; its
+    // callback belongs to the constructor. Track only direct, unshadowed global instances.
+    // Leave unrelated .on() and .observe() receivers conservative.
+    const relativeFile = path.relative(root, file).split(path.sep).join('/');
+    const isPlaywrightBrowserSpec = relativeFile.startsWith('tests/browser/') &&
+      /\.spec\.[cm]?js$/.test(relativeFile);
+    const cdpSessionNames = new Set();
+    const mutationObserverNames = new Set();
+    const invalidMutationObserverNames = new Set();
+    const playwrightEventEmitterNames = new Set();
+    const playwrightPopupPromiseNames = new Set();
+    const localCallbackFunctions = new Map();
+    const nodeHttpModuleNames = new Set();
+    const nodeHttpCreateServerNames = new Set();
+    const nodeSpawnFactoryNames = new Set();
+    const nodeEventEmitterNames = new Set();
+    const nodeEventEmitterMemberPaths = new Set();
+    const staticMemberPath = expression => {
+      if (expression?.type === 'Identifier') return expression.name;
+      if (expression?.type === 'MemberExpression' && !expression.computed) {
+        const parent = staticMemberPath(expression.object);
+        return parent ? parent + '.' + expression.property.name : null;
+      }
+      return null;
+    };
+    const isGlobalMutationObserverConstruction = expression =>
+      expression?.type === 'NewExpression' &&
+      expression.callee?.type === 'Identifier' &&
+      expression.callee.name === 'MutationObserver' &&
+      unresolved.has(expression.callee.start + ':' + expression.callee.end);
+    const isNullLiteral = expression =>
+      expression?.type === 'Literal' && expression.value === null;
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        if (node.init?.type === 'AwaitExpression' &&
+            node.init.argument?.type === 'CallExpression' &&
+            node.init.argument.callee?.type === 'MemberExpression' &&
+            !node.init.argument.callee.computed &&
+            node.init.argument.callee.property.name === 'newBrowserCDPSession') {
+          cdpSessionNames.add(node.id.name);
+        }
+        if (isGlobalMutationObserverConstruction(node.init)) mutationObserverNames.add(node.id.name);
+        else if (node.init && !isNullLiteral(node.init)) invalidMutationObserverNames.add(node.id.name);
+      }
+      if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') {
+        if (isGlobalMutationObserverConstruction(node.right)) mutationObserverNames.add(node.left.name);
+        else if (!isNullLiteral(node.right)) invalidMutationObserverNames.add(node.left.name);
+      }
+    });
+    for (const name of invalidMutationObserverNames) mutationObserverNames.delete(name);
+
+    // Playwright test fixtures expose Page and BrowserContext EventEmitter-style
+    // contracts. Follow fixture destructuring, popup Page results, and the
+    // BrowserContext 'serviceworker' callback parameter; keep unrelated .on()
+    // receivers uncertain.
+    visit(ast, node => {
+      if (node.type === 'ImportDeclaration') {
+        const moduleName = node.source.value;
+        if (['node:http', 'http'].includes(moduleName)) {
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportDefaultSpecifier') nodeHttpModuleNames.add(specifier.local.name);
+            if (specifier.type === 'ImportSpecifier' && (specifier.imported.name || specifier.imported.value) === 'createServer') {
+              nodeHttpCreateServerNames.add(specifier.local.name);
+            }
+          }
+        }
+        if (['node:child_process', 'child_process'].includes(moduleName)) {
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportSpecifier' && (specifier.imported.name || specifier.imported.value) === 'spawn') {
+              nodeSpawnFactoryNames.add(specifier.local.name);
+            }
+          }
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        if (['ArrowFunctionExpression', 'FunctionExpression'].includes(node.init?.type)) {
+          localCallbackFunctions.set(node.id.name, node.init);
+        }
+        if (node.init?.type === 'CallExpression' && node.init.callee?.type === 'Identifier' &&
+            node.init.callee.name === 'require' && node.init.arguments[0]?.type === 'Literal') {
+          const moduleName = node.init.arguments[0].value;
+          if (['node:http', 'http'].includes(moduleName)) nodeHttpModuleNames.add(node.id.name);
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern' &&
+          node.init?.type === 'CallExpression' && node.init.callee?.type === 'Identifier' &&
+          node.init.callee.name === 'require' && node.init.arguments[0]?.type === 'Literal' &&
+          ['node:child_process', 'child_process'].includes(node.init.arguments[0].value)) {
+        for (const property of node.id.properties) {
+          if (property.type !== 'Property' || property.computed) continue;
+          if ((property.key.name || property.key.value) === 'spawn' && property.value?.type === 'Identifier') {
+            nodeSpawnFactoryNames.add(property.value.name);
+          }
+        }
+      }
+      if (isPlaywrightBrowserSpec && node.type === 'CallExpression' &&
+          node.callee.type === 'Identifier' && node.callee.name === 'test') {
+        const callback = node.arguments[1];
+        const firstParameter = callback?.params?.[0];
+        if (['ArrowFunctionExpression', 'FunctionExpression'].includes(callback?.type) &&
+            firstParameter?.type === 'ObjectPattern') {
+          for (const property of firstParameter.properties) {
+            if (property.type !== 'Property' || property.computed) continue;
+            const key = property.key.name || property.key.value;
+            const value = property.value?.type === 'AssignmentPattern'
+              ? property.value.left : property.value;
+            if (['page', 'context'].includes(key) && value?.type === 'Identifier') {
+              playwrightEventEmitterNames.add(value.name);
+            }
+          }
+        }
+      }
+    });
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        const initializer = node.init?.type === 'AwaitExpression' ? node.init.argument : node.init;
+        if (initializer?.type === 'CallExpression' &&
+            initializer.callee?.type === 'MemberExpression' &&
+            !initializer.callee.computed &&
+            initializer.callee.object?.type === 'Identifier' &&
+            playwrightEventEmitterNames.has(initializer.callee.object.name)) {
+          const method = initializer.callee.property.name;
+          if (method === 'newPage') playwrightEventEmitterNames.add(node.id.name);
+          if (method === 'waitForEvent' && initializer.arguments[0]?.type === 'Literal' &&
+              initializer.arguments[0].value === 'popup') {
+            if (node.init?.type === 'AwaitExpression') playwrightEventEmitterNames.add(node.id.name);
+            else playwrightPopupPromiseNames.add(node.id.name);
+          }
+        }
+        if (node.init?.type === 'AwaitExpression' &&
+            node.init.argument?.type === 'Identifier' &&
+            playwrightPopupPromiseNames.has(node.init.argument.name)) {
+          playwrightEventEmitterNames.add(node.id.name);
+        }
+        if (node.init?.type === 'CallExpression') {
+          const callee = node.init.callee;
+          const isHttpCreateServer = callee?.type === 'MemberExpression' && !callee.computed &&
+            callee.property.name === 'createServer' && callee.object?.type === 'Identifier' &&
+            nodeHttpModuleNames.has(callee.object.name);
+          const isImportedHttpCreateServer = callee?.type === 'Identifier' &&
+            nodeHttpCreateServerNames.has(callee.name);
+          if (isHttpCreateServer || isImportedHttpCreateServer) {
+            nodeEventEmitterNames.add(node.id.name);
+            const callback = node.init.arguments[0];
+            const responseParameter = callback?.params?.[1];
+            if (['ArrowFunctionExpression', 'FunctionExpression'].includes(callback?.type) &&
+                responseParameter?.type === 'Identifier') {
+              nodeEventEmitterNames.add(responseParameter.name);
+            }
+          }
+          if (callee?.type === 'Identifier' && nodeSpawnFactoryNames.has(callee.name)) {
+            nodeEventEmitterNames.add(node.id.name);
+            nodeEventEmitterMemberPaths.add(node.id.name + '.stdout');
+            nodeEventEmitterMemberPaths.add(node.id.name + '.stderr');
+          }
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee?.type === 'MemberExpression' &&
+          !node.callee.computed && ['on', 'once'].includes(node.callee.property.name) &&
+          node.callee.object?.type === 'Identifier' &&
+          playwrightEventEmitterNames.has(node.callee.object.name) &&
+          node.arguments[0]?.type === 'Literal' && node.arguments[0].value === 'serviceworker') {
+        const callback = node.arguments[1];
+        const callbackFunction = callback?.type === 'Identifier'
+          ? localCallbackFunctions.get(callback.name) : callback;
+        const workerParameter = callbackFunction?.params?.[0];
+        if (workerParameter?.type === 'Identifier') {
+          playwrightEventEmitterNames.add(workerParameter.name);
+        }
+      }
+    });
+    // Resolve callback parameters of local helpers when they invoke a
+    // captured parameter, forward it to a Promise callback contract, or pass
+    // it through another locally-resolved helper. Shadowed closures and
+    // ambiguous same-name helpers remain conservative.
+    const localFunctionDefinitions = new Map();
+    visit(ast, node => {
+      let name = null;
+      let fn = null;
+      if (node.type === 'FunctionDeclaration' && node.id?.type === 'Identifier') {
+        name = node.id.name;
+        fn = node;
+      } else if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' &&
+          ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.init?.type)) {
+        name = node.id.name;
+        fn = node.init;
+      }
+      if (!name || !fn) return;
+      if (!localFunctionDefinitions.has(name)) localFunctionDefinitions.set(name, []);
+      localFunctionDefinitions.get(name).push({fn, parameterCount:fn.params.length, positions:new Set()});
+    });
+    for (const definitions of localFunctionDefinitions.values()) {
+      for (const definition of definitions) {
+        definition.fn.params.forEach((parameter, index) => {
+          const parameterIdentifier = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
+          if (parameterIdentifier?.type !== 'Identifier') return;
+          const parameterName = parameterIdentifier.name;
+          let invokedOrForwarded = false;
+          let reassigned = false;
+          visitFunctionBody(definition.fn.body, child => {
+            if (child.type === 'AssignmentExpression' && child.left?.type === 'Identifier' &&
+                child.left.name === parameterName) reassigned = true;
+            if (child.type !== 'CallExpression') return;
+            if (child.callee?.type === 'Identifier' && child.callee.name === parameterName) {
+              invokedOrForwarded = true;
+              return;
+            }
+            if (child.callee?.type === 'MemberExpression' && !child.callee.computed &&
+                ['then', 'catch', 'finally'].includes(child.callee.property.name) &&
+                child.arguments.some(argument => argument.type === 'Identifier' && argument.name === parameterName)) {
+              invokedOrForwarded = true;
+            }
+          }, parameterName);
+          if (invokedOrForwarded && !reassigned) definition.positions.add(index);
+        });
+      }
+    }
+    // Fixed-point propagation recognizes thin local wrappers such as
+    // safeRuntimeSendMessage -> sendRuntimeMessageWithRetry without assuming
+    // that callbacks passed to arbitrary external callees are invoked.
+    let callbackContractChanged = true;
+    while (callbackContractChanged) {
+      callbackContractChanged = false;
+      for (const definitions of localFunctionDefinitions.values()) {
+        for (const definition of definitions) {
+          definition.fn.params.forEach((parameter, index) => {
+            const parameterIdentifier = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
+            if (parameterIdentifier?.type !== 'Identifier' || definition.positions.has(index)) return;
+            const parameterName = parameterIdentifier.name;
+            let forwardedToKnownLocalContract = false;
+            visitFunctionBody(definition.fn.body, child => {
+              if (child.type !== 'CallExpression' || child.callee?.type !== 'Identifier') return;
+              const targetDefinitions = localFunctionDefinitions.get(child.callee.name) || [];
+              const argumentIndex = child.arguments.findIndex(argument =>
+                argument.type === 'Identifier' && argument.name === parameterName
+              );
+              if (argumentIndex < 0 || !targetDefinitions.length) return;
+              if (targetDefinitions.every(target =>
+                target.parameterCount > argumentIndex && target.positions.has(argumentIndex)
+              )) forwardedToKnownLocalContract = true;
+            }, parameterName);
+            if (forwardedToKnownLocalContract) {
+              definition.positions.add(index);
+              callbackContractChanged = true;
+            }
+          });
+        }
+      }
+    }
+    const hasKnownLocalCallbackContract = (name, index) => {
+      const definitions = localFunctionDefinitions.get(name) || [];
+      return definitions.length > 0 && definitions.every(definition =>
+        definition.parameterCount > index && definition.positions.has(index)
+      );
+    };
+
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
@@ -122,16 +460,41 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         const method = node.callee.type === 'MemberExpression'
           ? (node.callee.computed ? null : node.callee.property.name) : null;
-        if (method && /^(?:then|catch|finally|map|flatMap|forEach|filter|reduce|some|every|sort|addEventListener|removeEventListener|on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
+        // Promise chaining and DOM event listeners have specified callback contracts; the unified
+        // reachability pass models their ownership directly, so they are not uncertainty findings.
+        // Keep generic framework/event-emitter method names conservative: without receiver/type
+        // evidence, their callback semantics may still be supplied by an external runtime.
+        const knownCDPSessionEventListener = ['on', 'once'].includes(method) &&
+          node.callee.object?.type === 'Identifier' && cdpSessionNames.has(node.callee.object.name);
+        const receiverPath = staticMemberPath(node.callee.object);
+        const knownPlaywrightEventListener = ['on', 'once'].includes(method) &&
+          node.callee.object?.type === 'Identifier' && playwrightEventEmitterNames.has(node.callee.object.name);
+        const knownNodeEventListener = ['on', 'once'].includes(method) && (
+          nodeEventEmitterNames.has(receiverPath) ||
+          nodeEventEmitterMemberPaths.has(receiverPath) ||
+          (node.callee.object?.type === 'Identifier' && node.callee.object.name === 'process' &&
+            unresolved.has(node.callee.object.start + ':' + node.callee.object.end))
+        );
+        const knownMutationObserverObserve = method === 'observe' &&
+          node.callee.object?.type === 'Identifier' && mutationObserverNames.has(node.callee.object.name);
+        if (method && !knownCDPSessionEventListener && !knownPlaywrightEventListener && !knownNodeEventListener && !knownMutationObserverObserve &&
+            /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) || arg.type === 'Identifier' || arg.type === 'MemberExpression') {
               add(file, arg, 'callback-contract', method + ' argument[' + index + '] has a callback-like position; framework/runtime contract may be external');
             }
           }
         }
-        if (node.callee.type === 'Identifier' && !['require', 'import'].includes(node.callee.name)) {
+        const knownPlaywrightTestDeclaration = node.callee.type === 'Identifier' &&
+          node.callee.name === 'test' && relativeFile.startsWith('tests/browser/') &&
+          /\.spec\.[cm]?js$/.test(relativeFile);
+        const knownGlobalCallbackAPI = calleeName && KNOWN_GLOBAL_CALLBACK_APIS.has(calleeName) &&
+          unresolved.has(node.callee.start + ':' + node.callee.end);
+        if (node.callee.type === 'Identifier' && !['require', 'import', 'test'].includes(node.callee.name) &&
+            !knownPlaywrightTestDeclaration && !knownGlobalCallbackAPI) {
           for (const [index, arg] of node.arguments.entries()) {
-            if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type)) {
+            if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) &&
+                !hasKnownLocalCallbackContract(node.callee.name, index)) {
               add(file, arg, 'higher-order-callback-boundary', 'callback passed to ' + node.callee.name + ' argument[' + index + ']; callee contract is project-defined or external');
             }
           }
@@ -166,15 +529,27 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const unique = [...new Map(observations.map(item => [JSON.stringify(item), item])).values()];
   const byKind = {};
   for (const item of unique) byKind[item.kind] = (byKind[item.kind] || 0) + 1;
-  return { filesScanned: files.length, observations: unique, parseErrors, summary: { total: unique.length, byKind } };
+  return { filesScanned: files.length, scopeAnalysisFiles, observations: unique, parseErrors, summary: { total: unique.length, byKind } };
 }
 function run(root) {
   const result = analyze(root);
   console.log('Runtime metaprogramming and callback uncertainty census (not dead-code proof)');
   console.log('Files scanned: ' + result.filesScanned);
+  console.log('Files requiring global-shadow scope analysis: ' + result.scopeAnalysisFiles);
   console.log('Uncertainty observations: ' + result.summary.total);
   console.log('By kind: ' + JSON.stringify(result.summary.byKind));
-  for (const item of result.observations) console.log('UNCERTAIN ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.kind + ' — ' + item.detail);
+  const sampleLimitPerKind = 20;
+  const printedByKind = new Map();
+  for (const item of result.observations) {
+    const count = printedByKind.get(item.kind) || 0;
+    if (count >= sampleLimitPerKind) continue;
+    printedByKind.set(item.kind, count + 1);
+    console.log('UNCERTAIN ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.kind + ' — ' + item.detail);
+  }
+  for (const [kind, total] of Object.entries(result.summary.byKind)) {
+    const printed = printedByKind.get(kind) || 0;
+    if (total > printed) console.log('UNCERTAIN-SUPPRESSED ' + kind + ': ' + (total - printed) + ' additional findings (full counts retained in summary)');
+  }
   for (const item of result.parseErrors) console.log('PARSE-ERROR ' + item.file + ' — ' + item.error);
   return result;
 }

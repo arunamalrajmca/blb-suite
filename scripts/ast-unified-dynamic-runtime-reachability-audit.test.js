@@ -74,6 +74,106 @@ test('keeps nested callback wrappers uncertain when an intermediate parameter ha
   assert.ok(registration);
   assert.equal(registration.certainty, 'unresolved-callback-owner');
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+  const summary = result.uncertaintySummary.unresolvedExternalCallbackSites;
+  assert.equal(summary.total, 1);
+  assert.equal(summary.samples.length, 1);
+  assert.equal(summary.samples[0].file, 'scripts/main.js');
+  assert.equal(summary.samples[0].line, 1);
+  assert.equal(summary.samples[0].registrationApi, 'chrome.runtime.onMessage.addListener');
+});
+
+
+test('retains every known callback owner passed through a shared helper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function firstHandler() {}',
+      'function secondHandler() {}',
+      'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'register(firstHandler);',
+      'register(secondHandler);'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-multiple-interprocedural-callback-arguments');
+  assert.equal(registration.callbackTargets.length, 2);
+  assert.ok(registration.callbackTargets.some(target => target.includes('::firstHandler@')));
+  assert.ok(registration.callbackTargets.some(target => target.includes('::secondHandler@')));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('retains every known handleEvent owner forwarded through a listener helper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function register(listener) { document.addEventListener("ready", listener); }',
+      'register({ handleEvent() {} });',
+      'register({ handleEvent() {} });'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-multiple-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('recognizes Promise executor and resolver callbacks as known external owners', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'new Promise((resolve, reject) => {',
+      '  setTimeout(resolve, 0);',
+      '  setTimeout(reject, 0);',
+      '});'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item => item.expression === 'Promise' && item.certainty === 'resolved-inline-callback'));
+  assert.equal(registrations.filter(item => item.certainty === 'resolved-promise-resolver').length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat chrome.tabs.update options as an optional callback', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function update(tabId, properties, callback) {',
+      '  chrome.tabs.update(tabId, properties);',
+      '  chrome.tabs.update(tabId, properties, callback);',
+      '}'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'chrome.tabs.update'
+  );
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner' && item.expression === 'chrome.tabs.update'
+  ).length, 1);
+});
+
+test('caps unresolved external callback owner samples without truncating totals', () => {
+  const registrations = Array.from({length:45}, (_, index) =>
+    `chrome.runtime.onMessage.addListener(handler${index});`
+  ).join('\n');
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': registrations
+  });
+  const summary = result.uncertaintySummary.unresolvedExternalCallbackSites;
+  assert.equal(summary.total, 45);
+  assert.equal(summary.samples.length, 40);
+  assert.equal(summary.samples[0].line, 1);
+  assert.equal(summary.samples[39].line, 40);
 });
 
 
@@ -211,7 +311,7 @@ test('does not expose a default callback wrapper through export-star', () => {
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
-test('keeps callback parameters uncertain when another callsite supplies an unknown value', () => {
+test('keeps known callback owners while marking another callsite uncertain', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
@@ -222,11 +322,12 @@ test('keeps callback parameters uncertain when another callsite supplies an unkn
   });
   const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.certainty, 'partially-resolved-interprocedural-callback-arguments');
+  assert.equal(registration.callbackTargets.length, 1);
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
-test('keeps callback parameters uncertain when callsites disagree on the owner', () => {
+test('resolves every known callback owner when callsites disagree on the owner', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
@@ -238,8 +339,9 @@ test('keeps callback parameters uncertain when callsites disagree on the owner',
   });
   const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
-  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+  assert.equal(registration.certainty, 'resolved-multiple-interprocedural-callback-arguments');
+  assert.equal(registration.callbackTargets.length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
 test('resolves dynamic import, importScripts, executeScript files, and registered content scripts', () => {
@@ -631,18 +733,93 @@ test('resolves Worker and SharedWorker entrypoints, including constructor aliase
     'scripts/main.js': [
       "new Worker('./worker.js');",
       "const WorkerAlias = Worker; new WorkerAlias(new URL('./module-worker.js', import.meta.url), { type: 'module' });",
-      "new SharedWorker('./shared-worker.js');"
+      "new SharedWorker('./shared-worker.js');",
+      "new window.Worker('./window-worker.js');",
+      "const GlobalWorkerAlias = globalThis.Worker; new GlobalWorkerAlias('./global-worker.js');"
     ].join(' '),
     'scripts/worker.js': 'self.onmessage = () => {};',
     'scripts/module-worker.js': 'importScripts("./worker-dependency.js");',
     'scripts/shared-worker.js': 'onconnect = () => {};',
+    'scripts/window-worker.js': 'self.windowWorker = true;',
+    'scripts/global-worker.js': 'self.globalWorker = true;',
     'scripts/worker-dependency.js': 'self.dependency = true;'
   });
   assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/worker.js'));
   assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/module-worker.js'));
   assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/shared-worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/window-worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/global-worker.js'));
   assert.ok(edge(result, 'importScripts', 'scripts/module-worker.js', 'scripts/worker-dependency.js'));
 });
+
+test('resolves ServiceWorker registration and Worklet module loaders', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "navigator.serviceWorker.register('./service-worker.js');",
+      "audioContext.audioWorklet.addModule('./audio-processor.js');",
+      "CSS.paintWorklet.addModule(new URL('./paint-worklet.js', import.meta.url));",
+      "CSS.layoutWorklet.addModule('./layout-worklet.js');",
+      "const serviceWorkerContainer = navigator.serviceWorker;",
+      "const serviceWorkerAlias = serviceWorkerContainer; serviceWorkerAlias.register('./aliased-service-worker.js');",
+      "const audioWorklet = audioContext.audioWorklet;",
+      "const audioWorkletAlias = audioWorklet; audioWorkletAlias.addModule('./aliased-audio-processor.js');",
+      "let assignedServiceWorker; assignedServiceWorker = navigator.serviceWorker; assignedServiceWorker.register('./assigned-service-worker.js');",
+      "let assignedAudioWorklet; assignedAudioWorklet = audioContext.audioWorklet; assignedAudioWorklet.addModule('./assigned-audio-processor.js');",
+      "let AssignedWorker; AssignedWorker = window.Worker; new AssignedWorker('./assigned-window-worker.js');"
+    ].join(' '),
+    'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/audio-processor.js': 'class Processor extends AudioWorkletProcessor {};',
+    'scripts/paint-worklet.js': 'registerPaint("sample", class {});',
+    'scripts/layout-worklet.js': 'registerLayout("sample", class {});',
+    'scripts/aliased-service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/aliased-audio-processor.js': 'registerProcessor("aliased", class {});',
+    'scripts/assigned-service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/assigned-audio-processor.js': 'registerProcessor("assigned", class {});',
+    'scripts/assigned-window-worker.js': 'self.onmessage = () => {};'
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/service-worker.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/audio-processor.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/paint-worklet.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/layout-worklet.js'));
+  assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/aliased-service-worker.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/aliased-audio-processor.js'));
+  assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/assigned-service-worker.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/assigned-audio-processor.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/assigned-window-worker.js'));
+  assert.equal(result.uncertainty.filter(item =>
+    ['service-worker-register', 'worklet-module'].includes(item.kind)
+  ).length, 0);
+});
+
+
+test('keeps dynamic ServiceWorker and Worklet loader targets explicitly uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "navigator.serviceWorker.register(getWorkerScript());",
+      "audioContext.audioWorklet.addModule(resolveProcessor());",
+      "navigator.serviceWorker.register(new URL('./other-service-worker.js', location.href));",
+      "audioContext.audioWorklet.addModule(new URL('./other-processor.js', location.href));"
+    ].join(' '),
+    'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/processor.js': 'registerProcessor("sample", class {});',
+    'scripts/other-service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/other-processor.js': 'registerProcessor("other", class {});'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'service-worker-register' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'worklet-module' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.equal(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/service-worker.js'), false);
+  assert.equal(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/processor.js'), false);
+  assert.equal(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/other-service-worker.js'), false);
+  assert.equal(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/other-processor.js'), false);
+});
+
 
 test('tracks DOM script injection through aliased document and createElement bindings', () => {
   const result = run({
@@ -663,6 +840,54 @@ test('tracks DOM script injection through aliased document and createElement bin
   assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'extension/injected.js'));
   assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'extension/also-injected.js'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'dom-script-append' && item.expression === 'alias'));
+});
+
+
+test('does not classify shadowed ServiceWorker, URL, or Blob bindings as native loaders', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function install(navigator, URL, Blob) {',
+      "  navigator.serviceWorker.register('./shadowed-service-worker.js');",
+      "  new Worker(URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' })));",
+      '}',
+      "function shadowedWorker(Worker) { new Worker('./shadowed-worker.js'); }",
+      "function shadowedWindow(window) { new window.Worker('./shadowed-window-worker.js'); }"
+    ].join(' '),
+    'scripts/shadowed-service-worker.js': 'self.addEventListener("fetch", () => {});'
+  });
+  assert.equal(result.dynamicSites.filter(item => item.kind === 'service-worker-register').length, 0);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'generated-worker-source').length, 0);
+  assert.ok(result.uncertainty.some(item => item.kind === 'worker-constructor'));
+  assert.equal(result.dynamicSites.filter(item => item.kind === 'worker-constructor').length, 1);
+  assert.equal(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/shadowed-worker.js'), false);
+});
+
+
+test('records generated inline-script and Blob-worker source as scoped uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "const script = document.createElement('script');",
+      "script.textContent = 'globalThis.inlineGenerated = true;';",
+      "document.head.appendChild(script);",
+      "document.write('<script>globalThis.documentWritten = true;<\\/script>');",
+      "new Worker(URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' })));"
+    ].join(' '),
+    'scripts/inline-dependency.js': 'globalThis.inlineDependency = true;'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dom-script-inline-source' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'document-write-script-injection' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'generated-worker-source' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'worker-constructor' && item.affectedRoots.includes('scripts/main.js')
+  ));
 });
 
 
@@ -935,6 +1160,113 @@ test('records observer constructors, event-property handlers, and browser API ca
   assert.ok(registrations.some(item => item.expression === 'chrome.tabs.query' && item.certainty === 'resolved-function-binding'));
 });
 
+
+test('traces aliased observer constructors and object-based event listener handlers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onResize(entries) { return entries.length; }',
+      'const BaseObserver = ResizeObserver;',
+      'const Observer = BaseObserver;',
+      'new Observer(onResize);',
+      'document.addEventListener("click", { handleEvent(event) { return event.type; } });',
+      'document.addEventListener("keydown", { handleEvent: function(event) { return event.key; } });'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item =>
+    item.expression === 'Observer' && item.callback === 'onResize' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(registrations.filter(item =>
+    item.certainty === 'resolved-object-event-handler').length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves named and helper-passed object event listener handlers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const namedListener = { handleEvent(event) { return event.type; } };',
+      'document.addEventListener("click", namedListener);',
+      'const delegatedListener = { handleEvent(event) { return event.key; } };',
+      'function installListener(listener) { document.addEventListener("keydown", listener); }',
+      'installListener(delegatedListener);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.equal(registrations.filter(item =>
+    item.certainty === 'resolved-object-event-handler-binding').length, 2);
+  assert.ok(registrations.every(item => item.callbackTarget?.includes('function@')));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('resolves bound handleEvent method callbacks without losing their object owner', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const boundListener = { handleEvent(event) { return event.type; } };',
+      'document.addEventListener("click", boundListener.handleEvent.bind(boundListener));'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.callback, '[bound handleEvent listener]');
+  assert.equal(registration.certainty, 'resolved-bound-object-event-handler');
+  assert.ok(registration.callbackTarget?.includes('function@'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps bound handleEvent callbacks unresolved when their listener object is reassigned', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let listener = { handleEvent(event) { return event.type; } };',
+      'listener = replacement;',
+      'document.addEventListener("click", listener.handleEvent.bind(listener));'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.notEqual(registration.certainty, 'resolved-bound-object-event-handler');
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
+test('keeps helper listener parameters partially resolved when another caller is unknown', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const knownListener = { handleEvent(event) { return event.type; } };',
+      'function installListener(listener) { document.addEventListener("click", listener); }',
+      'installListener(knownListener);',
+      'installListener(runtimeValue);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'partially-resolved-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 1);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
+
+test('keeps reassigned named listener objects unresolved', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let listener = { handleEvent(event) { return event.type; } };',
+      'listener = replacement;',
+      'document.addEventListener("click", listener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+});
 
 test('resolves delegated event handlers, both Promise handlers, and React hook callbacks', () => {
   const result = run({
@@ -2297,4 +2629,236 @@ test('does not treat a shadowed nested parameter as reassignment of an imported 
   assert.equal(result.uncertainty.some(item =>
     item.file === 'scripts/loader.js' && item.kind === 'dynamic-import'
   ), false);
+});
+
+test('resolves listener objects forwarded through multiple helper layers', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const listener = { handleEvent(event) { return event.type; } };',
+      'function installAtFinalLayer(value) { document.addEventListener("click", value); }',
+      'function forwardOneLayer(value) { installAtFinalLayer(value); }',
+      'function forwardAnotherLayer(value) { forwardOneLayer(value); }',
+      'forwardAnotherLayer(listener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-object-event-handler-binding');
+  assert.ok(registration.callbackTarget?.includes('function@'));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps reassigned listener helper parameters unresolved across forwarding', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const listener = { handleEvent(event) { return event.type; } };',
+      'function install(value) { value = replacement; document.addEventListener("click", value); }',
+      'install(listener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  // Reassignment invalidates the original listener-object binding. Do not
+  // preserve a stale handleEvent target from the pre-assignment value.
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(!registration.callbackTargets?.length);
+  assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
+});
+
+test('keeps multi-hop listener forwarding partially resolved when one caller is unknown', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const listener = { handleEvent(event) { return event.type; } };',
+      'function install(value) { document.addEventListener("click", value); }',
+      'function forward(value) { install(value); }',
+      'forward(listener);',
+      'forward(runtimeListener);'
+    ].join(' ')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'partially-resolved-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 1);
+  assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
+});
+
+test('recognizes event callbacks installed through Object.defineProperty descriptors', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Object.defineProperty(window, "onmessage", { configurable: true, value: onMessage });'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'Object.defineProperty');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-function-binding');
+  assert.ok(registration.callbackTarget.endsWith('::onMessage@1:9'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not infer event callbacks from accessors or computed descriptor names', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Object.defineProperty(window, runtimeName, { get() { return onMessage; } });',
+      'Object.defineProperty(window, "onmessage", { get() { return onMessage; } });'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'Object.defineProperty'), false);
+});
+
+test('recognizes lifecycle callbacks on locally registered custom elements', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'class ScripturePanel extends HTMLElement {',
+      '  connectedCallback() { this.ready = true; }',
+      '  disconnectedCallback() { this.ready = false; }',
+      '  adoptedCallback() { this.adopted = true; }',
+      '  attributeChangedCallback(name, oldValue, newValue) { this[name] = newValue; }',
+      '}',
+      'customElements.define("scripture-panel", ScripturePanel);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    item.certainty === 'resolved-inline-callback' &&
+    item.expression === 'customElements.define');
+  assert.equal(registrations.length, 4, JSON.stringify(registrations));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat unregistered classes, non-elements, or shadowed HTMLElement as lifecycle roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'class UnregisteredPanel extends HTMLElement { connectedCallback() {} }',
+      'class OrdinaryClass { connectedCallback() {} }',
+      'function make(HTMLElement) {',
+      '  class ShadowedPanel extends HTMLElement { connectedCallback() {} }',
+      '  customElements.define("shadowed-panel", ShadowedPanel);',
+      '}'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'customElements.define'), false);
+});
+
+test('recognizes statically named event handlers installed through Reflect.set and Object.assign', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Reflect.set(window, "onmessage", onMessage);',
+      'Object.assign(window, { onerror: onMessage });'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    (item.expression === 'Reflect.set' || item.expression === 'Object.assign'));
+  assert.equal(registrations.length, 2, JSON.stringify(registrations));
+  assert.ok(registrations.every(item => item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.every(item => item.callbackTarget.endsWith('::onMessage@1:9')));
+});
+
+test('keeps dynamic Reflect.set event names outside resolved callback ownership', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMessage(event) { return event.data; }',
+      'Reflect.set(window, eventName, onMessage);'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'Reflect.set'), false);
+});
+
+test('recognizes Vue Composition API lifecycle callback registrations', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'import { onMounted, onBeforeUnmount, onErrorCaptured } from "vue";',
+      'function mounted() { return ready(); }',
+      'onMounted(mounted);',
+      'onBeforeUnmount(() => cleanup());',
+      'onErrorCaptured((error, instance, info) => report(error));'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    ['onMounted', 'onBeforeUnmount', 'onErrorCaptured'].includes(item.expression));
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.some(item =>
+    item.expression === 'onMounted' &&
+    item.callback === 'mounted' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(registrations.filter(item =>
+    item.certainty === 'resolved-inline-callback').length, 2);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not classify same-named local functions as Vue lifecycle registrations', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onMounted(callback) { return callback(); }',
+      'onMounted(() => cleanup());'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.some(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'onMounted'), false);
+});
+
+test('resolves callbacks read from static object and array registries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const objectHandlers = { ready: onReady };',
+      'const arrayHandlers = [onReady];',
+      'setTimeout(objectHandlers.ready, 0);',
+      'setTimeout(arrayHandlers[0], 0);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'setTimeout');
+  assert.equal(registrations.length, 2);
+  assert.ok(registrations.every(item => item.certainty === 'resolved-stored-callback-binding'));
+  assert.ok(registrations.every(item => item.callbackTarget.endsWith('::onReady@1:9')));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not resolve callbacks from dynamically indexed or mutated registries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const handlers = [onReady];',
+      'handlers.push(replacement);',
+      'setTimeout(handlers[index], 0);',
+      'setTimeout(handlers[0], 0);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'setTimeout');
+  assert.equal(registrations.length, 2);
+  assert.ok(registrations.every(item => item.certainty === 'unresolved-callback-owner'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });

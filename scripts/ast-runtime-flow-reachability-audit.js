@@ -141,6 +141,9 @@ function analyzeFile(root, file) {
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
   const containerWrites = [];
   const containerReads = [];
+  const factoryCallbackBindings = new Map();
+  const callbackAliases = [];
+  const arrayInitialLengths = new Map();
   const containerCopies = [];
   const iteratorSources = new Map();
   const iteratorNextRequests = [];
@@ -1184,7 +1187,7 @@ function analyzeFile(root, file) {
             if (storedFunction) addEdge('function@' + storedFunction.loc.start.line, stored,
               'function-variable-identity', node, name);
             addEdge(stored, container, isStoredCallback ? 'container-store-callback' : 'container-store', node, name);
-            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction});
+            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction, callbackFunction:storedFunction || null});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
             const identity = 'aggregate@' + value.loc.start.line + ':' + value.loc.start.column;
             const before = flowEdges.length;
@@ -1275,13 +1278,14 @@ function analyzeFile(root, file) {
 
       if (node.type === 'CallExpression' && containerReadMethods.has(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
-        const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
-          ? bindingId(parent.id) : null;
+        const invoked = parent?.type === 'CallExpression' && parent.callee === node;
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : invoked ? 'callback-invocation@' + parent.loc.start.line : null;
         addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.' + name);
         containerReads.push({
           container:bindingId(receiver),
           key:name === 'get' || name === 'at' ? literalKey(node.arguments[0]) : null,
-          assigned,node
+          assigned,node,invoked
         });
       }
       if (node.type === 'CallExpression' && ['values', 'entries', 'keys'].includes(name) &&
@@ -1653,11 +1657,18 @@ function analyzeFile(root, file) {
                 if (returnedFunction) {
                   addEdge('function@' + returnedFunction.loc.start.line, assigned,
                     'function-return-callback', node, node.callee.name);
+                  factoryCallbackBindings.set(assigned, returnedFunction);
                 } else {
                   const returnedBinding = bindingId(returned);
                   addEdge(returnedBinding, assigned, 'function-return', node, node.callee.name);
                   linkObjectAlias(assigned, returnedBinding);
                 }
+                continue;
+              }
+              if (isFunction(returned)) {
+                addEdge('function@' + returned.loc.start.line, assigned,
+                  'function-return-callback', node, node.callee.name);
+                factoryCallbackBindings.set(assigned, returned);
                 continue;
               }
               if (returned.type === 'MemberExpression') {
@@ -1854,6 +1865,15 @@ function analyzeFile(root, file) {
         const {object,property,name:objectName} = reference;
         let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
+        const arrayIndexRead = node.computed && /^\d+$/.test(String(property)) &&
+          ((parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') ||
+           (parent?.type === 'CallExpression' && parent.callee === node));
+        if (arrayIndexRead) {
+          const invoked = parent?.type === 'CallExpression' && parent.callee === node;
+          containerReads.push({container:object,key:String(property),
+            assigned:invoked ? 'callback-invocation@' + parent.loc.start.line : assigned,
+            node,invoked,arrayIndex:true});
+        }
         if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
           const schedulerName = calleeName(parent.callee);
           if (callbackSchedulers.has(schedulerName)) {
@@ -1877,6 +1897,12 @@ function analyzeFile(root, file) {
     }
 
     if (node.type === 'VariableDeclarator') {
+      if (node.id.type === 'Identifier' && node.init?.type === 'ArrayExpression') {
+        arrayInitialLengths.set(bindingId(node.id), node.init.elements.length);
+      }
+      if (node.id.type === 'Identifier' && node.init?.type === 'Identifier' && parent?.kind === 'const') {
+        callbackAliases.push({source:bindingId(node.init),target:bindingId(node.id)});
+      }
       if (node.init && ['ObjectExpression', 'ArrayExpression'].includes(node.init.type)) {
         add('object-wrapping', 'aggregate-wrapper', node,
           node.init.type + ' may retain nested function/object identities');
@@ -2178,19 +2204,31 @@ function analyzeFile(root, file) {
   // Propagate known property contents through object spread, Object.assign,
   // and Object.fromEntries(Object.entries(source)).
   // Iterate to a fixed point so chained copies retain their original values.
+  const propertyWritesByObject = new Map();
+  const propertyWriteKeys = new Set();
+  const propertyWriteKey = (object, property, stored) => JSON.stringify([object, property, stored]);
+  const indexPropertyWrite = write => {
+    const object = canonicalObject(write.object);
+    const key = propertyWriteKey(object, write.property, write.stored);
+    if (propertyWriteKeys.has(key)) return false;
+    propertyWriteKeys.add(key);
+    if (!propertyWritesByObject.has(object)) propertyWritesByObject.set(object, []);
+    propertyWritesByObject.get(object).push(write);
+    return true;
+  };
+  for (const write of propertyWrites) indexPropertyWrite(write);
   let copiesChanged = true;
   let copyPasses = 0;
   while (copiesChanged && copyPasses++ <= propertyCopies.length + 1) {
     copiesChanged = false;
     for (const copy of propertyCopies) {
       const source = canonicalObject(copy.source), target = canonicalObject(copy.target);
-      for (const write of [...propertyWrites]) {
-        if (canonicalObject(write.object) !== source) continue;
+      const sourceWrites = propertyWritesByObject.get(source) || [];
+      for (const write of sourceWrites.slice()) {
         const property = copy.prefix ? copy.prefix + '.' + write.property : write.property;
-        if (propertyWrites.some(existing =>
-          canonicalObject(existing.object) === target &&
-          existing.property === property && existing.stored === write.stored)) continue;
-        propertyWrites.push({object:target,property,stored:write.stored});
+        const copied = {object:target,property,stored:write.stored};
+        if (!indexPropertyWrite(copied)) continue;
+        propertyWrites.push(copied);
         copiesChanged = true;
       }
     }
@@ -2309,13 +2347,21 @@ function analyzeFile(root, file) {
     }
   }
 
+  // Property reads are resolved twice; index the completed write inventory once
+  // so each read visits only writes belonging to its canonical object.
+  const propertyWritesByObjectForReads = new Map();
+  for (const write of propertyWrites) {
+    const object = canonicalObject(write.object);
+    if (!propertyWritesByObjectForReads.has(object)) propertyWritesByObjectForReads.set(object, []);
+    propertyWritesByObjectForReads.get(object).push(write);
+  }
+
   // Resolve static object-property writes to subsequent property reads.
   // Unknown computed reads conservatively retain every stored value on the object.
   for (const read of propertyReads) {
     const readObject = canonicalObject(read.object);
-    const matches = propertyWrites.filter(write =>
-      canonicalObject(write.object) === readObject &&
-      (read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+    const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
+      read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
     for (const write of matches) {
       addEdge(write.stored, destination, 'property-value-read', read.node,
@@ -2326,6 +2372,25 @@ function analyzeFile(root, file) {
   // Copy array-container contents through slice/filter/concat and modern
   // copy-by-change methods. Include literal-array property slots as well as
   // values recorded by push/unshift so chained copies remain connected.
+  const containerWritesByObject = new Map();
+  const containerWriteKeys = new Set();
+  const containerWriteKey = (container, key, stored) => JSON.stringify([container, key, stored]);
+  const indexContainerWrite = write => {
+    const container = canonicalObject(write.container);
+    const identity = containerWriteKey(container, write.key, write.stored);
+    if (containerWriteKeys.has(identity)) return false;
+    containerWriteKeys.add(identity);
+    if (!containerWritesByObject.has(container)) containerWritesByObject.set(container, []);
+    containerWritesByObject.get(container).push(write);
+    return true;
+  };
+  for (const write of containerWrites) indexContainerWrite(write);
+  const propertyWritesByObjectForContainers = new Map();
+  for (const write of propertyWrites) {
+    const object = canonicalObject(write.object);
+    if (!propertyWritesByObjectForContainers.has(object)) propertyWritesByObjectForContainers.set(object, []);
+    propertyWritesByObjectForContainers.get(object).push(write);
+  }
   let containerCopiesChanged = true;
   let containerCopyPasses = 0;
   while (containerCopiesChanged && containerCopyPasses++ <= containerCopies.length + 1) {
@@ -2333,13 +2398,10 @@ function analyzeFile(root, file) {
     for (const copy of containerCopies) {
       const source = canonicalObject(copy.source), target = canonicalObject(copy.target);
       const copied = [];
-      for (const write of containerWrites) {
-        if (canonicalObject(write.container) === source) copied.push({
-          ...write, container:target, key:null, node:copy.node
-        });
-      }
-      for (const write of propertyWrites) {
-        if (canonicalObject(write.object) !== source) continue;
+      for (const write of containerWritesByObject.get(source) || []) copied.push({
+        ...write, container:target, key:null, node:copy.node
+      });
+      for (const write of propertyWritesByObjectForContainers.get(source) || []) {
         if (write.property !== null && !/^\d+$/.test(write.property)) continue;
         copied.push({
           container:target,key:null,stored:write.stored,node:copy.node,
@@ -2347,9 +2409,7 @@ function analyzeFile(root, file) {
         });
       }
       for (const write of copied) {
-        if (containerWrites.some(existing =>
-          canonicalObject(existing.container) === target &&
-          existing.key === write.key && existing.stored === write.stored)) continue;
+        if (!indexContainerWrite(write)) continue;
         containerWrites.push(write);
         containerCopiesChanged = true;
       }
@@ -2359,13 +2419,33 @@ function analyzeFile(root, file) {
   // Resolve container reads against all statically observed writes. A
   // literal Map/array index narrows known keys; unknown positions conservatively
   // retain every stored value so dynamic access cannot hide a live callback/object.
+  const containerCallbackBindings = new Map();
   for (const read of containerReads) {
     for (const write of containerWrites) {
       if (write.container !== read.container) continue;
       if (read.key !== null && write.key !== null && read.key !== write.key) continue;
-      addEdge(write.stored, read.assigned, 'container-value-read', read.node,
+      if (read.arrayIndex && write.key === null) {
+        const writesForContainer = containerWrites.filter(candidate => candidate.container === read.container);
+        if (read.key !== String(arrayInitialLengths.get(read.container)) || writesForContainer.length !== 1) continue;
+      }
+      addEdge(write.stored, read.assigned,
+        read.invoked ? 'container-callback-invocation' : 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
-      if (write.objectValue && read.assigned) linkObjectAlias(read.assigned, write.stored);
+      // Preserve the function identity when a callback is stored through a
+      // local variable binding; the binding edge alone is not a call edge.
+      if (write.callbackFunction && read.assigned) {
+        const functionIdentity = 'function@' + write.callbackFunction.loc.start.line;
+        if (read.invoked) {
+          addEdge(functionIdentity, read.assigned,
+            'container-callback-invocation', read.node,
+            read.key === null ? 'dynamic container key' : 'key=' + read.key);
+        } else {
+          addEdge(functionIdentity, read.assigned, 'container-callback-value-read', read.node,
+            read.key === null ? 'dynamic container key' : 'key=' + read.key);
+          containerCallbackBindings.set(read.assigned, write.callbackFunction);
+        }
+      }
+      if (write.objectValue && read.assigned && !read.invoked) linkObjectAlias(read.assigned, write.stored);
       if (read.node.callee?.property?.name === 'splice' && read.assigned) {
         containerWrites.push({container:read.assigned,key:null,stored:write.stored,node:read.node,objectValue:write.objectValue});
       }
@@ -2387,18 +2467,58 @@ function analyzeFile(root, file) {
     }
   }
 
-  // Resolve property reads again after container retrieval has established
-  // aliases from the retrieved bindings to the stored aggregate identities.
+  // Resolve property reads after container retrieval has established aliases.
+  // A single literal property containing a known function identity can also
+  // become a callback binding when a helper returns it to a local variable.
+  const callbackFunctionBindings = new Map([...containerCallbackBindings, ...factoryCallbackBindings]);
+  const callbackInvocationKinds = new Map();
+  for (const binding of containerCallbackBindings.keys()) callbackInvocationKinds.set(binding, 'container-callback-invocation');
+  for (const binding of factoryCallbackBindings.keys()) callbackInvocationKinds.set(binding, 'function-return-callback-invocation');
   for (const read of propertyReads) {
     const readObject = canonicalObject(read.object);
-    const matches = propertyWrites.filter(write =>
-      canonicalObject(write.object) === readObject &&
-      (read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+    const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
+      read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
+    const callbackIdentities = new Set(matches.filter(write =>
+      write.property === read.property && String(write.stored).startsWith('function@'))
+      .map(write => write.stored));
+    if (read.assigned && read.property !== null && callbackIdentities.size === 1 && !callbackFunctionBindings.has(read.assigned)) {
+      const identity = [...callbackIdentities][0];
+      const callback = functionNodes.find(fn => 'function@' + fn.loc.start.line === identity);
+      if (callback) {
+        callbackFunctionBindings.set(read.assigned, callback);
+        callbackInvocationKinds.set(read.assigned, 'property-value-callback-invocation');
+      }
+    }
     for (const write of matches) {
       addEdge(write.stored, destination, 'property-value-read', read.node,
         read.property === null ? 'dynamic property read' : 'property=' + read.property);
     }
+  }
+
+  // Propagate callback identities through immutable local aliases, then
+  // connect calls made after a container read, property read, or factory return.
+  let callbackAliasChanged = true;
+  while (callbackAliasChanged) {
+    callbackAliasChanged = false;
+    for (const alias of callbackAliases) {
+      if (!callbackFunctionBindings.has(alias.target) && callbackFunctionBindings.has(alias.source)) {
+        callbackFunctionBindings.set(alias.target, callbackFunctionBindings.get(alias.source));
+        callbackInvocationKinds.set(alias.target, callbackInvocationKinds.get(alias.source));
+        callbackAliasChanged = true;
+      }
+    }
+  }
+  if (callbackFunctionBindings.size) {
+    visit(ast, node => {
+      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
+      const binding = bindingId(node.callee);
+      const callback = callbackFunctionBindings.get(binding);
+      if (callback) addEdge('function@' + callback.loc.start.line,
+        'callback-invocation@' + node.loc.start.line,
+        callbackInvocationKinds.get(binding) || 'retrieved-callback-invocation',
+        node, 'retrieved callback binding');
+    });
   }
 
   // Captured closure records above may include the same captured binding in
@@ -2419,12 +2539,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const files = walkFiles(root);
   const results = [];
   const parseErrors = [];
+  const fileTimings = [];
   for (const file of files) {
+    const started = process.hrtime.bigint();
     try { results.push(analyzeFile(root, file)); }
     catch (error) {
       parseErrors.push({ file: path.relative(root, file).split(path.sep).join('/'), error: error.message });
+    } finally {
+      fileTimings.push({
+        file: path.relative(root, file).split(path.sep).join('/'),
+        durationMs: Number(process.hrtime.bigint() - started) / 1e6
+      });
     }
   }
+  fileTimings.sort((left, right) => right.durationMs - left.durationMs);
   const findings = results.flatMap(result => result.findings);
   const flowEdges = results.flatMap(result => result.flowEdges);
   const flowEdgeKinds = {};
@@ -2437,6 +2565,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   return {
     filesAnalyzed: results.length,
     filesFailedToParse: parseErrors.length,
+    slowestFiles: fileTimings.slice(0, 12),
     functionsInventoried: results.reduce((sum, result) => sum + result.functions, 0),
     findingCount: findings.length,
     flowEdgeCount: flowEdges.length,
@@ -2458,6 +2587,7 @@ function run(root = path.resolve(__dirname, '..')) {
   for (const category of CATEGORIES) console.log(category + ': ' + result.counts[category]);
   console.log('Runtime-flow findings: ' + result.findingCount);
   console.log('Explicit runtime-flow edges: ' + result.flowEdgeCount);
+  console.log('Slowest runtime-flow files: ' + JSON.stringify(result.slowestFiles));
   for (const [kind, count] of Object.entries(result.flowEdgeKinds).sort()) {
     console.log('  ' + kind + ': ' + count);
   }

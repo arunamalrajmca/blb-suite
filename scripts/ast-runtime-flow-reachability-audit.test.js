@@ -459,6 +459,82 @@ test('traces object-property callback values stored in and retrieved from contai
     edge.from === storedValue.to && edge.to === 'handler@5'));
 });
 
+test('traces immediate invocation of callbacks retrieved from a Map', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('ready', callback);",
+    "registry.get('ready')();"
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@4'));
+});
+
+test('traces callbacks invoked after retrieval from a Map', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('ready', callback);",
+    "const handler = registry.get('ready');",
+    'handler();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
+});
+
+test('traces callbacks read from a known array append slot and invoked later', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const callbacks = [];',
+    'callbacks.push(callback);',
+    'const handler = callbacks[0];',
+    'handler();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
+});
+
+test('traces named and inline callbacks returned by factories through immutable aliases', () => {
+  const result = audit([
+    'const namedCallback = () => startNamed();',
+    'function createNamed() { return namedCallback; }',
+    'const namedHandler = createNamed();',
+    'const alias = namedHandler;',
+    'const aliasAgain = alias;',
+    'aliasAgain();',
+    'function createInline() { return () => startInline(); }',
+    'const inlineHandler = createInline();',
+    'inlineHandler();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'function-return-callback-invocation' &&
+    edge.from === 'function@7' && edge.to === 'callback-invocation@9'));
+});
+
+test('traces callbacks returned from object registries through later invocation', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'function getHandler() { return registry.onReady; }',
+    'const handler = getHandler();',
+    'handler();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
+});
+
+test('traces callbacks retrieved from array literal slots through later invocation', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const callbacks = [callback];',
+    'const handler = callbacks[0];',
+    'handler();'
+  ].join('\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@4'));
+});
+
 test('traces object-property values returned from helper functions', () => {
   const result = audit([
     'const callback = () => start();',

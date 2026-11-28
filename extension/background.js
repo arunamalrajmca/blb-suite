@@ -3141,9 +3141,9 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
     let hostname = '';
     try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
     const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[hostname];
+    const mainWorldId = `${id}-main-world`;
     if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
-      const mainWorldId = `${id}-main-world`;
-      const mainWorldFiles = ['source-page-collector-sites.js','redirect-christianity-main-world.js'];
+      const mainWorldFiles = ['redirect-christianity-main-world.js'];
       const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
       if (!registeredMain.length) {
         await chrome.scripting.registerContentScripts([{
@@ -3164,6 +3164,14 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
           world:'MAIN',
           persistAcrossSessions:true
         }]);
+      }
+    } else {
+      // Registrations persist across browser sessions. If a host no longer
+      // requires the MAIN-world guard (or the isolated bundle is no longer
+      // eligible), remove any stale guard left by an earlier extension build.
+      const staleMainWorld = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
+      if (staleMainWorld.length) {
+        await chrome.scripting.unregisterContentScripts({ids:[mainWorldId]});
       }
     }
     // Permission revocation can race an in-flight register/update call. The
@@ -3187,7 +3195,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
   } catch (error) {
     const errorDetails = describeScriptInjectionError(error);
     const patternFileChecks = await inspectPackagedScriptFiles(files);
-    const mainWorldFileChecks = await inspectPackagedScriptFiles(['source-page-collector-sites.js','redirect-christianity-main-world.js']);
+    const mainWorldFileChecks = await inspectPackagedScriptFiles(['redirect-christianity-main-world.js']);
     let registeredScripts = [];
     try {
       registeredScripts = await chrome.scripting.getRegisteredContentScripts();
@@ -3552,13 +3560,13 @@ async function ensureContentScriptInTab(tabId) {
           if (!tab) return false;
           await chrome.scripting.executeScript({
             target:{tabId},
-            files:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
+            files:['redirect-christianity-main-world.js'],
             world:'MAIN'
           });
         } catch (error) {
           if (isTabUnavailableError(error)) return false;
           console.error('KJV Scripture Tools MAIN-world script injection failed:', {
-            tabId, tabUrl:tab.url, files:['source-page-collector-sites.js','redirect-christianity-main-world.js'], error:String(error)
+            tabId, tabUrl:tab.url, files:['redirect-christianity-main-world.js'], error:String(error)
           });
           return false;
         }
