@@ -88,3 +88,10 @@ test('does not classify Playwright test declaration callbacks as unknown higher-
     assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('does not label standard Array iteration callbacks as external callback contracts', () => {
+  const result = run("const nodes = [1, 2, 3]; nodes.map(value => value * 2); nodes.filter(value => value > 1); nodes.forEach(value => consume(value));");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
