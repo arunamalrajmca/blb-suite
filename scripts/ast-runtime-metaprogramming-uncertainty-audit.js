@@ -65,6 +65,11 @@ function needsScopeAnalysis(ast) {
   ]);
   visit(ast, node => {
     if (needed) return;
+    if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
+        KNOWN_GLOBAL_CALLBACK_APIS.has(node.callee.name)) {
+      needed = true;
+      return;
+    }
     if ((node.type === 'NewExpression' || node.type === 'CallExpression') &&
         node.callee.type === 'Identifier' &&
         ['Proxy', 'eval', 'Function'].includes(node.callee.name)) {
