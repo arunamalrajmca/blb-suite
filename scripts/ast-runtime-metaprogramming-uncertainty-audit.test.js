@@ -136,7 +136,7 @@ test('recognizes MutationObserver.observe as a target/options method, not a call
 });
 
 test('does not suppress observe contracts when MutationObserver is shadowed', () => {
-  const result = run("function setup(MutationObserver, observer) { const local = new MutationObserver(handler); local.observe(target, options); }");
+  const result = run("function setup(MutationObserver, observer) { const local = new MutationObserver(handler); local.observe(target, { childList: true }); }");
   assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 1);
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
