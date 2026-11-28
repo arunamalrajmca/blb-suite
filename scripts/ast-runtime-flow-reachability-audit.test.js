@@ -2182,3 +2182,90 @@ test('supports a directly instantiated anonymous async iterator class expression
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@6'));
 });
+
+test('traces native scheduler.postTask callback and asynchronous reachability edges', () => {
+  const result = audit([
+    'const onReady = () => true;',
+    'scheduler.postTask(onReady);',
+    'globalThis.scheduler.postTask(() => onReady());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 2);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 2);
+});
+
+test('does not treat shadowed or arbitrary postTask methods as native scheduler roots', () => {
+  const result = audit([
+    'function onReady() { return true; }',
+    'const scheduler = { postTask(callback) { return callback; } };',
+    'scheduler.postTask(onReady);',
+    'function local(scheduler) { scheduler.postTask(onReady); }'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
+
+test('traces native process.nextTick callbacks through callback and async edges', () => {
+  const result = audit([
+    'const onReady = () => true;',
+    'setImmediate(onReady);',
+    'process.nextTick(onReady);',
+    'globalThis.process.nextTick(() => onReady());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 3);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 3);
+});
+
+test('does not treat shadowed process.nextTick methods as native callback roots', () => {
+  const result = audit([
+    'function onReady() { return true; }',
+    'const process = { nextTick(callback) { return callback; } };',
+    'process.nextTick(onReady);',
+    'process.nextTick(() => work());',
+    'function local(process) { process.nextTick(() => work()); }'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
+
+test('does not treat a shadowed setImmediate declaration as the native scheduler', () => {
+  const result = audit([
+    'function onReady() { return true; }',
+    'function setImmediate(callback) { return callback; }',
+    'setImmediate(onReady);',
+    'setImmediate(() => work());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
+
+test('does not promote reassigned scheduler, process, or setImmediate aliases to native roots', () => {
+  const result = audit([
+    'let scheduler = globalThis.scheduler;',
+    'scheduler = { postTask(callback) { return callback; } };',
+    'scheduler.postTask(() => work());',
+    'let process = globalThis.process;',
+    'process = { nextTick(callback) { return callback; } };',
+    'process.nextTick(() => work());',
+    'let setImmediate = globalThis.setImmediate;',
+    'setImmediate = callback => callback();',
+    'setImmediate(() => work());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});

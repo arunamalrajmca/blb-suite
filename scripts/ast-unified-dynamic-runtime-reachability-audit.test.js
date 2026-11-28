@@ -1057,7 +1057,7 @@ test('records framework callback ownership and resolves named and inline callbac
     ].join(' ')
   });
   const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
-  assert.equal(registrations.length, 3);
+  assert.equal(registrations.length, 3, JSON.stringify(result.dynamicSites));
   assert.ok(registrations.some(item => item.callback === 'onMessage' && item.certainty === 'resolved-function-binding'));
   assert.ok(registrations.some(item => item.callback === '[inline callback]' && item.certainty === 'resolved-inline-callback'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
@@ -2830,7 +2830,7 @@ test('recognizes Vue Composition API lifecycle callback registrations', () => {
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' &&
     ['onMounted', 'onBeforeUnmount', 'onErrorCaptured'].includes(item.expression));
-  assert.equal(registrations.length, 3);
+  assert.equal(registrations.length, 3, JSON.stringify(result.dynamicSites));
   assert.ok(registrations.some(item =>
     item.expression === 'onMounted' &&
     item.callback === 'mounted' &&
@@ -2889,4 +2889,540 @@ test('does not resolve callbacks from dynamically indexed or mutated registries'
   assert.equal(registrations.length, 2);
   assert.ok(registrations.every(item => item.certainty === 'unresolved-callback-owner'));
   assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
+});
+
+test('recognizes native scheduler.postTask callbacks through global scheduler roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'scheduler.postTask(() => onReady());',
+      'globalThis.scheduler.postTask(onReady);',
+      'window.scheduler.postTask(onReady);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask'));
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.every(item => item.certainty === 'resolved-inline-callback' ||
+    item.certainty === 'resolved-function-binding' ||
+    item.certainty === 'resolved-interprocedural-callback-argument'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat shadowed or arbitrary postTask methods as native scheduler callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const scheduler = { postTask(callback) { return callback; } };',
+      'scheduler.postTask(onReady);',
+      'function local(scheduler) { scheduler.postTask(onReady); }'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask')).length, 0);
+});
+
+test('produces deterministic reachability results when module discovery order changes', () => {
+  const entries = [
+    ['package.json', JSON.stringify({ scripts: { audit: 'node scripts/main.js' } })],
+    ['scripts/main.js', [
+      "import { forward } from './middle.js';",
+      'function onReady() { return true; }',
+      'forward(onReady);'
+    ].join('\n')],
+    ['scripts/middle.js', [
+      "import { register } from './leaf.js';",
+      'export function forward(handler) { register(handler); }'
+    ].join('\n')],
+    ['scripts/leaf.js', [
+      'export function register(callback) {',
+      "  globalThis.addEventListener('audit-ready', callback);",
+      '}'
+    ].join('\n')]
+  ];
+  const first = run(Object.fromEntries(entries));
+  const second = run(Object.fromEntries([...entries].reverse()));
+  const stableView = result => ({
+    roots: result.roots,
+    edges: result.edges,
+    dynamicSites: result.dynamicSites,
+    uncertainty: result.uncertainty,
+    reachable: result.reachable,
+    unresolvedByRoot: result.unresolvedByRoot,
+    uncertainFiles: result.uncertainFiles,
+    unreachableInventory: result.unreachableInventory,
+    definiteUnreachable: result.definiteUnreachable
+  });
+  assert.deepEqual(stableView(first), stableView(second));
+});
+
+test('recognizes native Node setImmediate and process.nextTick callback roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'setImmediate(onReady);',
+      'process.nextTick(() => onReady());',
+      'globalThis.process.nextTick(onReady);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    ['setImmediate', 'process.nextTick', 'globalThis.process.nextTick'].includes(item.expression));
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.every(item => item.certainty === 'resolved-inline-callback' ||
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat shadowed setImmediate or process.nextTick methods as native roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function setImmediate(callback) { return callback; }',
+      'const process = { nextTick(callback) { return callback; } };',
+      'setImmediate(() => work());',
+      'process.nextTick(() => work());',
+      'function local(process) { process.nextTick(() => work()); }'
+    ].join('\n')
+  });
+  assert.equal(result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    ['setImmediate', 'process.nextTick'].includes(item.expression)).length, 0);
+});
+
+
+test('resolves callback ownership deterministically when declarations are reordered', () => {
+  const packageJson = JSON.stringify({ scripts: { audit: 'node scripts/main.js' } });
+  const beforeUse = [
+    'function onMessage(message) { return message; }',
+    'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'register(onMessage);'
+  ].join('\n');
+  const useBeforeDeclarations = [
+    'register(onMessage);',
+    'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'function onMessage(message) { return message; }'
+  ].join('\n');
+  const first = run({
+    'package.json': packageJson,
+    'scripts/main.js': beforeUse
+  });
+  const second = run({
+    'package.json': packageJson,
+    'scripts/main.js': useBeforeDeclarations
+  });
+  const summarize = result => ({
+    reachable: [...result.reachable].sort(),
+    registrations: result.dynamicSites
+      .filter(item => item.kind === 'external-callback-registration')
+      .map(item => ({
+        expression: item.expression,
+        certainty: item.certainty,
+        callback: item.callback || null,
+        callbackTarget: (item.callbackTarget || '').replace(/@\d+:\d+$/, '@<location>'),
+        callbackTargets: (item.callbackTargets || [])
+          .map(target => target.replace(/@\d+:\d+$/, '@<location>'))
+          .sort()
+      }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    uncertainty: result.uncertainty
+      .map(item => ({ kind: item.kind, expression: item.expression || null }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  });
+  assert.deepEqual(summarize(first), summarize(second));
+  assert.equal(summarize(first).registrations.length, 1);
+  assert.equal(summarize(first).registrations[0].certainty,
+    'resolved-interprocedural-callback-argument');
+});
+
+
+test('resolves a uniquely assigned local DOM listener callback', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'startupListener = () => initialize();',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-function-binding');
+  assert.match(registration.callbackTarget, /scripts\/main\.js::startupListener@/);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not resolve a reassigned local DOM listener callback from a stale function value', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'startupListener = () => initializeFirst();',
+      'startupListener = runtimeListener;',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.callbackTarget, null);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.expression === 'document.addEventListener'));
+});
+
+
+test('recognizes Chrome runtime onMessage sendResponse as an external callback parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
+      '  Promise.resolve({ok:true}).then(sendResponse);',
+      '});'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression.includes('.then'));
+  assert.ok(registration, JSON.stringify(result.dynamicSites));
+  assert.equal(registration.certainty, 'resolved-external-api-callback-parameter');
+  assert.equal(registration.callback, '[external API callback parameter]');
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat arbitrary sendResponse-named parameters as external callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function arbitraryHandler(message, sender, sendResponse) {',
+      '  Promise.resolve({ok:true}).then(sendResponse);',
+      '}'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression.includes('.then'));
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.expression.includes('.then')));
+});
+
+
+test('does not grant runtime message callback contracts to a shadowed chrome namespace', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function install(chrome) {',
+      '  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
+      '    Promise.resolve({ok:true}).then(sendResponse);',
+      '  });',
+      '}'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression.includes('.then'));
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner'));
+});
+
+
+test('does not resolve assigned callback values before their assignment or across conditional blocks', () => {
+  const beforeAssignment = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      "document.addEventListener('DOMContentLoaded', startupListener);",
+      'startupListener = () => initialize();'
+    ].join('\n')
+  });
+  const conditionalAssignment = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'if (shouldInstall) { startupListener = () => initialize(); }',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\n')
+  });
+  const wrapperBeforeAssignment = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function register(callback) { document.addEventListener("DOMContentLoaded", callback); }',
+      'let startupListener = null;',
+      'register(startupListener);',
+      'startupListener = () => initialize();'
+    ].join('\n')
+  });
+  for (const result of [beforeAssignment, conditionalAssignment, wrapperBeforeAssignment]) {
+    const registration = result.dynamicSites.find(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression === 'document.addEventListener');
+    assert.ok(registration);
+    assert.equal(registration.certainty, 'unresolved-callback-owner');
+    assert.ok(result.uncertainty.some(item =>
+      item.kind === 'unresolved-external-callback-owner'));
+  }
+});
+
+
+test('resolves callback assignment with cleanup-only null reset outside the registration block', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'function cleanup() {',
+      "  document.removeEventListener('DOMContentLoaded', startupListener);",
+      '  startupListener = null;',
+      '}',
+      'function initialize() {',
+      '  startupListener = () => initializeReady();',
+      "  document.addEventListener('DOMContentLoaded', startupListener);",
+      '}',
+      'initialize();'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-function-binding');
+  assert.match(registration.callbackTarget, /scripts\/main\.js::startupListener@/);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not resolve a callback cleared to null before its registration', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'startupListener = () => initializeReady();',
+      'startupListener = null;',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner'));
+});
+
+
+test('does not retain the Chrome sendResponse contract after its parameter is reassigned', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
+      '  sendResponse = fallbackResponder;',
+      '  Promise.resolve({ok:true}).then(sendResponse);',
+      '});'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression.includes('.then'));
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.expression.includes('.then')));
+});
+
+
+test('resolves bounded content-script arrays returned by a helper and forwarded through loader parameters', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      "const FULL_FILES = ['full-a.js', 'full-b.js'];",
+      "const LIGHT_FILES = ['light.js'];",
+      'function contentScriptFilesForTab(tab) {',
+      '  if (tab) return [...FULL_FILES];',
+      '  return LIGHT_FILES;',
+      '}',
+      'function registerRuntimeContentScriptForPattern(tab, files = FULL_FILES) {',
+      '  Array.isArray(files);',
+      '  JSON.stringify(files);',
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      'function ensureRuntimeContentScriptRegistered(tab, files = FULL_FILES) {',
+      '  return Promise.resolve().then(() => registerRuntimeContentScriptForPattern(tab, files));',
+      '}',
+      'function reconcile(tab) {',
+      '  const files = contentScriptFilesForTab(tab);',
+      '  return ensureRuntimeContentScriptRegistered(tab, files);',
+      '}',
+      'reconcile(true);',
+      'reconcile(false);'
+    ].join('\n'),
+    'extension/full-a.js': 'globalThis.fullA = true;',
+    'extension/full-b.js': 'globalThis.fullB = true;',
+    'extension/light.js': 'globalThis.light = true;'
+  });
+  for (const target of ['full-a.js', 'full-b.js', 'light.js']) {
+    assert.ok(edge(result, 'chrome.scripting.registerContentScripts',
+      'extension/background.js', 'extension/' + target), target);
+  }
+  assert.equal(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts'), false);
+});
+
+test('keeps array loader parameters uncertain when the callee mutates the file list', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function registerRuntime(files) {',
+      "  files.push('injected.js');",
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['base.js']);"
+    ].join('\n'),
+    'extension/base.js': 'globalThis.base = true;',
+    'extension/injected.js': 'globalThis.injected = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/base.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
+
+test('keeps array loader parameters uncertain when a local alias mutates the file list', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function registerRuntime(files) {',
+      '  const alias = files;',
+      "  alias.push('injected.js');",
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['base.js']);"
+    ].join('\n'),
+    'extension/base.js': 'globalThis.base = true;',
+    'extension/injected.js': 'globalThis.injected = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/base.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
+
+test('propagates loader-array mutation uncertainty back through a known local wrapper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function mutateFiles(files) {',
+      "  files.push('injected.js');",
+      '}',
+      'function registerRuntime(files) {',
+      '  mutateFiles(files);',
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['base.js']);"
+    ].join('\n'),
+    'extension/base.js': 'globalThis.base = true;',
+    'extension/injected.js': 'globalThis.injected = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/base.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
+
+test('keeps array loader parameters uncertain when any caller supplies an unknown file list', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function registerRuntime(files) {',
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['known.js']);",
+      'registerRuntime(runtimeFiles);'
+    ].join('\n'),
+    'extension/known.js': 'globalThis.known = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/known.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
+
+
+test('does not treat Playwright timeout configuration or listener removal as callback registration', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onFocusChanged() {}',
+      'test.setTimeout(600000);',
+      'chrome.windows.onFocusChanged.removeListener(onFocusChanged);',
+      'setTimeout(onFocusChanged, 0);',
+      'window.setTimeout(onFocusChanged, 0);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration');
+  assert.equal(registrations.some(item => item.expression === 'test.setTimeout'), false);
+  assert.equal(registrations.some(item => item.expression.endsWith('.removeListener')), false);
+  assert.equal(registrations.filter(item =>
+    ['setTimeout', 'window.setTimeout'].includes(item.expression)).length, 2);
+});
+
+test('recognizes callable final arguments through Function.prototype.call but not data arguments', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const defaults = { enabled: true };',
+      "const scripts = [{ id: 'runtime', js: ['content.js'] }];",
+      'chrome.storage.local.get.call(chrome.storage.local, defaults);',
+      'chrome.scripting.registerContentScripts.call(chrome.scripting, scripts);',
+      'chrome.tabs.query.call(chrome.tabs, {}, onReady);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration');
+  assert.equal(registrations.length, 1);
+  assert.ok(registrations[0].expression.endsWith('.call'));
+  assert.equal(registrations[0].certainty, 'resolved-function-binding');
+  assert.match(registrations[0].callbackTarget, /scripts\/main\.js::onReady@/);
 });

@@ -108,12 +108,38 @@ function analyzeFile(root, file) {
   for (const scope of manager.scopes) {
     for (const variable of scope.variables || []) {
       for (const id of variable.identifiers || []) variableForNode.set(id, variable);
-      for (const def of variable.defs || []) if (def.name) variableForNode.set(def.name, variable);
+      for (const def of variable.defs || []) {
+        if (def.name) variableForNode.set(def.name, variable);
+      }
     }
     for (const reference of scope.references || []) {
       if (reference.resolved) variableForNode.set(reference.identifier, reference.resolved);
     }
   }
+
+  const declaredNames = new Set();
+  const collectBindingNames = pattern => {
+    if (!pattern) return;
+    if (pattern.type === 'Identifier') declaredNames.add(pattern.name);
+    else if (pattern.type === 'RestElement') collectBindingNames(pattern.argument);
+    else if (pattern.type === 'AssignmentPattern') collectBindingNames(pattern.left);
+    else if (pattern.type === 'ArrayPattern') pattern.elements.forEach(collectBindingNames);
+    else if (pattern.type === 'ObjectPattern') {
+      for (const property of pattern.properties || []) {
+        collectBindingNames(property.type === 'RestElement' ? property.argument : property.value);
+      }
+    }
+  };
+  visit(ast, node => {
+    if (node.type === 'VariableDeclarator') collectBindingNames(node.id);
+    if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration' ||
+        (node.type === 'FunctionExpression' && node.id)) collectBindingNames(node.id);
+    if (isFunction(node)) (node.params || []).forEach(collectBindingNames);
+    if (node.type === 'CatchClause') collectBindingNames(node.param);
+    if (node.type === 'ImportDeclaration') {
+      for (const specifier of node.specifiers || []) collectBindingNames(specifier.local);
+    }
+  });
 
   const findings = [];
   const flowEdges = [];
@@ -128,7 +154,7 @@ function analyzeFile(root, file) {
     return variable.name + '@' + (definition && definition.loc ? definition.loc.start.line : 0);
   };
   const isUnshadowedGlobalIdentifier = (node, name) =>
-    node?.type === 'Identifier' && node.name === name && !variableForNode.has(node);
+    node?.type === 'Identifier' && node.name === name && !declaredNames.has(name);
   const addEdge = (from, to, kind, node, detail) => {
     if (!from || !to) return;
     flowEdges.push({
@@ -936,16 +962,46 @@ function analyzeFile(root, file) {
   }
 
   const callbackSchedulers = new Set([
-    'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask',
+    'setTimeout', 'setInterval', 'queueMicrotask',
     'then', 'catch', 'finally', 'addEventListener', 'removeListener',
     'addListener', 'on', 'once', 'subscribe', 'observe', 'watch',
     'requestAnimationFrame', 'requestIdleCallback', 'addEventListener', 'addListener', 'subscribe', 'observe', 'watch'
   ]);
   const asyncSchedulers = new Set([
-    'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask',
+    'setTimeout', 'setInterval', 'queueMicrotask',
     'then', 'catch', 'finally', 'requestAnimationFrame',
     'requestIdleCallback', 'postMessage', 'sendMessage'
   ]);
+  const isNativeTaskSchedulerCall = node => {
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' ||
+        propertyName(node.callee) !== 'postTask') return false;
+    const receiver = node.callee.object;
+    if (receiver?.type === 'Identifier' && receiver.name === 'scheduler') {
+      return !declaredNames.has('scheduler');
+    }
+    if (receiver?.type === 'MemberExpression' && propertyName(receiver) === 'scheduler' &&
+        receiver.object?.type === 'Identifier' &&
+        ['globalThis', 'window', 'self'].includes(receiver.object.name)) {
+      return !declaredNames.has(receiver.object.name);
+    }
+    return false;
+  };
+  const isNativeSetImmediateCall = node =>
+    node?.type === 'CallExpression' && node.callee?.type === 'Identifier' &&
+    node.callee.name === 'setImmediate' && !declaredNames.has('setImmediate');
+  const isNativeProcessNextTickCall = node => {
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' ||
+        propertyName(node.callee) !== 'nextTick') return false;
+    const receiver = node.callee.object;
+    if (receiver?.type === 'Identifier' && receiver.name === 'process') {
+      return !declaredNames.has('process');
+    }
+    if (receiver?.type === 'MemberExpression' && propertyName(receiver) === 'process' &&
+        receiver.object?.type === 'Identifier' && receiver.object.name === 'globalThis') {
+      return !declaredNames.has(receiver.object.name);
+    }
+    return false;
+  };
   const reflectiveMethods = new Set([
     'get', 'set', 'has', 'ownKeys', 'getOwnPropertyDescriptor',
     'getOwnPropertyDescriptors', 'getOwnPropertyNames', 'getOwnPropertySymbols',
@@ -1085,7 +1141,7 @@ function analyzeFile(root, file) {
       for (let index = 0; index < node.arguments.length; index++) {
         const argument = node.arguments[index];
         if (isFunction(argument)) {
-          const scheduler = callbackSchedulers.has(name) || name === 'addListener' ||
+          const scheduler = callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeSetImmediateCall(node) || isNativeProcessNextTickCall(node) || name === 'addListener' ||
             (name === 'addEventListener' && index === 1);
           if (scheduler) {
             add('callbacks', 'callback-registration', argument,
@@ -1095,7 +1151,7 @@ function analyzeFile(root, file) {
           }
         }
         if (argument.type === 'Identifier' && functionVariables.has(variableForNode.get(argument))) {
-          if (callbackSchedulers.has(name)) {
+          if (callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeSetImmediateCall(node) || isNativeProcessNextTickCall(node)) {
             add('callbacks', 'function-reference-registration',
               argument, (name || 'call') + ' argument[' + index + ']');
             addEdge(bindingId(argument), 'scheduler@' + node.loc.start.line,
@@ -1104,7 +1160,7 @@ function analyzeFile(root, file) {
         }
       }
 
-      if (asyncSchedulers.has(name)) add('asynchronous-scheduling', 'scheduler-call', node,
+      if (asyncSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeSetImmediateCall(node) || isNativeProcessNextTickCall(node)) add('asynchronous-scheduling', 'scheduler-call', node,
         (receiverName ? receiverName + '.' : '') + name);
 
       if (node.type === 'NewExpression' && name === 'Proxy') {

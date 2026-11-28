@@ -614,6 +614,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     exportStarsByFile.set(file, exportStars);
   }
 
+  const externalCallbackParameterBindings = new Set();
   const functionDefs = new Map();
   // Keep the unresolved-script-global fallback indexed by file and declared
   // name. Scanning every function definition for every callback/callsite made
@@ -635,6 +636,98 @@ function analyze(root = path.resolve(__dirname, '..')) {
       } else if ((node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
           parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
         const key = bindings.get(parent.id); if (key) functionDefs.set(file + '::' + key, { file, node });
+      }
+    });
+  }
+
+  // Resolve a callback stored by one direct assignment to a local binding.
+  // Only a single syntactic write is accepted; multiple writes, alias writes,
+  // and ambiguous reassignment remain unresolved rather than reusing stale
+  // function values. This covers startup listeners initialized after a
+  // nullable declaration without treating mutable callback slots as stable.
+  const assignedFunctionWrites = new Map();
+  const parentByFile = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file);
+    const parents = new WeakMap();
+    visit(ast, (node, parent) => { if (parent) parents.set(node, parent); });
+    parentByFile.set(file, parents);
+    visit(ast, node => {
+      const target = node.type === 'AssignmentExpression' && node.left.type === 'Identifier'
+        ? node.left
+        : node.type === 'UpdateExpression' && node.argument.type === 'Identifier'
+          ? node.argument
+          : (node.type === 'ForInStatement' || node.type === 'ForOfStatement') &&
+            node.left.type === 'Identifier' ? node.left : null;
+      if (!target) return;
+      const key = bindings?.get(target);
+      if (!key) return;
+      if (!assignedFunctionWrites.has(file + '::' + key)) assignedFunctionWrites.set(file + '::' + key, []);
+      const value = node.type === 'AssignmentExpression' && node.operator === '=' ? node.right : null;
+      assignedFunctionWrites.get(file + '::' + key).push({
+        node,
+        value,
+        isNullClear: value?.type === 'Literal' && value.value === null
+      });
+    });
+  }
+  for (const [identity, writes] of assignedFunctionWrites) {
+    const functionWrites = writes.filter(write =>
+      ['FunctionExpression', 'ArrowFunctionExpression'].includes(write.value?.type));
+    if (functionWrites.length !== 1 ||
+        writes.some(write => write !== functionWrites[0] && !write.isNullClear)) continue;
+    const write = functionWrites[0];
+    if (functionDefs.has(identity)) continue;
+    const separator = identity.indexOf('::');
+    const file = identity.slice(0, separator);
+    functionDefs.set(identity, {
+      file,
+      node: write.value,
+      assignmentNode: write.node,
+      nullClearNodes: writes.filter(candidate => candidate.isNullClear).map(candidate => candidate.node)
+    });
+  }
+
+  // Precompute callback parameters supplied by the exact Chrome runtime
+  // message-listener contract before per-file site analysis. This makes the
+  // result independent of source-file discovery order.
+  const staticApiPath = node => {
+    if (!node) return '';
+    if (node.type === 'Identifier') return node.name;
+    if (node.type !== 'MemberExpression') return '';
+    const property = node.computed
+      ? (node.property.type === 'Literal' ? String(node.property.value) : '')
+      : node.property.name;
+    return property ? [staticApiPath(node.object), property].filter(Boolean).join('.') : '';
+  };
+  for (const [registeredFile, registeredAst] of asts) {
+    const registeredBindings = bindingByFile.get(registeredFile);
+    const reassignedBindings = new Set();
+    visit(registeredAst, node => {
+      const target = node.type === 'AssignmentExpression' && node.left.type === 'Identifier'
+        ? node.left
+        : node.type === 'UpdateExpression' && node.argument.type === 'Identifier'
+          ? node.argument
+          : (node.type === 'ForInStatement' || node.type === 'ForOfStatement') &&
+            node.left.type === 'Identifier' ? node.left : null;
+      const key = target && registeredBindings?.get(target);
+      if (key) reassignedBindings.add(key);
+    });
+    visit(registeredAst, node => {
+      if (node.type !== 'CallExpression' ||
+          !['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener']
+            .includes(staticApiPath(node.callee))) return;
+      let apiRoot = node.callee;
+      while (apiRoot?.type === 'MemberExpression') apiRoot = apiRoot.object;
+      if (apiRoot?.type !== 'Identifier' || registeredBindings?.get(apiRoot)) return;
+      const callback = node.arguments[0];
+      const definition = callback?.type === 'Identifier'
+        ? functionDefs.get(registeredFile + '::' + registeredBindings?.get(callback)) : null;
+      const registeredFunction = definition?.node || callback;
+      const parameter = registeredFunction?.params?.[2];
+      const key = parameter?.type === 'Identifier' ? registeredBindings?.get(parameter) : null;
+      if (key && !reassignedBindings.has(key)) {
+        externalCallbackParameterBindings.add(registeredFile + '::' + key);
       }
     });
   }
@@ -708,6 +801,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
     objectMethodDefsByFile.set(file, methods);
   }
+  const nearestStaticBlock = (file, node) => {
+    const parents = parentByFile.get(file);
+    let current = node;
+    while (current) {
+      if (current.type === 'BlockStatement' || current.type === 'Program') return current;
+      current = parents?.get(current);
+    }
+    return null;
+  };
   const resolveFunctionOwner = (file, identifier) => {
     const bindings = bindingByFile.get(file);
     let key = bindings && bindings.get(identifier);
@@ -715,6 +817,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const seen = new Set();
     while (key && aliases && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
     let definition = key && functionDefs.get(file + '::' + key);
+    if (definition?.assignmentNode) {
+      const useBlock = nearestStaticBlock(file, identifier);
+      const invalidatedBeforeUse = (definition.nullClearNodes || []).some(clearNode =>
+        nearestStaticBlock(file, clearNode) === useBlock &&
+        clearNode.start > definition.assignmentNode.start && clearNode.start < identifier.start);
+      if (definition.assignmentNode.start >= identifier.start ||
+          nearestStaticBlock(file, definition.assignmentNode) !== useBlock ||
+          invalidatedBeforeUse) definition = null;
+    }
     if (definition) return { file: definition.file, key, node: definition.node };
     // Script/global scopes can leave same-file function references unresolved.
     // Use an exact local function name only when it has one definition.
@@ -780,8 +891,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
         reassigned = true;
         return;
       }
-      // Inspect nested closures too: binding identities distinguish a captured
-      // outer parameter from a shadowing nested parameter with the same name.
       for (const [key, value] of Object.entries(node)) {
         if (['loc', 'start', 'end', 'range'].includes(key)) continue;
         if (Array.isArray(value)) value.forEach(inspect);
@@ -792,17 +901,108 @@ function analyze(root = path.resolve(__dirname, '..')) {
     parameterReassignmentCache.set(identity, reassigned);
     return reassigned;
   };
+  const parameterMutationCache = new Map();
+  const parameterIsMutated = (file, functionNode, parameterKey) => {
+    const identity = file + '::' + parameterKey;
+    if (parameterMutationCache.has(identity)) return parameterMutationCache.get(identity);
+    const bindings = bindingByFile.get(file);
+    const aliases = new Set([parameterKey]);
+    let aliasesChanged = true;
+    while (aliasesChanged) {
+      aliasesChanged = false;
+      visit(functionNode.body, node => {
+        if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+            node.init?.type !== 'Identifier' || !aliases.has(bindings?.get(node.init))) return;
+        const aliasKey = bindings?.get(node.id);
+        if (aliasKey && !aliases.has(aliasKey)) {
+          aliases.add(aliasKey);
+          aliasesChanged = true;
+        }
+      });
+    }
+    const isParameterReference = node => node?.type === 'Identifier' &&
+      aliases.has(bindings?.get(node));
+    const mutatingArrayMethods = new Set([
+      'copyWithin', 'fill', 'pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'
+    ]);
+    let mutated = false;
+    const inspect = node => {
+      if (!node || typeof node !== 'object' || typeof node.type !== 'string' || mutated) return;
+      if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
+          isParameterReference(node.left.object)) {
+        mutated = true;
+        return;
+      }
+      if (node.type === 'UpdateExpression' && node.argument.type === 'MemberExpression' &&
+          isParameterReference(node.argument.object)) {
+        mutated = true;
+        return;
+      }
+      if (node.type === 'UnaryExpression' && node.operator === 'delete' &&
+          node.argument.type === 'MemberExpression' && isParameterReference(node.argument.object)) {
+        mutated = true;
+        return;
+      }
+      if (node.type === 'CallExpression') {
+        const callee = node.callee;
+        if (callee.type === 'MemberExpression' && isParameterReference(callee.object)) {
+          const method = callee.computed
+            ? (callee.property.type === 'Literal' ? String(callee.property.value) : null)
+            : callee.property.name;
+          if (mutatingArrayMethods.has(method)) {
+            mutated = true;
+            return;
+          }
+        }
+        // A value passed to an unknown function may be mutated. Known local
+        // callees are analyzed through their own parameter bindings.
+        const calleeObjectName = node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && !bindings?.get(node.callee.object)
+            ? node.callee.object.name : '';
+        const calleePropertyName = node.callee.type === 'MemberExpression'
+          ? (node.callee.computed
+            ? (node.callee.property.type === 'Literal' ? String(node.callee.property.value) : null)
+            : node.callee.property.name)
+          : null;
+        const isUnshadowedReadOnlyBuiltinCall =
+          (calleeObjectName === 'JSON' && calleePropertyName === 'stringify') ||
+          (calleeObjectName === 'Array' && calleePropertyName === 'isArray');
+        if (node.arguments.some(isParameterReference) &&
+            !resolveCallableOwner(file, node.callee) && !isUnshadowedReadOnlyBuiltinCall) {
+          mutated = true;
+          return;
+        }
+      }
+      for (const [key, value] of Object.entries(node)) {
+        if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+        if (Array.isArray(value)) value.forEach(inspect);
+        else if (value && typeof value.type === 'string') inspect(value);
+      }
+    };
+    inspect(functionNode.body);
+    parameterMutationCache.set(identity, mutated);
+    return mutated;
+  };
 
-  const inferredStringArguments = new Map();
-  const maxStringArgumentPasses = Math.max(
+  // Propagate statically known scalar strings and bounded string arrays through
+  // local/imported wrappers. Array values are unioned across all known callers
+  // because this pass models reachability targets, not execution order.
+  const inferredStaticArguments = new Map();
+  const maxStaticArgumentPasses = Math.max(
     1,
     functionDefs.size + [...objectMethodDefsByFile.values()].reduce((sum, methods) => sum + methods.size, 0) + 1
   );
-  for (let pass = 0; pass < maxStringArgumentPasses; pass++) {
+  const isStaticStringArray = value => Array.isArray(value) &&
+    value.every(item => typeof item === 'string' && item.length > 0);
+  const sameStaticValue = (left, right) =>
+    Array.isArray(left) && Array.isArray(right)
+      ? JSON.stringify(left) === JSON.stringify(right)
+      : Object.is(left, right);
+  for (let pass = 0; pass < maxStaticArgumentPasses; pass++) {
     const effectiveConstantsByFile = new Map();
     for (const [file, constants] of constantsByFile) {
       const effective = new Map(constants);
-      for (const [slot, value] of inferredStringArguments) {
+      for (const [slot, value] of inferredStaticArguments) {
         const separator = slot.indexOf('::');
         if (slot.slice(0, separator) === file) effective.set(slot.slice(separator + 2), value);
       }
@@ -817,10 +1017,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (node.type !== 'CallExpression') return;
         const target = resolveCallableOwner(callerFile, node.callee);
         if (!target) return;
-        for (let index = 0; index < Math.min(node.arguments.length, target.node.params.length); index++) {
-          const parameter = target.node.params[index];
+        const targetBindings = bindingByFile.get(target.file);
+        const targetConstants = effectiveConstantsByFile.get(target.file);
+        for (let index = 0; index < target.node.params.length; index++) {
+          const parameterNode = target.node.params[index];
+          const parameter = parameterNode.type === 'AssignmentPattern'
+            ? parameterNode.left : parameterNode;
           if (parameter.type !== 'Identifier') continue;
-          const parameterKey = bindingByFile.get(target.file)?.get(parameter);
+          const parameterKey = targetBindings?.get(parameter);
           if (!parameterKey) continue;
           const slot = target.file + '::' + parameterKey;
           if (!callsitesByParameter.has(slot)) {
@@ -828,34 +1032,78 @@ function analyze(root = path.resolve(__dirname, '..')) {
               file: target.file,
               functionNode: target.node,
               parameterKey,
-              values: []
+              values: [],
+              callerParameterSlots: []
             });
           }
-          const value = staticValue(node.arguments[index], callerConstants, 0, callerBindings);
-          callsitesByParameter.get(slot).values.push(
-            typeof value === 'string' && value.length ? value : undefined
-          );
+          let value;
+          if (index < node.arguments.length) {
+            value = staticValue(node.arguments[index], callerConstants, 0, callerBindings);
+            const argument = node.arguments[index];
+            const callerParameterKey = argument.type === 'Identifier'
+              ? callerBindings?.get(argument) : null;
+            if (callerParameterKey) {
+              callsitesByParameter.get(slot).callerParameterSlots.push(
+                callerFile + '::' + callerParameterKey
+              );
+            }
+          } else if (parameterNode.type === 'AssignmentPattern') {
+            value = staticValue(parameterNode.right, targetConstants, 0, targetBindings);
+          }
+          callsitesByParameter.get(slot).values.push(value);
         }
       });
+    }
+
+    // A wrapper parameter is also unsafe to infer when it is forwarded to a
+    // known local callee whose corresponding parameter mutates the array.
+    const mutatedParameterSlots = new Set();
+    for (const [slot, callsites] of callsitesByParameter) {
+      if (parameterIsMutated(callsites.file, callsites.functionNode, callsites.parameterKey)) {
+        mutatedParameterSlots.add(slot);
+      }
+    }
+    let mutationPropagationChanged = true;
+    while (mutationPropagationChanged) {
+      mutationPropagationChanged = false;
+      for (const [targetSlot, callsites] of callsitesByParameter) {
+        if (!mutatedParameterSlots.has(targetSlot)) continue;
+        for (const callerSlot of callsites.callerParameterSlots) {
+          if (!mutatedParameterSlots.has(callerSlot)) {
+            mutatedParameterSlots.add(callerSlot);
+            mutationPropagationChanged = true;
+          }
+        }
+      }
     }
 
     const nextInferred = new Map();
     for (const [slot, callsites] of callsitesByParameter) {
       const values = callsites.values;
-      if (!values.length || values.some(value => typeof value !== 'string')) continue;
-      const unique = [...new Set(values)];
-      if (unique.length !== 1 ||
-          parameterIsReassigned(callsites.file, callsites.functionNode, callsites.parameterKey)) continue;
-      nextInferred.set(slot, unique[0]);
+      if (!values.length || values.some(value => value === undefined)) continue;
+      let inferred;
+      if (values.every(value => typeof value === 'string' && value.length > 0)) {
+        const unique = [...new Set(values)];
+        if (unique.length !== 1) continue;
+        inferred = unique[0];
+      } else if (values.every(isStaticStringArray)) {
+        if (mutatedParameterSlots.has(slot)) continue;
+        inferred = [...new Set(values.flat())].sort();
+      } else {
+        continue;
+      }
+      if (parameterIsReassigned(callsites.file, callsites.functionNode, callsites.parameterKey)) continue;
+      nextInferred.set(slot, inferred);
     }
-    const changed = nextInferred.size !== inferredStringArguments.size ||
-      [...nextInferred].some(([slot, value]) => inferredStringArguments.get(slot) !== value);
-    inferredStringArguments.clear();
-    for (const [slot, value] of nextInferred) inferredStringArguments.set(slot, value);
+    const changed = nextInferred.size !== inferredStaticArguments.size ||
+      [...nextInferred].some(([slot, value]) =>
+        !sameStaticValue(inferredStaticArguments.get(slot), value));
+    inferredStaticArguments.clear();
+    for (const [slot, value] of nextInferred) inferredStaticArguments.set(slot, value);
     if (!changed) break;
   }
 
-  for (const [slot, value] of inferredStringArguments) {
+  for (const [slot, value] of inferredStaticArguments) {
     const separator = slot.indexOf('::');
     const targetFile = slot.slice(0, separator);
     const parameterKey = slot.slice(separator + 2);
@@ -1597,7 +1845,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     }
 
+    // Build parent links before callback sites are visited so assignment-
+    // initialized callbacks can be checked for same-block, prior assignment.
+    visit(ast, (node, parent) => { if (parent) parents.set(node, parent); });
+    const nearestCallbackBlock = node => {
+      let current = node;
+      while (current) {
+        if (current.type === 'BlockStatement' || current.type === 'Program') return current;
+        current = parents.get(current);
+      }
+      return null;
+    };
     const callbackRecord = (callback, api, line, expression) => {
+      // Chrome's runtime message listener contract supplies sendResponse as
+      // its third callback parameter. Mark only that exact API contract; a
+      // similarly named parameter in an arbitrary function is not external.
       let callbackName = null, callbackTarget = null, callbackTargets = [];
       let certainty = 'unresolved-callback-owner', knownExternalCallback = false, unresolvedCallbackOwner = false;
       if (callback?.type === 'Identifier') {
@@ -1610,10 +1872,19 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         let resolvedKey = callbackKey;
         let definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+        if (definition?.assignmentNode) {
+          const useBlock = nearestCallbackBlock(callback);
+          const invalidatedBeforeUse = (definition.nullClearNodes || []).some(clearNode =>
+            nearestCallbackBlock(clearNode) === useBlock &&
+            clearNode.start > definition.assignmentNode.start && clearNode.start < callback.start);
+          if (definition.assignmentNode.start >= callback.start ||
+              nearestCallbackBlock(definition.assignmentNode) !== useBlock ||
+              invalidatedBeforeUse) definition = null;
+        }
         // ESLint scope can leave a callback identifier unresolved in unusual
         // script/global scopes. Keep the fallback local to this source file
         // and exact function name; never resolve by repository-wide spelling.
-        if (!definition) {
+        if (!definition && !callbackKey) {
           const sameFileMatches = [...functionDefs].filter(([key, candidate]) =>
             candidate.file === file &&
             (candidate.node.id?.name === callback.name || key.startsWith(file + '::' + callback.name + '@')));
@@ -1627,6 +1898,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callbackTarget = rel(root, definition.file) + '::' + resolvedKey;
           callbackTargets = [callbackTarget];
           certainty = 'resolved-function-binding';
+        } else if (callbackKey && externalCallbackParameterBindings.has(file + '::' + callbackKey)) {
+          callbackName = '[external API callback parameter]';
+          certainty = 'resolved-external-api-callback-parameter';
+          knownExternalCallback = true;
         } else if (callbackKey && promiseResolverBindings.has(file + '::' + callbackKey)) {
           // Promise constructors synchronously provide resolve/reject
           // functions to their executor. These are known external callbacks,
@@ -2032,11 +2307,51 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const isPromiseExecutor = node.type === 'NewExpression' && pathName === 'Promise' &&
           callee.type === 'Identifier' && !bindings.get(callee);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
+        const nativeTimerRoots = new Set(['globalThis', 'window', 'self', 'global']);
+        const isNativeTimer = ['setTimeout', 'setInterval'].includes(method) &&
+          ((callee.type === 'Identifier' && !bindings.get(callee) && pathName === method) ||
+           (callee.type === 'MemberExpression' &&
+            callee.object.type === 'Identifier' &&
+            nativeTimerRoots.has(callee.object.name) &&
+            !bindings.get(callee.object) &&
+            pathName === callee.object.name + '.' + method));
         const calleeBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
         const vueHookName = calleeBinding && vueHookBindings.get(calleeBinding) ||
           (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' &&
             vueNamespaceBindings.has(bindings.get(callee.object)) && vueLifecycleHooks.has(method) ? method : null);
         const isVueLifecycleHook = Boolean(vueHookName);
+        // The browser Task Scheduling API invokes the callback passed to
+        // scheduler.postTask. Recognize only the unshadowed global scheduler
+        // namespace (including explicit global-object qualification); an
+        // arbitrary object's similarly named method is not a callback root.
+        const nativeSchedulerRoots = new Set(['globalThis', 'window', 'self']);
+        const isNativeTaskScheduler = method === 'postTask' &&
+          callee.type === 'MemberExpression' &&
+          ((callee.object.type === 'Identifier' && callee.object.name === 'scheduler' &&
+            !bindings.get(callee.object) && pathName === 'scheduler.postTask') ||
+           (callee.object.type === 'MemberExpression' &&
+            pathName.endsWith('.scheduler.postTask') &&
+            nativeSchedulerRoots.has(callee.object.object?.name) &&
+            callee.object.object?.type === 'Identifier' &&
+            !bindings.get(callee.object.object) &&
+            memberPath(callee.object) === callee.object.object.name + '.scheduler'));
+        // Node's setImmediate and process.nextTick are callback invocation
+        // roots too. Require the unshadowed native globals so same-named
+        // application helpers do not become false execution roots.
+        const isNativeNodeScheduler = (
+          callee.type === 'Identifier' && callee.name === 'setImmediate' &&
+          !bindings.get(callee) && !locallyDeclaredScheduler
+        ) || (
+          method === 'nextTick' && callee.type === 'MemberExpression' &&
+          ((callee.object.type === 'Identifier' && callee.object.name === 'process' &&
+            !bindings.get(callee.object) && pathName === 'process.nextTick') ||
+           (callee.object.type === 'MemberExpression' &&
+            pathName === 'globalThis.process.nextTick' &&
+            callee.object.object?.type === 'Identifier' &&
+            callee.object.object.name === 'globalThis' &&
+            !bindings.get(callee.object.object))
+          )
+        );
         const lastArgument = node.arguments[node.arguments.length - 1];
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
@@ -2045,14 +2360,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
             [...functionDefs.values()].filter(definition =>
               definition.file === file && definition.node.id?.name === lastArgument.name
             ).length === 1);
-        const extensionCallback = isExtensionApi && lastArgumentIsCallable &&
+        const isFunctionPrototypeForwarder = ['call', 'apply'].includes(method) &&
+          callee.type === 'MemberExpression' && callee.object.type === 'MemberExpression';
+        const extensionApiMethod = isFunctionPrototypeForwarder
+          ? memberPath(callee.object).split('.').pop() : method;
+        const isExtensionApiRemoval = ['removeListener', 'removeEventListener'].includes(extensionApiMethod);
+        const extensionCallback = isExtensionApi && !isExtensionApiRemoval && lastArgumentIsCallable &&
           !(pathName === 'chrome.tabs.update' && node.arguments.length < 3) &&
-          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction);
+          (method === 'apply' ||
+            (method === 'call'
+              ? (lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)
+              : (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)));
         const isCallbackCandidate = argument => argument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
         let callbackIndices = [];
-        if (isObserver || isPromiseExecutor) callbackIndices = [0];
+        if (isObserver || isPromiseExecutor || isNativeTaskScheduler || isNativeNodeScheduler) callbackIndices = [0];
         else if (method === 'addEventListener') callbackIndices = [1];
         else if (['on', 'once', 'addListener'].includes(method)) {
           const candidates = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
@@ -2060,7 +2383,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
         } else if (method === 'then') {
           callbackIndices = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
         } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
-        else if ((callbackApis.has(method) && !['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method)) ||
+        else if ((callbackApis.has(method) &&
+          !['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method) &&
+          (!['setTimeout', 'setInterval'].includes(method) || isNativeTimer)) ||
           (['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method) &&
             ((callee.type === 'Identifier' && !calleeBinding && !locallyDeclaredScheduler && pathName === method) ||
               (callee.type === 'MemberExpression' &&
