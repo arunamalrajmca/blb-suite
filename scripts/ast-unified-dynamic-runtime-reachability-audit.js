@@ -702,6 +702,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
   };
   for (const [registeredFile, registeredAst] of asts) {
     const registeredBindings = bindingByFile.get(registeredFile);
+    const reassignedBindings = new Set();
+    visit(registeredAst, node => {
+      const target = node.type === 'AssignmentExpression' && node.left.type === 'Identifier'
+        ? node.left
+        : node.type === 'UpdateExpression' && node.argument.type === 'Identifier'
+          ? node.argument
+          : (node.type === 'ForInStatement' || node.type === 'ForOfStatement') &&
+            node.left.type === 'Identifier' ? node.left : null;
+      const key = target && registeredBindings?.get(target);
+      if (key) reassignedBindings.add(key);
+    });
     visit(registeredAst, node => {
       if (node.type !== 'CallExpression' ||
           !['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener']
@@ -715,7 +726,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
       const registeredFunction = definition?.node || callback;
       const parameter = registeredFunction?.params?.[2];
       const key = parameter?.type === 'Identifier' ? registeredBindings?.get(parameter) : null;
-      if (key) externalCallbackParameterBindings.add(registeredFile + '::' + key);
+      if (key && !reassignedBindings.has(key)) {
+        externalCallbackParameterBindings.add(registeredFile + '::' + key);
+      }
     });
   }
 
