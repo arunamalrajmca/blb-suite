@@ -1200,6 +1200,8 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
 
     await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.evaluate(() => {
+      window.__blbSourcePassageClickGuardDiagnostics = true;
+      window.__blbSourcePassageClickGuardLast = null;
       window.__blbTestSourcePassageClick = null;
       window.addEventListener('blb-suite-source-passage-click', event => {
         window.__blbTestSourcePassageClick = {
@@ -1226,7 +1228,10 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       liveTabs:(await chrome.tabs.query({url:'https://www.blueletterbible.org/*'})).map(tab =>
         ({id:tab.id,url:tab.url,pendingUrl:tab.pendingUrl}))
     }), {target:destinationUrl,tabId:firstDestinationTab});
-    const clickGuardState = await page.evaluate(() => window.__blbTestSourcePassageClick ?? null);
+    const clickGuardState = await page.evaluate(() => ({
+      event:window.__blbTestSourcePassageClick ?? null,
+      guard:window.__blbSourcePassageClickGuardLast ?? null
+    }));
     const firstRegistryEntry = firstRegistryState.entries.find(([,id]) => id === firstDestinationTab);
     if (!firstRegistryEntry) {
       throw new Error('First BLB tab has no logical registry entry: ' + JSON.stringify({
