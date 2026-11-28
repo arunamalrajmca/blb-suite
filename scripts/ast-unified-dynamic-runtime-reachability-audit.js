@@ -1032,18 +1032,49 @@ function analyze(root = path.resolve(__dirname, '..')) {
               file: target.file,
               functionNode: target.node,
               parameterKey,
-              values: []
+              values: [],
+              callerParameterSlots: []
             });
           }
           let value;
           if (index < node.arguments.length) {
             value = staticValue(node.arguments[index], callerConstants, 0, callerBindings);
+            const argument = node.arguments[index];
+            const callerParameterKey = argument.type === 'Identifier'
+              ? callerBindings?.get(argument) : null;
+            if (callerParameterKey) {
+              callsitesByParameter.get(slot).callerParameterSlots.push(
+                callerFile + '::' + callerParameterKey
+              );
+            }
           } else if (parameterNode.type === 'AssignmentPattern') {
             value = staticValue(parameterNode.right, targetConstants, 0, targetBindings);
           }
           callsitesByParameter.get(slot).values.push(value);
         }
       });
+    }
+
+    // A wrapper parameter is also unsafe to infer when it is forwarded to a
+    // known local callee whose corresponding parameter mutates the array.
+    const mutatedParameterSlots = new Set();
+    for (const [slot, callsites] of callsitesByParameter) {
+      if (parameterIsMutated(callsites.file, callsites.functionNode, callsites.parameterKey)) {
+        mutatedParameterSlots.add(slot);
+      }
+    }
+    let mutationPropagationChanged = true;
+    while (mutationPropagationChanged) {
+      mutationPropagationChanged = false;
+      for (const [targetSlot, callsites] of callsitesByParameter) {
+        if (!mutatedParameterSlots.has(targetSlot)) continue;
+        for (const callerSlot of callsites.callerParameterSlots) {
+          if (!mutatedParameterSlots.has(callerSlot)) {
+            mutatedParameterSlots.add(callerSlot);
+            mutationPropagationChanged = true;
+          }
+        }
+      }
     }
 
     const nextInferred = new Map();
@@ -1056,7 +1087,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (unique.length !== 1) continue;
         inferred = unique[0];
       } else if (values.every(isStaticStringArray)) {
-        if (parameterIsMutated(callsites.file, callsites.functionNode, callsites.parameterKey)) continue;
+        if (mutatedParameterSlots.has(slot)) continue;
         inferred = [...new Set(values.flat())].sort();
       } else {
         continue;
