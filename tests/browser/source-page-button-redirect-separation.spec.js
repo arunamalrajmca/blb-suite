@@ -1195,7 +1195,7 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     // read completes. Wait for that read so the first click is not mistaken
     // for a native target=_blank navigation while redirectEnabled is unknown.
     await expect.poll(() => page.evaluate(() =>
-      globalThis.__blbSourceBibleRedirectSettingsReady === true
+      document.documentElement?.getAttribute('data-blb-source-redirect-settings-ready') === 'true'
     ), {timeout:10000}).toBe(true);
 
     await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
