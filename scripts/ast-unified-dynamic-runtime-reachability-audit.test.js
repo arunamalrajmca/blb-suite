@@ -998,7 +998,6 @@ test('resolves registered content-script files through aliases and bounded helpe
   assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/second.js'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts').length, 0);
 });
-
 test('keeps indirect registered-content-script options explicitly uncertain', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -1997,8 +1996,7 @@ test('resolves CommonJS relative package directories while keeping ESM directory
       "require('../local-package');",
       "require('../legacy-package');",
       "import('external-dependency');"
-    ].join(' '),
-    'local-package/package.json': JSON.stringify({
+    ].join(' '),    'local-package/package.json': JSON.stringify({
       type: 'module',
       main: './lib/start.cjs',
       exports: { '.': './entry.mjs' }
@@ -2993,4 +2991,49 @@ test('does not treat shadowed setImmediate or process.nextTick methods as native
   assert.equal(result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' &&
     ['setImmediate', 'process.nextTick'].includes(item.expression)).length, 0);
+});
+
+
+test('resolves callback ownership deterministically when declarations are reordered', () => {
+  const packageJson = JSON.stringify({ scripts: { audit: 'node scripts/main.js' } });
+  const beforeUse = [
+    'function onMessage(message) { return message; }',
+    'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'register(onMessage);'
+  ].join('\\n');
+  const useBeforeDeclarations = [
+    'register(onMessage);',
+    'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+    'function onMessage(message) { return message; }'
+  ].join('\\n');
+  const first = run({
+    'package.json': packageJson,
+    'scripts/main.js': beforeUse
+  });
+  const second = run({
+    'package.json': packageJson,
+    'scripts/main.js': useBeforeDeclarations
+  });
+  const summarize = result => ({
+    reachable: [...result.reachable].sort(),
+    registrations: result.dynamicSites
+      .filter(item => item.kind === 'external-callback-registration')
+      .map(item => ({
+        expression: item.expression,
+        certainty: item.certainty,
+        callback: item.callback || null,
+        callbackTarget: (item.callbackTarget || '').replace(/@\\d+:\\d+$/, '@<location>'),
+        callbackTargets: (item.callbackTargets || [])
+          .map(target => target.replace(/@\\d+:\\d+$/, '@<location>'))
+          .sort()
+      }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    uncertainty: result.uncertainty
+      .map(item => ({ kind: item.kind, expression: item.expression || null }))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  });
+  assert.deepEqual(summarize(first), summarize(second));
+  assert.equal(summarize(first).registrations.length, 1);
+  assert.equal(summarize(first).registrations[0].certainty,
+    'resolved-interprocedural-callback-argument');
 });
