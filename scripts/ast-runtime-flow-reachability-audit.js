@@ -2470,12 +2470,16 @@ function analyzeFile(root, file) {
   // Propagate callback identities through immutable local aliases, then
   // connect calls made after a container read or callback factory return.
   const callbackFunctionBindings = new Map([...containerCallbackBindings, ...factoryCallbackBindings]);
+  const callbackInvocationKinds = new Map();
+  for (const binding of containerCallbackBindings.keys()) callbackInvocationKinds.set(binding, 'container-callback-invocation');
+  for (const binding of factoryCallbackBindings.keys()) callbackInvocationKinds.set(binding, 'function-return-callback-invocation');
   let callbackAliasChanged = true;
   while (callbackAliasChanged) {
     callbackAliasChanged = false;
     for (const alias of callbackAliases) {
       if (!callbackFunctionBindings.has(alias.target) && callbackFunctionBindings.has(alias.source)) {
         callbackFunctionBindings.set(alias.target, callbackFunctionBindings.get(alias.source));
+        callbackInvocationKinds.set(alias.target, callbackInvocationKinds.get(alias.source));
         callbackAliasChanged = true;
       }
     }
@@ -2483,10 +2487,12 @@ function analyzeFile(root, file) {
   if (callbackFunctionBindings.size) {
     visit(ast, node => {
       if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
-      const callback = callbackFunctionBindings.get(bindingId(node.callee));
+      const binding = bindingId(node.callee);
+      const callback = callbackFunctionBindings.get(binding);
       if (callback) addEdge('function@' + callback.loc.start.line,
         'callback-invocation@' + node.loc.start.line,
-        'retrieved-callback-invocation', node, 'retrieved callback binding');
+        callbackInvocationKinds.get(binding) || 'retrieved-callback-invocation',
+        node, 'retrieved callback binding');
     });
   }
 
