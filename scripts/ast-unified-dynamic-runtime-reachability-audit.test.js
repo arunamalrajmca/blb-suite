@@ -3241,3 +3241,90 @@ test('does not retain the Chrome sendResponse contract after its parameter is re
     item.kind === 'unresolved-external-callback-owner' &&
     item.expression.includes('.then')));
 });
+
+
+test('resolves bounded content-script arrays returned by a helper and forwarded through loader parameters', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      "const FULL_FILES = ['full-a.js', 'full-b.js'];",
+      "const LIGHT_FILES = ['light.js'];",
+      'function contentScriptFilesForTab(tab) {',
+      '  if (tab) return [...FULL_FILES];',
+      '  return LIGHT_FILES;',
+      '}',
+      'function registerRuntimeContentScriptForPattern(tab, files = FULL_FILES) {',
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      'function ensureRuntimeContentScriptRegistered(tab, files = FULL_FILES) {',
+      '  return Promise.resolve().then(() => registerRuntimeContentScriptForPattern(tab, files));',
+      '}',
+      'function reconcile(tab) {',
+      '  const files = contentScriptFilesForTab(tab);',
+      '  return ensureRuntimeContentScriptRegistered(tab, files);',
+      '}',
+      'reconcile(true);',
+      'reconcile(false);'
+    ].join('\n'),
+    'extension/full-a.js': 'globalThis.fullA = true;',
+    'extension/full-b.js': 'globalThis.fullB = true;',
+    'extension/light.js': 'globalThis.light = true;'
+  });
+  for (const target of ['full-a.js', 'full-b.js', 'light.js']) {
+    assert.ok(edge(result, 'chrome.scripting.registerContentScripts',
+      'extension/background.js', 'extension/' + target), target);
+  }
+  assert.equal(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts'), false);
+});
+
+test('keeps array loader parameters uncertain when the callee mutates the file list', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function registerRuntime(files) {',
+      "  files.push('injected.js');",
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['base.js']);"
+    ].join('\n'),
+    'extension/base.js': 'globalThis.base = true;',
+    'extension/injected.js': 'globalThis.injected = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/base.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
+
+test('keeps array loader parameters uncertain when any caller supplies an unknown file list', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function registerRuntime(files) {',
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['known.js']);",
+      'registerRuntime(runtimeFiles);'
+    ].join('\n'),
+    'extension/known.js': 'globalThis.known = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/known.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
