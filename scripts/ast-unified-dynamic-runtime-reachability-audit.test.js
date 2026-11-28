@@ -3570,3 +3570,28 @@ test('Reflect.set with a dynamic global property invalidates stored callback own
   assert.ok(result.uncertainty.some(item =>
     item.kind === 'unresolved-external-callback-owner'));
 });
+
+
+test('resolves repeated global callback property names when each write is unique within its registration block', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'extensionWorker.evaluate(() => {',
+      '  globalThis.capture = message => first(message);',
+      '  chrome.runtime.onMessage.addListener(globalThis.capture);',
+      '});',
+      'extensionWorker.evaluate(() => {',
+      '  globalThis.capture = message => second(message);',
+      '  chrome.runtime.onMessage.addListener(globalThis.capture);',
+      '});'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener');
+  assert.equal(registrations.length, 2);
+  assert.ok(registrations.every(item =>
+    item.certainty === 'resolved-stored-global-callback-binding'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
