@@ -965,7 +965,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     if (mainWorldClickGuard) {
       expect(guardState.mainWorld).toMatchObject({
         matches:[originPattern],
-        js:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
+        js:['redirect-christianity-main-world.js'],
         runAt:'document_start',
         world:'MAIN',
         persistAcrossSessions:true
