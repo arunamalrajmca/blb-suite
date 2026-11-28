@@ -74,6 +74,28 @@ test('keeps nested callback wrappers uncertain when an intermediate parameter ha
   assert.ok(registration);
   assert.equal(registration.certainty, 'unresolved-callback-owner');
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+  const summary = result.uncertaintySummary.unresolvedExternalCallbackSites;
+  assert.equal(summary.total, 1);
+  assert.equal(summary.samples.length, 1);
+  assert.equal(summary.samples[0].file, 'scripts/main.js');
+  assert.equal(summary.samples[0].line, 1);
+  assert.equal(summary.samples[0].registrationApi, 'chrome.runtime.onMessage.addListener');
+});
+
+
+test('caps unresolved external callback owner samples without truncating totals', () => {
+  const registrations = Array.from({length:45}, (_, index =>
+    `chrome.runtime.onMessage.addListener(handler${index});`
+  )).join('\\n');
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': registrations
+  });
+  const summary = result.uncertaintySummary.unresolvedExternalCallbackSites;
+  assert.equal(summary.total, 45);
+  assert.equal(summary.samples.length, 40);
+  assert.equal(summary.samples[0].line, 1);
+  assert.equal(summary.samples[39].line, 40);
 });
 
 
