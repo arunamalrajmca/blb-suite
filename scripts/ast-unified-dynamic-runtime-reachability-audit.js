@@ -2056,7 +2056,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
         } else if (method === 'then') {
           callbackIndices = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
         } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
-        else if (callbackApis.has(method) || isVueLifecycleHook) callbackIndices = [0];
+        else if ((callbackApis.has(method) && !['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method)) ||
+          (['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method) &&
+            ((callee.type === 'Identifier' && !calleeBinding && pathName === method) ||
+              (callee.type === 'MemberExpression' &&
+                ['globalThis.', 'window.', 'self.'].some(prefix => pathName === prefix + method) &&
+                callee.object.type === 'Identifier' && !bindings.get(callee.object)))) {
+          callbackIndices = [0];
+        } else if (isVueLifecycleHook) callbackIndices = [0];
         for (const callbackIndex of callbackIndices) {
           if (callbackIndex < 0 || callbackIndex >= node.arguments.length) continue;
           const callback = node.arguments[callbackIndex];
