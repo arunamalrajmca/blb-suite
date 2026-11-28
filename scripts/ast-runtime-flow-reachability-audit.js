@@ -1184,7 +1184,7 @@ function analyzeFile(root, file) {
             if (storedFunction) addEdge('function@' + storedFunction.loc.start.line, stored,
               'function-variable-identity', node, name);
             addEdge(stored, container, isStoredCallback ? 'container-store-callback' : 'container-store', node, name);
-            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction});
+            containerWrites.push({container, key, stored, node, objectValue: value.type === 'Identifier' && !storedFunction, callbackFunction:storedFunction || null});
           } else if (['ObjectExpression', 'ArrayExpression'].includes(value.type)) {
             const identity = 'aggregate@' + value.loc.start.line + ':' + value.loc.start.column;
             const before = flowEdges.length;
@@ -2401,6 +2401,13 @@ function analyzeFile(root, file) {
       addEdge(write.stored, read.assigned,
         read.invoked ? 'container-callback-invocation' : 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
+      // Preserve the function identity when a callback is stored through a
+      // local variable binding; the binding edge alone is not a call edge.
+      if (read.invoked && write.callbackFunction) {
+        addEdge('function@' + write.callbackFunction.loc.start.line, read.assigned,
+          'container-callback-invocation', read.node,
+          read.key === null ? 'dynamic container key' : 'key=' + read.key);
+      }
       if (write.objectValue && read.assigned && !read.invoked) linkObjectAlias(read.assigned, write.stored);
       if (read.node.callee?.property?.name === 'splice' && read.assigned) {
         containerWrites.push({container:read.assigned,key:null,stored:write.stored,node:read.node,objectValue:write.objectValue});
