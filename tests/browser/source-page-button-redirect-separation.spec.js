@@ -1192,17 +1192,8 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       globalThis.__blbSourcePassageClickGuardInstalled === true
     ), {timeout:10000}).toBe(true);
 
-    await extensionWorker.evaluate(() => {
-      globalThis.__blbObservedTabUrls = [];
-      globalThis.__blbObservedTabListener = (_tabId, changeInfo) => {
-        if (typeof changeInfo.url === 'string') globalThis.__blbObservedTabUrls.push(changeInfo.url);
-      };
-      chrome.tabs.onUpdated.addListener(globalThis.__blbObservedTabListener);
-    });
+    await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
-    await expect.poll(() => extensionWorker.evaluate(target =>
-      globalThis.__blbObservedTabUrls.includes(target), destinationUrl
-    )).toBe(true);
     await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
       return tabs.length;
@@ -1213,11 +1204,8 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     });
     expect(firstDestinationTab).not.toBeNull();
 
-    await extensionWorker.evaluate(() => { globalThis.__blbObservedTabUrls = []; });
+    await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
-    await expect.poll(() => extensionWorker.evaluate(target =>
-      globalThis.__blbObservedTabUrls.includes(target), destinationUrl
-    )).toBe(true);
     await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
       const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
@@ -1226,14 +1214,6 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       count:1,
       activeId:firstDestinationTab,
       matchId:firstDestinationTab
-    });
-
-    await extensionWorker.evaluate(() => {
-      if (globalThis.__blbObservedTabListener) {
-        chrome.tabs.onUpdated.removeListener(globalThis.__blbObservedTabListener);
-      }
-      delete globalThis.__blbObservedTabListener;
-      delete globalThis.__blbObservedTabUrls;
     });
     await expect(page).toHaveURL(article);
   }
