@@ -649,12 +649,19 @@ function analyze(root = path.resolve(__dirname, '..')) {
   for (const [file, ast] of asts) {
     const bindings = bindingByFile.get(file);
     visit(ast, node => {
-      if (node.type !== 'AssignmentExpression' || node.operator !== '=' ||
-          node.left.type !== 'Identifier') return;
-      const key = bindings?.get(node.left);
+      const target = node.type === 'AssignmentExpression' && node.left.type === 'Identifier'
+        ? node.left
+        : node.type === 'UpdateExpression' && node.argument.type === 'Identifier'
+          ? node.argument
+          : (node.type === 'ForInStatement' || node.type === 'ForOfStatement') &&
+            node.left.type === 'Identifier' ? node.left : null;
+      if (!target) return;
+      const key = bindings?.get(target);
       if (!key) return;
       if (!assignedFunctionWrites.has(file + '::' + key)) assignedFunctionWrites.set(file + '::' + key, []);
-      assignedFunctionWrites.get(file + '::' + key).push(node.right);
+      assignedFunctionWrites.get(file + '::' + key).push(
+        node.type === 'AssignmentExpression' && node.operator === '=' ? node.right : null
+      );
     });
   }
   for (const [identity, writes] of assignedFunctionWrites) {
