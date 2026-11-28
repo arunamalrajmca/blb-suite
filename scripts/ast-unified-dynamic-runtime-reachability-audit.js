@@ -219,6 +219,17 @@ function staticPrefix(node, constants, bindings, depth = 0) {
   }
   return null;
 }
+function staticMemberPath(node, constants, bindings) {
+  const parts = [];
+  while (node?.type === 'MemberExpression') {
+    const part = node.computed ? staticValue(node.property, constants, 0, bindings) : node.property.name;
+    if (part === undefined || part === null) return '';
+    parts.unshift(String(part));
+    node = node.object;
+  }
+  if (node?.type === 'Identifier') parts.unshift(node.name);
+  return parts.join('.');
+}
 function staticLoaderSpecifier(node, constants, bindings) {
   if (node?.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'URL') {
     const base = node.arguments[1];
@@ -1409,7 +1420,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     });
     for (const key of reassignedLoaderWrapperBindings) loaderWrapperBindings.delete(key);
-    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set();
+    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set(), serviceWorkerContainerBindings = new Set(), workletBindings = new Set();
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
@@ -2179,6 +2190,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
           if (source && appendChildMethodBindings.has(source)) appendChildMethodBindings.add(target);
           if (source && workerConstructorBindings.has(source)) workerConstructorBindings.add(target);
+          if (source && serviceWorkerContainerBindings.has(source)) serviceWorkerContainerBindings.add(target);
+          if (source && workletBindings.has(source)) workletBindings.add(target);
           if (source && scriptElementBindings.has(source)) scriptElementBindings.add(target);
         }
         if (target && node.init.type === 'MemberExpression') {
@@ -2189,6 +2202,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const isDocumentOwner = owner?.type === 'Identifier' && (owner.name === 'document' || (base && documentNamespaceBindings.has(base)));
           if (prop === 'createElement' && isDocumentOwner) createElementMethodBindings.add(target);
           if (prop === 'appendChild' && isDocumentOwner) appendChildMethodBindings.add(target);
+          const initPath = staticMemberPath(node.init, constants, bindings);
+          const initRoot = (() => { let current = node.init; while (current?.type === 'MemberExpression') current = current.object; return current; })();
+          const initRootIsGlobal = initRoot?.type === 'Identifier' &&
+            ['navigator', 'window', 'globalThis', 'self'].includes(initRoot.name) && !bindings.get(initRoot);
+          if (initRootIsGlobal && ['navigator.serviceWorker', 'window.navigator.serviceWorker',
+              'globalThis.navigator.serviceWorker', 'self.navigator.serviceWorker'].includes(initPath)) {
+            serviceWorkerContainerBindings.add(target);
+          }
+          if (/(?:^|\\.)(?:audioWorklet|paintWorklet|layoutWorklet)$/.test(initPath)) workletBindings.add(target);
+          if (initRootIsGlobal && /^(?:window|globalThis|self)\\.(?:Worker|SharedWorker)$/.test(initPath)) {
+            workerConstructorBindings.add(target);
+          }
         }
         if (target && node.init.type === 'CallExpression') {
           const callee = node.init.callee;
@@ -2206,6 +2231,24 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (node.right.name === 'document' || (source && documentNamespaceBindings.has(source))) documentNamespaceBindings.add(target);
           if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
           if (source && scriptElementBindings.has(source)) scriptElementBindings.add(target);
+          if (source && serviceWorkerContainerBindings.has(source)) serviceWorkerContainerBindings.add(target);
+          if (source && workletBindings.has(source)) workletBindings.add(target);
+          if (source && workerConstructorBindings.has(source)) workerConstructorBindings.add(target);
+        }
+        if (target && node.right.type === 'MemberExpression') {
+          const rightPath = staticMemberPath(node.right, constants, bindings);
+          let rightRoot = node.right;
+          while (rightRoot?.type === 'MemberExpression') rightRoot = rightRoot.object;
+          const rightRootIsGlobal = rightRoot?.type === 'Identifier' &&
+            ['navigator', 'window', 'globalThis', 'self'].includes(rightRoot.name) && !bindings.get(rightRoot);
+          if (rightRootIsGlobal && ['navigator.serviceWorker', 'window.navigator.serviceWorker',
+              'globalThis.navigator.serviceWorker', 'self.navigator.serviceWorker'].includes(rightPath)) {
+            serviceWorkerContainerBindings.add(target);
+          }
+          if (/(?:^|\\.)(?:audioWorklet|paintWorklet|layoutWorklet)$/.test(rightPath)) workletBindings.add(target);
+          if (rightRootIsGlobal && /^(?:window|globalThis|self)\\.(?:Worker|SharedWorker)$/.test(rightPath)) {
+            workerConstructorBindings.add(target);
+          }
         }
       }
       if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
