@@ -111,7 +111,8 @@ function keyShape(node) {
   return 'computed-expression';
 }
 function analyze(root = path.resolve(__dirname, '..')) {
-  const files = walk(root), observations = [], parseErrors = [];\n  let scopeAnalysisFiles = 0;
+  const files = walk(root), observations = [], parseErrors = [];
+  let scopeAnalysisFiles = 0;
   const add = (file, node, kind, detail, certainty = 'unresolved-runtime-semantics') => observations.push({
     file: path.relative(root, file).split(path.sep).join('/'),
     line: node.loc?.start.line || null, kind, detail, certainty
@@ -209,7 +210,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
 function run(root) {
   const result = analyze(root);
   console.log('Runtime metaprogramming and callback uncertainty census (not dead-code proof)');
-  console.log('Files scanned: ' + result.filesScanned);\n  console.log('Files requiring global-shadow scope analysis: ' + result.scopeAnalysisFiles);
+  console.log('Files scanned: ' + result.filesScanned);
+  console.log('Files requiring global-shadow scope analysis: ' + result.scopeAnalysisFiles);
   console.log('Uncertainty observations: ' + result.summary.total);
   console.log('By kind: ' + JSON.stringify(result.summary.byKind));
   for (const item of result.observations) console.log('UNCERTAIN ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.kind + ' — ' + item.detail);
