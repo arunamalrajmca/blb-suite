@@ -2924,3 +2924,37 @@ test('does not treat shadowed or arbitrary postTask methods as native scheduler 
   assert.equal(result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask')).length, 0);
 });
+
+test('produces deterministic reachability results when module discovery order changes', () => {
+  const entries = [
+    ['package.json', JSON.stringify({ scripts: { audit: 'node scripts/main.js' } })],
+    ['scripts/main.js', [
+      "import { forward } from './middle.js';",
+      'function onReady() { return true; }',
+      'forward(onReady);'
+    ].join('\\n')],
+    ['scripts/middle.js', [
+      "import { register } from './leaf.js';",
+      'export function forward(handler) { register(handler); }'
+    ].join('\\n')],
+    ['scripts/leaf.js', [
+      'export function register(callback) {',
+      "  globalThis.addEventListener('audit-ready', callback);",
+      '}'
+    ].join('\\n')]
+  ];
+  const first = run(Object.fromEntries(entries));
+  const second = run(Object.fromEntries([...entries].reverse()));
+  const stableView = result => ({
+    roots: result.roots,
+    edges: result.edges,
+    dynamicSites: result.dynamicSites,
+    uncertainty: result.uncertainty,
+    reachable: result.reachable,
+    unresolvedByRoot: result.unresolvedByRoot,
+    uncertainFiles: result.uncertainFiles,
+    unreachableInventory: result.unreachableInventory,
+    definiteUnreachable: result.definiteUnreachable
+  });
+  assert.deepEqual(stableView(first), stableView(second));
+});
