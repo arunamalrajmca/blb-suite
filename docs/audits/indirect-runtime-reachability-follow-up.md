@@ -1,6 +1,13 @@
-# Indirect Runtime Reachability Audit — Follow-up
+# Indirect Runtime Reachability Audit — Next Follow-up
 
-This follow-up continues the cumulative repository-wide reachability audit after PR #1094. Keep unresolved runtime behavior explicit; do not infer callback ownership or reachability without static evidence.
+This checklist carries forward the unfinished cumulative repository-wide audit after PR #1096 (merged as `abe77a70bd3aaa50ecd8d6150c7fe1e7deb6c5e7`). PR #1096 completed the scheduler callback-rooting regression correction and the sensitive-site classifier additions. Do not repeat those completed changes unless new evidence exposes a regression.
+
+## Completed in PR #1096
+
+- [x] Add conservative native scheduler callback-root handling for `queueMicrotask`, `requestAnimationFrame`, and `requestIdleCallback`.
+- [x] Add positive coverage for native scheduler callbacks and negative coverage for a locally shadowed scheduler name, with correct lexical scope across separate source files.
+- [x] Expand sensitive-site classification for requested domain families and browser-internal `chrome://` and `brave://` schemes.
+- [x] Validate the merged head with HARD-GATE, ZIP integrity, References & Double-click, browser concurrency equivalence, and latest-main ancestry. Focused regressions and Performance were skipped by CI selection, not reported as failures.
 
 ## Carried-forward work
 
@@ -28,3 +35,4 @@ This follow-up continues the cumulative repository-wide reachability audit after
 - Keep unrelated browser suites out of audit-only changes unless the changed code affects them.
 - Require current-head required checks and latest-main ancestry before merge.
 - No version bump or release is included or authorized.
+- Do not include unrelated site-specific references in the PR scope.
