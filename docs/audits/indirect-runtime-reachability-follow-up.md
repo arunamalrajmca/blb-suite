@@ -58,15 +58,20 @@ The inventory describes what the current analyzers can establish; it is not a cl
 
 ## Additional findings resolved in the current PR head
 
-- [x] Resolve a DOM listener function stored by one direct assignment when the assignment precedes registration in the same lexical block. Permit null-only cleanup writes in separate blocks, but reject multiple function assignments, non-null writes, conditional-block assignments, use-before-assignment, wrapper calls before assignment, and null clears between assignment and registration.
+- [x] Resolve a DOM listener function stored by one direct assignment when the assignment precedes registration in the same lexical block. Permit null-only cleanup writes in separate blocks, but reject multiple function assignments, non-null writes, ambiguous conditional-block assignments, use-before-assignment, wrapper calls before assignment, and null clears between assignment and registration.
 - [x] Resolve the third parameter of an unshadowed `chrome.runtime.onMessage.addListener` callback as the API-supplied `sendResponse` callback. The binding is not promoted if it is reassigned; arbitrary parameters named `sendResponse` and shadowed `chrome` namespaces remain unresolved.
 - [x] Add positive and negative regression fixtures for both callback-owner improvements.
 - [x] Confirm the actual `pageButtonStartupListener` cleanup pattern is covered: its callback assignment and registration share the same block, while its null reset occurs in the separate cleanup function.
-- [x] Confirm the `.then(sendResponse)` callback owner in the background message listener is now resolved from the Chrome API contract. The analyzer does not need to infer a general Promise-return summary for `runMasterToggle` to establish the callback's owner.
+- [x] Confirm the `.then(sendResponse)` callback owner in the background message listener is resolved from the Chrome API contract. A general Promise-return summary for `runMasterToggle` is not required to establish this callback identity.
+- [x] Propagate bounded string-array values through known local/imported function parameters, including default parameter values and multi-hop wrapper calls.
+- [x] Union distinct, fully known array callsite values as a conservative reachability over-approximation; reject array propagation when a parameter is reassigned, mutated, or supplied by any unknown caller.
+- [x] Treat unshadowed `Array.isArray(files)` and `JSON.stringify(files)` as read-only checks for the bounded loader array; arbitrary unknown functions and array-mutating methods do not qualify.
+- [x] Resolve the actual runtime registration file list from `contentScriptFilesForTab` through `ensureRuntimeContentScriptRegistered` and `registerRuntimeContentScriptForPattern`. The function-return summary covers 24 possible script files, including the full bundle and both redirect-only handlers.
+- [x] Add positive and negative fixtures for bounded array forwarding, mutation, unknown callsites, and read-only validation/serialization.
 
-## Final-head validation — `29203e5e371232c96c5a49bce1e2477c5022dde3`
+## Final-head validation — `213439224cf7a325e4ffdf587f730cdc4bb6a26f`
 
-- **Selected and passed:** symbol (17), repository (6), owner (49), cross-module (132), runtime-flow (169), unified runtime (169), computed-property (15), and metaprogramming (26) AST test cases. Each selected section recorded a passed checkpoint; no selected section failed.
+- **Selected and passed:** symbol (17), repository (6), owner (49), cross-module (132), runtime-flow (169), unified runtime (172), computed-property (15), and metaprogramming (26) AST test cases. Every selected section recorded a passed checkpoint; no selected section failed.
 - **Audit selection:** all eight selected sections ran because the JavaScript analyzer/test inputs changed their fingerprints. The executable-source audit section was not selected because no extension source files changed.
 - **Passed CI gates:** HARD-GATE, References & Double-click, latest-main ancestry, and Full Browser Concurrency Equivalence.
 - **Additional passed jobs within concurrency validation:** focused retired content-bundle listener-race regression and checkpoint-recovery validator tests.
@@ -76,21 +81,21 @@ The inventory describes what the current analyzers can establish; it is not a cl
 
 ## Specific unresolved findings retained from the repository scan
 
-These are observed uncertainty samples, not proven defects. Keep them unresolved until the analyzer can establish target identity without guessing:
+These are observed uncertainty samples, not proven defects. Keep them unresolved until the analyzer can establish ownership without guessing:
 
-- `extension/background.js:3124`: `chrome.scripting.registerContentScripts` receives the `files` parameter of `registerRuntimeContentScriptForPattern`; trace the bounded file-list source through `contentScriptFilesForTab` and the registration helper before promoting it to a resolved loader edge. The list is derived from host and settings state, so static resolution must account for all possible returned file arrays.
-- Some test-only callback samples use Playwright `test.setTimeout` or Chrome API `.call/.apply` wrappers. Do not treat these as generic callback slots; distinguish API-specific argument positions and helper return semantics first.
-- Dynamic loader targets, computed-property access, reflection, external callback contracts without a statically known API owner, and runtime-generated source remain conservative uncertainty boundaries.
+- Test-only Playwright `test.setTimeout` callback samples remain uncertain because the test runner's callback contract is not yet modeled as an invocation root.
+- Test-only Chrome API `.call/.apply` wrappers remain uncertain; distinguish API-specific callback argument positions from generic Function.prototype forwarding before resolving them.
+- Test-only `queue.then` callbacks in ScriptTagger injection tests remain uncertain until the queue contract and ownership are established.
+- Computed-property access, reflection, external callback contracts without a statically known API owner, and runtime-generated source remain conservative uncertainty boundaries.
 
 ## Remaining carried-forward work
 
-- [ ] Trace the runtime content-script file-list source through `contentScriptFilesForTab`, `ensureRuntimeContentScriptRegistered`, and `registerRuntimeContentScriptForPattern`; only resolve a loader edge when all statically possible file targets are safely established.
-- [ ] Classify remaining test-only `test.setTimeout` and `.call/.apply` callback samples using API-specific contracts; keep unknown contracts unresolved.
+- [ ] Classify remaining test-only `test.setTimeout`, Chrome API `.call/.apply`, and `queue.then` callback samples using API-specific contracts; keep unknown contracts unresolved.
 - [ ] Continue auditing newly discovered behavioral invocation paths when repository evidence or findings identify a gap.
 - [ ] Add focused fixtures for any newly identified path before implementing recognition.
 - [ ] Revisit generated-source/template-origin handling if a statically analyzable source-generation pipeline is introduced.
 - [ ] Revisit source-map support only if the repository adds a source-map-producing build pipeline.
-- [ ] Continue reviewing newly exposed loader, computed-property, and reflection findings without weakening conservative uncertainty.
+- [ ] Continue reviewing newly exposed computed-property and reflection findings without weakening conservative uncertainty.
 - [ ] Keep reflective, computed, and runtime-dependent boundaries unresolved unless evidence can be established.
 - [ ] Continue validating change-based audit selection and fingerprinted checkpoint backup/restore; do not assume an unchanged section was reused unless the log explicitly reports reuse.
 - [ ] Avoid rerunning unchanged expensive audit sections; report selected, skipped, passed, and failed sections separately.
