@@ -2178,19 +2178,31 @@ function analyzeFile(root, file) {
   // Propagate known property contents through object spread, Object.assign,
   // and Object.fromEntries(Object.entries(source)).
   // Iterate to a fixed point so chained copies retain their original values.
+  const propertyWritesByObject = new Map();
+  const propertyWriteKeys = new Set();
+  const propertyWriteKey = (object, property, stored) => JSON.stringify([object, property, stored]);
+  const indexPropertyWrite = write => {
+    const object = canonicalObject(write.object);
+    const key = propertyWriteKey(object, write.property, write.stored);
+    if (propertyWriteKeys.has(key)) return false;
+    propertyWriteKeys.add(key);
+    if (!propertyWritesByObject.has(object)) propertyWritesByObject.set(object, []);
+    propertyWritesByObject.get(object).push(write);
+    return true;
+  };
+  for (const write of propertyWrites) indexPropertyWrite(write);
   let copiesChanged = true;
   let copyPasses = 0;
   while (copiesChanged && copyPasses++ <= propertyCopies.length + 1) {
     copiesChanged = false;
     for (const copy of propertyCopies) {
       const source = canonicalObject(copy.source), target = canonicalObject(copy.target);
-      for (const write of [...propertyWrites]) {
-        if (canonicalObject(write.object) !== source) continue;
+      const sourceWrites = propertyWritesByObject.get(source) || [];
+      for (const write of sourceWrites.slice()) {
         const property = copy.prefix ? copy.prefix + '.' + write.property : write.property;
-        if (propertyWrites.some(existing =>
-          canonicalObject(existing.object) === target &&
-          existing.property === property && existing.stored === write.stored)) continue;
-        propertyWrites.push({object:target,property,stored:write.stored});
+        const copied = {object:target,property,stored:write.stored};
+        if (!indexPropertyWrite(copied)) continue;
+        propertyWrites.push(copied);
         copiesChanged = true;
       }
     }
@@ -2326,6 +2338,25 @@ function analyzeFile(root, file) {
   // Copy array-container contents through slice/filter/concat and modern
   // copy-by-change methods. Include literal-array property slots as well as
   // values recorded by push/unshift so chained copies remain connected.
+  const containerWritesByObject = new Map();
+  const containerWriteKeys = new Set();
+  const containerWriteKey = (container, key, stored) => JSON.stringify([container, key, stored]);
+  const indexContainerWrite = write => {
+    const container = canonicalObject(write.container);
+    const identity = containerWriteKey(container, write.key, write.stored);
+    if (containerWriteKeys.has(identity)) return false;
+    containerWriteKeys.add(identity);
+    if (!containerWritesByObject.has(container)) containerWritesByObject.set(container, []);
+    containerWritesByObject.get(container).push(write);
+    return true;
+  };
+  for (const write of containerWrites) indexContainerWrite(write);
+  const propertyWritesByObjectForContainers = new Map();
+  for (const write of propertyWrites) {
+    const object = canonicalObject(write.object);
+    if (!propertyWritesByObjectForContainers.has(object)) propertyWritesByObjectForContainers.set(object, []);
+    propertyWritesByObjectForContainers.get(object).push(write);
+  }
   let containerCopiesChanged = true;
   let containerCopyPasses = 0;
   while (containerCopiesChanged && containerCopyPasses++ <= containerCopies.length + 1) {
@@ -2333,23 +2364,18 @@ function analyzeFile(root, file) {
     for (const copy of containerCopies) {
       const source = canonicalObject(copy.source), target = canonicalObject(copy.target);
       const copied = [];
-      for (const write of containerWrites) {
-        if (canonicalObject(write.container) === source) copied.push({
-          ...write, container:target, key:null, node:copy.node
-        });
-      }
-      for (const write of propertyWrites) {
-        if (canonicalObject(write.object) !== source) continue;
-        if (write.property !== null && !/^\d+$/.test(write.property)) continue;
+      for (const write of containerWritesByObject.get(source) || []) copied.push({
+        ...write, container:target, key:null, node:copy.node
+      });
+      for (const write of propertyWritesByObjectForContainers.get(source) || []) {
+        if (write.property !== null && !/^\\d+$/.test(write.property)) continue;
         copied.push({
           container:target,key:null,stored:write.stored,node:copy.node,
           objectValue:!String(write.stored).startsWith('function@')
         });
       }
       for (const write of copied) {
-        if (containerWrites.some(existing =>
-          canonicalObject(existing.container) === target &&
-          existing.key === write.key && existing.stored === write.stored)) continue;
+        if (!indexContainerWrite(write)) continue;
         containerWrites.push(write);
         containerCopiesChanged = true;
       }
