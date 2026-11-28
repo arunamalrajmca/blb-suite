@@ -3258,6 +3258,7 @@ test('resolves bounded content-script arrays returned by a helper and forwarded 
       '  return LIGHT_FILES;',
       '}',
       'function registerRuntimeContentScriptForPattern(tab, files = FULL_FILES) {',
+      '  JSON.stringify(files);',
       "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
       '}',
       'function ensureRuntimeContentScriptRegistered(tab, files = FULL_FILES) {',
