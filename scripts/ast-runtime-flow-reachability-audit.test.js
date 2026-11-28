@@ -997,7 +997,8 @@ test('resolves inherited class method factories directly on derived instances', 
 });
 
 
-test('traces bound callback identity and retains it through object wrappers', () => {  const result = audit([
+test('traces bound callback identity and retains it through object wrappers', () => {
+  const result = audit([
     'const callback = () => work();',
     'const bound = callback.bind(null);',
     'const wrapper = { handler: bound };'
@@ -1996,7 +1997,8 @@ test('preserves async iterator yielded values through an aliased iterable in for
 });
 
 test('traces values and cleanup methods on custom async iterator protocol objects', () => {
-  const result = audit([    'const cleanup = () => start();',
+  const result = audit([
+    'const cleanup = () => start();'
     'const iterable = {',
     '  [Symbol.asyncIterator]() {',
     '    return {',
