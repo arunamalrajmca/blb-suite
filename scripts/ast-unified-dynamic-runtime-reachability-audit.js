@@ -942,14 +942,19 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         // A value passed to an unknown function may be mutated. Known local
         // callees are analyzed through their own parameter bindings.
-        const isUnshadowedJsonStringify = node.callee.type === 'MemberExpression' &&
-          node.callee.object.type === 'Identifier' && node.callee.object.name === 'JSON' &&
-          !bindings?.get(node.callee.object) &&
-          (node.callee.computed
-            ? (node.callee.property.type === 'Literal' && node.callee.property.value === 'stringify')
-            : node.callee.property.name === 'stringify');
+        const calleeObjectName = node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && !bindings?.get(node.callee.object)
+            ? node.callee.object.name : '';
+        const calleePropertyName = node.callee.type === 'MemberExpression'
+          ? (node.callee.computed
+            ? (node.callee.property.type === 'Literal' ? String(node.callee.property.value) : null)
+            : node.callee.property.name)
+          : null;
+        const isUnshadowedReadOnlyBuiltinCall =
+          (calleeObjectName === 'JSON' && calleePropertyName === 'stringify') ||
+          (calleeObjectName === 'Array' && calleePropertyName === 'isArray');
         if (node.arguments.some(isParameterReference) &&
-            !resolveCallableOwner(file, node.callee) && !isUnshadowedJsonStringify) {
+            !resolveCallableOwner(file, node.callee) && !isUnshadowedReadOnlyBuiltinCall) {
           mutated = true;
           return;
         }
