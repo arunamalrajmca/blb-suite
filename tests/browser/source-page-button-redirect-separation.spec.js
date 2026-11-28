@@ -1210,12 +1210,20 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     });
     expect(firstDestinationTab).not.toBeNull();
     // A tab becomes queryable before chrome.tabs.create() has necessarily
-    // resolved and the destination identity has been recorded. Wait for the
-    // extension's completed registration before testing the subsequent click.
-    await expect.poll(() => extensionWorker.evaluate(target => {
-      const key = canonicalBlbTabKey(target);
-      return blbLogicalTabRegistry.get(key) ?? null;
-    }, destinationUrl), {timeout:10000}).toBe(firstDestinationTab);
+    // resolved and the destination identity has been recorded. Inspect the
+    // registry after the first open so URL-key mismatches are explicit.
+    const firstRegistryState = await extensionWorker.evaluate(({target, tabId}) => ({
+      targetKey:canonicalBlbTabKey(target),
+      entries:[...blbLogicalTabRegistry.entries()],
+      liveTabs:[]
+    }), {target:destinationUrl,tabId:firstDestinationTab});
+    const firstRegistryEntry = firstRegistryState.entries.find(([,id]) => id === firstDestinationTab);
+    if (!firstRegistryEntry) {
+      throw new Error('First BLB tab has no logical registry entry: ' + JSON.stringify({
+        host,targetKey:firstRegistryState.targetKey,firstDestinationTab,entries:firstRegistryState.entries
+      }));
+    }
+    expect(firstRegistryEntry[0]).toBe(firstRegistryState.targetKey);
 
     await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
