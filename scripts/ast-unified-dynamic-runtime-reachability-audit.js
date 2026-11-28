@@ -1789,6 +1789,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // registry rather than assuming the original function is still present.
     const storedCallbackOwners = new Map();
     const invalidStoredCallbackBindings = new Set();
+    const globalStoredCallbackWrites = new Map();
+    let globalStoredCallbackMutationUnknown = false;
+    const globalCallbackRoots = new Set(['globalThis', 'window', 'self']);
+
     const storedCallbackOwner = (value) => {
       if (value?.type === 'Identifier') return resolveFunctionOwner(file, value);
       if (value?.type === 'ArrowFunctionExpression' || value?.type === 'FunctionExpression') {
@@ -1813,6 +1817,37 @@ function analyze(root = path.resolve(__dirname, '..')) {
           if (key === null || !value || value.type === 'SpreadElement') continue;
           const owner = storedCallbackOwner(value);
           if (owner) storedCallbackOwners.set(binding + '::' + key, owner);
+        }
+      }
+      if (node.type === 'AssignmentExpression' &&
+          node.left.type === 'MemberExpression' &&
+          node.left.object.type === 'Identifier' &&
+          globalCallbackRoots.has(node.left.object.name) &&
+          !bindings.get(node.left.object)) {
+        const property = node.left.computed
+          ? staticValue(node.left.property, constants, 0, bindings)
+          : node.left.property.name;
+        if (property === undefined || property === null) {
+          globalStoredCallbackMutationUnknown = true;
+        } else {
+          const key = node.left.object.name + '::' + String(property);
+          const writes = globalStoredCallbackWrites.get(key) || [];
+          writes.push({node, owner:storedCallbackOwner(node.right)});
+          globalStoredCallbackWrites.set(key, writes);
+        }
+      }
+      if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+        const method = node.callee.computed
+          ? staticValue(node.callee.property, constants, 0, bindings)
+          : node.callee.property.name;
+        const root = node.callee.object;
+        if (['assign', 'set'].includes(method) &&
+            root?.type === 'Identifier' &&
+            ['Object', 'Reflect'].includes(root.name) &&
+            !bindings.get(root) &&
+            node.arguments.some(argument => argument?.type === 'Identifier' &&
+              globalCallbackRoots.has(argument.name) && !bindings.get(argument))) {
+          globalStoredCallbackMutationUnknown = true;
         }
       }
       if (node.type === 'AssignmentExpression') {
@@ -1842,6 +1877,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
     for (const binding of invalidStoredCallbackBindings) {
       for (const key of storedCallbackOwners.keys()) {
         if (key.startsWith(binding + '::')) storedCallbackOwners.delete(key);
+      }
+    }
+    const globalStoredCallbackOwners = new Map();
+    if (!globalStoredCallbackMutationUnknown) {
+      for (const [key, writes] of globalStoredCallbackWrites) {
+        if (writes.length === 1 && writes[0].owner) {
+          globalStoredCallbackOwners.set(key, writes[0]);
+        }
       }
     }
 
@@ -1962,17 +2005,26 @@ function analyze(root = path.resolve(__dirname, '..')) {
           }
         }
       } else if (callback?.type === 'MemberExpression' && callback.object.type === 'Identifier') {
-        const binding = bindings.get(callback.object);
         const property = callback.computed
           ? staticValue(callback.property, constants, 0, bindings)
           : callback.property.name;
+        const binding = bindings.get(callback.object);
         const owner = binding && property !== undefined && property !== null
           ? storedCallbackOwners.get(binding + '::' + String(property)) : null;
-        if (owner) {
+        const globalKey = !binding && globalCallbackRoots.has(callback.object.name) &&
+          property !== undefined && property !== null
+          ? callback.object.name + '::' + String(property) : null;
+        const globalWrite = globalKey ? globalStoredCallbackOwners.get(globalKey) : null;
+        const globalOwner = globalWrite &&
+          globalWrite.node.start < callback.start &&
+          nearestCallbackBlock(globalWrite.node) === nearestCallbackBlock(callback)
+          ? globalWrite.owner : null;
+        if (owner || globalOwner) {
+          const resolved = owner || globalOwner;
           callbackName = '[stored callback]';
-          callbackTarget = rel(root, owner.file) + '::' + owner.key;
+          callbackTarget = rel(root, resolved.file) + '::' + resolved.key;
           callbackTargets = [callbackTarget];
-          certainty = 'resolved-stored-callback-binding';
+          certainty = owner ? 'resolved-stored-callback-binding' : 'resolved-stored-global-callback-binding';
         }
       } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
         callbackName = '[inline callback]';
