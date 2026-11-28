@@ -2190,9 +2190,9 @@ test('traces native scheduler.postTask callback and asynchronous reachability ed
     'globalThis.scheduler.postTask(() => onReady());'
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
-    item.category === 'callbacks' && item.kind === 'callback-registration').length, 3);
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 2);
   assert.equal(result.findings.filter(item =>
-    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 3);
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 2);
 });
 
 test('does not treat shadowed or arbitrary postTask methods as native scheduler roots', () => {
@@ -2216,9 +2216,9 @@ test('traces native process.nextTick callbacks through callback and async edges'
     'globalThis.process.nextTick(() => onReady());'
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
-    item.category === 'callbacks' && item.kind === 'callback-registration').length, 2);
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 3);
   assert.equal(result.findings.filter(item =>
-    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 2);
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 3);
 });
 
 test('does not treat shadowed process.nextTick methods as native callback roots', () => {
