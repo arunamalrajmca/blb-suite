@@ -189,3 +189,13 @@ This tranche starts from merged main at `8653c26462e6dc8703adf28e4077097552ddaac
 - [x] Two fixtures reuse the `__blbSourceCollectorCapture` property name, but they are separate callback blocks with independent single writes. The resolver now scopes write uniqueness to the registration's lexical callback block, so this legitimate reuse does not create a false ambiguity.
 - [x] Added a regression fixture proving that the same global property name can be resolved independently in two distinct callback blocks.
 - [ ] Confirm the analyzer's current-head repository inventory reports all seven collector registrations as resolved; retain any unexpected result as unresolved and investigate it.
+
+
+### `.apply()` callback-argument correction
+
+- [x] The previous focused test exposed a false positive: the analyzer treated the final argument to `Function.prototype.apply` (the argument-list array) as if it were the callback itself.
+- [x] Exclude `.apply()` from direct extension-API callback registration inference. Its argument-list contents may be dynamic and the callback slot is API-signature-dependent; do not infer ownership from the array expression.
+- [x] Preserve `chrome.tabs.sendMessage.apply(chrome.tabs, args)` as an unresolved forwarding boundary rather than a callback registration.
+- [x] Add the focused regression covering data-only forwarding and a shadowed `chrome` namespace.
+- [ ] Confirm the corrected unified audit tests and selected repository AST audit sections pass on the latest head.
+- [ ] Confirm the seven collector registrations in the current repository inventory resolve as expected.
