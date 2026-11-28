@@ -151,3 +151,13 @@ This tranche starts from merged main at `8653c26462e6dc8703adf28e4077097552ddaac
 - Do not resolve `globalThis` property callbacks when writes are ambiguous, reassigned, dynamically keyed, or exposed to unknown mutation.
 - Do not modify extension production behavior merely to reduce test-only uncertainty.
 - No version bump, release, or merge without explicit authorization.
+
+### Contract findings from focused source inspection
+
+- [x] The two `chrome.scripting.getRegisteredContentScripts.apply(chrome.scripting, args)` sites only forward the API's filter/options arguments. The wrapped API is promise-based in these tests; these sites are not callback registrations and should not be "fixed" by treating the final data argument as a callback.
+- [x] The `chrome.tabs.sendMessage.apply(chrome.tabs, args)` site forwards a dynamic rest-argument list. The source does not prove whether an optional callback is present at every callsite, so callback ownership remains unresolved until the argument list and invocation sites are traced.
+- [x] The `queue.then(operation, operation)` / `queue = result.catch(() => {})` pattern is a native Promise chain used for queue recovery. It is not evidence that the `.catch()` receiver itself is a callback owner; the registered callback is the inline rejection handler.
+- [x] The `trackedLock.catch(...args)` test wrapper delegates to a native Promise's `gate.catch(...args)`, but the lock-map value is a custom thenable object. Do not infer that arbitrary `.catch()` methods are native Promise contracts.
+- [ ] Trace the dynamic rest-argument callers of the `chrome.tabs.sendMessage` wrapper and decide whether a callback position can be proven at each invocation.
+- [ ] Determine whether the custom thenable wrapper's `then` and `catch` forwarding should be modeled as a generic callback-container contract or retained as a test-only external boundary.
+- [ ] Add bounded static global-property callback resolution for the seven collector fixtures only if it can be constrained to a single dominating write before listener registration and invalidated by every additional/unknown write.
