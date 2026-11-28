@@ -1191,6 +1191,12 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     await expect.poll(() => page.evaluate(() =>
       globalThis.__blbSourcePassageClickGuardInstalled === true
     ), {timeout:10000}).toBe(true);
+    // The MAIN-world guard is installed before the isolated-world settings
+    // read completes. Wait for that read so the first click is not mistaken
+    // for a native target=_blank navigation while redirectEnabled is unknown.
+    await expect.poll(() => page.evaluate(() =>
+      globalThis.__blbSourceBibleRedirectSettingsReady === true
+    ), {timeout:10000}).toBe(true);
 
     await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
