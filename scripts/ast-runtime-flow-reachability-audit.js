@@ -2479,7 +2479,8 @@ function analyzeFile(root, file) {
     const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
       read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
-    const callbackIdentities = new Set(matches.filter(write => String(write.stored).startsWith('function@'))
+    const callbackIdentities = new Set(matches.filter(write =>
+      write.property === read.property && String(write.stored).startsWith('function@'))
       .map(write => write.stored));
     if (read.assigned && read.property !== null && callbackIdentities.size === 1 && !callbackFunctionBindings.has(read.assigned)) {
       const identity = [...callbackIdentities][0];
