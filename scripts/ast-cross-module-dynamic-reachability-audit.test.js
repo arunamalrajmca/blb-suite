@@ -120,14 +120,19 @@ test('tracks importScripts arguments and immutable worker constructor aliases',(
    'const WorkerBase = Worker;',
    'const WorkerAlias = WorkerBase;',
    "new WorkerAlias('./worker.js');",
-   "importScripts('./one.js', './two.js');"
+   "importScripts('./one.js', './two.js');",
+   "const loadScripts = importScripts; const loadScriptsAlias = loadScripts; loadScriptsAlias('./three.js');",
+   "self.importScripts('./four.js');",
+   "let assignedLoader; assignedLoader = importScripts; assignedLoader('./five.js');",
+   "new window.Worker('./window-worker.js');",
+   "let AssignedWorker; AssignedWorker = window.Worker; new AssignedWorker('./assigned-worker.js');"
   ].join('\n'));
-  for(const file of ['worker.js','one.js','two.js'])fs.writeFileSync(path.join(root,'scripts',file),'export const loaded = true;');
-  const files=['scripts/main.js','scripts/worker.js','scripts/one.js','scripts/two.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
-  assert.equal(r.resolvedLaunchEdges.length,3);
-  assert.ok(r.reachable.includes('scripts/worker.js'));
-  assert.ok(r.reachable.includes('scripts/one.js'));
-  assert.ok(r.reachable.includes('scripts/two.js'));
+  for(const file of ['worker.js','one.js','two.js','three.js','four.js','five.js','window-worker.js','assigned-worker.js'])fs.writeFileSync(path.join(root,'scripts',file),'export const loaded = true;');
+  const files=['scripts/main.js','scripts/worker.js','scripts/one.js','scripts/two.js','scripts/three.js','scripts/four.js','scripts/five.js','scripts/window-worker.js','scripts/assigned-worker.js'].map(x=>path.join(root,x)),g=buildModuleGraph(root),r=analyzeDynamicExecution(root,files,g);
+  assert.equal(r.resolvedLaunchEdges.length,8);
+  for(const file of ['worker.js','one.js','two.js','three.js','four.js','five.js','window-worker.js','assigned-worker.js']) {
+   assert.ok(r.reachable.includes('scripts/'+file));
+  }
  } finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 
