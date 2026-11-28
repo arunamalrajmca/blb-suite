@@ -120,9 +120,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
   for (const file of files) {
     let ast;
     try { ast = parse(file); } catch (error) { parseErrors.push({ file: path.relative(root, file), error: error.message }); continue; }
-    let unresolved;
-    try { unresolved = unresolvedReferences(ast); }
-    catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
+    let unresolved = new Set();
+    if (needsScopeAnalysis(ast)) {
+      scopeAnalysisFiles += 1;
+      try { unresolved = unresolvedReferences(ast); }
+      catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
+    }
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
@@ -166,7 +169,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const relativeFile = path.relative(root, file).split(path.sep).join('/');
         const knownPlaywrightTestDeclaration = node.callee.type === 'Identifier' &&
           node.callee.name === 'test' && relativeFile.startsWith('tests/browser/') &&
-          /\\.spec\\.[cm]?js$/.test(relativeFile);
+          /\.spec\.[cm]?js$/.test(relativeFile);
         if (node.callee.type === 'Identifier' && !['require', 'import'].includes(node.callee.name) &&
             !knownPlaywrightTestDeclaration) {
           for (const [index, arg] of node.arguments.entries()) {
