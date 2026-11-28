@@ -2681,7 +2681,8 @@ test('keeps multi-hop listener forwarding partially resolved when one caller is 
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.certainty, 'partially-resolved-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 1);
   assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });
 
