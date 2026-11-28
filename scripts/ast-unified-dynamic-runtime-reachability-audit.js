@@ -2412,12 +2412,16 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const extensionApiMethod = isFunctionPrototypeForwarder
           ? memberPath(callee.object).split('.').pop() : method;
         const isExtensionApiRemoval = ['removeListener', 'removeEventListener'].includes(extensionApiMethod);
-        const extensionCallback = isExtensionApi && !isExtensionApiRemoval && lastArgumentIsCallable &&
+        // Function.prototype.apply receives one argument-list object, not
+        // the callback as its final argument. Its callback slot cannot be
+        // inferred from a dynamic array; keep these wrappers out of the
+        // direct callback-registration inventory.
+        const extensionCallback = isExtensionApi && !isExtensionApiRemoval &&
+          method !== 'apply' && lastArgumentIsCallable &&
           !(pathName === 'chrome.tabs.update' && node.arguments.length < 3) &&
-          (method === 'apply' ||
-            (method === 'call'
-              ? (lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)
-              : (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)));
+          (method === 'call'
+            ? (lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)
+            : (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction));
         const isCallbackCandidate = argument => argument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
