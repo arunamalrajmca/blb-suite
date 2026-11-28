@@ -3433,7 +3433,7 @@ test('resolves a uniquely assigned globalThis callback property before listener 
     'scripts/main.js': [
       'globalThis.capture = message => handleMessage(message);',
       'chrome.runtime.onMessage.addListener(globalThis.capture);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
@@ -3452,7 +3452,7 @@ test('keeps global callback properties unresolved after multiple or unknown writ
       'globalThis.capture = message => first(message);',
       'globalThis.capture = message => second(message);',
       'chrome.runtime.onMessage.addListener(globalThis.capture);'
-    ].join('\\n')
+    ].join('\n')
   });
   const dynamicMutation = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -3460,7 +3460,7 @@ test('keeps global callback properties unresolved after multiple or unknown writ
       'globalThis.capture = message => first(message);',
       'globalThis[key] = replacement;',
       'chrome.runtime.onMessage.addListener(globalThis.capture);'
-    ].join('\\n')
+    ].join('\n')
   });
   for (const result of [multipleWrites, dynamicMutation]) {
     const registration = result.dynamicSites.find(item =>
@@ -3479,14 +3479,14 @@ test('does not resolve global callback properties assigned after registration or
     'scripts/main.js': [
       'chrome.runtime.onMessage.addListener(globalThis.capture);',
       'globalThis.capture = message => handleMessage(message);'
-    ].join('\\n')
+    ].join('\n')
   });
   const conditionalWrite = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
       'if (enabled) { globalThis.capture = message => handleMessage(message); }',
       'chrome.runtime.onMessage.addListener(globalThis.capture);'
-    ].join('\\n')
+    ].join('\n')
   });
   for (const result of [afterRegistration, conditionalWrite]) {
     const registration = result.dynamicSites.find(item =>
@@ -3507,7 +3507,7 @@ test('invalidates global callback-property ownership after reflective global mut
       'globalThis.capture = message => first(message);',
       'Object.assign(globalThis, {capture: replacement});',
       'chrome.runtime.onMessage.addListener(globalThis.capture);'
-    ].join('\\n')
+    ].join('\n')
   });
   const shadowedGlobal = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -3516,7 +3516,7 @@ test('invalidates global callback-property ownership after reflective global mut
       '  globalThis.capture = message => first(message);',
       '  chrome.runtime.onMessage.addListener(globalThis.capture);',
       '}'
-    ].join('\\n')
+    ].join('\n')
   });
   for (const result of [objectAssignMutation, shadowedGlobal]) {
     const registration = result.dynamicSites.find(item =>
@@ -3536,7 +3536,7 @@ test('does not infer callback ownership from data-only or shadowed Chrome API ap
     'scripts/main.js': [
       'const args = [tabId, {type: "ping"}];',
       'chrome.tabs.sendMessage.apply(chrome.tabs, args);'
-    ].join('\\n')
+    ].join('\n')
   });
   const shadowed = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
@@ -3544,7 +3544,7 @@ test('does not infer callback ownership from data-only or shadowed Chrome API ap
       'function forward(chrome, args) {',
       '  chrome.tabs.sendMessage.apply(chrome.tabs, args);',
       '}'
-    ].join('\\n')
+    ].join('\n')
   });
   for (const result of [dataOnly, shadowed]) {
     assert.equal(result.dynamicSites.filter(item =>
@@ -3560,7 +3560,7 @@ test('Reflect.set with a dynamic global property invalidates stored callback own
       'globalThis.capture = message => first(message);',
       'Reflect.set(globalThis, propertyName, replacement);',
       'chrome.runtime.onMessage.addListener(globalThis.capture);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
