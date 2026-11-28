@@ -3337,6 +3337,33 @@ test('keeps array loader parameters uncertain when a local alias mutates the fil
     item.certainty === 'unresolved-registered-script'));
 });
 
+test('propagates loader-array mutation uncertainty back through a known local wrapper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'extension/manifest.json': JSON.stringify({
+      manifest_version: 3,
+      background: { service_worker: 'background.js' }
+    }),
+    'extension/background.js': [
+      'function mutateFiles(files) {',
+      "  files.push('injected.js');",
+      '}',
+      'function registerRuntime(files) {',
+      '  mutateFiles(files);',
+      "  chrome.scripting.registerContentScripts([{ id: 'runtime', js: files }]);",
+      '}',
+      "registerRuntime(['base.js']);"
+    ].join('\n'),
+    'extension/base.js': 'globalThis.base = true;',
+    'extension/injected.js': 'globalThis.injected = true;'
+  });
+  assert.equal(edge(result, 'chrome.scripting.registerContentScripts',
+    'extension/background.js', 'extension/base.js'), false);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'chrome.scripting.registerContentScripts' &&
+    item.certainty === 'unresolved-registered-script'));
+});
+
 test('keeps array loader parameters uncertain when any caller supplies an unknown file list', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
