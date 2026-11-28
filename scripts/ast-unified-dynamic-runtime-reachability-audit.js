@@ -2308,7 +2308,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (documentWrite) {
           for (const argument of node.arguments) {
             const markup = staticValue(argument, constants, 0, bindings);
-            if (typeof markup === 'string' && /<script\\b/i.test(markup)) {
+            if (typeof markup === 'string' && /<script\b/i.test(markup)) {
               addSite(file, node, 'document-write-script-injection', markup, null,
                 'unresolved-generated-source', [], staticPrefix(argument, constants, bindings));
             }
