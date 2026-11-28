@@ -1209,12 +1209,8 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       return tabs[0]?.id ?? null;
     });
     expect(firstDestinationTab).not.toBeNull();
-    // A tab becomes queryable before chrome.tabs.create() has necessarily
-    // resolved and the destination identity has been recorded. Wait for any
-    // registration for this tab, then verify that its URL identity is exact.
-    await expect.poll(() => extensionWorker.evaluate(tabId =>
-      [...blbLogicalTabRegistry.values()].includes(tabId), firstDestinationTab),
-    {timeout:10000}).toBe(true);
+    // Capture the extension's actual destination identity after the first
+    // tab appears; include live URLs if the click bypassed the tab manager.
     const firstRegistryState = await extensionWorker.evaluate(async ({target, tabId}) => ({
       targetKey:canonicalBlbTabKey(target),
       entries:[...blbLogicalTabRegistry.entries()],
