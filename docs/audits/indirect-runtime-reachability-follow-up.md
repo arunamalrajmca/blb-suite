@@ -121,3 +121,33 @@ No further implementation task from this carried-forward tranche remains open. T
 - Require current-head required checks and latest-main ancestry before merge.
 - No version bump or release is included or authorized.
 - Do not include unrelated site-specific references in the PR scope.
+
+## Next tranche — callback ownership through test harness wrappers
+
+This tranche starts from merged main at `8653c26462e6dc8703adf28e4077097552ddaacf`. It carries forward only the observations that remain uncertain after PR #1097; it does not reclassify them as production defects.
+
+### Carried-forward observations
+
+- [ ] Inspect the `.apply()` wrappers around `chrome.scripting.getRegisteredContentScripts` and `chrome.tabs.sendMessage`. Establish whether each wrapper carries a callback at all before adding any callback-owner rule; these APIs may instead be promise-based or pass data arguments.
+- [ ] Inspect Promise-like reassignment patterns in `queue.then(...)` followed by `queue = result.catch(...)` and the custom `gate.catch(...)` wrapper. Resolve only when the receiver's Promise/callback contract is statically established; otherwise retain uncertainty.
+- [ ] Inspect Chrome message-listener callbacks stored on `globalThis` properties. Resolve property-backed callback identity only when the property write dominates registration and no conflicting write or unknown mutation exists.
+- [ ] Re-run the exact repository-wide finding inventory after each focused fixture; report remaining counts by source location and uncertainty reason.
+- [ ] Add positive and negative fixtures for each newly supported wrapper/property pattern, including reassignment, multiple writes, unknown property mutation, and data-only arguments.
+- [ ] Preserve unresolved status for dynamic property keys, external Promise-like objects, ambiguous callback ownership, and unknown mutation.
+- [ ] Run focused audit tests first, then only fingerprint-selected AST sections, then current-head required CI gates. Report selected, skipped, passed, and failed separately.
+
+### Initial source review
+
+- [x] Confirmed the `.apply()` sites at `tests/browser/extension-lifecycle.spec.js:723` and `tests/browser/site-registration-opt-out-race.spec.js:27` wrap `getRegisteredContentScripts` and forward an argument array; they are not automatically evidence of a callback argument.
+- [x] Confirmed `tests/browser/replaced-tab-lifecycle-races.spec.js:295` is a separate `chrome.tabs.sendMessage.apply` wrapper and requires inspection of its argument array before classifying it as callback registration.
+- [x] Confirmed the Promise-like queue reassignment sites at `tests/browser/scripttagger-global-injection.spec.js:289,354` and the custom gate catch site at `tests/browser/service-worker-lifecycle.spec.js:3371`.
+- [x] Confirmed seven source-page collector fixtures store message callbacks on named `globalThis` properties before registering those properties with `chrome.runtime.onMessage.addListener`.
+- [ ] No analyzer behavior has been changed or claimed complete in this initial inventory commit.
+
+### Guardrails
+
+- Do not infer that a method named `then` or `catch` is a native Promise contract without evidence.
+- Do not treat every final argument to `.apply()` as a callback; inspect the literal/known argument list and API signature.
+- Do not resolve `globalThis` property callbacks when writes are ambiguous, reassigned, dynamically keyed, or exposed to unknown mutation.
+- Do not modify extension production behavior merely to reduce test-only uncertainty.
+- No version bump, release, or merge without explicit authorization.
