@@ -7,6 +7,13 @@
   window.__blbSourcePassageClickGuardInstalled = true;
 
   window.addEventListener("click", event => {
+    const diagnose = state => {
+      if (window.__blbSourcePassageClickGuardDiagnostics === true) {
+        window.__blbSourcePassageClickGuardLast = state;
+      }
+    };
+    diagnose({stage:'click',button:event.button,metaKey:event.metaKey,ctrlKey:event.ctrlKey,
+      shiftKey:event.shiftKey,altKey:event.altKey,targetType:event.target?.constructor?.name || null});
     if (event.button !== 0 || event.metaKey || event.ctrlKey ||
         event.shiftKey || event.altKey) return;
 
@@ -22,6 +29,8 @@
     if (globalThis.BLBSourcePageCollectorSites?.[host]?.mainWorldClickGuard !== true) return;
     const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
     const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
+    diagnose({stage:'anchor',host,targetHost,href:url.href,path:url.pathname,label,
+      registryGuard:globalThis.BLBSourcePageCollectorSites?.[host]?.mainWorldClickGuard === true});
     const isChristianityPassage = host === "christianity.com" &&
       targetHost === "christianity.com" &&
       /^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname);
@@ -42,6 +51,8 @@
       ["blueletterbible.org", "blueletterbible.com"].includes(targetHost) &&
       (/^\/search\/preSearch\.cfm$/i.test(url.pathname) ||
        /^\/kjv\/[^/]+\/\d+(?:\/\d+(?:-\d+)?)?\/?$/i.test(url.pathname));
+    diagnose({stage:'candidate',isChristianityPassage,isChurchOfJesusChristVerse,
+      isMercyHouseVerse,isSarataVerse,isReferenceLabel,isBlbReferenceDestination});
     if (!isChristianityPassage && !isChurchOfJesusChristVerse &&
         !isMercyHouseVerse && !isSarataVerse && !isReferenceLabel && !isBlbReferenceDestination) return;
 
@@ -50,6 +61,7 @@
       cancelable: true
     });
     const handled = !window.dispatchEvent(request);
+    diagnose({stage:'dispatched',handled,defaultPrevented:request.defaultPrevented,href:url.href,label});
     if (!handled) return;
 
     event.preventDefault();
