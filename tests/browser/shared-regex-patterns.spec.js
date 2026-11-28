@@ -149,7 +149,21 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     accountPath: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
     billingPath: BLBShared.isSensitiveSiteUrl('https://example.com/billing/history'),
     taxPath: BLBShared.isSensitiveSiteUrl('https://example.com/tax/filing'),
-    unrelatedKeywordPage: BLBShared.isSensitiveSiteUrl('https://example.com/articles/gardening')
+    unrelatedKeywordPage: BLBShared.isSensitiveSiteUrl('https://example.com/articles/gardening'),
+    russianTld: BLBShared.isSensitiveSiteHostname('example.ru'),
+    russianSubdomain: BLBShared.isSensitiveSiteHostname('portal.example.ru'),
+    cameo: BLBShared.isSensitiveSiteUrl('https://www.cameo.com/'),
+    imdbSubdomain: BLBShared.isSensitiveSiteUrl('https://m.imdb.com/title/example'),
+    sensibullSubdomain: BLBShared.isSensitiveSiteHostname('app.sensibull.com'),
+    zerodhaSubdomain: BLBShared.isSensitiveSiteHostname('kite.zerodha.com'),
+    tradingviewSubdomain: BLBShared.isSensitiveSiteHostname('www.tradingview.com'),
+    amazonComSubdomain: BLBShared.isSensitiveSiteHostname('www.amazon.com'),
+    amazonInSubdomain: BLBShared.isSensitiveSiteHostname('www.amazon.in'),
+    paypalSubdomain: BLBShared.isSensitiveSiteHostname('www.paypal.com'),
+    flipkartSubdomain: BLBShared.isSensitiveSiteHostname('www.flipkart.com'),
+    chromeInternal: BLBShared.isSensitiveSiteUrl('chrome://settings/'),
+    braveInternal: BLBShared.isSensitiveSiteUrl('brave://settings/'),
+    unrelatedRuLookalike: BLBShared.isSensitiveSiteHostname('example.ru.com')
   }));
   expect(result).toMatchObject({
     chase: true,
@@ -199,7 +213,21 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     financePath: true,
     billingPath: true,
     taxPath: true,
-    unrelatedKeywordPage: false
+    unrelatedKeywordPage: false,
+    russianTld: true,
+    russianSubdomain: true,
+    cameo: true,
+    imdbSubdomain: true,
+    sensibullSubdomain: true,
+    zerodhaSubdomain: true,
+    tradingviewSubdomain: true,
+    amazonComSubdomain: true,
+    amazonInSubdomain: true,
+    paypalSubdomain: true,
+    flipkartSubdomain: true,
+    chromeInternal: true,
+    braveInternal: true,
+    unrelatedRuLookalike: false
   });
 });
 
