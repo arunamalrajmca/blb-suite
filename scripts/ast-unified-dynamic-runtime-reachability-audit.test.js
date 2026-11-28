@@ -2905,7 +2905,7 @@ test('recognizes native scheduler.postTask callbacks through global scheduler ro
     item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask'));
   assert.equal(registrations.length, 3);
   assert.ok(registrations.every(item => item.certainty === 'resolved-inline-callback' ||
-    item.certainty === 'resolved-named-callback-owner' ||
+    item.certainty === 'resolved-function-binding' ||
     item.certainty === 'resolved-interprocedural-callback-argument'));
   assert.equal(result.uncertainty.filter(item =>
     item.kind === 'unresolved-external-callback-owner').length, 0);
