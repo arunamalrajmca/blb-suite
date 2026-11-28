@@ -66,3 +66,25 @@ test('does not report shadowed Function, Proxy, Object, or Reflect as global met
   assert.equal(has(result, 'descriptor-or-prototype-mutation'), false);
   assert.equal(has(result, 'prototype-or-descriptor-api'), false);
 });
+
+test('skips global-shadow scope analysis when no reflective globals are candidates', () => {
+  const result = run("test('example', () => { callback(); });");
+  assert.equal(result.scopeAnalysisFiles, 0);
+});
+
+test('keeps scope analysis for shadowed metaprogramming globals', () => {
+  const result = run("function invokeReflect(Reflect) { Reflect.get({}, 'x'); }");
+  assert.equal(result.scopeAnalysisFiles, 1);
+  assert.equal(has(result, 'reflective-operation'), false);
+});
+
+test('does not classify Playwright test declaration callbacks as unknown higher-order boundaries', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-audit-'));
+  const file = path.join(root, 'tests', 'browser', 'omnibox-dictionary-routing.spec.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, "const { test } = require('./fixtures'); test('routes', async () => {});");
+    const result = analyze(root);
+    assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 0);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
