@@ -215,10 +215,11 @@ test('recognizes Playwright pages returned by context.newPage and awaited popup 
 
 test('recognizes Node HTTP, child-process, stream, and process event contracts', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-node-events-'));
-  const file = path.join(root, 'scripts', 'node-events.js');
+  const file = path.join(root, 'scripts', 'node-events.mjs');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   try {
     fs.writeFileSync(file, [
+      "import { spawn as importedSpawn } from 'node:child_process';",
       "const http = require('node:http');",
       "const { spawn } = require('node:child_process');",
       "const server = http.createServer((request, response) => { response.once('finish', handler); });",
@@ -227,6 +228,8 @@ test('recognizes Node HTTP, child-process, stream, and process event contracts',
       "child.stdout.on('data', handler);",
       "child.stderr.on('data', handler);",
       "child.once('close', handler);",
+      "const importedChild = importedSpawn('node', []);",
+      "importedChild.once('close', handler);",
       "process.on('exit', handler);",
       "unknown.on('ready', handler);",
       "function shadowed(process) { process.on('ready', handler); }"
