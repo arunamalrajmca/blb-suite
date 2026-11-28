@@ -2319,8 +2319,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'NewExpression') {
         const constructorName = node.callee.type === 'Identifier' ? node.callee.name : null;
         const constructorBinding = node.callee.type === 'Identifier' ? bindings.get(node.callee) : null;
+        const constructorPath = staticMemberPath(node.callee, constants, bindings);
+        let constructorRoot = node.callee;
+        while (constructorRoot?.type === 'MemberExpression') constructorRoot = constructorRoot.object;
+        const globalMemberWorker = constructorRoot?.type === 'Identifier' &&
+          ['window', 'globalThis', 'self'].includes(constructorRoot.name) && !bindings.get(constructorRoot) &&
+          /^(?:window|globalThis|self)\.(?:Worker|SharedWorker)$/.test(constructorPath);
         const isWorker = (['Worker', 'SharedWorker'].includes(constructorName) && !bindings.get(node.callee)) ||
-          (constructorBinding && workerConstructorBindings.has(constructorBinding));
+          globalMemberWorker || (constructorBinding && workerConstructorBindings.has(constructorBinding));
         if (isWorker) {
           const sourceNode = node.arguments[0];
           const spec = staticLoaderSpecifier(sourceNode, constants, bindings);
@@ -2398,11 +2404,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const serviceWorkerGlobalRoot = serviceWorkerRoot?.type === 'Identifier' &&
           ['navigator', 'window', 'globalThis', 'self'].includes(serviceWorkerRoot.name) &&
           !bindings.get(serviceWorkerRoot);
-        const serviceWorkerRegister = method === 'register' && serviceWorkerGlobalRoot &&
-          ['navigator.serviceWorker.register', 'window.navigator.serviceWorker.register',
-            'globalThis.navigator.serviceWorker.register', 'self.navigator.serviceWorker.register'].includes(fullPath);
-        const workletModule = method === 'addModule' &&
-          /(?:^|\.)(?:audioWorklet|paintWorklet|layoutWorklet)\.addModule$/.test(fullPath);
+        const serviceWorkerAlias = callee.type === 'MemberExpression' &&
+          callee.object.type === 'Identifier' && serviceWorkerContainerBindings.has(bindings.get(callee.object));
+        const serviceWorkerRegister = method === 'register' && (serviceWorkerAlias ||
+          (serviceWorkerGlobalRoot && ['navigator.serviceWorker.register', 'window.navigator.serviceWorker.register',
+            'globalThis.navigator.serviceWorker.register', 'self.navigator.serviceWorker.register'].includes(fullPath)));
+        const workletAlias = callee.type === 'MemberExpression' &&
+          callee.object.type === 'Identifier' && workletBindings.has(bindings.get(callee.object));
+        const workletModule = method === 'addModule' && (workletAlias ||
+          /(?:^|\.)(?:audioWorklet|paintWorklet|layoutWorklet)\.addModule$/.test(fullPath));
         if (serviceWorkerRegister || workletModule) {
           const sourceNode = node.arguments[0];
           const spec = staticLoaderSpecifier(sourceNode, constants, bindings);
