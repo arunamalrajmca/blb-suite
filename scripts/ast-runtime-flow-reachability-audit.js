@@ -2419,12 +2419,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const files = walkFiles(root);
   const results = [];
   const parseErrors = [];
+  const fileTimings = [];
   for (const file of files) {
+    const started = process.hrtime.bigint();
     try { results.push(analyzeFile(root, file)); }
     catch (error) {
       parseErrors.push({ file: path.relative(root, file).split(path.sep).join('/'), error: error.message });
+    } finally {
+      fileTimings.push({
+        file: path.relative(root, file).split(path.sep).join('/'),
+        durationMs: Number(process.hrtime.bigint() - started) / 1e6
+      });
     }
   }
+  fileTimings.sort((left, right) => right.durationMs - left.durationMs);
   const findings = results.flatMap(result => result.findings);
   const flowEdges = results.flatMap(result => result.flowEdges);
   const flowEdgeKinds = {};
@@ -2437,6 +2445,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
   return {
     filesAnalyzed: results.length,
     filesFailedToParse: parseErrors.length,
+    slowestFiles: fileTimings.slice(0, 12),
     functionsInventoried: results.reduce((sum, result) => sum + result.functions, 0),
     findingCount: findings.length,
     flowEdgeCount: flowEdges.length,
@@ -2458,6 +2467,7 @@ function run(root = path.resolve(__dirname, '..')) {
   for (const category of CATEGORIES) console.log(category + ': ' + result.counts[category]);
   console.log('Runtime-flow findings: ' + result.findingCount);
   console.log('Explicit runtime-flow edges: ' + result.flowEdgeCount);
+  console.log('Slowest runtime-flow files: ' + JSON.stringify(result.slowestFiles));
   for (const [kind, count] of Object.entries(result.flowEdgeKinds).sort()) {
     console.log('  ' + kind + ': ' + count);
   }
