@@ -2594,3 +2594,41 @@ test('does not classify same-named local functions as Vue lifecycle registration
   assert.equal(result.dynamicSites.some(item =>
     item.kind === 'external-callback-registration' && item.expression === 'onMounted'), false);
 });
+
+test('resolves callbacks read from static object and array registries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const objectHandlers = { ready: onReady };',
+      'const arrayHandlers = [onReady];',
+      'setTimeout(objectHandlers.ready, 0);',
+      'setTimeout(arrayHandlers[0], 0);'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'setTimeout');
+  assert.equal(registrations.length, 2);
+  assert.ok(registrations.every(item => item.certainty === 'resolved-stored-callback-binding'));
+  assert.ok(registrations.every(item => item.callbackTarget.endsWith('::onReady@1:9')));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not resolve callbacks from dynamically indexed or mutated registries', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const handlers = [onReady];',
+      'handlers.push(replacement);',
+      'setTimeout(handlers[index], 0);',
+      'setTimeout(handlers[0], 0);'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'setTimeout');
+  assert.equal(registrations.length, 2);
+  assert.ok(registrations.every(item => item.certainty === 'unresolved-callback-owner'));
+  assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
+});
