@@ -56,27 +56,36 @@ Verified on final implementation/test head `80586917574d93e26e52b60de627a7627084
 
 The inventory describes what the current analyzers can establish; it is not a claim that reflective, computed, external, or runtime-generated behavior is fully resolved. Preserve those boundaries as uncertain unless new static evidence justifies a stronger classification.
 
-## Final-head validation — `80586917574d93e26e52b60de627a7627084e460`
+## Additional findings resolved in the current PR head
 
-- **Selected and passed:** symbol, repository, owner, cross-module, runtime-flow, unified runtime, computed-property, and metaprogramming AST audit sections. All eight executed because their fingerprinted JavaScript inputs changed; all recorded passed checkpoints.
-- **Not selected:** executable-source audit section (no extension source inputs changed).
+- [x] Resolve a DOM listener function stored by one direct assignment when the assignment precedes registration in the same lexical block. Permit null-only cleanup writes in separate blocks, but reject multiple function assignments, non-null writes, conditional-block assignments, use-before-assignment, wrapper calls before assignment, and null clears between assignment and registration.
+- [x] Resolve the third parameter of an unshadowed `chrome.runtime.onMessage.addListener` callback as the API-supplied `sendResponse` callback. The binding is not promoted if it is reassigned; arbitrary parameters named `sendResponse` and shadowed `chrome` namespaces remain unresolved.
+- [x] Add positive and negative regression fixtures for both callback-owner improvements.
+- [x] Confirm the actual `pageButtonStartupListener` cleanup pattern is covered: its callback assignment and registration share the same block, while its null reset occurs in the separate cleanup function.
+- [x] Confirm the `.then(sendResponse)` callback owner in the background message listener is now resolved from the Chrome API contract. The analyzer does not need to infer a general Promise-return summary for `runMasterToggle` to establish the callback's owner.
+
+## Final-head validation — `29203e5e371232c96c5a49bce1e2477c5022dde3`
+
+- **Selected and passed:** symbol (17), repository (6), owner (49), cross-module (132), runtime-flow (169), unified runtime (169), computed-property (15), and metaprogramming (26) AST test cases. Each selected section recorded a passed checkpoint; no selected section failed.
+- **Audit selection:** all eight selected sections ran because the JavaScript analyzer/test inputs changed their fingerprints. The executable-source audit section was not selected because no extension source files changed.
 - **Passed CI gates:** HARD-GATE, References & Double-click, latest-main ancestry, and Full Browser Concurrency Equivalence.
 - **Additional passed jobs within concurrency validation:** focused retired content-bundle listener-race regression and checkpoint-recovery validator tests.
-- **Skipped by workflow selection:** Focused regressions, Master-Toggle Registration Diagnostics, Package validation, and the unrelated/deep browser test stages. Skipped jobs are not reported as passes or failures.
+- **Skipped by workflow selection:** Focused regressions, Master-Toggle Registration Diagnostics, Package validation, and unrelated/deep browser test stages. Skipped jobs are not reported as passes or failures.
 - **Failed selected sections:** none.
+- No extension production source was changed by this audit update; no separate extension smoke test was required by the selected CI scope.
 
 ## Specific unresolved findings retained from the repository scan
 
-These are observed uncertainty samples, not proven defects. Keep them unresolved until the analyzer can establish ownership or target identity without guessing:
+These are observed uncertainty samples, not proven defects. Keep them unresolved until the analyzer can establish target identity without guessing:
 
-- `extension/background.js:4481`: `.then(sendResponse)` is chained from the local `runMasterToggle(...)` helper. Promise-return summaries for this helper-return chain are not currently established.
-- `extension/blb-page-selection-button.js:687`: the `DOMContentLoaded` callback is assigned to an outer listener binding before registration; the current owner analysis does not prove that assignment as a stable callback owner.
-- `extension/background.js:3124`: `chrome.scripting.registerContentScripts` receives the `files` parameter of `registerRuntimeContentScriptForPattern`; trace the bounded file-list source through `contentScriptFilesForTab` and the registration helper before promoting it to a resolved loader edge.
+- `extension/background.js:3124`: `chrome.scripting.registerContentScripts` receives the `files` parameter of `registerRuntimeContentScriptForPattern`; trace the bounded file-list source through `contentScriptFilesForTab` and the registration helper before promoting it to a resolved loader edge. The list is derived from host and settings state, so static resolution must account for all possible returned file arrays.
 - Some test-only callback samples use Playwright `test.setTimeout` or Chrome API `.call/.apply` wrappers. Do not treat these as generic callback slots; distinguish API-specific argument positions and helper return semantics first.
+- Dynamic loader targets, computed-property access, reflection, external callback contracts without a statically known API owner, and runtime-generated source remain conservative uncertainty boundaries.
 
 ## Remaining carried-forward work
 
-- [ ] Resolve the observed Promise-return helper, assignment-initialized DOM listener, and runtime content-script file-list uncertainty samples above when safe ownership/target evidence can be modeled.
+- [ ] Trace the runtime content-script file-list source through `contentScriptFilesForTab`, `ensureRuntimeContentScriptRegistered`, and `registerRuntimeContentScriptForPattern`; only resolve a loader edge when all statically possible file targets are safely established.
+- [ ] Classify remaining test-only `test.setTimeout` and `.call/.apply` callback samples using API-specific contracts; keep unknown contracts unresolved.
 - [ ] Continue auditing newly discovered behavioral invocation paths when repository evidence or findings identify a gap.
 - [ ] Add focused fixtures for any newly identified path before implementing recognition.
 - [ ] Revisit generated-source/template-origin handling if a statically analyzable source-generation pipeline is introduced.
