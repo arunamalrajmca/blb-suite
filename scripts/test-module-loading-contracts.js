@@ -125,14 +125,22 @@ if (!importMatch) {
   }
   const shortWhitelistFastPath = background.indexOf('const shortPhraseWords = normalizeKjvPassageWords(remainingText);');
   const indexedCriteriaPath = background.indexOf('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {', shortWhitelistFastPath);
-  if (shortWhitelistFastPath < 0
-      || indexedCriteriaPath <= shortWhitelistFastPath
-      || !background.includes('KJV_PASSAGE_SHORT_WHITELIST.has(shortPhrase)')
-      || !background.includes('await ensureKjvVerseEntriesLoaded();')
-      || !background.includes('findExactKjvPhraseInLoadedCorpus(shortPhraseWords)')) {
-    fail('exact short whitelist phrases use verse-only loading with authoritative contiguous-text verification');
+  const shortWhitelistBlock = shortWhitelistFastPath >= 0 && indexedCriteriaPath > shortWhitelistFastPath
+    ? background.slice(shortWhitelistFastPath, indexedCriteriaPath)
+    : '';
+  const lazyLoadingRegression = read('tests/browser/kjv-corpus-lazy-loading.spec.js');
+  if (!shortWhitelistBlock
+      || !shortWhitelistBlock.includes('KJV_PASSAGE_SHORT_WHITELIST.has(shortPhrase)')
+      || !shortWhitelistBlock.includes('makeQuotedCriteriaOrQuery([shortPhrase])')
+      || !shortWhitelistBlock.includes("return {valid:true, type:'KJV_PASSAGE'")
+      || shortWhitelistBlock.includes('ensureKjvVerseEntriesLoaded')
+      || shortWhitelistBlock.includes('findExactKjvPhraseInLoadedCorpus')
+      || !lazyLoadingRegression.includes('every curated short-whitelist phrase is present in the normalized KJV corpus')
+      || !lazyLoadingRegression.includes('await ensureKjvVerseEntriesLoaded();')
+      || !lazyLoadingRegression.includes('findExactKjvPhraseInLoadedCorpus(phrase.split(/\\s+/))')) {
+    fail('short whitelist phrases bypass runtime corpus loading and are validated against normalized KJV verse text by regression coverage');
   } else {
-    pass('exact short whitelist phrases use verse-only loading with authoritative contiguous-text verification');
+    pass('short whitelist phrases bypass runtime corpus loading and retain corpus-backed whitelist validation');
   }
   for (const file of ['kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js']) {
     if (imports.includes(file)) {
@@ -553,28 +561,29 @@ function activeSelectionBranchStart(type) {
   }
   return background.indexOf("if (message.type === '" + type + "'");
 }
-const senderBoundAltBHandler =
-  /async function handleOpenBibleSelectionCommand\(sender = null\) \{[\s\S]*?if \(sender\) \{\s*if \(!\(await isActiveTabContentScriptSender\(sender\)\)\)/.test(background);
-function selectionBranchIsSenderBound(type, branch) {
-  return branch.includes('isActiveTabContentScriptSender(sender)') ||
-    (type === 'blbSuiteOpenCurrentSelection' &&
-      branch.includes('handleOpenBibleSelectionCommand(sender)') &&
-      senderBoundAltBHandler);
-}
-for (const type of activeSelectionTypes) {
+const activeSelectionBranchHasSenderGuard = (type) => {
   const start = activeSelectionBranchStart(type);
   const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
-  if (!selectionBranchIsSenderBound(type, branch)) {
+  if (branch.includes('isActiveTabContentScriptSender(sender)')) return true;
+  // Alt+B selection dispatch deliberately delegates to the shared command
+  // handler, which performs the same active-tab and sender authorization
+  // checks before reading or clearing the originating document's selection.
+  if (type === 'blbSuiteOpenCurrentSelection' &&
+      branch.includes('handleOpenBibleSelectionCommand(sender)')) {
+    const handlerStart = background.indexOf('async function handleOpenBibleSelectionCommand(sender = null)');
+    const handlerEnd = handlerStart < 0 ? -1 : background.indexOf('\n}', handlerStart);
+    const handler = handlerStart < 0 ? '' : background.slice(handlerStart, handlerEnd < 0 ? undefined : handlerEnd);
+    return handler.includes('isActiveTabContentScriptSender(sender)');
+  }
+  return false;
+};
+for (const type of activeSelectionTypes) {
+  if (!activeSelectionBranchHasSenderGuard(type)) {
     fail('selection handoff message ' + type + ' is bound to its active sender tab');
   }
 }
-if (activeSelectionTypes.every(type => {
-  const start = activeSelectionBranchStart(type);
-  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
-  const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
-  return start >= 0 && selectionBranchIsSenderBound(type, branch);
-})) {
+if (activeSelectionTypes.every(activeSelectionBranchHasSenderGuard)) {
   pass(activeSelectionTypes.length + ' selection handoff message types are bound to the active sender tab');
 }
 

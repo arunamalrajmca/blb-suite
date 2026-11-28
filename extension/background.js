@@ -6700,11 +6700,11 @@ async function classifySelectionForBlb(selectionText) {
       && shortPhraseWords.length <= 4) {
     const shortPhrase = shortPhraseWords.join(' ');
     if (KJV_PASSAGE_SHORT_WHITELIST.has(shortPhrase)) {
-      await ensureKjvVerseEntriesLoaded();
-      if (findExactKjvPhraseInLoadedCorpus(shortPhraseWords)) {
-        const query = makeQuotedCriteriaOrQuery([shortPhrase]);
-        return {valid:true, type:'KJV_PASSAGE', text:query, kjvPassageQuery:query};
-      }
+      // The complete curated whitelist is validated against the normalized
+      // KJV corpus by the focused lazy-loading regression test. Trust that
+      // validated set here so a common short phrase needs no corpus fetch.
+      const query = makeQuotedCriteriaOrQuery([shortPhrase]);
+      return {valid:true, type:'KJV_PASSAGE', text:query, kjvPassageQuery:query};
     }
   }
 
