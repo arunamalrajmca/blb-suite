@@ -614,6 +614,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     exportStarsByFile.set(file, exportStars);
   }
 
+  const externalCallbackParameterBindings = new Set();
   const functionDefs = new Map();
   // Keep the unresolved-script-global fallback indexed by file and declared
   // name. Scanning every function definition for every callback/callsite made
@@ -1624,19 +1625,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     }
 
-    const externalCallbackParameterBindings = new Set();
     const callbackRecord = (callback, api, line, expression) => {
       // Chrome's runtime message listener contract supplies sendResponse as
       // its third callback parameter. Mark only that exact API contract; a
       // similarly named parameter in an arbitrary function is not external.
       if (['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener'].includes(api)) {
-        const registeredFunction = callback?.type === 'Identifier'
-          ? functionDefs.get(file + '::' + bindings.get(callback))?.node
-          : callback;
+        const registeredDefinition = callback?.type === 'Identifier'
+          ? functionDefs.get(file + '::' + bindings.get(callback)) : null;
+        const registeredFunction = registeredDefinition?.node || callback;
+        const registeredFile = registeredDefinition?.file || file;
+        const registeredBindings = bindingByFile.get(registeredFile);
         const sendResponseParameter = registeredFunction?.params?.[2];
         const parameterBinding = sendResponseParameter?.type === 'Identifier'
-          ? bindings.get(sendResponseParameter) : null;
-        if (parameterBinding) externalCallbackParameterBindings.add(file + '::' + parameterBinding);
+          ? registeredBindings?.get(sendResponseParameter) : null;
+        if (parameterBinding) externalCallbackParameterBindings.add(registeredFile + '::' + parameterBinding);
       }
       let callbackName = null, callbackTarget = null, callbackTargets = [];
       let certainty = 'unresolved-callback-owner', knownExternalCallback = false, unresolvedCallbackOwner = false;
