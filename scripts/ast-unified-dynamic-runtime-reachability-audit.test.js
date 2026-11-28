@@ -3035,3 +3035,44 @@ test('resolves callback ownership deterministically when declarations are reorde
   assert.equal(summarize(first).registrations[0].certainty,
     'resolved-interprocedural-callback-argument');
 });
+
+
+test('resolves a uniquely assigned local DOM listener callback', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'startupListener = () => initialize();',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-function-binding');
+  assert.match(registration.callbackTarget, /scripts\\/main\\.js::startupListener@/);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not resolve a reassigned local DOM listener callback from a stale function value', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'startupListener = () => initializeFirst();',
+      'startupListener = runtimeListener;',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.callbackTarget, null);
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.expression === 'document.addEventListener'));
+});
