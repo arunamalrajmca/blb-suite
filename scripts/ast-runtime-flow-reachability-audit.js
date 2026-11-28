@@ -2467,12 +2467,36 @@ function analyzeFile(root, file) {
     }
   }
 
-  // Propagate callback identities through immutable local aliases, then
-  // connect calls made after a container read or callback factory return.
+  // Resolve property reads after container retrieval has established aliases.
+  // A single literal property containing a known function identity can also
+  // become a callback binding when a helper returns it to a local variable.
   const callbackFunctionBindings = new Map([...containerCallbackBindings, ...factoryCallbackBindings]);
   const callbackInvocationKinds = new Map();
   for (const binding of containerCallbackBindings.keys()) callbackInvocationKinds.set(binding, 'container-callback-invocation');
   for (const binding of factoryCallbackBindings.keys()) callbackInvocationKinds.set(binding, 'function-return-callback-invocation');
+  for (const read of propertyReads) {
+    const readObject = canonicalObject(read.object);
+    const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
+      read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
+    const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
+    const callbackIdentities = new Set(matches.filter(write => String(write.stored).startsWith('function@'))
+      .map(write => write.stored));
+    if (read.assigned && read.property !== null && callbackIdentities.size === 1 && !callbackFunctionBindings.has(read.assigned)) {
+      const identity = [...callbackIdentities][0];
+      const callback = functionNodes.find(fn => 'function@' + fn.loc.start.line === identity);
+      if (callback) {
+        callbackFunctionBindings.set(read.assigned, callback);
+        callbackInvocationKinds.set(read.assigned, 'property-value-callback-invocation');
+      }
+    }
+    for (const write of matches) {
+      addEdge(write.stored, destination, 'property-value-read', read.node,
+        read.property === null ? 'dynamic property read' : 'property=' + read.property);
+    }
+  }
+
+  // Propagate callback identities through immutable local aliases, then
+  // connect calls made after a container read, property read, or factory return.
   let callbackAliasChanged = true;
   while (callbackAliasChanged) {
     callbackAliasChanged = false;
@@ -2494,19 +2518,6 @@ function analyzeFile(root, file) {
         callbackInvocationKinds.get(binding) || 'retrieved-callback-invocation',
         node, 'retrieved callback binding');
     });
-  }
-
-  // Resolve property reads again after container retrieval has established
-  // aliases from the retrieved bindings to the stored aggregate identities.
-  for (const read of propertyReads) {
-    const readObject = canonicalObject(read.object);
-    const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
-      read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
-    const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
-    for (const write of matches) {
-      addEdge(write.stored, destination, 'property-value-read', read.node,
-        read.property === null ? 'dynamic property read' : 'property=' + read.property);
-    }
   }
 
   // Captured closure records above may include the same captured binding in
