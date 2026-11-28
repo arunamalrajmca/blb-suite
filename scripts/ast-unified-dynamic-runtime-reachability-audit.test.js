@@ -3528,3 +3528,45 @@ test('invalidates global callback-property ownership after reflective global mut
       item.kind === 'unresolved-external-callback-owner'));
   }
 });
+
+
+test('does not infer callback ownership from data-only or shadowed Chrome API apply wrappers', () => {
+  const dataOnly = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const args = [tabId, {type: "ping"}];',
+      'chrome.tabs.sendMessage.apply(chrome.tabs, args);'
+    ].join('\\n')
+  });
+  const shadowed = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function forward(chrome, args) {',
+      '  chrome.tabs.sendMessage.apply(chrome.tabs, args);',
+      '}'
+    ].join('\\n')
+  });
+  for (const result of [dataOnly, shadowed]) {
+    assert.equal(result.dynamicSites.filter(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression.includes('sendMessage')).length, 0);
+  }
+});
+
+test('Reflect.set with a dynamic global property invalidates stored callback ownership', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'globalThis.capture = message => first(message);',
+      'Reflect.set(globalThis, propertyName, replacement);',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner'));
+});
