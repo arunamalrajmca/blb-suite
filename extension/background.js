@@ -3141,8 +3141,8 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
     let hostname = '';
     try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
     const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[hostname];
+    const mainWorldId = `${id}-main-world`;
     if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
-      const mainWorldId = `${id}-main-world`;
       const mainWorldFiles = ['source-page-collector-sites.js','redirect-christianity-main-world.js'];
       const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
       if (!registeredMain.length) {
@@ -3164,6 +3164,14 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
           world:'MAIN',
           persistAcrossSessions:true
         }]);
+      }
+    } else {
+      // Registrations persist across browser sessions. If a host no longer
+      // requires the MAIN-world guard (or the isolated bundle is no longer
+      // eligible), remove any stale guard left by an earlier extension build.
+      const staleMainWorld = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
+      if (staleMainWorld.length) {
+        await chrome.scripting.unregisterContentScripts({ids:[mainWorldId]});
       }
     }
     // Permission revocation can race an in-flight register/update call. The
