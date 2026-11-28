@@ -105,21 +105,41 @@ function analyzeFile(root, file) {
     ignoreEval: false, impliedStrict: false
   });
   const variableForNode = new Map();
-  const declaredNames = new Set();
   for (const scope of manager.scopes) {
     for (const variable of scope.variables || []) {
       for (const id of variable.identifiers || []) variableForNode.set(id, variable);
       for (const def of variable.defs || []) {
-        if (def.name) {
-          variableForNode.set(def.name, variable);
-          declaredNames.add(variable.name);
-        }
+        if (def.name) variableForNode.set(def.name, variable);
       }
     }
     for (const reference of scope.references || []) {
       if (reference.resolved) variableForNode.set(reference.identifier, reference.resolved);
     }
   }
+
+  const declaredNames = new Set();
+  const collectBindingNames = pattern => {
+    if (!pattern) return;
+    if (pattern.type === 'Identifier') declaredNames.add(pattern.name);
+    else if (pattern.type === 'RestElement') collectBindingNames(pattern.argument);
+    else if (pattern.type === 'AssignmentPattern') collectBindingNames(pattern.left);
+    else if (pattern.type === 'ArrayPattern') pattern.elements.forEach(collectBindingNames);
+    else if (pattern.type === 'ObjectPattern') {
+      for (const property of pattern.properties || []) {
+        collectBindingNames(property.type === 'RestElement' ? property.argument : property.value);
+      }
+    }
+  };
+  visit(ast, node => {
+    if (node.type === 'VariableDeclarator') collectBindingNames(node.id);
+    else if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration' ||
+        (node.type === 'FunctionExpression' && node.id)) collectBindingNames(node.id);
+    else if (isFunction(node)) (node.params || []).forEach(collectBindingNames);
+    else if (node.type === 'CatchClause') collectBindingNames(node.param);
+    else if (node.type === 'ImportDeclaration') {
+      for (const specifier of node.specifiers || []) collectBindingNames(specifier.local);
+    }
+  });
 
   const findings = [];
   const flowEdges = [];
