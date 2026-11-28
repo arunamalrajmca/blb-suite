@@ -1166,7 +1166,6 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       ? 'https://sagacityweb.com/the-digital-harlot-resisting-the-seduction-of-modern-babylon/'
       : 'https://rediscover.bible/acts_intro.html';
 
-    const blbDestinationRequests = [];
     await context.route('https://' + host + '/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
@@ -1174,17 +1173,6 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
         '<main><a id="bible-reference" target="_blank" href="' + destinationUrl +
         '">' + referenceLabel + '</a></main></body></html>'
     }));
-    // The extension opens BLB in a separate tab, so page.route() cannot
-    // intercept this navigation. Route at context scope to keep the exact
-    // preSearch URL observable before BLB's live server canonicalizes it.
-    await context.route('https://www.blueletterbible.org/**', route => {
-      blbDestinationRequests.push(route.request().url());
-      return route.fulfill({
-      status:200,
-      contentType:'text/html; charset=utf-8',
-      body:'<!doctype html><html><head><title>BLB destination</title></head><body>John 3:16 KJV</body></html>'
-      });
-    });
 
     await page.goto(homepage, {waitUntil:'domcontentloaded'});
     const originPattern = 'https://' + host + '/*';
@@ -1204,26 +1192,37 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       globalThis.__blbSourcePassageClickGuardInstalled === true
     ), {timeout:10000}).toBe(true);
 
+    await extensionWorker.evaluate(() => {
+      globalThis.__blbObservedTabUrls = [];
+      globalThis.__blbObservedTabListener = (_tabId, changeInfo) => {
+        if (typeof changeInfo.url === 'string') globalThis.__blbObservedTabUrls.push(changeInfo.url);
+      };
+      chrome.tabs.onUpdated.addListener(globalThis.__blbObservedTabListener);
+    });
     await page.locator('#bible-reference').click();
-    await expect.poll(() => blbDestinationRequests.includes(destinationUrl)).toBe(true);
-    await expect.poll(() => extensionWorker.evaluate(async target => {
+    await expect.poll(() => extensionWorker.evaluate(target =>
+      globalThis.__blbObservedTabUrls.includes(target), destinationUrl
+    )).toBe(true);
+    await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.filter(tab => tab.url === target || tab.pendingUrl === target).length;
-    }, destinationUrl)).toBe(1);
-
-    const firstDestinationTab = await extensionWorker.evaluate(async target => {
+      return tabs.length;
+    })).toBe(1);
+    const firstDestinationTab = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.find(tab => tab.url === target || tab.pendingUrl === target)?.id ?? null;
-    }, destinationUrl);
+      return tabs[0]?.id ?? null;
+    });
     expect(firstDestinationTab).not.toBeNull();
 
+    await extensionWorker.evaluate(() => { globalThis.__blbObservedTabUrls = []; });
     await page.locator('#bible-reference').click();
-    await expect.poll(() => extensionWorker.evaluate(async target => {
+    await expect.poll(() => extensionWorker.evaluate(target =>
+      globalThis.__blbObservedTabUrls.includes(target), destinationUrl
+    )).toBe(true);
+    await expect.poll(() => extensionWorker.evaluate(async expectedTabId => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      const matches = tabs.filter(tab => tab.url === target || tab.pendingUrl === target);
       const [active] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-      return {count:matches.length, activeId:active?.id ?? null, matchId:matches[0]?.id ?? null};
-    }, destinationUrl)).toEqual({
+      return {count:tabs.length, activeId:active?.id ?? null, matchId:tabs[0]?.id ?? null};
+    }, firstDestinationTab)).toEqual({
       count:1,
       activeId:firstDestinationTab,
       matchId:firstDestinationTab
