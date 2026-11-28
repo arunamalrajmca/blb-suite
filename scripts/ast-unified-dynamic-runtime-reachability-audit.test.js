@@ -92,7 +92,7 @@ test('retains every known callback owner passed through a shared helper', () => 
       'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
       'register(firstHandler);',
       'register(secondHandler);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
@@ -113,7 +113,7 @@ test('retains every known handleEvent owner forwarded through a listener helper'
       'function register(listener) { document.addEventListener("ready", listener); }',
       'register({ handleEvent() {} });',
       'register({ handleEvent() {} });'
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
@@ -133,7 +133,7 @@ test('recognizes Promise executor and resolver callbacks as known external owner
       '  setTimeout(resolve, 0);',
       '  setTimeout(reject, 0);',
       '});'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
   assert.ok(registrations.some(item => item.expression === 'Promise' && item.certainty === 'resolved-inline-callback'));
@@ -149,7 +149,7 @@ test('does not treat chrome.tabs.update options as an optional callback', () => 
       '  chrome.tabs.update(tabId, properties);',
       '  chrome.tabs.update(tabId, properties, callback);',
       '}'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' && item.expression === 'chrome.tabs.update'
