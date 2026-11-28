@@ -148,10 +148,18 @@ test('recognizes MutationObserver instances assigned after declaration', () => {
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
 
-test('keeps reassigned and shadowed observer-like bindings conservative', () => {
-  const result = run("let observer; observer = new MutationObserver(handler); observer = replacement; observer.observe(target, { childList: true }); function setup(MutationObserver) { let local; local = new MutationObserver(handler); local.observe(target, { childList: true }); }");
+test('keeps reassigned observer-like bindings conservative', () => {
+  const result = run("let observer; observer = new MutationObserver(handler); observer = replacement; observer.observe(target, { childList: true });");
   const findings = result.observations.filter(item => item.kind === 'callback-contract');
-  assert.equal(findings.length, 2);
-  assert.ok(findings.every(item => item.detail.includes('observe argument[0]')));
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.ok(findings[0].detail.includes('observe argument[0]'));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('keeps shadowed MutationObserver assignments conservative', () => {
+  const result = run("function setup(MutationObserver) { let local; local = new MutationObserver(handler); local.observe(target, { childList: true }); }");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 1, JSON.stringify(findings));
+  assert.ok(findings[0].detail.includes('observe argument[0]'));
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
