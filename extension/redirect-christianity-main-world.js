@@ -34,12 +34,9 @@
     const host = location.hostname.toLowerCase().replace(/^www\./, "");
     const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
     const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
-    const registry = globalThis.BLBSourcePageCollectorSites;
-    const registryEntry = registry?.[host] || null;
-    diagnose({stage:'registry-check',host,targetHost,href:url.href,path:url.pathname,label,
-      registryPresent:Boolean(registry),registryEntry,
-      registryGuard:registryEntry?.mainWorldClickGuard === true});
-    if (registryEntry?.mainWorldClickGuard !== true) return;
+    // This script is registered only for hosts whose shared site-registry
+    // entry enables mainWorldClickGuard. Do not re-read that registry in the
+    // page world: registration itself is the authoritative host gate.
     const isChristianityPassage = host === "christianity.com" &&
       targetHost === "christianity.com" &&
       /^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname);
