@@ -1129,8 +1129,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
       else if (sourceOwners?.size) {
         for (const [key, value] of sourceOwners) add(call.targetSlot, key, value);
       } else {
-        const argumentKey = call.argument.type === 'Identifier'
+        let argumentKey = call.argument.type === 'Identifier'
           ? bindingByFile.get(call.file)?.get(call.argument) : null;
+        const aliases = functionAliasesByFile.get(call.file);
+        const seenAliases = new Set();
+        while (argumentKey && aliases?.has(argumentKey) && !seenAliases.has(argumentKey)) {
+          seenAliases.add(argumentKey);
+          argumentKey = aliases.get(argumentKey);
+        }
         const callbackOwners = argumentKey
           ? callbackParameterOwners.get(call.file + '::' + argumentKey) : null;
         const knownFunctionArgument =
