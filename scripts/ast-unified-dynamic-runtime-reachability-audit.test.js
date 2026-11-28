@@ -86,7 +86,7 @@ test('keeps nested callback wrappers uncertain when an intermediate parameter ha
 test('caps unresolved external callback owner samples without truncating totals', () => {
   const registrations = Array.from({length:45}, (_, index) =>
     `chrome.runtime.onMessage.addListener(handler${index});`
-  )).join('\n');
+  ).join('\n');
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': registrations
