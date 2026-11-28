@@ -1879,15 +1879,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (key.startsWith(binding + '::')) storedCallbackOwners.delete(key);
       }
     }
-    const globalStoredCallbackOwners = new Map();
-    if (!globalStoredCallbackMutationUnknown) {
-      for (const [key, writes] of globalStoredCallbackWrites) {
-        if (writes.length === 1 && writes[0].owner) {
-          globalStoredCallbackOwners.set(key, writes[0]);
-        }
-      }
-    }
-
     // Build parent links before callback sites are visited so assignment-
     // initialized callbacks can be checked for same-block, prior assignment.
     visit(ast, (node, parent) => { if (parent) parents.set(node, parent); });
@@ -2014,10 +2005,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const globalKey = !binding && globalCallbackRoots.has(callback.object.name) &&
           property !== undefined && property !== null
           ? callback.object.name + '::' + String(property) : null;
-        const globalWrite = globalKey ? globalStoredCallbackOwners.get(globalKey) : null;
-        const globalOwner = globalWrite &&
-          globalWrite.node.start < callback.start &&
-          nearestCallbackBlock(globalWrite.node) === nearestCallbackBlock(callback)
+        const callbackBlock = nearestCallbackBlock(callback);
+        const sameBlockWrites = globalKey && !globalStoredCallbackMutationUnknown
+          ? (globalStoredCallbackWrites.get(globalKey) || []).filter(write =>
+            nearestCallbackBlock(write.node) === callbackBlock)
+          : [];
+        const globalWrite = sameBlockWrites.length === 1 ? sameBlockWrites[0] : null;
+        const globalOwner = globalWrite && globalWrite.owner &&
+          globalWrite.node.start < callback.start
           ? globalWrite.owner : null;
         if (owner || globalOwner) {
           const resolved = owner || globalOwner;
