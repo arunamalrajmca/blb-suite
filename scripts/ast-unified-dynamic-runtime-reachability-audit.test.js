@@ -2604,7 +2604,7 @@ test('resolves callbacks read from static object and array registries', () => {
       'const arrayHandlers = [onReady];',
       'setTimeout(objectHandlers.ready, 0);',
       'setTimeout(arrayHandlers[0], 0);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' && item.expression === 'setTimeout');
@@ -2624,7 +2624,7 @@ test('does not resolve callbacks from dynamically indexed or mutated registries'
       'handlers.push(replacement);',
       'setTimeout(handlers[index], 0);',
       'setTimeout(handlers[0], 0);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' && item.expression === 'setTimeout');
