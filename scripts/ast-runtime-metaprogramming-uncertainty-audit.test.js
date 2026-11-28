@@ -102,3 +102,10 @@ test('does not treat the standard test runner callback as an unknown higher-orde
   assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 0);
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
+
+
+test('does not classify specified Promise and DOM event callbacks as uncertain contracts', () => {
+  const result = run("promise.then(onFulfilled).catch(onRejected).finally(onSettled); target.addEventListener('click', onClick); target.removeEventListener('click', onClick);");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
