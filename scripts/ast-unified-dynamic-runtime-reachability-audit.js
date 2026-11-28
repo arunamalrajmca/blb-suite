@@ -639,6 +639,33 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
   }
 
+  // Resolve a callback stored by one direct assignment to a local binding.
+  // Only a single syntactic write is accepted; multiple writes, alias writes,
+  // and ambiguous reassignment remain unresolved rather than reusing stale
+  // function values. This covers startup listeners initialized after a
+  // nullable declaration without treating mutable callback slots as stable.
+  const assignedFunctionWrites = new Map();
+  for (const [file, ast] of asts) {
+    const bindings = bindingByFile.get(file);
+    visit(ast, node => {
+      if (node.type !== 'AssignmentExpression' || node.operator !== '=' ||
+          node.left.type !== 'Identifier') return;
+      const key = bindings?.get(node.left);
+      if (!key) return;
+      if (!assignedFunctionWrites.has(file + '::' + key)) assignedFunctionWrites.set(file + '::' + key, []);
+      assignedFunctionWrites.get(file + '::' + key).push(node.right);
+    });
+  }
+  for (const [identity, writes] of assignedFunctionWrites) {
+    if (writes.length !== 1) continue;
+    const value = writes[0];
+    if (!['FunctionExpression', 'ArrowFunctionExpression'].includes(value?.type)) continue;
+    if (functionDefs.has(identity)) continue;
+    const separator = identity.indexOf('::');
+    const file = identity.slice(0, separator);
+    functionDefs.set(identity, { file, node: value });
+  }
+
   // Resolve callback parameters through direct callsites. A wrapper such as
   // register(handler) { api.addListener(handler); } owns no local function
   // declaration for handler; its callers provide the actual callback.
