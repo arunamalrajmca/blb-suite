@@ -144,7 +144,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const mutationObserverNames = new Set();
     const invalidMutationObserverNames = new Set();
     const playwrightEventEmitterNames = new Set();
+    const playwrightPopupPromiseNames = new Set();
     const localCallbackFunctions = new Map();
+    const nodeHttpModuleNames = new Set();
+    const nodeHttpCreateServerNames = new Set();
+    const nodeSpawnFactoryNames = new Set();
+    const nodeEventEmitterNames = new Set();
+    const nodeEventEmitterMemberPaths = new Set();
+    const staticMemberPath = expression => {
+      if (expression?.type === 'Identifier') return expression.name;
+      if (expression?.type === 'MemberExpression' && !expression.computed) {
+        const parent = staticMemberPath(expression.object);
+        return parent ? parent + '.' + expression.property.name : null;
+      }
+      return null;
+    };
     const isGlobalMutationObserverConstruction = expression =>
       expression?.type === 'NewExpression' &&
       expression.callee?.type === 'Identifier' &&
@@ -176,9 +190,44 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // BrowserContext 'serviceworker' callback parameter; keep unrelated .on()
     // receivers uncertain.
     visit(ast, node => {
-      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
-          ['ArrowFunctionExpression', 'FunctionExpression'].includes(node.init?.type)) {
-        localCallbackFunctions.set(node.id.name, node.init);
+      if (node.type === 'ImportDeclaration') {
+        const moduleName = node.source.value;
+        if (['node:http', 'http'].includes(moduleName)) {
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportDefaultSpecifier') nodeHttpModuleNames.add(specifier.local.name);
+            if (specifier.type === 'ImportSpecifier' && (specifier.imported.name || specifier.imported.value) === 'createServer') {
+              nodeHttpCreateServerNames.add(specifier.local.name);
+            }
+          }
+        }
+        if (['node:child_process', 'child_process'].includes(moduleName)) {
+          for (const specifier of node.specifiers) {
+            if (specifier.type === 'ImportSpecifier' && (specifier.imported.name || specifier.imported.value) === 'spawn') {
+              nodeSpawnFactoryNames.add(specifier.local.name);
+            }
+          }
+        }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        if (['ArrowFunctionExpression', 'FunctionExpression'].includes(node.init?.type)) {
+          localCallbackFunctions.set(node.id.name, node.init);
+        }
+        if (node.init?.type === 'CallExpression' && node.init.callee?.type === 'Identifier' &&
+            node.init.callee.name === 'require' && node.init.arguments[0]?.type === 'Literal') {
+          const moduleName = node.init.arguments[0].value;
+          if (['node:http', 'http'].includes(moduleName)) nodeHttpModuleNames.add(node.id.name);
+        }
+        if (node.init?.type === 'CallExpression' && node.init.callee?.type === 'Identifier' &&
+            node.init.callee.name === 'require' && node.init.arguments[0]?.type === 'Literal' &&
+            ['node:child_process', 'child_process'].includes(node.init.arguments[0].value) &&
+            node.id.type === 'ObjectPattern') {
+          for (const property of node.id.properties) {
+            if (property.type !== 'Property' || property.computed) continue;
+            if ((property.key.name || property.key.value) === 'spawn' && property.value?.type === 'Identifier') {
+              nodeSpawnFactoryNames.add(property.value.name);
+            }
+          }
+        }
       }
       if (isPlaywrightBrowserSpec && node.type === 'CallExpression' &&
           node.callee.type === 'Identifier' && node.callee.name === 'test') {
@@ -199,17 +248,48 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     });
     visit(ast, node => {
-      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
-          node.init?.type === 'AwaitExpression' &&
-          node.init.argument?.type === 'CallExpression' &&
-          node.init.argument.callee?.type === 'MemberExpression' &&
-          !node.init.argument.callee.computed &&
-          node.init.argument.callee.property.name === 'waitForEvent' &&
-          node.init.argument.callee.object?.type === 'Identifier' &&
-          playwrightEventEmitterNames.has(node.init.argument.callee.object.name) &&
-          node.init.argument.arguments[0]?.type === 'Literal' &&
-          node.init.argument.arguments[0].value === 'popup') {
-        playwrightEventEmitterNames.add(node.id.name);
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        const initializer = node.init?.type === 'AwaitExpression' ? node.init.argument : node.init;
+        if (initializer?.type === 'CallExpression' &&
+            initializer.callee?.type === 'MemberExpression' &&
+            !initializer.callee.computed &&
+            initializer.callee.object?.type === 'Identifier' &&
+            playwrightEventEmitterNames.has(initializer.callee.object.name)) {
+          const method = initializer.callee.property.name;
+          if (method === 'newPage') playwrightEventEmitterNames.add(node.id.name);
+          if (method === 'waitForEvent' && initializer.arguments[0]?.type === 'Literal' &&
+              initializer.arguments[0].value === 'popup') {
+            if (node.init?.type === 'AwaitExpression') playwrightEventEmitterNames.add(node.id.name);
+            else playwrightPopupPromiseNames.add(node.id.name);
+          }
+        }
+        if (node.init?.type === 'AwaitExpression' &&
+            node.init.argument?.type === 'Identifier' &&
+            playwrightPopupPromiseNames.has(node.init.argument.name)) {
+          playwrightEventEmitterNames.add(node.id.name);
+        }
+        if (node.init?.type === 'CallExpression') {
+          const callee = node.init.callee;
+          const isHttpCreateServer = callee?.type === 'MemberExpression' && !callee.computed &&
+            callee.property.name === 'createServer' && callee.object?.type === 'Identifier' &&
+            nodeHttpModuleNames.has(callee.object.name);
+          const isImportedHttpCreateServer = callee?.type === 'Identifier' &&
+            nodeHttpCreateServerNames.has(callee.name);
+          if (isHttpCreateServer || isImportedHttpCreateServer) {
+            nodeEventEmitterNames.add(node.id.name);
+            const callback = node.init.arguments[0];
+            const responseParameter = callback?.params?.[1];
+            if (['ArrowFunctionExpression', 'FunctionExpression'].includes(callback?.type) &&
+                responseParameter?.type === 'Identifier') {
+              nodeEventEmitterNames.add(responseParameter.name);
+            }
+          }
+          if (callee?.type === 'Identifier' && nodeSpawnFactoryNames.has(callee.name)) {
+            nodeEventEmitterNames.add(node.id.name);
+            nodeEventEmitterMemberPaths.add(node.id.name + '.stdout');
+            nodeEventEmitterMemberPaths.add(node.id.name + '.stderr');
+          }
+        }
       }
       if (node.type === 'CallExpression' && node.callee?.type === 'MemberExpression' &&
           !node.callee.computed && ['on', 'once'].includes(node.callee.property.name) &&
@@ -264,11 +344,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // evidence, their callback semantics may still be supplied by an external runtime.
         const knownCDPSessionEventListener = ['on', 'once'].includes(method) &&
           node.callee.object?.type === 'Identifier' && cdpSessionNames.has(node.callee.object.name);
+        const receiverPath = staticMemberPath(node.callee.object);
         const knownPlaywrightEventListener = ['on', 'once'].includes(method) &&
           node.callee.object?.type === 'Identifier' && playwrightEventEmitterNames.has(node.callee.object.name);
+        const knownNodeEventListener = ['on', 'once'].includes(method) && (
+          nodeEventEmitterNames.has(receiverPath) ||
+          nodeEventEmitterMemberPaths.has(receiverPath) ||
+          (node.callee.object?.type === 'Identifier' && node.callee.object.name === 'process' &&
+            unresolved.has(node.callee.object.start + ':' + node.callee.object.end))
+        );
         const knownMutationObserverObserve = method === 'observe' &&
           node.callee.object?.type === 'Identifier' && mutationObserverNames.has(node.callee.object.name);
-        if (method && !knownCDPSessionEventListener && !knownPlaywrightEventListener && !knownMutationObserverObserve &&
+        if (method && !knownCDPSessionEventListener && !knownPlaywrightEventListener && !knownNodeEventListener && !knownMutationObserverObserve &&
             /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) || arg.type === 'Identifier' || arg.type === 'MemberExpression') {
