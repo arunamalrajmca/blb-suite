@@ -3426,3 +3426,172 @@ test('recognizes callable final arguments through Function.prototype.call but no
   assert.equal(registrations[0].certainty, 'resolved-function-binding');
   assert.match(registrations[0].callbackTarget, /scripts\/main\.js::onReady@/);
 });
+
+test('resolves a uniquely assigned globalThis callback property before listener registration', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'globalThis.capture = message => handleMessage(message);',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-stored-global-callback-binding');
+  assert.match(registration.callbackTarget, /scripts\/main\.js::function@1/);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('keeps global callback properties unresolved after multiple or unknown writes', () => {
+  const multipleWrites = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'globalThis.capture = message => first(message);',
+      'globalThis.capture = message => second(message);',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\n')
+  });
+  const dynamicMutation = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'globalThis.capture = message => first(message);',
+      'globalThis[key] = replacement;',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\n')
+  });
+  for (const result of [multipleWrites, dynamicMutation]) {
+    const registration = result.dynamicSites.find(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression === 'chrome.runtime.onMessage.addListener');
+    assert.ok(registration);
+    assert.equal(registration.certainty, 'unresolved-callback-owner');
+    assert.ok(result.uncertainty.some(item =>
+      item.kind === 'unresolved-external-callback-owner'));
+  }
+});
+
+test('does not resolve global callback properties assigned after registration or from another block', () => {
+  const afterRegistration = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'chrome.runtime.onMessage.addListener(globalThis.capture);',
+      'globalThis.capture = message => handleMessage(message);'
+    ].join('\n')
+  });
+  const conditionalWrite = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'if (enabled) { globalThis.capture = message => handleMessage(message); }',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\n')
+  });
+  for (const result of [afterRegistration, conditionalWrite]) {
+    const registration = result.dynamicSites.find(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression === 'chrome.runtime.onMessage.addListener');
+    assert.ok(registration);
+    assert.equal(registration.certainty, 'unresolved-callback-owner');
+    assert.ok(result.uncertainty.some(item =>
+      item.kind === 'unresolved-external-callback-owner'));
+  }
+});
+
+
+test('invalidates global callback-property ownership after reflective global mutation or shadowing', () => {
+  const objectAssignMutation = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'globalThis.capture = message => first(message);',
+      'Object.assign(globalThis, {capture: replacement});',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\n')
+  });
+  const shadowedGlobal = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function install(globalThis) {',
+      '  globalThis.capture = message => first(message);',
+      '  chrome.runtime.onMessage.addListener(globalThis.capture);',
+      '}'
+    ].join('\n')
+  });
+  for (const result of [objectAssignMutation, shadowedGlobal]) {
+    const registration = result.dynamicSites.find(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression === 'chrome.runtime.onMessage.addListener');
+    assert.ok(registration);
+    assert.equal(registration.certainty, 'unresolved-callback-owner');
+    assert.ok(result.uncertainty.some(item =>
+      item.kind === 'unresolved-external-callback-owner'));
+  }
+});
+
+
+test('does not infer callback ownership from data-only or shadowed Chrome API apply wrappers', () => {
+  const dataOnly = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'const args = [tabId, {type: "ping"}];',
+      'chrome.tabs.sendMessage.apply(chrome.tabs, args);'
+    ].join('\n')
+  });
+  const shadowed = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function forward(chrome, args) {',
+      '  chrome.tabs.sendMessage.apply(chrome.tabs, args);',
+      '}'
+    ].join('\n')
+  });
+  for (const result of [dataOnly, shadowed]) {
+    assert.equal(result.dynamicSites.filter(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression.includes('sendMessage')).length, 0);
+  }
+});
+
+test('Reflect.set with a dynamic global property invalidates stored callback ownership', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'globalThis.capture = message => first(message);',
+      'Reflect.set(globalThis, propertyName, replacement);',
+      'chrome.runtime.onMessage.addListener(globalThis.capture);'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner'));
+});
+
+
+test('resolves repeated global callback property names when each write is unique within its registration block', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'extensionWorker.evaluate(() => {',
+      '  globalThis.capture = message => first(message);',
+      '  chrome.runtime.onMessage.addListener(globalThis.capture);',
+      '});',
+      'extensionWorker.evaluate(() => {',
+      '  globalThis.capture = message => second(message);',
+      '  chrome.runtime.onMessage.addListener(globalThis.capture);',
+      '});'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener');
+  assert.equal(registrations.length, 2);
+  assert.ok(registrations.every(item =>
+    item.certainty === 'resolved-stored-global-callback-binding'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
