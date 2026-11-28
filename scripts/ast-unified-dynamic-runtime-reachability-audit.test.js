@@ -3044,14 +3044,14 @@ test('resolves a uniquely assigned local DOM listener callback', () => {
       'let startupListener = null;',
       'startupListener = () => initialize();',
       "document.addEventListener('DOMContentLoaded', startupListener);"
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
     item.expression === 'document.addEventListener');
   assert.ok(registration);
   assert.equal(registration.certainty, 'resolved-function-binding');
-  assert.match(registration.callbackTarget, /scripts\\/main\\.js::startupListener@/);
+  assert.match(registration.callbackTarget, /scripts\/main\.js::startupListener@/);
   assert.equal(result.uncertainty.filter(item =>
     item.kind === 'unresolved-external-callback-owner').length, 0);
 });
@@ -3064,7 +3064,7 @@ test('does not resolve a reassigned local DOM listener callback from a stale fun
       'startupListener = () => initializeFirst();',
       'startupListener = runtimeListener;',
       "document.addEventListener('DOMContentLoaded', startupListener);"
-    ].join('\\n')
+    ].join('\n')
   });
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' &&
