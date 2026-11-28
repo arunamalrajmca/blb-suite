@@ -942,8 +942,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         // A value passed to an unknown function may be mutated. Known local
         // callees are analyzed through their own parameter bindings.
+        const isUnshadowedJsonStringify = node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' && node.callee.object.name === 'JSON' &&
+          !bindings?.get(node.callee.object) &&
+          (node.callee.computed
+            ? (node.callee.property.type === 'Literal' && node.callee.property.value === 'stringify')
+            : node.callee.property.name === 'stringify');
         if (node.arguments.some(isParameterReference) &&
-            !resolveCallableOwner(file, node.callee)) {
+            !resolveCallableOwner(file, node.callee) && !isUnshadowedJsonStringify) {
           mutated = true;
           return;
         }
