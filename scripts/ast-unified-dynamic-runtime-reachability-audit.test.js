@@ -674,10 +674,14 @@ test('keeps dynamic ServiceWorker and Worklet loader targets explicitly uncertai
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
       "navigator.serviceWorker.register(getWorkerScript());",
-      "audioContext.audioWorklet.addModule(resolveProcessor());"
+      "audioContext.audioWorklet.addModule(resolveProcessor());",
+      "navigator.serviceWorker.register(new URL('./other-service-worker.js', location.href));",
+      "audioContext.audioWorklet.addModule(new URL('./other-processor.js', location.href));"
     ].join(' '),
     'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
-    'scripts/processor.js': 'registerProcessor("sample", class {});'
+    'scripts/processor.js': 'registerProcessor("sample", class {});',
+    'scripts/other-service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/other-processor.js': 'registerProcessor("other", class {});'
   });
   assert.ok(result.uncertainty.some(item =>
     item.kind === 'service-worker-register' && item.affectedRoots.includes('scripts/main.js')
@@ -691,6 +695,8 @@ test('keeps dynamic ServiceWorker and Worklet loader targets explicitly uncertai
   assert.ok(result.uncertainFiles.some(item =>
     item.file === 'scripts/processor.js' && item.affectedRoots.includes('scripts/main.js')
   ));
+  assert.equal(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/other-service-worker.js'), false);
+  assert.equal(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/other-processor.js'), false);
 });
 
 
@@ -713,6 +719,23 @@ test('tracks DOM script injection through aliased document and createElement bin
   assert.ok(edge(result, 'dom-script-src-injection', 'scripts/main.js', 'extension/injected.js'));
   assert.ok(edge(result, 'dom-script-setAttribute-injection', 'scripts/main.js', 'extension/also-injected.js'));
   assert.ok(result.dynamicSites.some(item => item.kind === 'dom-script-append' && item.expression === 'alias'));
+});
+
+
+test('does not classify shadowed ServiceWorker, URL, or Blob bindings as native loaders', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function install(navigator, URL, Blob) {',
+      "  navigator.serviceWorker.register('./shadowed-service-worker.js');",
+      "  new Worker(URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' })));",
+      '}'
+    ].join(' '),
+    'scripts/shadowed-service-worker.js': 'self.addEventListener("fetch", () => {});'
+  });
+  assert.equal(result.dynamicSites.filter(item => item.kind === 'service-worker-register').length, 0);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'generated-worker-source').length, 0);
+  assert.ok(result.uncertainty.some(item => item.kind === 'worker-constructor'));
 });
 
 
