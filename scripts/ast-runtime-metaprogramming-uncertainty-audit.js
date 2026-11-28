@@ -57,6 +57,19 @@ function unresolvedReferences(ast) {
   }
   return unresolved;
 }
+function visitFunctionBody(node, fn) {
+  function descend(current, root = false) {
+    if (!current || typeof current !== 'object' || typeof current.type !== 'string') return;
+    if (!root && ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(current.type)) return;
+    fn(current);
+    for (const [key, value] of Object.entries(current)) {
+      if (['loc', 'start', 'end', 'range'].includes(key)) continue;
+      if (Array.isArray(value)) value.forEach(child => descend(child));
+      else if (value && typeof value.type === 'string') descend(value);
+    }
+  }
+  descend(node, true);
+}
 function needsScopeAnalysis(ast) {
   let needed = false;
   const descriptorMethods = new Set([
@@ -305,6 +318,53 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
       }
     });
+    // Resolve callback parameters of local helpers when the helper itself
+    // invokes the parameter or forwards it to a Promise callback contract.
+    // Keep helpers that merely pass callbacks to unknown callees conservative.
+    const localFunctionDefinitions = new Map();
+    const ambiguousLocalFunctionNames = new Set();
+    visit(ast, node => {
+      let name = null;
+      let fn = null;
+      if (node.type === 'FunctionDeclaration' && node.id?.type === 'Identifier') {
+        name = node.id.name;
+        fn = node;
+      } else if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' &&
+          ['FunctionExpression', 'ArrowFunctionExpression'].includes(node.init?.type)) {
+        name = node.id.name;
+        fn = node.init;
+      }
+      if (!name || !fn) return;
+      if (localFunctionDefinitions.has(name)) ambiguousLocalFunctionNames.add(name);
+      else localFunctionDefinitions.set(name, fn);
+    });
+    const localCallbackParameterPositions = new Map();
+    for (const [name, fn] of localFunctionDefinitions) {
+      if (ambiguousLocalFunctionNames.has(name)) continue;
+      const positions = new Set();
+      fn.params.forEach((parameter, index) => {
+        if (parameter.type !== 'Identifier') return;
+        let invokedOrForwarded = false;
+        let reassigned = false;
+        visitFunctionBody(fn.body, child => {
+          if (child.type === 'AssignmentExpression' && child.left?.type === 'Identifier' &&
+              child.left.name === parameter.name) reassigned = true;
+          if (child.type !== 'CallExpression') return;
+          if (child.callee?.type === 'Identifier' && child.callee.name === parameter.name) {
+            invokedOrForwarded = true;
+            return;
+          }
+          if (child.callee?.type === 'MemberExpression' && !child.callee.computed &&
+              ['then', 'catch', 'finally'].includes(child.callee.property.name) &&
+              child.arguments.some(argument => argument.type === 'Identifier' && argument.name === parameter.name)) {
+            invokedOrForwarded = true;
+          }
+        });
+        if (invokedOrForwarded && !reassigned) positions.add(index);
+      });
+      if (positions.size) localCallbackParameterPositions.set(name, positions);
+    }
+
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
@@ -370,8 +430,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           unresolved.has(node.callee.start + ':' + node.callee.end);
         if (node.callee.type === 'Identifier' && !['require', 'import', 'test'].includes(node.callee.name) &&
             !knownPlaywrightTestDeclaration && !knownGlobalCallbackAPI) {
+          const knownLocalCallbackPositions = localCallbackParameterPositions.get(node.callee.name) || new Set();
           for (const [index, arg] of node.arguments.entries()) {
-            if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type)) {
+            if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) &&
+                !knownLocalCallbackPositions.has(index)) {
               add(file, arg, 'higher-order-callback-boundary', 'callback passed to ' + node.callee.name + ' argument[' + index + ']; callee contract is project-defined or external');
             }
           }
