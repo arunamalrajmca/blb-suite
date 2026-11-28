@@ -716,6 +716,33 @@ test('tracks DOM script injection through aliased document and createElement bin
 });
 
 
+test('records generated inline-script and Blob-worker source as scoped uncertainty', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "const script = document.createElement('script');",
+      "script.textContent = 'globalThis.inlineGenerated = true;';",
+      "document.head.appendChild(script);",
+      "document.write('<script>globalThis.documentWritten = true;<\\/script>');",
+      "new Worker(URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' })));"
+    ].join(' '),
+    'scripts/inline-dependency.js': 'globalThis.inlineDependency = true;'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'dom-script-inline-source' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'document-write-script-injection' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'generated-worker-source' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'worker-constructor' && item.affectedRoots.includes('scripts/main.js')
+  ));
+});
+
+
 test('tracks message-driven worker script loading as scoped uncertainty', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
