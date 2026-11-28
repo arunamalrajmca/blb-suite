@@ -2341,7 +2341,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           ['navigator.serviceWorker.register', 'window.navigator.serviceWorker.register',
             'globalThis.navigator.serviceWorker.register', 'self.navigator.serviceWorker.register'].includes(fullPath);
         const workletModule = method === 'addModule' &&
-          /(?:^|\\.)(?:audioWorklet|paintWorklet|layoutWorklet)\\.addModule$/.test(fullPath);
+          /(?:^|\.)(?:audioWorklet|paintWorklet|layoutWorklet)\.addModule$/.test(fullPath);
         if (serviceWorkerRegister || workletModule) {
           const sourceNode = node.arguments[0];
           const spec = staticLoaderSpecifier(sourceNode, constants, bindings);
