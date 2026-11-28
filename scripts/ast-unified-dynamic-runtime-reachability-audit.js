@@ -1409,7 +1409,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     });
     for (const key of reassignedLoaderWrapperBindings) loaderWrapperBindings.delete(key);
-    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set(['Worker', 'SharedWorker']);
+    const imported = new Map(), scriptElementBindings = new Set(), documentNamespaceBindings = new Set(), createElementMethodBindings = new Set(), appendChildMethodBindings = new Set(), workerConstructorBindings = new Set();
     const parents = new Map(), aliases = new Map(), computedValueBindings = new Map();
     const calledBindings = new Set(), constructedBindings = new Set(), callbackBindings = new Set();
     const dynamicCallableBindings = new Map(), vmNamespaceBindings = new Set(), vmMethodBindings = new Map();
@@ -2174,7 +2174,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const target = bindings.get(node.id);
         if (target && node.init.type === 'Identifier') {
           const source = bindings.get(node.init);
-          if (['Worker', 'SharedWorker'].includes(node.init.name)) workerConstructorBindings.add(target);
+          if (['Worker', 'SharedWorker'].includes(node.init.name) && !bindings.get(node.init)) workerConstructorBindings.add(target);
           if (node.init.name === 'document' || (source && documentNamespaceBindings.has(source))) documentNamespaceBindings.add(target);
           if (source && createElementMethodBindings.has(source)) createElementMethodBindings.add(target);
           if (source && appendChildMethodBindings.has(source)) appendChildMethodBindings.add(target);
@@ -2276,7 +2276,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'NewExpression') {
         const constructorName = node.callee.type === 'Identifier' ? node.callee.name : null;
         const constructorBinding = node.callee.type === 'Identifier' ? bindings.get(node.callee) : null;
-        const isWorker = ['Worker', 'SharedWorker'].includes(constructorName) ||
+        const isWorker = (['Worker', 'SharedWorker'].includes(constructorName) && !bindings.get(node.callee)) ||
           (constructorBinding && workerConstructorBindings.has(constructorBinding));
         if (isWorker) {
           const sourceNode = node.arguments[0];
