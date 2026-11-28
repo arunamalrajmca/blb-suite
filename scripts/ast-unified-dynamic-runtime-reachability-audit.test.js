@@ -631,16 +631,22 @@ test('resolves Worker and SharedWorker entrypoints, including constructor aliase
     'scripts/main.js': [
       "new Worker('./worker.js');",
       "const WorkerAlias = Worker; new WorkerAlias(new URL('./module-worker.js', import.meta.url), { type: 'module' });",
-      "new SharedWorker('./shared-worker.js');"
+      "new SharedWorker('./shared-worker.js');",
+      "new window.Worker('./window-worker.js');",
+      "const GlobalWorkerAlias = globalThis.Worker; new GlobalWorkerAlias('./global-worker.js');"
     ].join(' '),
     'scripts/worker.js': 'self.onmessage = () => {};',
     'scripts/module-worker.js': 'importScripts("./worker-dependency.js");',
     'scripts/shared-worker.js': 'onconnect = () => {};',
+    'scripts/window-worker.js': 'self.windowWorker = true;',
+    'scripts/global-worker.js': 'self.globalWorker = true;',
     'scripts/worker-dependency.js': 'self.dependency = true;'
   });
   assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/worker.js'));
   assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/module-worker.js'));
   assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/shared-worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/window-worker.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/global-worker.js'));
   assert.ok(edge(result, 'importScripts', 'scripts/module-worker.js', 'scripts/worker-dependency.js'));
 });
 
@@ -651,18 +657,26 @@ test('resolves ServiceWorker registration and Worklet module loaders', () => {
       "navigator.serviceWorker.register('./service-worker.js');",
       "audioContext.audioWorklet.addModule('./audio-processor.js');",
       "CSS.paintWorklet.addModule(new URL('./paint-worklet.js', import.meta.url));",
-      "CSS.layoutWorklet.addModule('./layout-worklet.js');"
+      "CSS.layoutWorklet.addModule('./layout-worklet.js');",
+      "const serviceWorkerContainer = navigator.serviceWorker;",
+      "const serviceWorkerAlias = serviceWorkerContainer; serviceWorkerAlias.register('./aliased-service-worker.js');",
+      "const audioWorklet = audioContext.audioWorklet;",
+      "const audioWorkletAlias = audioWorklet; audioWorkletAlias.addModule('./aliased-audio-processor.js');"
     ].join(' '),
     'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
     'scripts/audio-processor.js': 'class Processor extends AudioWorkletProcessor {};',
     'scripts/paint-worklet.js': 'registerPaint("sample", class {});',
-    'scripts/layout-worklet.js': 'registerLayout("sample", class {});'
+    'scripts/layout-worklet.js': 'registerLayout("sample", class {});',
+    'scripts/aliased-service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/aliased-audio-processor.js': 'registerProcessor("aliased", class {});'
   });
   assert.equal(result.parseErrors.length, 0);
   assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/service-worker.js'));
   assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/audio-processor.js'));
   assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/paint-worklet.js'));
   assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/layout-worklet.js'));
+  assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/aliased-service-worker.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/aliased-audio-processor.js'));
   assert.equal(result.uncertainty.filter(item =>
     ['service-worker-register', 'worklet-module'].includes(item.kind)
   ).length, 0);
