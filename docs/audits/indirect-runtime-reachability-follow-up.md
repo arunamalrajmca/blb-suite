@@ -180,3 +180,12 @@ This tranche starts from merged main at `8653c26462e6dc8703adf28e4077097552ddaac
 - [ ] Re-run selected AST sections, full current-head required CI, and the repository finding inventory. Keep skipped jobs separate from passed jobs.
 
 - [x] Add a `Reflect.set(globalThis, dynamicKey, value)` negative fixture and a data-only/shadowed `chrome.tabs.sendMessage.apply` fixture. These remain unresolved/non-callback cases rather than being promoted to callback roots.
+
+
+### Source-page collector callback fixture verification
+
+- [x] Re-inspected all seven source-page collector callback fixtures in `tests/browser/source-page-collector-behavior.spec.js`.
+- [x] Each fixture assigns its callback directly to a static `globalThis` property and registers that same property from the same `extensionWorker.evaluate(() => { ... })` callback block.
+- [x] Two fixtures reuse the `__blbSourceCollectorCapture` property name, but they are separate callback blocks with independent single writes. The resolver now scopes write uniqueness to the registration's lexical callback block, so this legitimate reuse does not create a false ambiguity.
+- [x] Added a regression fixture proving that the same global property name can be resolved independently in two distinct callback blocks.
+- [ ] Confirm the analyzer's current-head repository inventory reports all seven collector registrations as resolved; retain any unexpected result as unresolved and investigate it.
