@@ -597,6 +597,7 @@ if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"
 // without requiring the user to reload the source page.
 async function refreshSourceBibleRedirect() {
   const generation = ++sourceBibleRedirectRefreshGeneration;
+  globalThis.__blbSourceBibleRedirectSettingsReady = false;
   try {
     const [enabled, settings] = await Promise.all([
       isSuiteEnabled(),
@@ -604,11 +605,15 @@ async function refreshSourceBibleRedirect() {
     ]);
     if (generation !== sourceBibleRedirectRefreshGeneration || !enabled) return;
     sourceBibleRedirectEnabled = settings.redirectEnabled === true;
+    globalThis.__blbSourceBibleRedirectSettingsReady = true;
     if (!sourceBibleRedirectEnabled || sourceBibleRedirectAttempted) return;
     const redirected = redirectBlbNet() || redirectBibleSite();
     if (redirected) sourceBibleRedirectAttempted = true;
   } catch (_) {
-    if (generation === sourceBibleRedirectRefreshGeneration) sourceBibleRedirectEnabled = false;
+    if (generation === sourceBibleRedirectRefreshGeneration) {
+      sourceBibleRedirectEnabled = false;
+      globalThis.__blbSourceBibleRedirectSettingsReady = true;
+    }
   }
 }
 
