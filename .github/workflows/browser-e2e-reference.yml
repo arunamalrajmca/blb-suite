@@ -150,7 +150,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 --retry-max-time 30 \
             -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
@@ -588,7 +588,7 @@ jobs:
           fi
 
           payload=$(printf '{"state":"%s","target_url":"%s","description":"%s","context":"browser-e2e"}' "$state" "$TARGET_URL" "$description")
-          curl --fail-with-body --silent --show-error \
+          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 --retry-max-time 30 \
             -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
