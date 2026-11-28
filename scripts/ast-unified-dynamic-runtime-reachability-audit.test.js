@@ -311,7 +311,7 @@ test('does not expose a default callback wrapper through export-star', () => {
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
-test('keeps callback parameters uncertain when another callsite supplies an unknown value', () => {
+test('keeps known callback owners while marking another callsite uncertain', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
@@ -322,11 +322,12 @@ test('keeps callback parameters uncertain when another callsite supplies an unkn
   });
   const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.certainty, 'partially-resolved-interprocedural-callback-arguments');
+  assert.equal(registration.callbackTargets.length, 1);
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
-test('keeps callback parameters uncertain when callsites disagree on the owner', () => {
+test('resolves every known callback owner when callsites disagree on the owner', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
@@ -338,8 +339,9 @@ test('keeps callback parameters uncertain when callsites disagree on the owner',
   });
   const registration = result.dynamicSites.find(item => item.kind === 'external-callback-registration');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
-  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
+  assert.equal(registration.certainty, 'resolved-multiple-interprocedural-callback-arguments');
+  assert.equal(registration.callbackTargets.length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
 test('resolves dynamic import, importScripts, executeScript files, and registered content scripts', () => {
@@ -1232,7 +1234,7 @@ test('keeps bound handleEvent callbacks unresolved when their listener object is
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
-test('keeps helper listener parameters unresolved when callers disagree', () => {
+test('keeps helper listener parameters partially resolved when another caller is unknown', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
@@ -1245,8 +1247,9 @@ test('keeps helper listener parameters unresolved when callers disagree', () => 
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
   assert.ok(registration);
-  assert.notEqual(registration.certainty, 'resolved-object-event-handler-binding');
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.certainty, 'partially-resolved-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 1);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 1);
 });
 
 test('keeps reassigned named listener objects unresolved', () => {
@@ -2659,11 +2662,12 @@ test('keeps reassigned listener helper parameters unresolved across forwarding',
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.equal(registration.certainty, 'partially-resolved-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 1);
   assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });
 
-test('keeps multi-hop listener forwarding unresolved when one caller is unknown', () => {
+test('keeps multi-hop listener forwarding partially resolved when one caller is unknown', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': [
