@@ -512,6 +512,29 @@ test('traces named and inline callbacks returned by factories through immutable 
     edge.from === 'function@7' && edge.to === 'callback-invocation@9'));
 });
 
+test('traces callbacks returned from object registries through later invocation', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = { onReady: callback };',
+    'function getHandler() { return registry.onReady; }',
+    'const handler = getHandler();',
+    'handler();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
+});
+
+test('traces callbacks retrieved from array literal slots through later invocation', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const callbacks = [callback];',
+    'const handler = callbacks[0];',
+    'handler();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'property-value-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@4'));
+});
+
 test('traces object-property values returned from helper functions', () => {
   const result = audit([
     'const callback = () => start();',
