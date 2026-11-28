@@ -35,7 +35,7 @@ test('reports prototype and descriptor mutation APIs', () => {
 });
 
 test('reports unknown higher-order callbacks but recognizes standard timer callback APIs', () => {
-  const result = run("function factory() { return callback => callback(); } register(handler); events.on('ready', handler); setTimeout(() => run(), 1);");
+  const result = run("function factory() { return callback => callback(); } register(handler); events.on('ready', handler); schedule(() => run()); setTimeout(() => run(), 1);");
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.ok(has(result, 'higher-order-function-factory'));
   assert.ok(has(result, 'callback-contract'));
