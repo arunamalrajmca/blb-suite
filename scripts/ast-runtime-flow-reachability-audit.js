@@ -1842,15 +1842,6 @@ function analyzeFile(root, file) {
         const property = propertyKey(node.property, node.computed);
         let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
-        const arrayIndexRead = node.computed && /^\d+$/.test(String(property)) &&
-          ((parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') ||
-           (parent?.type === 'CallExpression' && parent.callee === node));
-        if (arrayIndexRead) {
-          const invoked = parent?.type === 'CallExpression' && parent.callee === node;
-          containerReads.push({container:object,key:String(property),
-            assigned:invoked ? 'callback-invocation@' + parent.loc.start.line : assigned,
-            node,invoked,arrayIndex:true});
-        }
         if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
           const schedulerName = calleeName(parent.callee);
           if (callbackSchedulers.has(schedulerName)) {
@@ -1874,6 +1865,15 @@ function analyzeFile(root, file) {
         const {object,property,name:objectName} = reference;
         let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
+        const arrayIndexRead = node.computed && /^\d+$/.test(String(property)) &&
+          ((parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') ||
+           (parent?.type === 'CallExpression' && parent.callee === node));
+        if (arrayIndexRead) {
+          const invoked = parent?.type === 'CallExpression' && parent.callee === node;
+          containerReads.push({container:object,key:String(property),
+            assigned:invoked ? 'callback-invocation@' + parent.loc.start.line : assigned,
+            node,invoked,arrayIndex:true});
+        }
         if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
           const schedulerName = calleeName(parent.callee);
           if (callbackSchedulers.has(schedulerName)) {
