@@ -2206,7 +2206,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const key = bindings.get(node.callee); if (key) constructedBindings.add(key);
       }
       if (node.type === 'CallExpression' && node.callee.type === 'Identifier' &&
-          ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'].includes(node.callee.name)) {
+          ['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame'].includes(node.callee.name) &&
+          !bindings.get(node.callee)) {
         for (const arg of node.arguments) if (arg.type === 'Identifier') {
           const key = bindings.get(arg); if (key) callbackBindings.add(key);
         }
