@@ -997,7 +997,9 @@ test('resolves registered content-script files through aliases and bounded helpe
   assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/first.js'));
   assert.ok(edge(result, 'chrome.scripting.registerContentScripts', 'extension/background.js', 'extension/scripts/second.js'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'chrome.scripting.registerContentScripts').length, 0);
-});test('keeps indirect registered-content-script options explicitly uncertain', () => {
+});
+
+test('keeps indirect registered-content-script options explicitly uncertain', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
     'scripts/main.js': 'module.exports = true;',
@@ -1995,8 +1997,10 @@ test('resolves CommonJS relative package directories while keeping ESM directory
       "require('../local-package');",
       "require('../legacy-package');",
       "import('external-dependency');"
-    ].join(' '),    'local-package/package.json': JSON.stringify({
-      type: 'module',      main: './lib/start.cjs',
+    ].join(' '),
+    'local-package/package.json': JSON.stringify({
+      type: 'module',
+      main: './lib/start.cjs',
       exports: { '.': './entry.mjs' }
     }),
     'local-package/entry.mjs': 'export const value = 1;',
