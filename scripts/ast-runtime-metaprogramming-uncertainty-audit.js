@@ -9,6 +9,8 @@ const eslintScope = require('eslint-scope');
 
 const SKIP = new Set(['.git', 'node_modules', 'coverage', 'test-results', 'playwright-report', 'dist']);
 const EXT = new Set(['.js', '.cjs', '.mjs']);
+// Standard global APIs with specified callback execution semantics.
+const KNOWN_GLOBAL_CALLBACK_APIS = new Set(['setTimeout', 'setInterval', 'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback']);
 function walk(root) {
   const files = [];
   function visit(dir) {
@@ -191,8 +193,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const knownPlaywrightTestDeclaration = node.callee.type === 'Identifier' &&
           node.callee.name === 'test' && relativeFile.startsWith('tests/browser/') &&
           /\.spec\.[cm]?js$/.test(relativeFile);
+        const knownGlobalCallbackAPI = calleeName && KNOWN_GLOBAL_CALLBACK_APIS.has(calleeName) &&
+          unresolved.has(node.callee.start + ':' + node.callee.end);
         if (node.callee.type === 'Identifier' && !['require', 'import', 'test'].includes(node.callee.name) &&
-            !knownPlaywrightTestDeclaration) {
+            !knownPlaywrightTestDeclaration && !knownGlobalCallbackAPI) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type)) {
               add(file, arg, 'higher-order-callback-boundary', 'callback passed to ' + node.callee.name + ' argument[' + index + ']; callee contract is project-defined or external');
