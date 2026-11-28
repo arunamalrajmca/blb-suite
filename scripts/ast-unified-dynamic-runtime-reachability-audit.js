@@ -2245,8 +2245,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
               'globalThis.navigator.serviceWorker', 'self.navigator.serviceWorker'].includes(rightPath)) {
             serviceWorkerContainerBindings.add(target);
           }
-          if (/(?:^|\\.)(?:audioWorklet|paintWorklet|layoutWorklet)$/.test(rightPath)) workletBindings.add(target);
-          if (rightRootIsGlobal && /^(?:window|globalThis|self)\\.(?:Worker|SharedWorker)$/.test(rightPath)) {
+          if (/(?:^|\.)(?:audioWorklet|paintWorklet|layoutWorklet)$/.test(rightPath)) workletBindings.add(target);
+          if (rightRootIsGlobal && /^(?:window|globalThis|self)\.(?:Worker|SharedWorker)$/.test(rightPath)) {
             workerConstructorBindings.add(target);
           }
         }
