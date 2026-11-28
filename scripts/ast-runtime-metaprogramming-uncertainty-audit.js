@@ -55,6 +55,39 @@ function unresolvedReferences(ast) {
   }
   return unresolved;
 }
+function needsScopeAnalysis(ast) {
+  let needed = false;
+  const descriptorMethods = new Set([
+    'defineProperty', 'defineProperties', 'setPrototypeOf', 'assign', 'create',
+    'freeze', 'seal', 'preventExtensions'
+  ]);
+  visit(ast, node => {
+    if (needed) return;
+    if ((node.type === 'NewExpression' || node.type === 'CallExpression') &&
+        node.callee.type === 'Identifier' &&
+        ['Proxy', 'eval', 'Function'].includes(node.callee.name)) {
+      needed = true;
+      return;
+    }
+    if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+      const root = rootIdentifier(node.callee);
+      const property = node.callee.computed
+        ? (node.callee.property.type === 'Literal' ? String(node.callee.property.value) : null)
+        : node.callee.property.name;
+      if (root?.name === 'Reflect' || (root?.name === 'Object' && descriptorMethods.has(property))) {
+        needed = true;
+      }
+    }
+    if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
+        node.left.object.type === 'Identifier' && node.left.object.name === 'Object') {
+      const property = node.left.computed
+        ? (node.left.property.type === 'Literal' ? String(node.left.property.value) : null)
+        : node.left.property.name;
+      if (property === 'setPrototypeOf') needed = true;
+    }
+  });
+  return needed;
+}
 function rootIdentifier(node) {
   while (node && node.type === 'MemberExpression') node = node.object;
   return node?.type === 'Identifier' ? node : null;
@@ -78,7 +111,7 @@ function keyShape(node) {
   return 'computed-expression';
 }
 function analyze(root = path.resolve(__dirname, '..')) {
-  const files = walk(root), observations = [], parseErrors = [];
+  const files = walk(root), observations = [], parseErrors = [];\n  let scopeAnalysisFiles = 0;
   const add = (file, node, kind, detail, certainty = 'unresolved-runtime-semantics') => observations.push({
     file: path.relative(root, file).split(path.sep).join('/'),
     line: node.loc?.start.line || null, kind, detail, certainty
@@ -129,7 +162,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
             }
           }
         }
-        if (node.callee.type === 'Identifier' && !['require', 'import'].includes(node.callee.name)) {
+        const relativeFile = path.relative(root, file).split(path.sep).join('/');
+        const knownPlaywrightTestDeclaration = node.callee.type === 'Identifier' &&
+          node.callee.name === 'test' && relativeFile.startsWith('tests/browser/') &&
+          /\\.spec\\.[cm]?js$/.test(relativeFile);
+        if (node.callee.type === 'Identifier' && !['require', 'import'].includes(node.callee.name) &&
+            !knownPlaywrightTestDeclaration) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type)) {
               add(file, arg, 'higher-order-callback-boundary', 'callback passed to ' + node.callee.name + ' argument[' + index + ']; callee contract is project-defined or external');
@@ -166,12 +204,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const unique = [...new Map(observations.map(item => [JSON.stringify(item), item])).values()];
   const byKind = {};
   for (const item of unique) byKind[item.kind] = (byKind[item.kind] || 0) + 1;
-  return { filesScanned: files.length, observations: unique, parseErrors, summary: { total: unique.length, byKind } };
+  return { filesScanned: files.length, scopeAnalysisFiles, observations: unique, parseErrors, summary: { total: unique.length, byKind } };
 }
 function run(root) {
   const result = analyze(root);
   console.log('Runtime metaprogramming and callback uncertainty census (not dead-code proof)');
-  console.log('Files scanned: ' + result.filesScanned);
+  console.log('Files scanned: ' + result.filesScanned);\n  console.log('Files requiring global-shadow scope analysis: ' + result.scopeAnalysisFiles);
   console.log('Uncertainty observations: ' + result.summary.total);
   console.log('By kind: ' + JSON.stringify(result.summary.byKind));
   for (const item of result.observations) console.log('UNCERTAIN ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.kind + ' — ' + item.detail);
