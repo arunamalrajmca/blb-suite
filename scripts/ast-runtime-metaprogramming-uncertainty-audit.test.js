@@ -241,3 +241,26 @@ test('recognizes Node HTTP, child-process, stream, and process event contracts',
     assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('recognizes local helpers that invoke or Promise-forward callback parameters', () => {
+  const result = run([
+    "function invoke(callback) { return callback('ready'); }",
+    "function forward(callback) { return pending.then(callback); }",
+    "function delegate(callback) { externalRegistry.register(callback); }",
+    "invoke(() => run());",
+    "forward(() => run());",
+    "delegate(() => run());",
+    "schedule(() => run());"
+  ].join('\n'));
+  const findings = result.observations.filter(item => item.kind === 'higher-order-callback-boundary');
+  assert.equal(findings.length, 2, JSON.stringify(findings));
+  assert.ok(findings.every(item => ['delegate', 'schedule'].some(name => item.detail.includes(name))));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('keeps reassigned callback parameters conservative in local helpers', () => {
+  const result = run("function invoke(callback) { callback = replacement; callback(); } invoke(() => run());");
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 1);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
