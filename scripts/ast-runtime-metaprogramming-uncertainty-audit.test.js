@@ -43,6 +43,12 @@ test('reports unknown higher-order callbacks but recognizes standard timer callb
   assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary' && /setTimeout/.test(item.detail)).length, 0);
 });
 
+test('keeps shadowed timer-like functions as unknown callback boundaries', () => {
+  const result = run("function schedule(setTimeout, callback) { setTimeout(() => callback(), 1); }");
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary' && /setTimeout/.test(item.detail)).length, 1);
+});
+
 test('surfaces dynamic code generation, dynamic imports, and dynamic scope', () => {
   const result = run("eval(source); const generated = Function('return value')(); import(runtimeModule); with (runtimeObject) { invoke(); }");
   assert.ok(has(result, 'dynamic-code-generation'));
