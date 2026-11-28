@@ -3174,3 +3174,49 @@ test('does not resolve assigned callback values before their assignment or acros
       item.kind === 'unresolved-external-callback-owner'));
   }
 });
+
+
+test('resolves callback assignment with cleanup-only null reset outside the registration block', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'function cleanup() {',
+      "  document.removeEventListener('DOMContentLoaded', startupListener);",
+      '  startupListener = null;',
+      '}',
+      'function initialize() {',
+      '  startupListener = () => initializeReady();',
+      "  document.addEventListener('DOMContentLoaded', startupListener);",
+      '}',
+      'initialize();'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-function-binding');
+  assert.match(registration.callbackTarget, /scripts\/main\.js::startupListener@/);
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not resolve a callback cleared to null before its registration', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'startupListener = () => initializeReady();',
+      'startupListener = null;',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner'));
+});
