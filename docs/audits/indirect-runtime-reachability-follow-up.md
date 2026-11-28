@@ -161,3 +161,20 @@ This tranche starts from merged main at `8653c26462e6dc8703adf28e4077097552ddaac
 - [ ] Trace the dynamic rest-argument callers of the `chrome.tabs.sendMessage` wrapper and decide whether a callback position can be proven at each invocation.
 - [ ] Determine whether the custom thenable wrapper's `then` and `catch` forwarding should be modeled as a generic callback-container contract or retained as a test-only external boundary.
 - [ ] Add bounded static global-property callback resolution for the seven collector fixtures only if it can be constrained to a single dominating write before listener registration and invalidated by every additional/unknown write.
+
+### Bounded global callback-property ownership implementation
+
+- [x] Add a narrow resolver for callbacks assigned directly to a static property on an unshadowed `globalThis`, `window`, or `self` root and then passed as a callback in the same lexical block.
+- [x] Require exactly one statically visible property write, with a known function owner and a write that precedes the registration. Multiple writes, unknown computed writes, reflective `Object.assign`/`Reflect.set` mutation, or a shadowed global root do not resolve.
+- [x] Add positive coverage for a uniquely assigned `globalThis` callback property.
+- [x] Add negative coverage for multiple writes, dynamic property writes, writes after registration, conditional writes in a different block, reflective mutation, and a shadowed `globalThis` parameter.
+- [ ] Run the focused unified audit tests and inspect failures before treating this behavior as validated.
+- [ ] Confirm the seven existing source-page collector fixtures are resolved only where their assignments meet the single-write/same-block constraints; report any that remain unresolved.
+
+### Remaining callback-owner boundaries
+
+- [x] The `chrome.tabs.sendMessage.apply(chrome.tabs, args)` wrapper in `tests/browser/replaced-tab-lifecycle-races.spec.js` forwards a dynamic rest-argument array. No statically bounded callback position is established by that wrapper; retain uncertainty rather than treating the final `.apply()` argument as a callback.
+- [x] The queue's `result.catch(() => {})` is an inline rejection callback on a native Promise chain; it does not establish ownership for an arbitrary `.catch()` receiver.
+- [x] The content-script lock-map test value is a custom thenable forwarding to a native Promise. Its `.then()`/`.catch()` surface remains a custom external boundary unless a stronger, repository-specific contract is proven.
+- [ ] Add a focused fixture for `Reflect.set(globalThis, dynamicKey, value)` and confirm it invalidates global callback-property resolution.
+- [ ] Re-run selected AST sections, full current-head required CI, and the repository finding inventory. Keep skipped jobs separate from passed jobs.
