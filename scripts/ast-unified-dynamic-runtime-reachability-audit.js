@@ -667,6 +667,34 @@ function analyze(root = path.resolve(__dirname, '..')) {
     functionDefs.set(identity, { file, node: value });
   }
 
+  // Precompute callback parameters supplied by the exact Chrome runtime
+  // message-listener contract before per-file site analysis. This makes the
+  // result independent of source-file discovery order.
+  const staticApiPath = node => {
+    if (!node) return '';
+    if (node.type === 'Identifier') return node.name;
+    if (node.type !== 'MemberExpression') return '';
+    const property = node.computed
+      ? (node.property.type === 'Literal' ? String(node.property.value) : '')
+      : node.property.name;
+    return property ? [staticApiPath(node.object), property].filter(Boolean).join('.') : '';
+  };
+  for (const [registeredFile, registeredAst] of asts) {
+    const registeredBindings = bindingByFile.get(registeredFile);
+    visit(registeredAst, node => {
+      if (node.type !== 'CallExpression' ||
+          !['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener']
+            .includes(staticApiPath(node.callee))) return;
+      const callback = node.arguments[0];
+      const definition = callback?.type === 'Identifier'
+        ? functionDefs.get(registeredFile + '::' + registeredBindings?.get(callback)) : null;
+      const registeredFunction = definition?.node || callback;
+      const parameter = registeredFunction?.params?.[2];
+      const key = parameter?.type === 'Identifier' ? registeredBindings?.get(parameter) : null;
+      if (key) externalCallbackParameterBindings.add(registeredFile + '::' + key);
+    });
+  }
+
   // Resolve callback parameters through direct callsites. A wrapper such as
   // register(handler) { api.addListener(handler); } owns no local function
   // declaration for handler; its callers provide the actual callback.
@@ -1629,17 +1657,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
       // Chrome's runtime message listener contract supplies sendResponse as
       // its third callback parameter. Mark only that exact API contract; a
       // similarly named parameter in an arbitrary function is not external.
-      if (['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener'].includes(api)) {
-        const registeredDefinition = callback?.type === 'Identifier'
-          ? functionDefs.get(file + '::' + bindings.get(callback)) : null;
-        const registeredFunction = registeredDefinition?.node || callback;
-        const registeredFile = registeredDefinition?.file || file;
-        const registeredBindings = bindingByFile.get(registeredFile);
-        const sendResponseParameter = registeredFunction?.params?.[2];
-        const parameterBinding = sendResponseParameter?.type === 'Identifier'
-          ? registeredBindings?.get(sendResponseParameter) : null;
-        if (parameterBinding) externalCallbackParameterBindings.add(registeredFile + '::' + parameterBinding);
-      }
       let callbackName = null, callbackTarget = null, callbackTargets = [];
       let certainty = 'unresolved-callback-owner', knownExternalCallback = false, unresolvedCallbackOwner = false;
       if (callback?.type === 'Identifier') {
