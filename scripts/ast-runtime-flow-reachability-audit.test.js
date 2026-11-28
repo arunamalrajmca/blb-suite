@@ -1998,7 +1998,7 @@ test('preserves async iterator yielded values through an aliased iterable in for
 
 test('traces values and cleanup methods on custom async iterator protocol objects', () => {
   const result = audit([
-    'const cleanup = () => start();'
+    'const cleanup = () => start();',
     'const iterable = {',
     '  [Symbol.asyncIterator]() {',
     '    return {',
