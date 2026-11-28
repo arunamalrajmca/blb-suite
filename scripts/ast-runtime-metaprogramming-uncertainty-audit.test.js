@@ -276,7 +276,7 @@ test('tracks callback capture through nested closures and local wrapper chains',
     "function delegate(callback) { externalRegistry.register(callback); }",
     "capture(() => run());",
     "captureDefault(() => run());",
-    "forward(() => run());"
+    "forward(() => run());",
     "shadow(() => run());",
     "delegate(() => run());",
     "schedule(() => run());"
