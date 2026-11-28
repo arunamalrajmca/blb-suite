@@ -685,6 +685,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type !== 'CallExpression' ||
           !['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener']
             .includes(staticApiPath(node.callee))) return;
+      let apiRoot = node.callee;
+      while (apiRoot?.type === 'MemberExpression') apiRoot = apiRoot.object;
+      if (apiRoot?.type !== 'Identifier' || registeredBindings?.get(apiRoot)) return;
       const callback = node.arguments[0];
       const definition = callback?.type === 'Identifier'
         ? functionDefs.get(registeredFile + '::' + registeredBindings?.get(callback)) : null;
