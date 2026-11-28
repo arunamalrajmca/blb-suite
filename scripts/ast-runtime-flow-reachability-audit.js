@@ -2394,6 +2394,7 @@ function analyzeFile(root, file) {
   // Resolve container reads against all statically observed writes. A
   // literal Map/array index narrows known keys; unknown positions conservatively
   // retain every stored value so dynamic access cannot hide a live callback/object.
+  const containerCallbackBindings = new Map();
   for (const read of containerReads) {
     for (const write of containerWrites) {
       if (write.container !== read.container) continue;
@@ -2403,10 +2404,17 @@ function analyzeFile(root, file) {
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
       // Preserve the function identity when a callback is stored through a
       // local variable binding; the binding edge alone is not a call edge.
-      if (read.invoked && write.callbackFunction) {
-        addEdge('function@' + write.callbackFunction.loc.start.line, read.assigned,
-          'container-callback-invocation', read.node,
-          read.key === null ? 'dynamic container key' : 'key=' + read.key);
+      if (write.callbackFunction && read.assigned) {
+        const functionIdentity = 'function@' + write.callbackFunction.loc.start.line;
+        if (read.invoked) {
+          addEdge(functionIdentity, read.assigned,
+            'container-callback-invocation', read.node,
+            read.key === null ? 'dynamic container key' : 'key=' + read.key);
+        } else {
+          addEdge(functionIdentity, read.assigned, 'container-callback-value-read', read.node,
+            read.key === null ? 'dynamic container key' : 'key=' + read.key);
+          containerCallbackBindings.set(read.assigned, write.callbackFunction);
+        }
       }
       if (write.objectValue && read.assigned && !read.invoked) linkObjectAlias(read.assigned, write.stored);
       if (read.node.callee?.property?.name === 'splice' && read.assigned) {
@@ -2428,6 +2436,19 @@ function analyzeFile(root, file) {
         });
       }
     }
+  }
+
+  // A callback retrieved into a local binding can be invoked in a later
+  // statement. Connect that exact binding to its direct call without treating
+  // unrelated calls or reassigned container values as callback invocations.
+  if (containerCallbackBindings.size) {
+    visit(ast, node => {
+      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
+      const callback = containerCallbackBindings.get(bindingId(node.callee));
+      if (callback) addEdge('function@' + callback.loc.start.line,
+        'callback-invocation@' + node.loc.start.line,
+        'container-callback-invocation', node, 'retrieved callback binding');
+    });
   }
 
   // Resolve property reads again after container retrieval has established
