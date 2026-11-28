@@ -188,3 +188,53 @@ test('recognizes Playwright Page, BrowserContext, popup, and service-worker even
     assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('recognizes Playwright pages returned by context.newPage and awaited popup promises', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-playwright-created-pages-'));
+  const file = path.join(root, 'tests', 'browser', 'created-pages.spec.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, [
+      "const { test } = require('@playwright/test');",
+      "test('created pages', async ({ page, context }) => {",
+      "  const createdPage = await context.newPage();",
+      "  const popupPromise = page.waitForEvent('popup');",
+      "  const popup = await popupPromise;",
+      "  createdPage.on('dialog', handler);",
+      "  popup.once('pageerror', handler);",
+      "  unrelated.on('ready', handler);",
+      "});"
+    ].join('\n'));
+    const result = analyze(root);
+    const findings = result.observations.filter(item => item.kind === 'callback-contract');
+    assert.equal(findings.length, 1, JSON.stringify(findings));
+    assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('recognizes Node HTTP, child-process, stream, and process event contracts', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-node-events-'));
+  const file = path.join(root, 'scripts', 'node-events.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, [
+      "const http = require('node:http');",
+      "const { spawn } = require('node:child_process');",
+      "const server = http.createServer((request, response) => { response.once('finish', handler); });",
+      "server.once('error', handler);",
+      "const child = spawn('node', []);",
+      "child.stdout.on('data', handler);",
+      "child.stderr.on('data', handler);",
+      "child.once('close', handler);",
+      "process.on('exit', handler);",
+      "unknown.on('ready', handler);",
+      "function shadowed(process) { process.on('ready', handler); }"
+    ].join('\n'));
+    const result = analyze(root);
+    const findings = result.observations.filter(item => item.kind === 'callback-contract');
+    assert.equal(findings.length, 2, JSON.stringify(findings));
+    assert.ok(findings.every(item => item.detail.includes('argument[1]')));
+    assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
