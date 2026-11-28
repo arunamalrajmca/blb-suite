@@ -1063,6 +1063,29 @@ test('records framework callback ownership and resolves named and inline callbac
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
 });
 
+test('recognizes native scheduler callbacks but not shadowed scheduler names', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onDeferred() { return 1; }',
+      'function onFrame() { return 2; }',
+      'queueMicrotask(onDeferred);',
+      'window.requestAnimationFrame(onFrame);',
+      'function queueMicrotask(callback) { customInvoke(callback); }',
+      'queueMicrotask(onDeferred);'
+    ].join(' ')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item =>
+    item.expression === 'queueMicrotask' && item.callback === 'onDeferred' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.ok(registrations.some(item =>
+    item.expression === 'window.requestAnimationFrame' && item.callback === 'onFrame' &&
+    item.certainty === 'resolved-function-binding'));
+  assert.equal(registrations.filter(item => item.expression === 'queueMicrotask').length, 1);
+});
+
 test('keeps unresolved callback ownership explicit instead of silently assuming a callback target', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
