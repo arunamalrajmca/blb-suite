@@ -3155,7 +3155,16 @@ test('does not resolve assigned callback values before their assignment or acros
       "document.addEventListener('DOMContentLoaded', startupListener);"
     ].join('\n')
   });
-  for (const result of [beforeAssignment, conditionalAssignment]) {
+  const wrapperBeforeAssignment = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function register(callback) { document.addEventListener("DOMContentLoaded", callback); }',
+      'let startupListener = null;',
+      'register(startupListener);',
+      'startupListener = () => initialize();'
+    ].join('\n')
+  });
+  for (const result of [beforeAssignment, conditionalAssignment, wrapperBeforeAssignment]) {
     const registration = result.dynamicSites.find(item =>
       item.kind === 'external-callback-registration' &&
       item.expression === 'document.addEventListener');
