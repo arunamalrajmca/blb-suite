@@ -1125,7 +1125,7 @@ function analyzeFile(root, file) {
           }
         }
         if (argument.type === 'Identifier' && functionVariables.has(variableForNode.get(argument))) {
-          if (callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeProcessNextTickCall(node)) {
+          if (callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeSetImmediateCall(node) || isNativeProcessNextTickCall(node)) {
             add('callbacks', 'function-reference-registration',
               argument, (name || 'call') + ' argument[' + index + ']');
             addEdge(bindingId(argument), 'scheduler@' + node.loc.start.line,
@@ -1134,7 +1134,7 @@ function analyzeFile(root, file) {
         }
       }
 
-      if (asyncSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeProcessNextTickCall(node)) add('asynchronous-scheduling', 'scheduler-call', node,
+      if (asyncSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeSetImmediateCall(node) || isNativeProcessNextTickCall(node)) add('asynchronous-scheduling', 'scheduler-call', node,
         (receiverName ? receiverName + '.' : '') + name);
 
       if (node.type === 'NewExpression' && name === 'Proxy') {
