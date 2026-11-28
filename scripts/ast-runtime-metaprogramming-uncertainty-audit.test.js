@@ -140,3 +140,18 @@ test('does not suppress observe contracts when MutationObserver is shadowed', ()
   assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 1);
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
+
+
+test('recognizes MutationObserver instances assigned after declaration', () => {
+  const result = run("let observer = null; observer = new MutationObserver(handler); observer.observe(target, { childList: true });");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('keeps reassigned and shadowed observer-like bindings conservative', () => {
+  const result = run("let observer; observer = new MutationObserver(handler); observer = replacement; observer.observe(target, { childList: true }); function setup(MutationObserver) { let local; local = new MutationObserver(handler); local.observe(target, { childList: true }); }");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 2);
+  assert.ok(findings.every(item => item.detail.includes('observe argument[0]')));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
