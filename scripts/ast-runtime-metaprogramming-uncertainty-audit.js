@@ -126,6 +126,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
       try { unresolved = unresolvedReferences(ast); }
       catch (error) { parseErrors.push({ file: path.relative(root, file), error: 'Scope analysis failed: ' + error.message }); continue; }
     }
+    // CDP sessions expose a documented EventEmitter-style .on(event, listener) contract.
+    // Recognize variables initialized by Playwright's newBrowserCDPSession() factory;
+    // leave unrelated .on() receivers conservative.
+    const cdpSessionNames = new Set();
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.init?.type === 'AwaitExpression' &&
+          node.init.argument?.type === 'CallExpression' &&
+          node.init.argument.callee?.type === 'MemberExpression' &&
+          !node.init.argument.callee.computed &&
+          node.init.argument.callee.property.name === 'newBrowserCDPSession') {
+        cdpSessionNames.add(node.id.name);
+      }
+    });
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
@@ -163,7 +177,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // reachability pass models their ownership directly, so they are not uncertainty findings.
         // Keep generic framework/event-emitter method names conservative: without receiver/type
         // evidence, their callback semantics may still be supplied by an external runtime.
-        if (method && /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
+        const knownCDPSessionEventListener = method === 'on' &&
+          node.callee.object?.type === 'Identifier' && cdpSessionNames.has(node.callee.object.name);
+        if (method && !knownCDPSessionEventListener &&
+            /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) || arg.type === 'Identifier' || arg.type === 'MemberExpression') {
               add(file, arg, 'callback-contract', method + ' argument[' + index + '] has a callback-like position; framework/runtime contract may be external');
