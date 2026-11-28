@@ -47,7 +47,9 @@ globalThis.BLBShared = Object.freeze({
     'massgeneralbrigham.org', 'uclahealth.org', 'kp.org', 'apollohospitals.com',
     'unitedhealthcare.com', 'uhc.com', 'aetna.com', 'cigna.com', 'humana.com',
     'anthem.com', 'bcbs.com', 'geico.com', 'progressive.com', 'statefarm.com',
-    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov', 'accounts.google.com', 'chrome.google.com', 'chromewebstore.google.com', 'github.com'
+    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov', 'accounts.google.com', 'chrome.google.com', 'chromewebstore.google.com', 'github.com',
+    'cameo.com', 'imdb.com', 'sensibull.com', 'zerodha.com', 'tradingview.com',
+    'amazon.com', 'amazon.in', 'paypal.com', 'flipkart.com'
   ]),
   isSensitiveSiteHostname(value) {
     let host = String(value || '').trim().toLowerCase().replace(/\.$/, '');
@@ -56,12 +58,16 @@ globalThis.BLBShared = Object.freeze({
     } catch (_) {}
     if (host.startsWith('www.')) host = host.slice(4);
     if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
+    // Russian country-code domains are treated as sensitive by policy.
+    if (host === 'ru' || host.endsWith('.ru')) return true;
     if (this.sensitiveSiteDomainSuffixes.some(domain => host === domain || host.endsWith('.' + domain))) return true;
     if (/(?:^|\.)gov(?:\.[a-z]{2})+$/i.test(host)) return true;
     return /(?:^|[.-])(?:bank|banking|banker|credit.?union|hospital|hospitals|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)(?:[.-]|$)/i.test(host);
   },
   isSensitiveSiteUrl(value) {
     const raw = String(value || '').trim();
+    // Browser-internal pages are always restricted; they are not ordinary web hosts.
+    if (/^(?:chrome|brave):\/\//i.test(raw)) return true;
     try {
       const url = new URL(raw);
       if (url.protocol !== 'http:' && url.protocol !== 'https:') return this.isSensitiveSiteHostname(raw);
