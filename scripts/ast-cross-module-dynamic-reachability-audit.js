@@ -1385,21 +1385,53 @@ function analyzeDynamicExecution(root,files,graph){
       }
       return null;
     };
-    const requireAliases=new Set(),workerConstructorAliases=new Set();
+    const requireAliases=new Set(),workerConstructorAliases=new Set(),importScriptsAliases=new Set();
+    const isGlobalWorkerConstructor=node=>{
+      if(node?.type==='Identifier')return ['Worker','SharedWorker'].includes(node.name)&&isUnboundGlobal(node);
+      if(node?.type!=='MemberExpression'||node.object.type!=='Identifier')return false;
+      const property=node.computed&&node.property.type==='Literal'?String(node.property.value):node.property.name;
+      return ['Worker','SharedWorker'].includes(property)&&['window','globalThis','self'].includes(node.object.name)&&isUnboundGlobal(node.object);
+    };
+    const isGlobalImportScriptsMember=node=>{
+      if(node?.type!=='MemberExpression'||node.object.type!=='Identifier')return false;
+      const property=node.computed&&node.property.type==='Literal'?String(node.property.value):node.property.name;
+      return property==='importScripts'&&['window','globalThis','self'].includes(node.object.name)&&isUnboundGlobal(node.object);
+    };
     visit(ast,(node,parent)=>{
-      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'
-        &&['Worker','SharedWorker'].includes(node.init.name)&&isUnboundGlobal(node.init)&&parent?.kind==='const'){
-        const variable=bindingForIdentifier(node.id);if(variable)workerConstructorAliases.add(variable);
+      if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&parent?.kind==='const'){
+        const variable=bindingForIdentifier(node.id);
+        if(variable&&isGlobalWorkerConstructor(node.init))workerConstructorAliases.add(variable);
+        if(variable&&node.init?.type==='Identifier'&&node.init.name==='importScripts'&&isUnboundGlobal(node.init))importScriptsAliases.add(variable);
+        if(variable&&isGlobalImportScriptsMember(node.init))importScriptsAliases.add(variable);
+      }
+      if(node.type==='AssignmentExpression'&&node.left.type==='Identifier'){
+        const variable=bindingForIdentifier(node.left);
+        if(variable&&isGlobalWorkerConstructor(node.right))workerConstructorAliases.add(variable);
+        if(variable&&node.right?.type==='Identifier'&&node.right.name==='importScripts'&&isUnboundGlobal(node.right))importScriptsAliases.add(variable);
+        if(variable&&isGlobalImportScriptsMember(node.right))importScriptsAliases.add(variable);
       }
     });
-    let workerAliasAdded=true;
-    while(workerAliasAdded){
-      workerAliasAdded=false;
+    let workerAliasAdded=true,importScriptsAliasAdded=true;
+    while(workerAliasAdded||importScriptsAliasAdded){
+      workerAliasAdded=false;importScriptsAliasAdded=false;
       visit(ast,(node,parent)=>{
-        if(node.type!=='VariableDeclarator'||node.id.type!=='Identifier'||node.init?.type!=='Identifier'||parent?.kind!=='const')return;
-        const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
-        if(source&&workerConstructorAliases.has(source)&&target&&!workerConstructorAliases.has(target)){
-          workerConstructorAliases.add(target);workerAliasAdded=true;
+        if(node.type==='VariableDeclarator'&&node.id.type==='Identifier'&&node.init?.type==='Identifier'&&parent?.kind==='const'){
+          const source=bindingForIdentifier(node.init),target=bindingForIdentifier(node.id);
+          if(source&&workerConstructorAliases.has(source)&&target&&!workerConstructorAliases.has(target)){
+            workerConstructorAliases.add(target);workerAliasAdded=true;
+          }
+          if(source&&importScriptsAliases.has(source)&&target&&!importScriptsAliases.has(target)){
+            importScriptsAliases.add(target);importScriptsAliasAdded=true;
+          }
+        }
+        if(node.type==='AssignmentExpression'&&node.left.type==='Identifier'&&node.right?.type==='Identifier'){
+          const source=bindingForIdentifier(node.right),target=bindingForIdentifier(node.left);
+          if(source&&workerConstructorAliases.has(source)&&target&&!workerConstructorAliases.has(target)){
+            workerConstructorAliases.add(target);workerAliasAdded=true;
+          }
+          if(source&&importScriptsAliases.has(source)&&target&&!importScriptsAliases.has(target)){
+            importScriptsAliases.add(target);importScriptsAliasAdded=true;
+          }
         }
       });
     }
@@ -1476,7 +1508,7 @@ function analyzeDynamicExecution(root,files,graph){
       return null;
     };
     visit(ast,n=>{
-    if(n.type==='NewExpression'&&n.callee.type==='Identifier'&&(isUnboundGlobal(n.callee)&&['Worker','SharedWorker'].includes(n.callee.name)||workerConstructorAliases.has(bindingForIdentifier(n.callee)))){
+    if(n.type==='NewExpression'&&(isGlobalWorkerConstructor(n.callee)||n.callee.type==='Identifier'&&workerConstructorAliases.has(bindingForIdentifier(n.callee)))){
       const spec=literalString(n.arguments[0],file),candidate=spec?path.resolve(path.dirname(file),spec):null,target=candidate&&set.has(candidate)?candidate:null;
       launches.push({file:path.relative(root,file),line:n.loc.start.line,kind:'worker-launch',expression:spec||null,resolved:target?path.relative(root,target):null,certainty:target?'resolved-local':'unresolved-worker-target'});
       if(target)extra.push({from:file,to:target}); return;
@@ -1484,13 +1516,17 @@ function analyzeDynamicExecution(root,files,graph){
     if(n.type!=='CallExpression')return;
     const c=n.callee,method=c.type==='MemberExpression'?(c.computed&&c.property.type==='Literal'?c.property.value:c.property.name):c.name;
     const object=c.type==='MemberExpression'&&c.object.type==='Identifier'?c.object.name:null;
-    const loader=(c.type==='Identifier'&&isRequireAlias(c))
-      ||(['require','load','runInThisContext','runInNewContext','runInContext','importScripts'].includes(method)
+    const importScriptsAlias=c.type==='Identifier'&&importScriptsAliases.has(bindingForIdentifier(c));
+    const importScriptsMember=isGlobalImportScriptsMember(c);
+    const directImportScripts=c.type==='Identifier'&&c.name==='importScripts'&&isUnboundGlobal(c);
+    const usesImportScripts=directImportScripts||importScriptsAlias||importScriptsMember;
+    const loader=(c.type==='Identifier'&&isRequireAlias(c))||usesImportScripts
+      ||(['require','load','runInThisContext','runInNewContext','runInContext'].includes(method)
         &&((c.type==='Identifier'&&isUnboundGlobal(c))
           ||(c.type==='MemberExpression'&&object==='module'&&isUnboundGlobal(c.object))
           ||(c.type==='MemberExpression'&&object==='Module'&&isUnboundGlobal(c.object))));
     if(loader){
-      const loaderArguments=method==='importScripts'?n.arguments:[n.arguments[0]];
+      const loaderArguments=usesImportScripts?n.arguments:[n.arguments[0]];
       for(const argument of loaderArguments){
         const spec=literalString(argument,file);
         const target=spec?(path.isAbsolute(spec)?(set.has(path.resolve(spec))?path.resolve(spec):null):resolveLocal(file,spec,set,root,'require')):null;
