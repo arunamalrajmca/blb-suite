@@ -489,7 +489,7 @@ test('traces callbacks read from a known array append slot and invoked later', (
     'callbacks.push(callback);',
     'const handler = callbacks[0];',
     'handler();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'retrieved-callback-invocation' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
 });
@@ -505,7 +505,7 @@ test('traces named and inline callbacks returned by factories through immutable 
     'function createInline() { return () => startInline(); }',
     'const inlineHandler = createInline();',
     'inlineHandler();'
-  ].join('\\n'));
+  ].join('\n'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'retrieved-callback-invocation' &&
     edge.from === 'function@1' && edge.to === 'callback-invocation@6'));
   assert.ok(result.flowEdges.some(edge => edge.kind === 'retrieved-callback-invocation' &&
