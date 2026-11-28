@@ -1199,6 +1199,15 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     ), {timeout:10000}).toBe(true);
 
     await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
+    await page.evaluate(() => {
+      window.__blbTestSourcePassageClick = null;
+      window.addEventListener('blb-suite-source-passage-click', event => {
+        window.__blbTestSourcePassageClick = {
+          defaultPrevented:event.defaultPrevented,
+          detail:event.detail
+        };
+      }, {once:true});
+    });
     await page.locator('#bible-reference').click();
     await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
@@ -1217,11 +1226,12 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       liveTabs:(await chrome.tabs.query({url:'https://www.blueletterbible.org/*'})).map(tab =>
         ({id:tab.id,url:tab.url,pendingUrl:tab.pendingUrl}))
     }), {target:destinationUrl,tabId:firstDestinationTab});
+    const clickGuardState = await page.evaluate(() => window.__blbTestSourcePassageClick ?? null);
     const firstRegistryEntry = firstRegistryState.entries.find(([,id]) => id === firstDestinationTab);
     if (!firstRegistryEntry) {
       throw new Error('First BLB tab has no logical registry entry: ' + JSON.stringify({
         host,targetKey:firstRegistryState.targetKey,firstDestinationTab,
-        entries:firstRegistryState.entries,liveTabs:firstRegistryState.liveTabs
+        entries:firstRegistryState.entries,liveTabs:firstRegistryState.liveTabs,clickGuardState
       }));
     }
     expect(firstRegistryEntry[0]).toBe(firstRegistryState.targetKey);
