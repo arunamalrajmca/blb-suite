@@ -2061,7 +2061,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
             ((callee.type === 'Identifier' && !calleeBinding && pathName === method) ||
               (callee.type === 'MemberExpression' &&
                 ['globalThis.', 'window.', 'self.'].some(prefix => pathName === prefix + method) &&
-                callee.object.type === 'Identifier' && !bindings.get(callee.object)))) {
+                callee.object.type === 'Identifier' && !bindings.get(callee.object))))) {
           callbackIndices = [0];
         } else if (isVueLifecycleHook) callbackIndices = [0];
         for (const callbackIndex of callbackIndices) {
