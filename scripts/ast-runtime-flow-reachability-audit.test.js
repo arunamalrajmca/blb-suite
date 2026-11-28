@@ -482,6 +482,36 @@ test('traces callbacks invoked after retrieval from a Map', () => {
     edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
 });
 
+test('traces callbacks read from a known array append slot and invoked later', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const callbacks = [];',
+    'callbacks.push(callback);',
+    'const handler = callbacks[0];',
+    'handler();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'retrieved-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@5'));
+});
+
+test('traces named and inline callbacks returned by factories through immutable aliases', () => {
+  const result = audit([
+    'const namedCallback = () => startNamed();',
+    'function createNamed() { return namedCallback; }',
+    'const namedHandler = createNamed();',
+    'const alias = namedHandler;',
+    'const aliasAgain = alias;',
+    'aliasAgain();',
+    'function createInline() { return () => startInline(); }',
+    'const inlineHandler = createInline();',
+    'inlineHandler();'
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'retrieved-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@6'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'retrieved-callback-invocation' &&
+    edge.from === 'function@7' && edge.to === 'callback-invocation@9'));
+});
+
 test('traces object-property values returned from helper functions', () => {
   const result = audit([
     'const callback = () => start();',
