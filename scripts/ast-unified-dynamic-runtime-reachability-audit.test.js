@@ -1070,9 +1070,14 @@ test('recognizes native scheduler callbacks but not shadowed scheduler names', (
       'function onDeferred() { return 1; }',
       'function onFrame() { return 2; }',
       'queueMicrotask(onDeferred);',
-      'window.requestAnimationFrame(onFrame);',
+      'window.requestAnimationFrame(onFrame);'
+    ].join(' '),
+    // Keep the shadowed declaration in a distinct module: a top-level
+    // function declaration is hoisted and shadows the name throughout its
+    // own source file, including calls textually before the declaration.
+    'scripts/shadowed-scheduler.js': [
       'function queueMicrotask(callback) { customInvoke(callback); }',
-      'queueMicrotask(onDeferred);'
+      'queueMicrotask(function locallyOwned() {});'
     ].join(' ')
   });
   const registrations = result.dynamicSites.filter(item =>
