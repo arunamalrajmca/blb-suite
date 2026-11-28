@@ -159,7 +159,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         const method = node.callee.type === 'MemberExpression'
           ? (node.callee.computed ? null : node.callee.property.name) : null;
-        if (method && /^(?:then|catch|finally|addEventListener|removeEventListener|on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
+        // Promise chaining and DOM event listeners have specified callback contracts; the unified
+        // reachability pass models their ownership directly, so they are not uncertainty findings.
+        // Keep generic framework/event-emitter method names conservative: without receiver/type
+        // evidence, their callback semantics may still be supplied by an external runtime.
+        if (method && /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) || arg.type === 'Identifier' || arg.type === 'MemberExpression') {
               add(file, arg, 'callback-contract', method + ' argument[' + index + '] has a callback-like position; framework/runtime contract may be external');
