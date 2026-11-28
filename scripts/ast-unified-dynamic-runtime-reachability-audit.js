@@ -663,21 +663,29 @@ function analyze(root = path.resolve(__dirname, '..')) {
       const key = bindings?.get(target);
       if (!key) return;
       if (!assignedFunctionWrites.has(file + '::' + key)) assignedFunctionWrites.set(file + '::' + key, []);
+      const value = node.type === 'AssignmentExpression' && node.operator === '=' ? node.right : null;
       assignedFunctionWrites.get(file + '::' + key).push({
         node,
-        value: node.type === 'AssignmentExpression' && node.operator === '=' ? node.right : null
+        value,
+        isNullClear: value?.type === 'Literal' && value.value === null
       });
     });
   }
   for (const [identity, writes] of assignedFunctionWrites) {
-    if (writes.length !== 1) continue;
-    const write = writes[0];
-    const value = write.value;
-    if (!['FunctionExpression', 'ArrowFunctionExpression'].includes(value?.type)) continue;
+    const functionWrites = writes.filter(write =>
+      ['FunctionExpression', 'ArrowFunctionExpression'].includes(write.value?.type));
+    if (functionWrites.length !== 1 ||
+        writes.some(write => write !== functionWrites[0] && !write.isNullClear)) continue;
+    const write = functionWrites[0];
     if (functionDefs.has(identity)) continue;
     const separator = identity.indexOf('::');
     const file = identity.slice(0, separator);
-    functionDefs.set(identity, { file, node: value, assignmentNode: write.node });
+    functionDefs.set(identity, {
+      file,
+      node: write.value,
+      assignmentNode: write.node,
+      nullClearNodes: writes.filter(candidate => candidate.isNullClear).map(candidate => candidate.node)
+    });
   }
 
   // Precompute callback parameters supplied by the exact Chrome runtime
@@ -796,10 +804,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const seen = new Set();
     while (key && aliases && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
     let definition = key && functionDefs.get(file + '::' + key);
-    if (definition?.assignmentNode &&
-        (definition.assignmentNode.start >= identifier.start ||
-         nearestStaticBlock(file, definition.assignmentNode) !== nearestStaticBlock(file, identifier))) {
-      definition = null;
+    if (definition?.assignmentNode) {
+      const useBlock = nearestStaticBlock(file, identifier);
+      const invalidatedBeforeUse = (definition.nullClearNodes || []).some(clearNode =>
+        nearestStaticBlock(file, clearNode) === useBlock &&
+        clearNode.start > definition.assignmentNode.start && clearNode.start < identifier.start);
+      if (definition.assignmentNode.start >= identifier.start ||
+          nearestStaticBlock(file, definition.assignmentNode) !== useBlock ||
+          invalidatedBeforeUse) definition = null;
     }
     if (definition) return { file: definition.file, key, node: definition.node };
     // Script/global scopes can leave same-file function references unresolved.
@@ -1710,10 +1722,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         let resolvedKey = callbackKey;
         let definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
-        if (definition?.assignmentNode &&
-            (definition.assignmentNode.start >= callback.start ||
-             nearestCallbackBlock(definition.assignmentNode) !== nearestCallbackBlock(callback))) {
-          definition = null;
+        if (definition?.assignmentNode) {
+          const useBlock = nearestCallbackBlock(callback);
+          const invalidatedBeforeUse = (definition.nullClearNodes || []).some(clearNode =>
+            nearestCallbackBlock(clearNode) === useBlock &&
+            clearNode.start > definition.assignmentNode.start && clearNode.start < callback.start);
+          if (definition.assignmentNode.start >= callback.start ||
+              nearestCallbackBlock(definition.assignmentNode) !== useBlock ||
+              invalidatedBeforeUse) definition = null;
         }
         // ESLint scope can leave a callback identifier unresolved in unusual
         // script/global scopes. Keep the fallback local to this source file
