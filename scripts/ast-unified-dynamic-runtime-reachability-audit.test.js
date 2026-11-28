@@ -3076,3 +3076,42 @@ test('does not resolve a reassigned local DOM listener callback from a stale fun
     item.kind === 'unresolved-external-callback-owner' &&
     item.expression === 'document.addEventListener'));
 });
+
+
+test('recognizes Chrome runtime onMessage sendResponse as an external callback parameter', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
+      '  Promise.resolve({ok:true}).then(sendResponse);',
+      '});'
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'Promise.prototype.then');
+  assert.ok(registration, JSON.stringify(result.dynamicSites));
+  assert.equal(registration.certainty, 'resolved-external-api-callback-parameter');
+  assert.equal(registration.callback, '[external API callback parameter]');
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat arbitrary sendResponse-named parameters as external callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function arbitraryHandler(message, sender, sendResponse) {',
+      '  Promise.resolve({ok:true}).then(sendResponse);',
+      '}'
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'Promise.prototype.then');
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner' &&
+    item.expression === 'Promise.prototype.then'));
+});
