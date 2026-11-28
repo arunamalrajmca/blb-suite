@@ -661,14 +661,20 @@ test('resolves ServiceWorker registration and Worklet module loaders', () => {
       "const serviceWorkerContainer = navigator.serviceWorker;",
       "const serviceWorkerAlias = serviceWorkerContainer; serviceWorkerAlias.register('./aliased-service-worker.js');",
       "const audioWorklet = audioContext.audioWorklet;",
-      "const audioWorkletAlias = audioWorklet; audioWorkletAlias.addModule('./aliased-audio-processor.js');"
+      "const audioWorkletAlias = audioWorklet; audioWorkletAlias.addModule('./aliased-audio-processor.js');",
+      "let assignedServiceWorker; assignedServiceWorker = navigator.serviceWorker; assignedServiceWorker.register('./assigned-service-worker.js');",
+      "let assignedAudioWorklet; assignedAudioWorklet = audioContext.audioWorklet; assignedAudioWorklet.addModule('./assigned-audio-processor.js');",
+      "let AssignedWorker; AssignedWorker = window.Worker; new AssignedWorker('./assigned-window-worker.js');"
     ].join(' '),
     'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
     'scripts/audio-processor.js': 'class Processor extends AudioWorkletProcessor {};',
     'scripts/paint-worklet.js': 'registerPaint("sample", class {});',
     'scripts/layout-worklet.js': 'registerLayout("sample", class {});',
     'scripts/aliased-service-worker.js': 'self.addEventListener("fetch", () => {});',
-    'scripts/aliased-audio-processor.js': 'registerProcessor("aliased", class {});'
+    'scripts/aliased-audio-processor.js': 'registerProcessor("aliased", class {});',
+    'scripts/assigned-service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/assigned-audio-processor.js': 'registerProcessor("assigned", class {});',
+    'scripts/assigned-window-worker.js': 'self.onmessage = () => {};'
   });
   assert.equal(result.parseErrors.length, 0);
   assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/service-worker.js'));
@@ -677,6 +683,9 @@ test('resolves ServiceWorker registration and Worklet module loaders', () => {
   assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/layout-worklet.js'));
   assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/aliased-service-worker.js'));
   assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/aliased-audio-processor.js'));
+  assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/assigned-service-worker.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/assigned-audio-processor.js'));
+  assert.ok(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/assigned-window-worker.js'));
   assert.equal(result.uncertainty.filter(item =>
     ['service-worker-register', 'worklet-module'].includes(item.kind)
   ).length, 0);
