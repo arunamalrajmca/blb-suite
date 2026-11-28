@@ -178,3 +178,5 @@ This tranche starts from merged main at `8653c26462e6dc8703adf28e4077097552ddaac
 - [x] The content-script lock-map test value is a custom thenable forwarding to a native Promise. Its `.then()`/`.catch()` surface remains a custom external boundary unless a stronger, repository-specific contract is proven.
 - [ ] Add a focused fixture for `Reflect.set(globalThis, dynamicKey, value)` and confirm it invalidates global callback-property resolution.
 - [ ] Re-run selected AST sections, full current-head required CI, and the repository finding inventory. Keep skipped jobs separate from passed jobs.
+
+- [x] Add a `Reflect.set(globalThis, dynamicKey, value)` negative fixture and a data-only/shadowed `chrome.tabs.sendMessage.apply` fixture. These remain unresolved/non-callback cases rather than being promoted to callback roots.
