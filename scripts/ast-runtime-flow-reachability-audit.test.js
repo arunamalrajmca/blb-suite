@@ -2231,3 +2231,14 @@ test('does not treat shadowed process.nextTick methods as native callback roots'
   assert.equal(result.findings.filter(item =>
     item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
 });
+
+test('does not treat a shadowed setImmediate declaration as the native scheduler', () => {
+  const result = audit([
+    'function setImmediate(callback) { return callback; }',
+    'setImmediate(() => work());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
