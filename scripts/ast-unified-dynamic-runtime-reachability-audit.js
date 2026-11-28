@@ -2037,6 +2037,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
           (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' &&
             vueNamespaceBindings.has(bindings.get(callee.object)) && vueLifecycleHooks.has(method) ? method : null);
         const isVueLifecycleHook = Boolean(vueHookName);
+        // The browser Task Scheduling API invokes the callback passed to
+        // scheduler.postTask. Recognize only the unshadowed global scheduler
+        // namespace (including explicit global-object qualification); an
+        // arbitrary object's similarly named method is not a callback root.
+        const nativeSchedulerRoots = new Set(['globalThis', 'window', 'self']);
+        const isNativeTaskScheduler = method === 'postTask' &&
+          callee.type === 'MemberExpression' &&
+          ((callee.object.type === 'Identifier' && callee.object.name === 'scheduler' &&
+            !bindings.get(callee.object) && pathName === 'scheduler.postTask') ||
+           (callee.object.type === 'MemberExpression' &&
+            pathName.endsWith('.scheduler.postTask') &&
+            nativeSchedulerRoots.has(callee.object.object?.name) &&
+            callee.object.object?.type === 'Identifier' &&
+            !bindings.get(callee.object.object) &&
+            memberPath(callee.object) === callee.object.object.name + '.scheduler'));
         const lastArgument = node.arguments[node.arguments.length - 1];
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
@@ -2052,7 +2067,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
         let callbackIndices = [];
-        if (isObserver || isPromiseExecutor) callbackIndices = [0];
+        if (isObserver || isPromiseExecutor || isNativeTaskScheduler) callbackIndices = [0];
         else if (method === 'addEventListener') callbackIndices = [1];
         else if (['on', 'once', 'addListener'].includes(method)) {
           const candidates = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
