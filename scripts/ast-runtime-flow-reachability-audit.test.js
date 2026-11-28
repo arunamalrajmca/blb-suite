@@ -2204,7 +2204,8 @@ test('does not treat shadowed or arbitrary postTask methods as native scheduler 
     'function local(scheduler) { scheduler.postTask(onReady); }'
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
-    item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 0);
   assert.equal(result.findings.filter(item =>
     item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
 });
@@ -2225,7 +2226,9 @@ test('traces native process.nextTick callbacks through callback and async edges'
 
 test('does not treat shadowed process.nextTick methods as native callback roots', () => {
   const result = audit([
+    'function onReady() { return true; }',
     'const process = { nextTick(callback) { return callback; } };',
+    'process.nextTick(onReady);',
     'process.nextTick(() => work());',
     'function local(process) { process.nextTick(() => work()); }'
   ].join('\n'));
@@ -2237,7 +2240,9 @@ test('does not treat shadowed process.nextTick methods as native callback roots'
 
 test('does not treat a shadowed setImmediate declaration as the native scheduler', () => {
   const result = audit([
+    'function onReady() { return true; }',
     'function setImmediate(callback) { return callback; }',
+    'setImmediate(onReady);',
     'setImmediate(() => work());'
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
