@@ -2754,6 +2754,16 @@ function analyze(root = path.resolve(__dirname, '..')) {
   const computedPropertyCallSites = uncertainty.filter(site =>
     site.kind === 'unresolved-computed-property' && ['call', 'construct', 'indirect-call', 'indirect-construct', 'indirect-callback'].includes(site.accessRole)
   ).map(site => ({ file: site.file, line: site.line, expression: site.expression, propertyExpression: site.propertyExpression, role: site.accessRole, affectedRoots: site.affectedRoots }));
+  const unresolvedExternalCallbackOwners = uncertainty.filter(site =>
+    site.kind === 'unresolved-external-callback-owner'
+  );
+  const unresolvedExternalCallbackSites = {
+    total: unresolvedExternalCallbackOwners.length,
+    samples: unresolvedExternalCallbackOwners.slice(0, 40).map(site => ({
+      file: site.file, line: site.line, expression: site.expression,
+      registrationApi: site.registrationApi || null, affectedRoots: site.affectedRoots
+    }))
+  };
   const unresolvedLoaderSites = uncertainty.filter(site => [
     'dynamic-import', 'importScripts', 'chrome.scripting.executeScript.files',
     'chrome.scripting.executeScript', 'chrome.scripting.registerContentScripts',
@@ -2767,6 +2777,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
     byAffectedRoot: Object.fromEntries([...uncertaintyByRoot].sort((a, b) => a[0].localeCompare(b[0])).map(([rootName, kinds]) => [rootName, Object.fromEntries(kinds)])),
     computedPropertyRoles: Object.fromEntries([...computedPropertyRoles].sort((a, b) => b[1] - a[1])),
     computedPropertyCallSites,
+    unresolvedExternalCallbackSites,
     unresolvedLoaderSites,
     topComputedPropertyKeys,
     topFiles: topUncertaintyFiles
@@ -2805,6 +2816,7 @@ function run(root) {
   console.log('Uncertainty observations by affected root: ' + JSON.stringify(result.uncertaintySummary.byAffectedRoot));
   console.log('Unresolved computed-property use roles: ' + JSON.stringify(result.uncertaintySummary.computedPropertyRoles));
   console.log('Unresolved computed-property call/construct sites: ' + JSON.stringify(result.uncertaintySummary.computedPropertyCallSites));
+  console.log('Unresolved external callback owners (first 40 of ' + result.uncertaintySummary.unresolvedExternalCallbackSites.total + '): ' + JSON.stringify(result.uncertaintySummary.unresolvedExternalCallbackSites.samples));
   console.log('Unresolved loader sites with affected roots: ' + JSON.stringify(result.uncertaintySummary.unresolvedLoaderSites));
   console.log('Most common unresolved computed-property expressions: ' + JSON.stringify(result.uncertaintySummary.topComputedPropertyKeys));
   console.log('Top uncertainty source files: ' + JSON.stringify(result.uncertaintySummary.topFiles));
