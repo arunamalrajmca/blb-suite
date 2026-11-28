@@ -2188,7 +2188,7 @@ test('traces native scheduler.postTask callback and asynchronous reachability ed
     'function onReady() { return true; }',
     'scheduler.postTask(onReady);',
     'globalThis.scheduler.postTask(() => onReady());'
-  ].join('\\n'));
+  ].join('\n'));
   assert.equal(result.findings.filter(item =>
     item.category === 'callbacks' && item.kind === 'callback-registration').length, 2);
   assert.equal(result.findings.filter(item =>
@@ -2201,7 +2201,7 @@ test('does not treat shadowed or arbitrary postTask methods as native scheduler 
     'const scheduler = { postTask(callback) { return callback; } };',
     'scheduler.postTask(onReady);',
     'function local(scheduler) { scheduler.postTask(onReady); }'
-  ].join('\\n'));
+  ].join('\n'));
   assert.equal(result.findings.filter(item =>
     item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
   assert.equal(result.findings.filter(item =>
