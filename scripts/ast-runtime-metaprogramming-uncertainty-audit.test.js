@@ -163,3 +163,28 @@ test('keeps shadowed MutationObserver assignments conservative', () => {
   assert.ok(findings[0].detail.includes('observe argument[0]'));
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
+
+
+test('recognizes Playwright Page, BrowserContext, popup, and service-worker event listeners', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-meta-playwright-events-'));
+  const file = path.join(root, 'tests', 'browser', 'playwright-events.spec.js');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  try {
+    fs.writeFileSync(file, [
+      "const { test } = require('@playwright/test');",
+      "test('events', async ({ page, context }) => {",
+      "  const observeWorker = worker => { worker.on('close', handler); };",
+      "  page.on('console', handler);",
+      "  context.on('serviceworker', observeWorker);",
+      "  const destination = await page.waitForEvent('popup');",
+      "  destination.once('pageerror', handler);",
+      "  unrelated.on('ready', handler);",
+      "});"
+    ].join('\n'));
+    const result = analyze(root);
+    const findings = result.observations.filter(item => item.kind === 'callback-contract');
+    assert.equal(findings.length, 1, JSON.stringify(findings));
+    assert.ok(findings[0].detail.includes('on argument[1]'));
+    assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
