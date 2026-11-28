@@ -2385,10 +2385,7 @@ function canonicalBlbTabKey(url) {
 
     // BLB search destinations: normalize the Criteria value while ignoring
     // presentation differences in the URL.
-    if (host === BLB_HOSTNAME && ['/search/search.cfm', '/search/presearch.cfm'].includes(path)) {
-      // BLB's preSearch endpoint redirects to search.cfm after loading. Treat
-      // both URL forms as one logical destination so repeated source-page
-      // clicks reuse the already-open search tab after that normalization.
+    if (host === BLB_HOSTNAME && path === '/search/search.cfm') {
       const criteria = (u.searchParams.get('Criteria') || '').trim().toLowerCase();
       return `blb-search|${criteria}`;
     }
