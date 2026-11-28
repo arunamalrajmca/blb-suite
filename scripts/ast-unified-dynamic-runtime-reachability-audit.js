@@ -219,6 +219,12 @@ function staticPrefix(node, constants, bindings, depth = 0) {
   }
   return null;
 }
+function staticLoaderSpecifier(node, constants, bindings) {
+  if (node?.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'URL') {
+    return staticValue(node.arguments[0], constants, 0, bindings);
+  }
+  return staticValue(node, constants, 0, bindings);
+}
 function staticValue(node, constants, depth = 0, bindings = null) {
   if (!node || depth > 8) return undefined;
   if (node.type === 'Literal') return node.value;
@@ -2204,11 +2210,26 @@ function analyze(root = path.resolve(__dirname, '..')) {
           node.init.arguments[0] && node.init.arguments[0].type === 'Literal' &&
           node.init.arguments[0].value === 'script') scriptElementBindings.add(bindings.get(node.id));
       if (node.type === 'AssignmentExpression' && node.left.type === 'MemberExpression' &&
-          node.left.object.type === 'Identifier' && scriptElementBindings.has(bindings.get(node.left.object)) &&
-          (node.left.computed ? staticValue(node.left.property, constants, 0, bindings) : node.left.property.name) === 'src') {
-        const spec = staticValue(node.right, constants, 0, bindings);
-        const target = typeof spec === 'string' ? resolveInjected(spec) : null;
-        addSite(file, node, 'dom-script-src-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection', [], staticPrefix(node.right, constants, bindings));
+          node.left.object.type === 'Identifier' && scriptElementBindings.has(bindings.get(node.left.object))) {
+        const property = node.left.computed ? staticValue(node.left.property, constants, 0, bindings) : node.left.property.name;
+        if (property === 'src') {
+          const spec = staticValue(node.right, constants, 0, bindings);
+          const target = typeof spec === 'string' ? resolveInjected(spec) : null;
+          addSite(file, node, 'dom-script-src-injection', spec, target, target ? 'resolved-local' : 'unresolved-dom-script-injection', [], staticPrefix(node.right, constants, bindings));
+          const generatedBlobUrl = node.right.type === 'CallExpression' &&
+            node.right.callee.type === 'MemberExpression' &&
+            node.right.callee.property.name === 'createObjectURL' &&
+            node.right.arguments[0]?.type === 'NewExpression' &&
+            node.right.arguments[0].callee.type === 'Identifier' &&
+            node.right.arguments[0].callee.name === 'Blob';
+          if (generatedBlobUrl) addSite(file, node, 'generated-script-source', null, null,
+            'unresolved-generated-source', [], null);
+        }
+        if (property === 'text' || property === 'textContent') {
+          const source = staticValue(node.right, constants, 0, bindings);
+          addSite(file, node, 'dom-script-inline-source', source, null,
+            'unresolved-generated-source', [], staticPrefix(node.right, constants, bindings));
+        }
       }
       if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' && scriptElementBindings.has(bindings.get(node.callee.object)) &&
@@ -2249,12 +2270,18 @@ function analyze(root = path.resolve(__dirname, '..')) {
           (constructorBinding && workerConstructorBindings.has(constructorBinding));
         if (isWorker) {
           const sourceNode = node.arguments[0];
-          const spec = sourceNode?.type === 'NewExpression' && sourceNode.callee.type === 'Identifier' && sourceNode.callee.name === 'URL'
-            ? staticValue(sourceNode.arguments[0], constants, 0, bindings)
-            : staticValue(sourceNode, constants, 0, bindings);
+          const spec = staticLoaderSpecifier(sourceNode, constants, bindings);
           const target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
           addSite(file, node, 'worker-constructor', spec, target,
             target ? 'resolved-local' : 'unresolved-worker-target', [], staticPrefix(sourceNode, constants, bindings));
+          const generatedBlobUrl = sourceNode?.type === 'CallExpression' &&
+            sourceNode.callee.type === 'MemberExpression' &&
+            sourceNode.callee.property.name === 'createObjectURL' &&
+            sourceNode.arguments[0]?.type === 'NewExpression' &&
+            sourceNode.arguments[0].callee.type === 'Identifier' &&
+            sourceNode.arguments[0].callee.name === 'Blob';
+          if (generatedBlobUrl) addSite(file, node, 'generated-worker-source', null, null,
+            'unresolved-generated-source', [], null);
         }
       }
       if (node.type === 'CallExpression') {
@@ -2275,6 +2302,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
       if (node.type === 'CallExpression') {
         const callee = node.callee;
         const memberPath = n => { const parts = []; while (n && n.type === 'MemberExpression') { parts.unshift(n.computed ? staticValue(n.property, constants, 0, bindings) : n.property.name); n = n.object; } if (n && n.type === 'Identifier') { const key = bindings.get(n); parts.unshift(key && scriptingNamespaceBindings.has(key) ? 'chrome.scripting' : n.name); } return parts.filter(Boolean).join('.'); };
+        const documentWrite = ['document.write', 'document.writeln', 'window.document.write',
+          'window.document.writeln', 'globalThis.document.write', 'globalThis.document.writeln'].includes(fullPath);
+        if (documentWrite) {
+          for (const argument of node.arguments) {
+            const markup = staticValue(argument, constants, 0, bindings);
+            if (typeof markup === 'string' && /<script\\b/i.test(markup)) {
+              addSite(file, node, 'document-write-script-injection', markup, null,
+                'unresolved-generated-source', [], staticPrefix(argument, constants, bindings));
+            }
+          }
+        }
         if (callee.type === 'Identifier' && callee.name === 'fetchPackagedJsonAssignment') {
           const spec = staticValue(node.arguments[0], constants, 0, bindings);
           const target = typeof spec === 'string' ? resolveInjected(spec) : null;
@@ -2298,6 +2336,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callee.type === 'Identifier' ? scriptingLoaderMethodBindings.get(bindings.get(callee)) : null;
         const object = callee.type === 'MemberExpression' ? memberPath(callee.object) :
           callee.type === 'Identifier' && scriptingLoaderMethodBindings.has(bindings.get(callee)) ? 'chrome.scripting' : null;
+        const fullPath = memberPath(callee);
+        const serviceWorkerRegister = method === 'register' &&
+          ['navigator.serviceWorker.register', 'window.navigator.serviceWorker.register',
+            'globalThis.navigator.serviceWorker.register', 'self.navigator.serviceWorker.register'].includes(fullPath);
+        const workletModule = method === 'addModule' &&
+          /(?:^|\\.)(?:audioWorklet|paintWorklet|layoutWorklet)\\.addModule$/.test(fullPath);
+        if (serviceWorkerRegister || workletModule) {
+          const sourceNode = node.arguments[0];
+          const spec = staticLoaderSpecifier(sourceNode, constants, bindings);
+          const target = typeof spec === 'string' ? resolveFile(file, spec, fileSet) : null;
+          const kind = serviceWorkerRegister ? 'service-worker-register' : 'worklet-module';
+          addSite(file, node, kind, spec, target,
+            target ? 'resolved-local' : (serviceWorkerRegister
+              ? 'unresolved-service-worker-target' : 'unresolved-worklet-module'),
+            [], staticPrefix(sourceNode, constants, bindings));
+        }
         if (method === 'executeScript' && object === 'chrome.scripting') {
           let foundFiles = [];
           let foundFilesProperty = false;
