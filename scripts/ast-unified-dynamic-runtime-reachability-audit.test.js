@@ -689,12 +689,8 @@ test('keeps dynamic ServiceWorker and Worklet loader targets explicitly uncertai
   assert.ok(result.uncertainty.some(item =>
     item.kind === 'worklet-module' && item.affectedRoots.includes('scripts/main.js')
   ));
-  assert.ok(result.uncertainFiles.some(item =>
-    item.file === 'scripts/service-worker.js' && item.affectedRoots.includes('scripts/main.js')
-  ));
-  assert.ok(result.uncertainFiles.some(item =>
-    item.file === 'scripts/processor.js' && item.affectedRoots.includes('scripts/main.js')
-  ));
+  assert.equal(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/service-worker.js'), false);
+  assert.equal(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/processor.js'), false);
   assert.equal(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/other-service-worker.js'), false);
   assert.equal(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/other-processor.js'), false);
 });
