@@ -2262,6 +2262,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const isPromiseExecutor = node.type === 'NewExpression' && pathName === 'Promise' &&
           callee.type === 'Identifier' && !bindings.get(callee);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
+        const nativeTimerRoots = new Set(['globalThis', 'window', 'self', 'global']);
+        const isNativeTimer = ['setTimeout', 'setInterval'].includes(method) &&
+          ((callee.type === 'Identifier' && !bindings.get(callee) && pathName === method) ||
+           (callee.type === 'MemberExpression' &&
+            callee.object.type === 'Identifier' &&
+            nativeTimerRoots.has(callee.object.name) &&
+            !bindings.get(callee.object) &&
+            pathName === callee.object.name + '.' + method));
         const calleeBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
         const vueHookName = calleeBinding && vueHookBindings.get(calleeBinding) ||
           (callee.type === 'MemberExpression' && callee.object.type === 'Identifier' &&
@@ -2307,9 +2315,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
             [...functionDefs.values()].filter(definition =>
               definition.file === file && definition.node.id?.name === lastArgument.name
             ).length === 1);
-        const extensionCallback = isExtensionApi && lastArgumentIsCallable &&
+        const isFunctionPrototypeForwarder = ['call', 'apply'].includes(method) &&
+          callee.type === 'MemberExpression' && callee.object.type === 'MemberExpression';
+        const extensionApiMethod = isFunctionPrototypeForwarder
+          ? memberPath(callee.object).split('.').pop() : method;
+        const isExtensionApiRemoval = ['removeListener', 'removeEventListener'].includes(extensionApiMethod);
+        const extensionCallback = isExtensionApi && !isExtensionApiRemoval && lastArgumentIsCallable &&
           !(pathName === 'chrome.tabs.update' && node.arguments.length < 3) &&
-          (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction);
+          (method === 'apply' ||
+            (method === 'call'
+              ? (lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)
+              : (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction)));
         const isCallbackCandidate = argument => argument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
@@ -2322,7 +2338,9 @@ function analyze(root = path.resolve(__dirname, '..')) {
         } else if (method === 'then') {
           callbackIndices = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
         } else if (extensionCallback) callbackIndices = [node.arguments.length - 1];
-        else if ((callbackApis.has(method) && !['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method)) ||
+        else if ((callbackApis.has(method) &&
+          !['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method) &&
+          (!['setTimeout', 'setInterval'].includes(method) || isNativeTimer)) ||
           (['queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback'].includes(method) &&
             ((callee.type === 'Identifier' && !calleeBinding && !locallyDeclaredScheduler && pathName === method) ||
               (callee.type === 'MemberExpression' &&
