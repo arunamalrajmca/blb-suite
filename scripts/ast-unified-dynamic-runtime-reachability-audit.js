@@ -1624,7 +1624,20 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     }
 
+    const externalCallbackParameterBindings = new Set();
     const callbackRecord = (callback, api, line, expression) => {
+      // Chrome's runtime message listener contract supplies sendResponse as
+      // its third callback parameter. Mark only that exact API contract; a
+      // similarly named parameter in an arbitrary function is not external.
+      if (['chrome.runtime.onMessage.addListener', 'browser.runtime.onMessage.addListener'].includes(api)) {
+        const registeredFunction = callback?.type === 'Identifier'
+          ? functionDefs.get(file + '::' + bindings.get(callback))?.node
+          : callback;
+        const sendResponseParameter = registeredFunction?.params?.[2];
+        const parameterBinding = sendResponseParameter?.type === 'Identifier'
+          ? bindings.get(sendResponseParameter) : null;
+        if (parameterBinding) externalCallbackParameterBindings.add(file + '::' + parameterBinding);
+      }
       let callbackName = null, callbackTarget = null, callbackTargets = [];
       let certainty = 'unresolved-callback-owner', knownExternalCallback = false, unresolvedCallbackOwner = false;
       if (callback?.type === 'Identifier') {
@@ -1654,6 +1667,10 @@ function analyze(root = path.resolve(__dirname, '..')) {
           callbackTarget = rel(root, definition.file) + '::' + resolvedKey;
           callbackTargets = [callbackTarget];
           certainty = 'resolved-function-binding';
+        } else if (callbackKey && externalCallbackParameterBindings.has(file + '::' + callbackKey)) {
+          callbackName = '[external API callback parameter]';
+          certainty = 'resolved-external-api-callback-parameter';
+          knownExternalCallback = true;
         } else if (callbackKey && promiseResolverBindings.has(file + '::' + callbackKey)) {
           // Promise constructors synchronously provide resolve/reject
           // functions to their executor. These are known external callbacks,
