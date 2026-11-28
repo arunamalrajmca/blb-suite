@@ -264,3 +264,25 @@ test('keeps reassigned callback parameters conservative in local helpers', () =>
   assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 1);
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
+
+
+test('tracks callback capture through nested closures and local wrapper chains', () => {
+  const result = run([
+    "function capture(callback) { return pending.then(() => callback()); }",
+    "function invoke(callback) { callback(); }",
+    "function forward(callback) { invoke(callback); }",
+    "function shadow(callback) { return pending.then(callback => callback()); }",
+    "function delegate(callback) { externalRegistry.register(callback); }",
+    "capture(() => run());",
+    "forward(() => run());",
+    "shadow(() => run());",
+    "delegate(() => run());",
+    "schedule(() => run());"
+  ].join('\n'));
+  const findings = result.observations.filter(item => item.kind === 'higher-order-callback-boundary');
+  assert.equal(findings.length, 3, JSON.stringify(findings));
+  assert.ok(findings.some(item => item.detail.includes('shadow')));
+  assert.ok(findings.some(item => item.detail.includes('delegate')));
+  assert.ok(findings.some(item => item.detail.includes('schedule')));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
