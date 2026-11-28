@@ -3115,3 +3115,24 @@ test('does not treat arbitrary sendResponse-named parameters as external callbac
     item.kind === 'unresolved-external-callback-owner' &&
     item.expression.includes('.then')));
 });
+
+
+test('does not grant runtime message callback contracts to a shadowed chrome namespace', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function install(chrome) {',
+      '  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {',
+      '    Promise.resolve({ok:true}).then(sendResponse);',
+      '  });',
+      '}'
+    ].join('\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression.includes('.then'));
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'unresolved-external-callback-owner'));
+});
