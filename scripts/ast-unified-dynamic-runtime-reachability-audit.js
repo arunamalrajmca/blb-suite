@@ -2052,6 +2052,23 @@ function analyze(root = path.resolve(__dirname, '..')) {
             callee.object.object?.type === 'Identifier' &&
             !bindings.get(callee.object.object) &&
             memberPath(callee.object) === callee.object.object.name + '.scheduler'));
+        // Node's setImmediate and process.nextTick are callback invocation
+        // roots too. Require the unshadowed native globals so same-named
+        // application helpers do not become false execution roots.
+        const isNativeNodeScheduler = (
+          callee.type === 'Identifier' && callee.name === 'setImmediate' &&
+          !bindings.get(callee) && !locallyDeclaredScheduler
+        ) || (
+          method === 'nextTick' && callee.type === 'MemberExpression' &&
+          ((callee.object.type === 'Identifier' && callee.object.name === 'process' &&
+            !bindings.get(callee.object) && pathName === 'process.nextTick') ||
+           (callee.object.type === 'MemberExpression' &&
+            pathName === 'globalThis.process.nextTick' &&
+            callee.object.object?.type === 'Identifier' &&
+            callee.object.object.name === 'globalThis' &&
+            !bindings.get(callee.object.object))
+          )
+        );
         const lastArgument = node.arguments[node.arguments.length - 1];
         const lastArgumentIsCallable = lastArgument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression'].includes(lastArgument.type);
@@ -2067,7 +2084,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
         let callbackIndices = [];
-        if (isObserver || isPromiseExecutor || isNativeTaskScheduler) callbackIndices = [0];
+        if (isObserver || isPromiseExecutor || isNativeTaskScheduler || isNativeNodeScheduler) callbackIndices = [0];
         else if (method === 'addEventListener') callbackIndices = [1];
         else if (['on', 'once', 'addListener'].includes(method)) {
           const candidates = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
