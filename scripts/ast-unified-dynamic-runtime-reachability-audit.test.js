@@ -3136,3 +3136,32 @@ test('does not grant runtime message callback contracts to a shadowed chrome nam
   assert.ok(result.uncertainty.some(item =>
     item.kind === 'unresolved-external-callback-owner'));
 });
+
+
+test('does not resolve assigned callback values before their assignment or across conditional blocks', () => {
+  const beforeAssignment = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      "document.addEventListener('DOMContentLoaded', startupListener);",
+      'startupListener = () => initialize();'
+    ].join('\n')
+  });
+  const conditionalAssignment = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'let startupListener = null;',
+      'if (shouldInstall) { startupListener = () => initialize(); }',
+      "document.addEventListener('DOMContentLoaded', startupListener);"
+    ].join('\n')
+  });
+  for (const result of [beforeAssignment, conditionalAssignment]) {
+    const registration = result.dynamicSites.find(item =>
+      item.kind === 'external-callback-registration' &&
+      item.expression === 'document.addEventListener');
+    assert.ok(registration);
+    assert.equal(registration.certainty, 'unresolved-callback-owner');
+    assert.ok(result.uncertainty.some(item =>
+      item.kind === 'unresolved-external-callback-owner'));
+  }
+});
