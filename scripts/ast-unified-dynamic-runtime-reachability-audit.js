@@ -646,8 +646,12 @@ function analyze(root = path.resolve(__dirname, '..')) {
   // function values. This covers startup listeners initialized after a
   // nullable declaration without treating mutable callback slots as stable.
   const assignedFunctionWrites = new Map();
+  const parentByFile = new Map();
   for (const [file, ast] of asts) {
     const bindings = bindingByFile.get(file);
+    const parents = new WeakMap();
+    visit(ast, (node, parent) => { if (parent) parents.set(node, parent); });
+    parentByFile.set(file, parents);
     visit(ast, node => {
       const target = node.type === 'AssignmentExpression' && node.left.type === 'Identifier'
         ? node.left
@@ -776,6 +780,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
     });
     objectMethodDefsByFile.set(file, methods);
   }
+  const nearestStaticBlock = (file, node) => {
+    const parents = parentByFile.get(file);
+    let current = node;
+    while (current) {
+      if (current.type === 'BlockStatement' || current.type === 'Program') return current;
+      current = parents?.get(current);
+    }
+    return null;
+  };
   const resolveFunctionOwner = (file, identifier) => {
     const bindings = bindingByFile.get(file);
     let key = bindings && bindings.get(identifier);
@@ -783,6 +796,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const seen = new Set();
     while (key && aliases && aliases.has(key) && !seen.has(key)) { seen.add(key); key = aliases.get(key); }
     let definition = key && functionDefs.get(file + '::' + key);
+    if (definition?.assignmentNode &&
+        (definition.assignmentNode.start >= identifier.start ||
+         nearestStaticBlock(file, definition.assignmentNode) !== nearestStaticBlock(file, identifier))) {
+      definition = null;
+    }
     if (definition) return { file: definition.file, key, node: definition.node };
     // Script/global scopes can leave same-file function references unresolved.
     // Use an exact local function name only when it has one definition.
