@@ -740,7 +740,8 @@ test('does not classify shadowed ServiceWorker, URL, or Blob bindings as native 
       "  navigator.serviceWorker.register('./shadowed-service-worker.js');",
       "  new Worker(URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' })));",
       '}',
-      "function shadowedWorker(Worker) { new Worker('./shadowed-worker.js'); }"
+      "function shadowedWorker(Worker) { new Worker('./shadowed-worker.js'); }",
+      "function shadowedWindow(window) { new window.Worker('./shadowed-window-worker.js'); }"
     ].join(' '),
     'scripts/shadowed-service-worker.js': 'self.addEventListener("fetch", () => {});'
   });
