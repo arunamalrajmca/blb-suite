@@ -1147,7 +1147,7 @@ test('Suite master opt-out removes both registered worlds for guarded source hos
 });
 
 test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB destination tab', async ({
-  page, extensionStorage, extensionWorker
+  page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -1166,18 +1166,25 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       ? 'https://sagacityweb.com/the-digital-harlot-resisting-the-seduction-of-modern-babylon/'
       : 'https://rediscover.bible/acts_intro.html';
 
-    await page.route('https://' + host + '/**', route => route.fulfill({
+    const blbDestinationRequests = [];
+    await context.route('https://' + host + '/**', route => route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
       body:'<!doctype html><html><head><title>Source reference fixture</title></head><body>' +
         '<main><a id="bible-reference" target="_blank" href="' + destinationUrl +
         '">' + referenceLabel + '</a></main></body></html>'
     }));
-    await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    // The extension opens BLB in a separate tab, so page.route() cannot
+    // intercept this navigation. Route at context scope to keep the exact
+    // preSearch URL observable before BLB's live server canonicalizes it.
+    await context.route('https://www.blueletterbible.org/**', route => {
+      blbDestinationRequests.push(route.request().url());
+      return route.fulfill({
       status:200,
       contentType:'text/html; charset=utf-8',
       body:'<!doctype html><html><head><title>BLB destination</title></head><body>John 3:16 KJV</body></html>'
-    }));
+      });
+    });
 
     await page.goto(homepage, {waitUntil:'domcontentloaded'});
     const originPattern = 'https://' + host + '/*';
@@ -1198,6 +1205,7 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     ), {timeout:10000}).toBe(true);
 
     await page.locator('#bible-reference').click();
+    await expect.poll(() => blbDestinationRequests.includes(destinationUrl)).toBe(true);
     await expect.poll(() => extensionWorker.evaluate(async target => {
       const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
       return tabs.filter(tab => tab.url === target || tab.pendingUrl === target).length;
