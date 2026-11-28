@@ -83,6 +83,84 @@ test('keeps nested callback wrappers uncertain when an intermediate parameter ha
 });
 
 
+test('retains every known callback owner passed through a shared helper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function firstHandler() {}',
+      'function secondHandler() {}',
+      'function register(callback) { chrome.runtime.onMessage.addListener(callback); }',
+      'register(firstHandler);',
+      'register(secondHandler);'
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'chrome.runtime.onMessage.addListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-multiple-interprocedural-callback-arguments');
+  assert.equal(registration.callbackTargets.length, 2);
+  assert.ok(registration.callbackTargets.some(target => target.includes('::firstHandler@')));
+  assert.ok(registration.callbackTargets.some(target => target.includes('::secondHandler@')));
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('retains every known handleEvent owner forwarded through a listener helper', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function register(listener) { document.addEventListener("ready", listener); }',
+      'register({ handleEvent() {} });',
+      'register({ handleEvent() {} });'
+    ].join('\\n')
+  });
+  const registration = result.dynamicSites.find(item =>
+    item.kind === 'external-callback-registration' &&
+    item.expression === 'document.addEventListener'
+  );
+  assert.ok(registration);
+  assert.equal(registration.certainty, 'resolved-multiple-object-event-handler-bindings');
+  assert.equal(registration.callbackTargets.length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('recognizes Promise executor and resolver callbacks as known external owners', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'new Promise((resolve, reject) => {',
+      '  setTimeout(resolve, 0);',
+      '  setTimeout(reject, 0);',
+      '});'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
+  assert.ok(registrations.some(item => item.expression === 'Promise' && item.certainty === 'resolved-inline-callback'));
+  assert.equal(registrations.filter(item => item.certainty === 'resolved-promise-resolver').length, 2);
+  assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat chrome.tabs.update options as an optional callback', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function update(tabId, properties, callback) {',
+      '  chrome.tabs.update(tabId, properties);',
+      '  chrome.tabs.update(tabId, properties, callback);',
+      '}'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression === 'chrome.tabs.update'
+  );
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].certainty, 'unresolved-callback-owner');
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner' && item.expression === 'chrome.tabs.update'
+  ).length, 1);
+});
+
 test('caps unresolved external callback owner samples without truncating totals', () => {
   const registrations = Array.from({length:45}, (_, index) =>
     `chrome.runtime.onMessage.addListener(handler${index});`
