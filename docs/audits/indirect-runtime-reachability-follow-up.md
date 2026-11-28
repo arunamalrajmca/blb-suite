@@ -69,37 +69,49 @@ The inventory describes what the current analyzers can establish; it is not a cl
 - [x] Resolve the actual runtime registration file list from `contentScriptFilesForTab` through `ensureRuntimeContentScriptRegistered` and `registerRuntimeContentScriptForPattern`. The function-return summary covers 24 possible script files, including the full bundle and both redirect-only handlers.
 - [x] Add positive and negative fixtures for bounded array forwarding, mutation, unknown callsites, and read-only validation/serialization.
 
-## Final-head validation — `213439224cf7a325e4ffdf587f730cdc4bb6a26f`
+## Additional safety coverage
 
-- **Selected and passed:** symbol (17), repository (6), owner (49), cross-module (132), runtime-flow (169), unified runtime (172), computed-property (15), and metaprogramming (26) AST test cases. Every selected section recorded a passed checkpoint; no selected section failed.
-- **Audit selection:** all eight selected sections ran because the JavaScript analyzer/test inputs changed their fingerprints. The executable-source audit section was not selected because no extension source files changed.
+- [x] Reject bounded-array propagation when a function parameter is mutated directly or through a local alias such as `const alias = files; alias.push(...)`.
+- [x] Propagate mutation uncertainty backwards through known local wrapper calls. If a wrapper forwards its array parameter to a known helper that mutates the corresponding parameter, the wrapper parameter is no longer treated as a stable static file list.
+- [x] Add focused negative fixtures for direct mutation, local-alias mutation, transitive mutation through a known local helper, and unknown caller inputs. The positive production-pattern fixture continues to prove the non-mutating forwarding chain resolves.
+
+## Final-head validation — `59d9521bbdcdad4de79a6b7784c4f914da47c8f0`
+
+- **Selected and passed:** symbol (17), repository (6), owner (49), cross-module (132), runtime-flow (169), unified runtime (176), computed-property (15), and metaprogramming (26) AST test cases. All eight selected sections recorded passed checkpoints; no selected section failed.
+- **Audit selection:** all eight selected AST sections ran because the changed analyzer and test files had changed input fingerprints. The executable-source audit section was not selected because no extension production source changed.
 - **Passed CI gates:** HARD-GATE, References & Double-click, latest-main ancestry, and Full Browser Concurrency Equivalence.
-- **Additional passed jobs within concurrency validation:** focused retired content-bundle listener-race regression and checkpoint-recovery validator tests.
-- **Skipped by workflow selection:** Focused regressions, Master-Toggle Registration Diagnostics, Package validation, and unrelated/deep browser test stages. Skipped jobs are not reported as passes or failures.
+- **Additional passed jobs within concurrency validation:** focused retired content-bundle listener-race regression and checkpoint-recovery validator unit tests.
+- **Skipped by workflow selection:** Focused regressions, Master-Toggle Registration Diagnostics, Package validation, and unrelated/deep browser stages. Skipped jobs are not reported as passes or failures.
 - **Failed selected sections:** none.
-- No extension production source was changed by this audit update; no separate extension smoke test was required by the selected CI scope.
+- No extension production source was changed; no separate production smoke test was required by this audit-only change.
 
 ## Specific unresolved findings retained from the repository scan
 
-These are observed uncertainty samples, not proven defects. Keep them unresolved until the analyzer can establish ownership without guessing:
+These are 15 test-only `unresolved-external-callback-owner` observations, not production defects. They remain uncertain until the analyzer can establish the exact callback contract and ownership without guessing:
 
-- Test-only Playwright `test.setTimeout` callback samples remain uncertain because the test runner's callback contract is not yet modeled as an invocation root.
-- Test-only Chrome API `.call/.apply` wrappers remain uncertain; distinguish API-specific callback argument positions from generic Function.prototype forwarding before resolving them.
-- Test-only `queue.then` callbacks in ScriptTagger injection tests remain uncertain until the queue contract and ownership are established.
-- Computed-property access, reflection, external callback contracts without a statically known API owner, and runtime-generated source remain conservative uncertainty boundaries.
+- `tests/browser/extension-lifecycle.spec.js:723`: `chrome.scripting.getRegisteredContentScripts.apply`; the wrapper forwards an argument array through `Function.prototype.apply`.
+- `tests/browser/replaced-tab-lifecycle-races.spec.js:295`: `chrome.tabs.sendMessage.apply`; the wrapper forwards an argument array to the Chrome API.
+- `tests/browser/site-registration-opt-out-race.spec.js:27`: another `chrome.scripting.getRegisteredContentScripts.apply` wrapper.
+- `tests/browser/scripttagger-global-injection.spec.js:289,354`: `queue.then`; the queue is a Promise chain reassigned through `.catch`, but this test-local Promise-like variable flow is not yet modeled as a callback owner.
+- `tests/browser/service-worker-lifecycle.spec.js:3371`: `gate.catch`; this is a custom then/catch wrapper over a Promise gate, not a direct native Promise binding.
+- `tests/browser/source-page-collector-behavior.spec.js:41,123,221,343,480,542,593`: `chrome.runtime.onMessage.addListener` receives callbacks stored on `globalThis` properties. The Chrome listener API contract is known, but resolving these property-backed callback values is not yet modeled.
+- No `test.setTimeout` callback-owner observation appeared in the final audit output; it is not carried as an unresolved finding.
+- Computed-property access, reflection, external callback contracts without a statically known owner, and runtime-generated source remain conservative uncertainty boundaries.
 
-## Remaining carried-forward work
+## Carried-forward checklist status
 
-- [ ] Classify remaining test-only `test.setTimeout`, Chrome API `.call/.apply`, and `queue.then` callback samples using API-specific contracts; keep unknown contracts unresolved.
-- [ ] Continue auditing newly discovered behavioral invocation paths when repository evidence or findings identify a gap.
-- [ ] Add focused fixtures for any newly identified path before implementing recognition.
-- [ ] Revisit generated-source/template-origin handling if a statically analyzable source-generation pipeline is introduced.
-- [ ] Revisit source-map support only if the repository adds a source-map-producing build pipeline.
-- [ ] Continue reviewing newly exposed computed-property and reflection findings without weakening conservative uncertainty.
-- [ ] Keep reflective, computed, and runtime-dependent boundaries unresolved unless evidence can be established.
-- [ ] Continue validating change-based audit selection and fingerprinted checkpoint backup/restore; do not assume an unchanged section was reused unless the log explicitly reports reuse.
-- [ ] Avoid rerunning unchanged expensive audit sections; report selected, skipped, passed, and failed sections separately.
-- [ ] Run targeted audit tests first, then selected repository-wide audit sections and required CI gates on each final PR head.
+- [x] Classify remaining test-only `.apply`, Promise-like `.then/.catch`, and global-property callback samples by their observed source and API contract; leave unresolved cases explicit.
+- [x] Review behavioral invocation paths newly exposed by this audit and add focused positive/negative fixtures before recognizing new paths.
+- [x] Review cross-module callback ownership, wrapper propagation, aliases, re-exports, callback containers, and iterator protocols.
+- [x] Review repository-used module/browser loaders, including dynamic/static imports, CommonJS loaders, `importScripts`, Chrome script injection/content scripts, workers, service workers, worklets, and DOM script injection.
+- [x] Review generated-source/template-origin handling. No statically analyzable source-generation build pipeline is present in the current repository; retain uncertainty for runtime-generated sources.
+- [x] Review source-map applicability. No source-map-producing pipeline or source-map artifacts are present in the current repository; revisit if that changes.
+- [x] Review computed-property and reflection findings; preserve conservative uncertainty rather than promoting unproven paths.
+- [x] Validate change-based audit selection, input fingerprinting, and checkpoint backup/restore. The checkpoint recovery validator passed. All eight AST sections ran on the final implementation head because their JavaScript inputs changed; no unchanged-section reuse is claimed.
+- [x] Avoid unrelated full-audit reruns: executable-source coverage was not selected because production source did not change; unrelated/deep browser stages were skipped by workflow selection.
+- [x] Run targeted audit tests, selected repository-wide AST audits, and required CI gates on the final implementation/test head.
+
+No further implementation task from this carried-forward tranche remains open. The unresolved samples above are intentionally retained as uncertainty, not silently treated as completed reachability.
 
 ## Validation constraints
 
