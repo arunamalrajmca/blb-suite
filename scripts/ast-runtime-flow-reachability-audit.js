@@ -141,6 +141,9 @@ function analyzeFile(root, file) {
   const add = (category, kind, node, detail) => findings.push(location(root, file, node, category, kind, detail));
   const containerWrites = [];
   const containerReads = [];
+  const factoryCallbackBindings = new Map();
+  const callbackAliases = [];
+  const arrayInitialLengths = new Map();
   const containerCopies = [];
   const iteratorSources = new Map();
   const iteratorNextRequests = [];
@@ -1654,11 +1657,18 @@ function analyzeFile(root, file) {
                 if (returnedFunction) {
                   addEdge('function@' + returnedFunction.loc.start.line, assigned,
                     'function-return-callback', node, node.callee.name);
+                  factoryCallbackBindings.set(assigned, returnedFunction);
                 } else {
                   const returnedBinding = bindingId(returned);
                   addEdge(returnedBinding, assigned, 'function-return', node, node.callee.name);
                   linkObjectAlias(assigned, returnedBinding);
                 }
+                continue;
+              }
+              if (isFunction(returned)) {
+                addEdge('function@' + returned.loc.start.line, assigned,
+                  'function-return-callback', node, node.callee.name);
+                factoryCallbackBindings.set(assigned, returned);
                 continue;
               }
               if (returned.type === 'MemberExpression') {
@@ -1832,6 +1842,15 @@ function analyzeFile(root, file) {
         const property = propertyKey(node.property, node.computed);
         let assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
           ? bindingId(parent.id) : null;
+        const arrayIndexRead = node.computed && /^\d+$/.test(String(property)) &&
+          ((parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') ||
+           (parent?.type === 'CallExpression' && parent.callee === node));
+        if (arrayIndexRead) {
+          const invoked = parent?.type === 'CallExpression' && parent.callee === node;
+          containerReads.push({container:object,key:String(property),
+            assigned:invoked ? 'callback-invocation@' + parent.loc.start.line : assigned,
+            node,invoked,arrayIndex:true});
+        }
         if (parent?.type === 'CallExpression' && parent.arguments.includes(node)) {
           const schedulerName = calleeName(parent.callee);
           if (callbackSchedulers.has(schedulerName)) {
@@ -1878,6 +1897,12 @@ function analyzeFile(root, file) {
     }
 
     if (node.type === 'VariableDeclarator') {
+      if (node.id.type === 'Identifier' && node.init?.type === 'ArrayExpression') {
+        arrayInitialLengths.set(bindingId(node.id), node.init.elements.length);
+      }
+      if (node.id.type === 'Identifier' && node.init?.type === 'Identifier' && parent?.kind === 'const') {
+        callbackAliases.push({source:bindingId(node.init),target:bindingId(node.id)});
+      }
       if (node.init && ['ObjectExpression', 'ArrayExpression'].includes(node.init.type)) {
         add('object-wrapping', 'aggregate-wrapper', node,
           node.init.type + ' may retain nested function/object identities');
@@ -2399,6 +2424,10 @@ function analyzeFile(root, file) {
     for (const write of containerWrites) {
       if (write.container !== read.container) continue;
       if (read.key !== null && write.key !== null && read.key !== write.key) continue;
+      if (read.arrayIndex && write.key === null) {
+        const writesForContainer = containerWrites.filter(candidate => candidate.container === read.container);
+        if (read.key !== String(arrayInitialLengths.get(read.container)) || writesForContainer.length !== 1) continue;
+      }
       addEdge(write.stored, read.assigned,
         read.invoked ? 'container-callback-invocation' : 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
@@ -2438,16 +2467,26 @@ function analyzeFile(root, file) {
     }
   }
 
-  // A callback retrieved into a local binding can be invoked in a later
-  // statement. Connect that exact binding to its direct call without treating
-  // unrelated calls or reassigned container values as callback invocations.
-  if (containerCallbackBindings.size) {
+  // Propagate callback identities through immutable local aliases, then
+  // connect calls made after a container read or callback factory return.
+  const callbackFunctionBindings = new Map([...containerCallbackBindings, ...factoryCallbackBindings]);
+  let callbackAliasChanged = true;
+  while (callbackAliasChanged) {
+    callbackAliasChanged = false;
+    for (const alias of callbackAliases) {
+      if (!callbackFunctionBindings.has(alias.target) && callbackFunctionBindings.has(alias.source)) {
+        callbackFunctionBindings.set(alias.target, callbackFunctionBindings.get(alias.source));
+        callbackAliasChanged = true;
+      }
+    }
+  }
+  if (callbackFunctionBindings.size) {
     visit(ast, node => {
       if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier') return;
-      const callback = containerCallbackBindings.get(bindingId(node.callee));
+      const callback = callbackFunctionBindings.get(bindingId(node.callee));
       if (callback) addEdge('function@' + callback.loc.start.line,
         'callback-invocation@' + node.loc.start.line,
-        'container-callback-invocation', node, 'retrieved callback binding');
+        'retrieved-callback-invocation', node, 'retrieved callback binding');
     });
   }
 
