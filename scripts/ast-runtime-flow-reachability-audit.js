@@ -105,10 +105,16 @@ function analyzeFile(root, file) {
     ignoreEval: false, impliedStrict: false
   });
   const variableForNode = new Map();
+  const declaredNames = new Set();
   for (const scope of manager.scopes) {
     for (const variable of scope.variables || []) {
       for (const id of variable.identifiers || []) variableForNode.set(id, variable);
-      for (const def of variable.defs || []) if (def.name) variableForNode.set(def.name, variable);
+      for (const def of variable.defs || []) {
+        if (def.name) {
+          variableForNode.set(def.name, variable);
+          declaredNames.add(variable.name);
+        }
+      }
     }
     for (const reference of scope.references || []) {
       if (reference.resolved) variableForNode.set(reference.identifier, reference.resolved);
@@ -128,7 +134,7 @@ function analyzeFile(root, file) {
     return variable.name + '@' + (definition && definition.loc ? definition.loc.start.line : 0);
   };
   const isUnshadowedGlobalIdentifier = (node, name) =>
-    node?.type === 'Identifier' && node.name === name && !variableForNode.has(node);
+    node?.type === 'Identifier' && node.name === name && !declaredNames.has(name);
   const addEdge = (from, to, kind, node, detail) => {
     if (!from || !to) return;
     flowEdges.push({
@@ -951,28 +957,28 @@ function analyzeFile(root, file) {
         propertyName(node.callee) !== 'postTask') return false;
     const receiver = node.callee.object;
     if (receiver?.type === 'Identifier' && receiver.name === 'scheduler') {
-      return !variableForNode.has(receiver);
+      return !declaredNames.has('scheduler');
     }
     if (receiver?.type === 'MemberExpression' && propertyName(receiver) === 'scheduler' &&
         receiver.object?.type === 'Identifier' &&
         ['globalThis', 'window', 'self'].includes(receiver.object.name)) {
-      return !variableForNode.has(receiver.object);
+      return !declaredNames.has(receiver.object.name);
     }
     return false;
   };
   const isNativeSetImmediateCall = node =>
     node?.type === 'CallExpression' && node.callee?.type === 'Identifier' &&
-    node.callee.name === 'setImmediate' && !variableForNode.has(node.callee);
+    node.callee.name === 'setImmediate' && !declaredNames.has('setImmediate');
   const isNativeProcessNextTickCall = node => {
     if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' ||
         propertyName(node.callee) !== 'nextTick') return false;
     const receiver = node.callee.object;
     if (receiver?.type === 'Identifier' && receiver.name === 'process') {
-      return !variableForNode.has(receiver);
+      return !declaredNames.has('process');
     }
     if (receiver?.type === 'MemberExpression' && propertyName(receiver) === 'process' &&
         receiver.object?.type === 'Identifier' && receiver.object.name === 'globalThis') {
-      return !variableForNode.has(receiver.object);
+      return !declaredNames.has(receiver.object.name);
     }
     return false;
   };
