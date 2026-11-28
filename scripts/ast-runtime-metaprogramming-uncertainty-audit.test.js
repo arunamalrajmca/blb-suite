@@ -95,3 +95,10 @@ test('does not label standard Array iteration callbacks as external callback con
   assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 0);
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
+
+
+test('does not treat the standard test runner callback as an unknown higher-order boundary', () => {
+  const result = run("test('case', async () => { assert.equal(1, 1); });");
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary').length, 0);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
