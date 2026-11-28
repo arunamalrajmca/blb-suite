@@ -960,6 +960,19 @@ function analyzeFile(root, file) {
     }
     return false;
   };
+  const isNativeProcessNextTickCall = node => {
+    if (node?.type !== 'CallExpression' || node.callee?.type !== 'MemberExpression' ||
+        propertyName(node.callee) !== 'nextTick') return false;
+    const receiver = node.callee.object;
+    if (receiver?.type === 'Identifier' && receiver.name === 'process') {
+      return !variableForNode.has(receiver);
+    }
+    if (receiver?.type === 'MemberExpression' && propertyName(receiver) === 'process' &&
+        receiver.object?.type === 'Identifier' && receiver.object.name === 'globalThis') {
+      return !variableForNode.has(receiver.object);
+    }
+    return false;
+  };
   const reflectiveMethods = new Set([
     'get', 'set', 'has', 'ownKeys', 'getOwnPropertyDescriptor',
     'getOwnPropertyDescriptors', 'getOwnPropertyNames', 'getOwnPropertySymbols',
@@ -1099,7 +1112,7 @@ function analyzeFile(root, file) {
       for (let index = 0; index < node.arguments.length; index++) {
         const argument = node.arguments[index];
         if (isFunction(argument)) {
-          const scheduler = callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || name === 'addListener' ||
+          const scheduler = callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeProcessNextTickCall(node) || name === 'addListener' ||
             (name === 'addEventListener' && index === 1);
           if (scheduler) {
             add('callbacks', 'callback-registration', argument,
@@ -1109,7 +1122,7 @@ function analyzeFile(root, file) {
           }
         }
         if (argument.type === 'Identifier' && functionVariables.has(variableForNode.get(argument))) {
-          if (callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node)) {
+          if (callbackSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeProcessNextTickCall(node)) {
             add('callbacks', 'function-reference-registration',
               argument, (name || 'call') + ' argument[' + index + ']');
             addEdge(bindingId(argument), 'scheduler@' + node.loc.start.line,
@@ -1118,7 +1131,7 @@ function analyzeFile(root, file) {
         }
       }
 
-      if (asyncSchedulers.has(name) || isNativeTaskSchedulerCall(node)) add('asynchronous-scheduling', 'scheduler-call', node,
+      if (asyncSchedulers.has(name) || isNativeTaskSchedulerCall(node) || isNativeProcessNextTickCall(node)) add('asynchronous-scheduling', 'scheduler-call', node,
         (receiverName ? receiverName + '.' : '') + name);
 
       if (node.type === 'NewExpression' && name === 'Proxy') {
