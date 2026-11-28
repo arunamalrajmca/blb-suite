@@ -2182,3 +2182,28 @@ test('supports a directly instantiated anonymous async iterator class expression
   assert.ok(result.flowEdges.some(edge => edge.kind === 'container-value-read' &&
     edge.from === 'function@1' && edge.to === 'handler@6'));
 });
+
+test('traces native scheduler.postTask callback and asynchronous reachability edges', () => {
+  const result = audit([
+    'function onReady() { return true; }',
+    'scheduler.postTask(onReady);',
+    'globalThis.scheduler.postTask(() => onReady());'
+  ].join('\\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 2);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 2);
+});
+
+test('does not treat shadowed or arbitrary postTask methods as native scheduler roots', () => {
+  const result = audit([
+    'function onReady() { return true; }',
+    'const scheduler = { postTask(callback) { return callback; } };',
+    'scheduler.postTask(onReady);',
+    'function local(scheduler) { scheduler.postTask(onReady); }'
+  ].join('\\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
