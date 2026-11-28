@@ -1275,13 +1275,14 @@ function analyzeFile(root, file) {
 
       if (node.type === 'CallExpression' && containerReadMethods.has(name) && receiverName &&
           !['Object', 'Reflect'].includes(receiverName)) {
-        const assigned = parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
-          ? bindingId(parent.id) : null;
+        const invoked = parent?.type === 'CallExpression' && parent.callee === node;
+        const assigned = parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier'
+          ? bindingId(parent.id) : invoked ? 'callback-invocation@' + parent.loc.start.line : null;
         addEdge(bindingId(receiver), assigned, 'container-read', node, receiverName + '.' + name);
         containerReads.push({
           container:bindingId(receiver),
           key:name === 'get' || name === 'at' ? literalKey(node.arguments[0]) : null,
-          assigned,node
+          assigned,node,invoked
         });
       }
       if (node.type === 'CallExpression' && ['values', 'entries', 'keys'].includes(name) &&
@@ -2397,9 +2398,10 @@ function analyzeFile(root, file) {
     for (const write of containerWrites) {
       if (write.container !== read.container) continue;
       if (read.key !== null && write.key !== null && read.key !== write.key) continue;
-      addEdge(write.stored, read.assigned, 'container-value-read', read.node,
+      addEdge(write.stored, read.assigned,
+        read.invoked ? 'container-callback-invocation' : 'container-value-read', read.node,
         read.key === null ? 'dynamic container key' : 'key=' + read.key);
-      if (write.objectValue && read.assigned) linkObjectAlias(read.assigned, write.stored);
+      if (write.objectValue && read.assigned && !read.invoked) linkObjectAlias(read.assigned, write.stored);
       if (read.node.callee?.property?.name === 'splice' && read.assigned) {
         containerWrites.push({container:read.assigned,key:null,stored:write.stored,node:read.node,objectValue:write.objectValue});
       }
