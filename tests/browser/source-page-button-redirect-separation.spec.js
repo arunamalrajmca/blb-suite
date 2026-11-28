@@ -1209,12 +1209,13 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
       return tabs[0]?.id ?? null;
     });
     expect(firstDestinationTab).not.toBeNull();
-    const firstRegistryState = await extensionWorker.evaluate(target => {
+    // A tab becomes queryable before chrome.tabs.create() has necessarily
+    // resolved and the destination identity has been recorded. Wait for the
+    // extension's completed registration before testing the subsequent click.
+    await expect.poll(() => extensionWorker.evaluate(target => {
       const key = canonicalBlbTabKey(target);
-      return {key, rememberedId:blbLogicalTabRegistry.get(key) ?? null,
-        entries:[...blbLogicalTabRegistry.entries()]};
-    }, destinationUrl);
-    console.log('BLB_SOURCE_DESTINATION_REGISTRY '+JSON.stringify({host,...firstRegistryState,firstDestinationTab}));
+      return blbLogicalTabRegistry.get(key) ?? null;
+    }, destinationUrl), {timeout:10000}).toBe(firstDestinationTab);
 
     await expect(page.locator('#bible-reference')).toHaveAttribute('href', destinationUrl);
     await page.locator('#bible-reference').click();
