@@ -1220,7 +1220,8 @@ test('SagacityWeb and Rediscover Bible reference clicks reuse the existing BLB d
     const firstRegistryEntry = firstRegistryState.entries.find(([,id]) => id === firstDestinationTab);
     if (!firstRegistryEntry) {
       throw new Error('First BLB tab has no logical registry entry: ' + JSON.stringify({
-        host,targetKey:firstRegistryState.targetKey,firstDestinationTab,entries:firstRegistryState.entries
+        host,targetKey:firstRegistryState.targetKey,firstDestinationTab,
+        entries:firstRegistryState.entries,liveTabs:firstRegistryState.liveTabs
       }));
     }
     expect(firstRegistryEntry[0]).toBe(firstRegistryState.targetKey);
