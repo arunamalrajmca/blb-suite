@@ -221,6 +221,13 @@ function staticPrefix(node, constants, bindings, depth = 0) {
 }
 function staticLoaderSpecifier(node, constants, bindings) {
   if (node?.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'URL') {
+    const base = node.arguments[1];
+    const isImportMetaUrl = base?.type === 'MemberExpression' &&
+      base.object?.type === 'MetaProperty' && base.object.meta?.name === 'import' &&
+      base.object.property?.name === 'meta' && base.property?.name === 'url';
+    // A relative URL is file-relative only when its base is the current
+    // module URL. Other bases may point at a page or remote origin.
+    if (!isImportMetaUrl) return undefined;
     return staticValue(node.arguments[0], constants, 0, bindings);
   }
   return staticValue(node, constants, 0, bindings);
