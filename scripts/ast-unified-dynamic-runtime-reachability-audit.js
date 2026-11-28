@@ -591,11 +591,23 @@ function analyze(root = path.resolve(__dirname, '..')) {
   }
 
   const functionDefs = new Map();
+  // Keep the unresolved-script-global fallback indexed by file and declared
+  // name. Scanning every function definition for every callback/callsite made
+  // large repository passes quadratic in the number of functions.
+  const functionDefsByFileAndName = new Map();
   for (const [file, ast] of asts) {
     const bindings = bindingByFile.get(file);
     visit(ast, (node, parent) => {
       if (node.type === 'FunctionDeclaration' && node.id) {
-        const key = bindings.get(node.id); if (key) functionDefs.set(file + '::' + key, { file, node });
+        const key = bindings.get(node.id);
+        if (key) {
+          const definition = { file, node };
+          functionDefs.set(file + '::' + key, definition);
+          if (!functionDefsByFileAndName.has(file)) functionDefsByFileAndName.set(file, new Map());
+          const byName = functionDefsByFileAndName.get(file);
+          if (!byName.has(node.id.name)) byName.set(node.id.name, []);
+          byName.get(node.id.name).push(definition);
+        }
       } else if ((node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
           parent && parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
         const key = bindings.get(parent.id); if (key) functionDefs.set(file + '::' + key, { file, node });
@@ -682,12 +694,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
     if (definition) return { file: definition.file, key, node: definition.node };
     // Script/global scopes can leave same-file function references unresolved.
     // Use an exact local function name only when it has one definition.
-    const localMatches = [...functionDefs].filter(([candidateKey, candidate]) =>
-      candidate.file === file && candidate.node.id?.name === identifier.name
-    );
+    const localMatches = functionDefsByFileAndName.get(file)?.get(identifier.name) || [];
     if (localMatches.length === 1) {
-      const [candidateKey, candidate] = localMatches[0];
-      return { file: candidate.file, key: candidateKey.slice(file.length + 2), node: candidate.node };
+      const candidate = localMatches[0];
+      const candidateKey = bindingByFile.get(file)?.get(candidate.node.id);
+      return { file: candidate.file, key: candidateKey, node: candidate.node };
     }
     const imported = key && importedFunctionsByFile.get(file).get(key);
     if (imported) return resolveExportedFunction(imported.file, imported.importedName);
