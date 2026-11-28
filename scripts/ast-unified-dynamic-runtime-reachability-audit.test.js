@@ -2662,8 +2662,10 @@ test('keeps reassigned listener helper parameters unresolved across forwarding',
   const registration = result.dynamicSites.find(item =>
     item.kind === 'external-callback-registration' && item.expression === 'document.addEventListener');
   assert.ok(registration);
-  assert.equal(registration.certainty, 'partially-resolved-object-event-handler-bindings');
-  assert.equal(registration.callbackTargets.length, 1);
+  // Reassignment invalidates the original listener-object binding. Do not
+  // preserve a stale handleEvent target from the pre-assignment value.
+  assert.equal(registration.certainty, 'unresolved-callback-owner');
+  assert.ok(!registration.callbackTargets?.length);
   assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });
 
