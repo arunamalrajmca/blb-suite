@@ -659,19 +659,21 @@ function analyze(root = path.resolve(__dirname, '..')) {
       const key = bindings?.get(target);
       if (!key) return;
       if (!assignedFunctionWrites.has(file + '::' + key)) assignedFunctionWrites.set(file + '::' + key, []);
-      assignedFunctionWrites.get(file + '::' + key).push(
-        node.type === 'AssignmentExpression' && node.operator === '=' ? node.right : null
-      );
+      assignedFunctionWrites.get(file + '::' + key).push({
+        node,
+        value: node.type === 'AssignmentExpression' && node.operator === '=' ? node.right : null
+      });
     });
   }
   for (const [identity, writes] of assignedFunctionWrites) {
     if (writes.length !== 1) continue;
-    const value = writes[0];
+    const write = writes[0];
+    const value = write.value;
     if (!['FunctionExpression', 'ArrowFunctionExpression'].includes(value?.type)) continue;
     if (functionDefs.has(identity)) continue;
     const separator = identity.indexOf('::');
     const file = identity.slice(0, separator);
-    functionDefs.set(identity, { file, node: value });
+    functionDefs.set(identity, { file, node: value, assignmentNode: write.node });
   }
 
   // Precompute callback parameters supplied by the exact Chrome runtime
@@ -1663,6 +1665,17 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     }
 
+    // Build parent links before callback sites are visited so assignment-
+    // initialized callbacks can be checked for same-block, prior assignment.
+    visit(ast, (node, parent) => { if (parent) parents.set(node, parent); });
+    const nearestCallbackBlock = node => {
+      let current = node;
+      while (current) {
+        if (current.type === 'BlockStatement' || current.type === 'Program') return current;
+        current = parents.get(current);
+      }
+      return null;
+    };
     const callbackRecord = (callback, api, line, expression) => {
       // Chrome's runtime message listener contract supplies sendResponse as
       // its third callback parameter. Mark only that exact API contract; a
@@ -1679,6 +1692,11 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         let resolvedKey = callbackKey;
         let definition = callbackKey && functionDefs.get(file + '::' + callbackKey);
+        if (definition?.assignmentNode &&
+            (definition.assignmentNode.start >= callback.start ||
+             nearestCallbackBlock(definition.assignmentNode) !== nearestCallbackBlock(callback))) {
+          definition = null;
+        }
         // ESLint scope can leave a callback identifier unresolved in unusual
         // script/global scopes. Keep the fallback local to this source file
         // and exact function name; never resolve by repository-wide spelling.
