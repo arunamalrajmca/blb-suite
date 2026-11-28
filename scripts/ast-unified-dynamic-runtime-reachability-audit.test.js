@@ -729,13 +729,16 @@ test('does not classify shadowed ServiceWorker, URL, or Blob bindings as native 
       'function install(navigator, URL, Blob) {',
       "  navigator.serviceWorker.register('./shadowed-service-worker.js');",
       "  new Worker(URL.createObjectURL(new Blob(['self.onmessage = () => {};'], { type: 'text/javascript' })));",
-      '}'
+      '}',
+      "function shadowedWorker(Worker) { new Worker('./shadowed-worker.js'); }"
     ].join(' '),
     'scripts/shadowed-service-worker.js': 'self.addEventListener("fetch", () => {});'
   });
   assert.equal(result.dynamicSites.filter(item => item.kind === 'service-worker-register').length, 0);
   assert.equal(result.uncertainty.filter(item => item.kind === 'generated-worker-source').length, 0);
   assert.ok(result.uncertainty.some(item => item.kind === 'worker-constructor'));
+  assert.equal(result.dynamicSites.filter(item => item.kind === 'worker-constructor').length, 1);
+  assert.equal(edge(result, 'worker-constructor', 'scripts/main.js', 'scripts/shadowed-worker.js'), false);
 });
 
 
