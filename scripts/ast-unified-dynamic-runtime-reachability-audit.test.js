@@ -1057,7 +1057,7 @@ test('records framework callback ownership and resolves named and inline callbac
     ].join(' ')
   });
   const registrations = result.dynamicSites.filter(item => item.kind === 'external-callback-registration');
-  assert.equal(registrations.length, 3);
+  assert.equal(registrations.length, 3, JSON.stringify(result.dynamicSites));
   assert.ok(registrations.some(item => item.callback === 'onMessage' && item.certainty === 'resolved-function-binding'));
   assert.ok(registrations.some(item => item.callback === '[inline callback]' && item.certainty === 'resolved-inline-callback'));
   assert.equal(result.uncertainty.filter(item => item.kind === 'unresolved-external-callback-owner').length, 0);
@@ -2830,7 +2830,7 @@ test('recognizes Vue Composition API lifecycle callback registrations', () => {
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' &&
     ['onMounted', 'onBeforeUnmount', 'onErrorCaptured'].includes(item.expression));
-  assert.equal(registrations.length, 3);
+  assert.equal(registrations.length, 3, JSON.stringify(result.dynamicSites));
   assert.ok(registrations.some(item =>
     item.expression === 'onMounted' &&
     item.callback === 'mounted' &&
