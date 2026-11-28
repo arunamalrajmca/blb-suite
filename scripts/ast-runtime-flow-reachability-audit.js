@@ -132,11 +132,11 @@ function analyzeFile(root, file) {
   };
   visit(ast, node => {
     if (node.type === 'VariableDeclarator') collectBindingNames(node.id);
-    else if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration' ||
+    if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration' ||
         (node.type === 'FunctionExpression' && node.id)) collectBindingNames(node.id);
-    else if (isFunction(node)) (node.params || []).forEach(collectBindingNames);
-    else if (node.type === 'CatchClause') collectBindingNames(node.param);
-    else if (node.type === 'ImportDeclaration') {
+    if (isFunction(node)) (node.params || []).forEach(collectBindingNames);
+    if (node.type === 'CatchClause') collectBindingNames(node.param);
+    if (node.type === 'ImportDeclaration') {
       for (const specifier of node.specifiers || []) collectBindingNames(specifier.local);
     }
   });
