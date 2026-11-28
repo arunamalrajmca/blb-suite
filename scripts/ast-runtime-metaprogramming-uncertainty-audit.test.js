@@ -34,12 +34,13 @@ test('reports prototype and descriptor mutation APIs', () => {
   assert.ok(has(result, 'descriptor-or-prototype-mutation'));
 });
 
-test('reports higher-order factories and callback contract boundaries', () => {
-  const result = run("function factory() { return callback => callback(); } register(factory()); events.on('ready', handler); setTimeout(() => run(), 1);");
+test('reports unknown higher-order callbacks but recognizes standard timer callback APIs', () => {
+  const result = run("function factory() { return callback => callback(); } register(() => run()); events.on('ready', handler); setTimeout(() => run(), 1); queueMicrotask(() => run());");
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   assert.ok(has(result, 'higher-order-function-factory'));
   assert.ok(has(result, 'callback-contract'));
   assert.ok(has(result, 'higher-order-callback-boundary'));
+  assert.equal(result.observations.filter(item => item.kind === 'higher-order-callback-boundary' && /setTimeout|queueMicrotask/.test(item.detail)).length, 0);
 });
 
 test('surfaces dynamic code generation, dynamic imports, and dynamic scope', () => {
