@@ -2185,7 +2185,7 @@ test('supports a directly instantiated anonymous async iterator class expression
 
 test('traces native scheduler.postTask callback and asynchronous reachability edges', () => {
   const result = audit([
-    'function onReady() { return true; }',
+    'const onReady = () => true;',
     'scheduler.postTask(onReady);',
     'globalThis.scheduler.postTask(() => onReady());'
   ].join('\n'));
@@ -2212,7 +2212,7 @@ test('does not treat shadowed or arbitrary postTask methods as native scheduler 
 
 test('traces native process.nextTick callbacks through callback and async edges', () => {
   const result = audit([
-    'function onReady() { return true; }',
+    'const onReady = () => true;',
     'setImmediate(onReady);',
     'process.nextTick(onReady);',
     'globalThis.process.nextTick(() => onReady());'
