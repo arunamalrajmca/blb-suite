@@ -459,6 +459,17 @@ test('traces object-property callback values stored in and retrieved from contai
     edge.from === storedValue.to && edge.to === 'handler@5'));
 });
 
+test('traces immediate invocation of callbacks retrieved from a Map', () => {
+  const result = audit([
+    'const callback = () => start();',
+    'const registry = new Map();',
+    "registry.set('ready', callback);",
+    "registry.get('ready')();"
+  ].join('\\n'));
+  assert.ok(result.flowEdges.some(edge => edge.kind === 'container-callback-invocation' &&
+    edge.from === 'function@1' && edge.to === 'callback-invocation@4'));
+});
+
 test('traces object-property values returned from helper functions', () => {
   const result = audit([
     'const callback = () => start();',
