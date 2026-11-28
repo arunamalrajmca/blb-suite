@@ -125,3 +125,18 @@ test('recognizes Playwright CDP session event listeners without suppressing gene
   assert.ok(findings[0].detail.includes('argument[1]'));
   assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
 });
+
+
+test('recognizes MutationObserver.observe as a target/options method, not a callback contract', () => {
+  const result = run("const observer = new MutationObserver(onMutation); observer.observe(document.documentElement, { childList: true, subtree: true }); other.observe(handler);");
+  const findings = result.observations.filter(item => item.kind === 'callback-contract');
+  assert.equal(findings.length, 1);
+  assert.ok(findings[0].detail.includes('observe argument[0]'));
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
+
+test('does not suppress observe contracts when MutationObserver is shadowed', () => {
+  const result = run("function setup(MutationObserver, observer) { const local = new MutationObserver(handler); local.observe(target, options); }");
+  assert.equal(result.observations.filter(item => item.kind === 'callback-contract').length, 1);
+  assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
+});
