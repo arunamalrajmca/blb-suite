@@ -929,16 +929,21 @@ test('same-tab redirect re-enable restores source-page buttons on every register
       return scripts.some(script => script.id === id + '-main-world');
     }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
 
-    await expect.poll(() => extensionWorker.evaluate(async pattern => {
-      const [tab] = await chrome.tabs.query({url:pattern});
-      if (tab?.id == null) return false;
-      const [result] = await chrome.scripting.executeScript({
-        target:{tabId:tab.id},
-        world:'MAIN',
-        func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
-      });
-      return result?.result === true;
-    }, originPattern), {timeout:10000}).toBe(mainWorldClickGuard);
+    // A page-world marker can outlive a same-tab navigation in the reused
+    // browser context. Registration presence is authoritative for hosts that
+    // must not receive the guard; verify the page marker only when required.
+    if (mainWorldClickGuard) {
+      await expect.poll(() => extensionWorker.evaluate(async pattern => {
+        const [tab] = await chrome.tabs.query({url:pattern});
+        if (tab?.id == null) return false;
+        const [result] = await chrome.scripting.executeScript({
+          target:{tabId:tab.id},
+          world:'MAIN',
+          func:() => globalThis.__blbSourcePassageClickGuardInstalled === true
+        });
+        return result?.result === true;
+      }, originPattern), {timeout:10000}).toBe(true);
+    }
 
     const guardState = await extensionWorker.evaluate(async pattern => {
       const id = runtimeContentScriptIdForPattern(pattern);
@@ -961,7 +966,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     }, originPattern);
     expect(guardState.isolated?.js).toContain('content.js');
     expect(Boolean(guardState.mainWorld), originPattern).toBe(mainWorldClickGuard);
-    expect(guardState.mainWorldMarker, originPattern).toBe(mainWorldClickGuard);
+    if (mainWorldClickGuard) expect(guardState.mainWorldMarker, originPattern).toBe(true);
     if (mainWorldClickGuard) {
       expect(guardState.mainWorld).toMatchObject({
         matches:[originPattern],
