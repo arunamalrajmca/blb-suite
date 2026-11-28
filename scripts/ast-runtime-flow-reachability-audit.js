@@ -2321,13 +2321,21 @@ function analyzeFile(root, file) {
     }
   }
 
+  // Property reads are resolved twice; index the completed write inventory once
+  // so each read visits only writes belonging to its canonical object.
+  const propertyWritesByObjectForReads = new Map();
+  for (const write of propertyWrites) {
+    const object = canonicalObject(write.object);
+    if (!propertyWritesByObjectForReads.has(object)) propertyWritesByObjectForReads.set(object, []);
+    propertyWritesByObjectForReads.get(object).push(write);
+  }
+
   // Resolve static object-property writes to subsequent property reads.
   // Unknown computed reads conservatively retain every stored value on the object.
   for (const read of propertyReads) {
     const readObject = canonicalObject(read.object);
-    const matches = propertyWrites.filter(write =>
-      canonicalObject(write.object) === readObject &&
-      (read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+    const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
+      read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
     for (const write of matches) {
       addEdge(write.stored, destination, 'property-value-read', read.node,
@@ -2417,9 +2425,8 @@ function analyzeFile(root, file) {
   // aliases from the retrieved bindings to the stored aggregate identities.
   for (const read of propertyReads) {
     const readObject = canonicalObject(read.object);
-    const matches = propertyWrites.filter(write =>
-      canonicalObject(write.object) === readObject &&
-      (read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.')));
+    const matches = (propertyWritesByObjectForReads.get(readObject) || []).filter(write =>
+      read.property === null || write.property === null || write.property === read.property || write.property.startsWith(read.property + '.'));
     const destination = read.assigned || 'property-read@' + read.node.loc.start.line;
     for (const write of matches) {
       addEdge(write.stored, destination, 'property-value-read', read.node,
