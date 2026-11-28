@@ -3330,3 +3330,43 @@ test('keeps array loader parameters uncertain when any caller supplies an unknow
     item.kind === 'chrome.scripting.registerContentScripts' &&
     item.certainty === 'unresolved-registered-script'));
 });
+
+
+test('does not treat Playwright timeout configuration or listener removal as callback registration', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onFocusChanged() {}',
+      'test.setTimeout(600000);',
+      'chrome.windows.onFocusChanged.removeListener(onFocusChanged);',
+      'setTimeout(onFocusChanged, 0);',
+      'window.setTimeout(onFocusChanged, 0);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration');
+  assert.equal(registrations.some(item => item.expression === 'test.setTimeout'), false);
+  assert.equal(registrations.some(item => item.expression.endsWith('.removeListener')), false);
+  assert.equal(registrations.filter(item =>
+    ['setTimeout', 'window.setTimeout'].includes(item.expression)).length, 2);
+});
+
+test('recognizes callable final arguments through Function.prototype.call but not data arguments', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const defaults = { enabled: true };',
+      "const scripts = [{ id: 'runtime', js: ['content.js'] }];",
+      'chrome.storage.local.get.call(chrome.storage.local, defaults);',
+      'chrome.scripting.registerContentScripts.call(chrome.scripting, scripts);',
+      'chrome.tabs.query.call(chrome.tabs, {}, onReady);'
+    ].join('\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration');
+  assert.equal(registrations.length, 1);
+  assert.ok(registrations[0].expression.endsWith('.call'));
+  assert.equal(registrations[0].certainty, 'resolved-function-binding');
+  assert.match(registrations[0].callbackTarget, /scripts\/main\.js::onReady@/);
+});
