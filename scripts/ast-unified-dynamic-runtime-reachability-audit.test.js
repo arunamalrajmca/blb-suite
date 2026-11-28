@@ -644,6 +644,56 @@ test('resolves Worker and SharedWorker entrypoints, including constructor aliase
   assert.ok(edge(result, 'importScripts', 'scripts/module-worker.js', 'scripts/worker-dependency.js'));
 });
 
+test('resolves ServiceWorker registration and Worklet module loaders', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "navigator.serviceWorker.register('./service-worker.js');",
+      "audioContext.audioWorklet.addModule('./audio-processor.js');",
+      "CSS.paintWorklet.addModule(new URL('./paint-worklet.js', import.meta.url));",
+      "CSS.layoutWorklet.addModule('./layout-worklet.js');"
+    ].join(' '),
+    'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/audio-processor.js': 'class Processor extends AudioWorkletProcessor {};',
+    'scripts/paint-worklet.js': 'registerPaint("sample", class {});',
+    'scripts/layout-worklet.js': 'registerLayout("sample", class {});'
+  });
+  assert.equal(result.parseErrors.length, 0);
+  assert.ok(edge(result, 'service-worker-register', 'scripts/main.js', 'scripts/service-worker.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/audio-processor.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/paint-worklet.js'));
+  assert.ok(edge(result, 'worklet-module', 'scripts/main.js', 'scripts/layout-worklet.js'));
+  assert.equal(result.uncertainty.filter(item =>
+    ['service-worker-register', 'worklet-module'].includes(item.kind)
+  ).length, 0);
+});
+
+
+test('keeps dynamic ServiceWorker and Worklet loader targets explicitly uncertain', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      "navigator.serviceWorker.register(getWorkerScript());",
+      "audioContext.audioWorklet.addModule(resolveProcessor());"
+    ].join(' '),
+    'scripts/service-worker.js': 'self.addEventListener("fetch", () => {});',
+    'scripts/processor.js': 'registerProcessor("sample", class {});'
+  });
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'service-worker-register' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainty.some(item =>
+    item.kind === 'worklet-module' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'scripts/service-worker.js' && item.affectedRoots.includes('scripts/main.js')
+  ));
+  assert.ok(result.uncertainFiles.some(item =>
+    item.file === 'scripts/processor.js' && item.affectedRoots.includes('scripts/main.js')
+  ));
+});
+
+
 test('tracks DOM script injection through aliased document and createElement bindings', () => {
   const result = run({
     'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
