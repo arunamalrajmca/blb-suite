@@ -906,8 +906,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
     const identity = file + '::' + parameterKey;
     if (parameterMutationCache.has(identity)) return parameterMutationCache.get(identity);
     const bindings = bindingByFile.get(file);
+    const aliases = new Set([parameterKey]);
+    let aliasesChanged = true;
+    while (aliasesChanged) {
+      aliasesChanged = false;
+      visit(functionNode.body, node => {
+        if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier' ||
+            node.init?.type !== 'Identifier' || !aliases.has(bindings?.get(node.init))) return;
+        const aliasKey = bindings?.get(node.id);
+        if (aliasKey && !aliases.has(aliasKey)) {
+          aliases.add(aliasKey);
+          aliasesChanged = true;
+        }
+      });
+    }
     const isParameterReference = node => node?.type === 'Identifier' &&
-      bindings?.get(node) === parameterKey;
+      aliases.has(bindings?.get(node));
     const mutatingArrayMethods = new Set([
       'copyWithin', 'fill', 'pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'
     ]);
