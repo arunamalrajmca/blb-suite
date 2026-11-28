@@ -170,7 +170,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const knownPlaywrightTestDeclaration = node.callee.type === 'Identifier' &&
           node.callee.name === 'test' && relativeFile.startsWith('tests/browser/') &&
           /\.spec\.[cm]?js$/.test(relativeFile);
-        if (node.callee.type === 'Identifier' && !['require', 'import'].includes(node.callee.name) &&
+        if (node.callee.type === 'Identifier' && !['require', 'import', 'test'].includes(node.callee.name) &&
             !knownPlaywrightTestDeclaration) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type)) {
@@ -217,7 +217,18 @@ function run(root) {
   console.log('Files requiring global-shadow scope analysis: ' + result.scopeAnalysisFiles);
   console.log('Uncertainty observations: ' + result.summary.total);
   console.log('By kind: ' + JSON.stringify(result.summary.byKind));
-  for (const item of result.observations) console.log('UNCERTAIN ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.kind + ' — ' + item.detail);
+  const sampleLimitPerKind = 20;
+  const printedByKind = new Map();
+  for (const item of result.observations) {
+    const count = printedByKind.get(item.kind) || 0;
+    if (count >= sampleLimitPerKind) continue;
+    printedByKind.set(item.kind, count + 1);
+    console.log('UNCERTAIN ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.kind + ' — ' + item.detail);
+  }
+  for (const [kind, total] of Object.entries(result.summary.byKind)) {
+    const printed = printedByKind.get(kind) || 0;
+    if (total > printed) console.log('UNCERTAIN-SUPPRESSED ' + kind + ': ' + (total - printed) + ' additional findings (full counts retained in summary)');
+  }
   for (const item of result.parseErrors) console.log('PARSE-ERROR ' + item.file + ' — ' + item.error);
   return result;
 }
