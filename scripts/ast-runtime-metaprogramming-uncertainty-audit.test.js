@@ -236,7 +236,7 @@ test('recognizes Node HTTP, child-process, stream, and process event contracts',
     ].join('\n'));
     const result = analyze(root);
     const findings = result.observations.filter(item => item.kind === 'callback-contract');
-    assert.equal(findings.length, 2, JSON.stringify(findings));
+    assert.deepEqual(findings.map(item => item.line), [12, 13, 14], JSON.stringify(findings));
     assert.ok(findings.every(item => item.detail.includes('argument[1]')));
     assert.equal(result.parseErrors.length, 0, JSON.stringify(result.parseErrors));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
