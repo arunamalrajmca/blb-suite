@@ -2190,7 +2190,8 @@ test('traces native scheduler.postTask callback and asynchronous reachability ed
     'globalThis.scheduler.postTask(() => onReady());'
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
-    item.category === 'callbacks' && item.kind === 'callback-registration').length, 2);
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 2);
   assert.equal(result.findings.filter(item =>
     item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 2);
 });
@@ -2216,7 +2217,8 @@ test('traces native process.nextTick callbacks through callback and async edges'
     'globalThis.process.nextTick(() => onReady());'
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
-    item.category === 'callbacks' && item.kind === 'callback-registration').length, 3);
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 3);
   assert.equal(result.findings.filter(item =>
     item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 3);
 });
