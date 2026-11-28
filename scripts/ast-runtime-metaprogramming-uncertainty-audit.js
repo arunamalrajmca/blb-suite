@@ -139,21 +139,32 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // Leave unrelated .on() and .observe() receivers conservative.
     const cdpSessionNames = new Set();
     const mutationObserverNames = new Set();
+    const invalidMutationObserverNames = new Set();
+    const isGlobalMutationObserverConstruction = expression =>
+      expression?.type === 'NewExpression' &&
+      expression.callee?.type === 'Identifier' &&
+      expression.callee.name === 'MutationObserver' &&
+      unresolved.has(expression.callee.start + ':' + expression.callee.end);
+    const isNullLiteral = expression =>
+      expression?.type === 'Literal' && expression.value === null;
     visit(ast, node => {
-      if (node.type !== 'VariableDeclarator' || node.id.type !== 'Identifier') return;
-      if (node.init?.type === 'AwaitExpression' &&
-          node.init.argument?.type === 'CallExpression' &&
-          node.init.argument.callee?.type === 'MemberExpression' &&
-          !node.init.argument.callee.computed &&
-          node.init.argument.callee.property.name === 'newBrowserCDPSession') {
-        cdpSessionNames.add(node.id.name);
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+        if (node.init?.type === 'AwaitExpression' &&
+            node.init.argument?.type === 'CallExpression' &&
+            node.init.argument.callee?.type === 'MemberExpression' &&
+            !node.init.argument.callee.computed &&
+            node.init.argument.callee.property.name === 'newBrowserCDPSession') {
+          cdpSessionNames.add(node.id.name);
+        }
+        if (isGlobalMutationObserverConstruction(node.init)) mutationObserverNames.add(node.id.name);
+        else if (node.init && !isNullLiteral(node.init)) invalidMutationObserverNames.add(node.id.name);
       }
-      if (node.init?.type === 'NewExpression' && node.init.callee?.type === 'Identifier' &&
-          node.init.callee.name === 'MutationObserver' &&
-          unresolved.has(node.init.callee.start + ':' + node.init.callee.end)) {
-        mutationObserverNames.add(node.id.name);
+      if (node.type === 'AssignmentExpression' && node.left?.type === 'Identifier') {
+        if (isGlobalMutationObserverConstruction(node.right)) mutationObserverNames.add(node.left.name);
+        else if (!isNullLiteral(node.right)) invalidMutationObserverNames.add(node.left.name);
       }
     });
+    for (const name of invalidMutationObserverNames) mutationObserverNames.delete(name);
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
