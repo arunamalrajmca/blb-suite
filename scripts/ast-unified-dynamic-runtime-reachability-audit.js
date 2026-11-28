@@ -1999,7 +1999,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const callbackApis = new Set([
           'addListener', 'addEventListener', 'on', 'once', 'subscribe',
           'then', 'catch', 'finally', 'setTimeout', 'setInterval',
-          'queueMicrotask', 'requestAnimationFrame', 'requestIdleCallback',
           'useEffect', 'useLayoutEffect', 'useMemo', 'useCallback'
         ]);
         const vueLifecycleHooks = new Set([
