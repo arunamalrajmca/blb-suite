@@ -997,8 +997,7 @@ test('resolves inherited class method factories directly on derived instances', 
 });
 
 
-test('traces bound callback identity and retains it through object wrappers', () => {
-  const result = audit([
+test('traces bound callback identity and retains it through object wrappers', () => {  const result = audit([
     'const callback = () => work();',
     'const bound = callback.bind(null);',
     'const wrapper = { handler: bound };'
@@ -1997,8 +1996,7 @@ test('preserves async iterator yielded values through an aliased iterable in for
 });
 
 test('traces values and cleanup methods on custom async iterator protocol objects', () => {
-  const result = audit([
-    'const cleanup = () => start();',
+  const result = audit([    'const cleanup = () => start();',
     'const iterable = {',
     '  [Symbol.asyncIterator]() {',
     '    return {',
@@ -2247,6 +2245,25 @@ test('does not treat a shadowed setImmediate declaration as the native scheduler
   ].join('\n'));
   assert.equal(result.findings.filter(item =>
     item.category === 'callbacks' && item.kind === 'callback-registration').length, 0);
+  assert.equal(result.findings.filter(item =>
+    item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
+});
+
+test('does not promote reassigned scheduler, process, or setImmediate aliases to native roots', () => {
+  const result = audit([
+    'let scheduler = globalThis.scheduler;',
+    'scheduler = { postTask(callback) { return callback; } };',
+    'scheduler.postTask(() => work());',
+    'let process = globalThis.process;',
+    'process = { nextTick(callback) { return callback; } };',
+    'process.nextTick(() => work());',
+    'let setImmediate = globalThis.setImmediate;',
+    'setImmediate = callback => callback();',
+    'setImmediate(() => work());'
+  ].join('\n'));
+  assert.equal(result.findings.filter(item =>
+    item.category === 'callbacks' &&
+    ['callback-registration', 'function-reference-registration'].includes(item.kind)).length, 0);
   assert.equal(result.findings.filter(item =>
     item.category === 'asynchronous-scheduling' && item.kind === 'scheduler-call').length, 0);
 });
