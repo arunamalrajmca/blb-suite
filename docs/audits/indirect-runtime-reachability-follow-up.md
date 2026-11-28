@@ -65,8 +65,18 @@ The inventory describes what the current analyzers can establish; it is not a cl
 - **Skipped by workflow selection:** Focused regressions, Master-Toggle Registration Diagnostics, Package validation, and the unrelated/deep browser test stages. Skipped jobs are not reported as passes or failures.
 - **Failed selected sections:** none.
 
+## Specific unresolved findings retained from the repository scan
+
+These are observed uncertainty samples, not proven defects. Keep them unresolved until the analyzer can establish ownership or target identity without guessing:
+
+- `extension/background.js:4481`: `.then(sendResponse)` is chained from the local `runMasterToggle(...)` helper. Promise-return summaries for this helper-return chain are not currently established.
+- `extension/blb-page-selection-button.js:687`: the `DOMContentLoaded` callback is assigned to an outer listener binding before registration; the current owner analysis does not prove that assignment as a stable callback owner.
+- `extension/background.js:3124`: `chrome.scripting.registerContentScripts` receives the `files` parameter of `registerRuntimeContentScriptForPattern`; trace the bounded file-list source through `contentScriptFilesForTab` and the registration helper before promoting it to a resolved loader edge.
+- Some test-only callback samples use Playwright `test.setTimeout` or Chrome API `.call/.apply` wrappers. Do not treat these as generic callback slots; distinguish API-specific argument positions and helper return semantics first.
+
 ## Remaining carried-forward work
 
+- [ ] Resolve the observed Promise-return helper, assignment-initialized DOM listener, and runtime content-script file-list uncertainty samples above when safe ownership/target evidence can be modeled.
 - [ ] Continue auditing newly discovered behavioral invocation paths when repository evidence or findings identify a gap.
 - [ ] Add focused fixtures for any newly identified path before implementing recognition.
 - [ ] Revisit generated-source/template-origin handling if a statically analyzable source-generation pipeline is introduced.
