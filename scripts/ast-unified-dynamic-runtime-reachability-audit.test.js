@@ -2890,3 +2890,37 @@ test('does not resolve callbacks from dynamically indexed or mutated registries'
   assert.ok(registrations.every(item => item.certainty === 'unresolved-callback-owner'));
   assert.ok(result.uncertainty.some(item => item.kind === 'unresolved-external-callback-owner'));
 });
+
+test('recognizes native scheduler.postTask callbacks through global scheduler roots', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'scheduler.postTask(() => onReady());',
+      'globalThis.scheduler.postTask(onReady);',
+      'window.scheduler.postTask(onReady);'
+    ].join('\\n')
+  });
+  const registrations = result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask'));
+  assert.equal(registrations.length, 3);
+  assert.ok(registrations.every(item => item.certainty === 'resolved-inline-callback' ||
+    item.certainty === 'resolved-named-callback-owner' ||
+    item.certainty === 'resolved-interprocedural-callback-argument'));
+  assert.equal(result.uncertainty.filter(item =>
+    item.kind === 'unresolved-external-callback-owner').length, 0);
+});
+
+test('does not treat shadowed or arbitrary postTask methods as native scheduler callbacks', () => {
+  const result = run({
+    'package.json': JSON.stringify({ scripts: { audit: 'node scripts/main.js' } }),
+    'scripts/main.js': [
+      'function onReady() { return true; }',
+      'const scheduler = { postTask(callback) { return callback; } };',
+      'scheduler.postTask(onReady);',
+      'function local(scheduler) { scheduler.postTask(onReady); }'
+    ].join('\\n')
+  });
+  assert.equal(result.dynamicSites.filter(item =>
+    item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask')).length, 0);
+});
