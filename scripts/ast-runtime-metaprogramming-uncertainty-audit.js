@@ -217,15 +217,15 @@ function analyze(root = path.resolve(__dirname, '..')) {
           const moduleName = node.init.arguments[0].value;
           if (['node:http', 'http'].includes(moduleName)) nodeHttpModuleNames.add(node.id.name);
         }
-        if (node.init?.type === 'CallExpression' && node.init.callee?.type === 'Identifier' &&
-            node.init.callee.name === 'require' && node.init.arguments[0]?.type === 'Literal' &&
-            ['node:child_process', 'child_process'].includes(node.init.arguments[0].value) &&
-            node.id.type === 'ObjectPattern') {
-          for (const property of node.id.properties) {
-            if (property.type !== 'Property' || property.computed) continue;
-            if ((property.key.name || property.key.value) === 'spawn' && property.value?.type === 'Identifier') {
-              nodeSpawnFactoryNames.add(property.value.name);
-            }
+      }
+      if (node.type === 'VariableDeclarator' && node.id.type === 'ObjectPattern' &&
+          node.init?.type === 'CallExpression' && node.init.callee?.type === 'Identifier' &&
+          node.init.callee.name === 'require' && node.init.arguments[0]?.type === 'Literal' &&
+          ['node:child_process', 'child_process'].includes(node.init.arguments[0].value)) {
+        for (const property of node.id.properties) {
+          if (property.type !== 'Property' || property.computed) continue;
+          if ((property.key.name || property.key.value) === 'spawn' && property.value?.type === 'Identifier') {
+            nodeSpawnFactoryNames.add(property.value.name);
           }
         }
       }
