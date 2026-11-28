@@ -137,9 +137,14 @@ function analyze(root = path.resolve(__dirname, '..')) {
     // MutationObserver.observe(target, options) is not a callback-registration API; its
     // callback belongs to the constructor. Track only direct, unshadowed global instances.
     // Leave unrelated .on() and .observe() receivers conservative.
+    const relativeFile = path.relative(root, file).split(path.sep).join('/');
+    const isPlaywrightBrowserSpec = relativeFile.startsWith('tests/browser/') &&
+      /\.spec\.[cm]?js$/.test(relativeFile);
     const cdpSessionNames = new Set();
     const mutationObserverNames = new Set();
     const invalidMutationObserverNames = new Set();
+    const playwrightEventEmitterNames = new Set();
+    const localCallbackFunctions = new Map();
     const isGlobalMutationObserverConstruction = expression =>
       expression?.type === 'NewExpression' &&
       expression.callee?.type === 'Identifier' &&
@@ -165,6 +170,61 @@ function analyze(root = path.resolve(__dirname, '..')) {
       }
     });
     for (const name of invalidMutationObserverNames) mutationObserverNames.delete(name);
+
+    // Playwright test fixtures expose Page and BrowserContext EventEmitter-style
+    // contracts. Follow fixture destructuring, popup Page results, and the
+    // BrowserContext 'serviceworker' callback parameter; keep unrelated .on()
+    // receivers uncertain.
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          ['ArrowFunctionExpression', 'FunctionExpression'].includes(node.init?.type)) {
+        localCallbackFunctions.set(node.id.name, node.init);
+      }
+      if (isPlaywrightBrowserSpec && node.type === 'CallExpression' &&
+          node.callee.type === 'Identifier' && node.callee.name === 'test') {
+        const callback = node.arguments[1];
+        const firstParameter = callback?.params?.[0];
+        if (['ArrowFunctionExpression', 'FunctionExpression'].includes(callback?.type) &&
+            firstParameter?.type === 'ObjectPattern') {
+          for (const property of firstParameter.properties) {
+            if (property.type !== 'Property' || property.computed) continue;
+            const key = property.key.name || property.key.value;
+            const value = property.value?.type === 'AssignmentPattern'
+              ? property.value.left : property.value;
+            if (['page', 'context'].includes(key) && value?.type === 'Identifier') {
+              playwrightEventEmitterNames.add(value.name);
+            }
+          }
+        }
+      }
+    });
+    visit(ast, node => {
+      if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
+          node.init?.type === 'AwaitExpression' &&
+          node.init.argument?.type === 'CallExpression' &&
+          node.init.argument.callee?.type === 'MemberExpression' &&
+          !node.init.argument.callee.computed &&
+          node.init.argument.callee.property.name === 'waitForEvent' &&
+          node.init.argument.callee.object?.type === 'Identifier' &&
+          playwrightEventEmitterNames.has(node.init.argument.callee.object.name) &&
+          node.init.argument.arguments[0]?.type === 'Literal' &&
+          node.init.argument.arguments[0].value === 'popup') {
+        playwrightEventEmitterNames.add(node.id.name);
+      }
+      if (node.type === 'CallExpression' && node.callee?.type === 'MemberExpression' &&
+          !node.callee.computed && ['on', 'once'].includes(node.callee.property.name) &&
+          node.callee.object?.type === 'Identifier' &&
+          playwrightEventEmitterNames.has(node.callee.object.name) &&
+          node.arguments[0]?.type === 'Literal' && node.arguments[0].value === 'serviceworker') {
+        const callback = node.arguments[1];
+        const callbackFunction = callback?.type === 'Identifier'
+          ? localCallbackFunctions.get(callback.name) : callback;
+        const workerParameter = callbackFunction?.params?.[0];
+        if (workerParameter?.type === 'Identifier') {
+          playwrightEventEmitterNames.add(workerParameter.name);
+        }
+      }
+    });
     visit(ast, (node, parent) => {
       if (node.type === 'NewExpression' && node.callee.type === 'Identifier' && node.callee.name === 'Proxy' && unresolved.has(node.callee.start + ':' + node.callee.end)) {
         const traps = node.arguments[1]?.type === 'ObjectExpression'
@@ -202,11 +262,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
         // reachability pass models their ownership directly, so they are not uncertainty findings.
         // Keep generic framework/event-emitter method names conservative: without receiver/type
         // evidence, their callback semantics may still be supplied by an external runtime.
-        const knownCDPSessionEventListener = method === 'on' &&
+        const knownCDPSessionEventListener = ['on', 'once'].includes(method) &&
           node.callee.object?.type === 'Identifier' && cdpSessionNames.has(node.callee.object.name);
+        const knownPlaywrightEventListener = ['on', 'once'].includes(method) &&
+          node.callee.object?.type === 'Identifier' && playwrightEventEmitterNames.has(node.callee.object.name);
         const knownMutationObserverObserve = method === 'observe' &&
           node.callee.object?.type === 'Identifier' && mutationObserverNames.has(node.callee.object.name);
-        if (method && !knownCDPSessionEventListener && !knownMutationObserverObserve &&
+        if (method && !knownCDPSessionEventListener && !knownPlaywrightEventListener && !knownMutationObserverObserve &&
             /^(?:on|once|subscribe|register|use|tap|pipe|watch|observe|intercept|provide|configure|setHandler|addHook)$/.test(method)) {
           for (const [index, arg] of node.arguments.entries()) {
             if (['FunctionExpression', 'ArrowFunctionExpression'].includes(arg.type) || arg.type === 'Identifier' || arg.type === 'MemberExpression') {
@@ -214,7 +276,6 @@ function analyze(root = path.resolve(__dirname, '..')) {
             }
           }
         }
-        const relativeFile = path.relative(root, file).split(path.sep).join('/');
         const knownPlaywrightTestDeclaration = node.callee.type === 'Identifier' &&
           node.callee.name === 'test' && relativeFile.startsWith('tests/browser/') &&
           /\.spec\.[cm]?js$/.test(relativeFile);
