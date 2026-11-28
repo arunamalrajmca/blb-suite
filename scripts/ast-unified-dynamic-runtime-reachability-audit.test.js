@@ -2899,7 +2899,7 @@ test('recognizes native scheduler.postTask callbacks through global scheduler ro
       'scheduler.postTask(() => onReady());',
       'globalThis.scheduler.postTask(onReady);',
       'window.scheduler.postTask(onReady);'
-    ].join('\\n')
+    ].join('\n')
   });
   const registrations = result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask'));
@@ -2919,7 +2919,7 @@ test('does not treat shadowed or arbitrary postTask methods as native scheduler 
       'const scheduler = { postTask(callback) { return callback; } };',
       'scheduler.postTask(onReady);',
       'function local(scheduler) { scheduler.postTask(onReady); }'
-    ].join('\\n')
+    ].join('\n')
   });
   assert.equal(result.dynamicSites.filter(item =>
     item.kind === 'external-callback-registration' && item.expression.endsWith('.postTask')).length, 0);
@@ -2932,16 +2932,16 @@ test('produces deterministic reachability results when module discovery order ch
       "import { forward } from './middle.js';",
       'function onReady() { return true; }',
       'forward(onReady);'
-    ].join('\\n')],
+    ].join('\n')],
     ['scripts/middle.js', [
       "import { register } from './leaf.js';",
       'export function forward(handler) { register(handler); }'
-    ].join('\\n')],
+    ].join('\n')],
     ['scripts/leaf.js', [
       'export function register(callback) {',
       "  globalThis.addEventListener('audit-ready', callback);",
       '}'
-    ].join('\\n')]
+    ].join('\n')]
   ];
   const first = run(Object.fromEntries(entries));
   const second = run(Object.fromEntries([...entries].reverse()));
