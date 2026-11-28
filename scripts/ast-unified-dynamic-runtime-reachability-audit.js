@@ -1139,6 +1139,22 @@ function analyze(root = path.resolve(__dirname, '..')) {
     if (!changed) break;
   }
 
+  const promiseResolverBindings = new Set();
+  for (const [promiseFile, promiseAst] of asts) {
+    const promiseBindings = bindingByFile.get(promiseFile);
+    visit(promiseAst, node => {
+      if (node.type !== 'NewExpression' || node.callee.type !== 'Identifier' ||
+          node.callee.name !== 'Promise' || promiseBindings?.get(node.callee)) return;
+      const executor = node.arguments[0];
+      if (!['ArrowFunctionExpression', 'FunctionExpression'].includes(executor?.type)) return;
+      for (const parameter of (executor.params || []).slice(0, 2)) {
+        if (parameter.type !== 'Identifier') continue;
+        const key = promiseBindings?.get(parameter);
+        if (key) promiseResolverBindings.add(promiseFile + '::' + key);
+      }
+    });
+  }
+
   for (const [file, ast] of asts) {
     const constants = constantsByFile.get(file), bindings = bindingByFile.get(file);
     const sourceText = fs.readFileSync(file, 'utf8');
@@ -1565,7 +1581,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
     }
 
     const callbackRecord = (callback, api, line, expression) => {
-      let callbackName = null, callbackTarget = null, certainty = 'unresolved-callback-owner';
+      let callbackName = null, callbackTarget = null, callbackTargets = [];
+      let certainty = 'unresolved-callback-owner', knownExternalCallback = false, unresolvedCallbackOwner = false;
       if (callback?.type === 'Identifier') {
         callbackName = callback.name;
         let callbackKey = bindings.get(callback);
@@ -1591,24 +1608,66 @@ function analyze(root = path.resolve(__dirname, '..')) {
         }
         if (definition) {
           callbackTarget = rel(root, definition.file) + '::' + resolvedKey;
+          callbackTargets = [callbackTarget];
           certainty = 'resolved-function-binding';
+        } else if (callbackKey && promiseResolverBindings.has(file + '::' + callbackKey)) {
+          // Promise constructors synchronously provide resolve/reject
+          // functions to their executor. These are known external callbacks,
+          // not unknown repository function owners.
+          callbackName = '[Promise resolver]';
+          certainty = 'resolved-promise-resolver';
+          knownExternalCallback = true;
         } else if (callbackKey) {
           const owners = callbackParameterOwners.get(file + '::' + callbackKey);
-          if (owners && owners.size === 1 && ![...owners.values()][0].unresolved) {
-            const owner = [...owners.values()][0];
-            callbackTarget = rel(root, owner.file) + '::' + owner.key;
-            certainty = 'resolved-interprocedural-callback-argument';
+          if (owners?.size) {
+            const knownOwners = [...owners.values()].filter(owner => owner && !owner.unresolved);
+            const hasUnknownOwner = [...owners.values()].some(owner => !owner || owner.unresolved);
+            callbackTargets = knownOwners.map(owner => rel(root, owner.file) + '::' + owner.key);
+            if (callbackTargets.length) {
+              callbackName = '[interprocedural callback argument]';
+              callbackTarget = callbackTargets.length === 1 ? callbackTargets[0] : null;
+              certainty = callbackTargets.length === 1
+                ? 'resolved-interprocedural-callback-argument'
+                : 'resolved-multiple-interprocedural-callback-arguments';
+              if (hasUnknownOwner) {
+                certainty = 'partially-resolved-interprocedural-callback-arguments';
+                unresolvedCallbackOwner = true;
+              }
+            } else if (hasUnknownOwner) {
+              unresolvedCallbackOwner = true;
+            }
           }
         }
         const objectOwners = listenerObjectParameterOwners.get(file + '::' + callbackKey);
         const namedObjectOwner = listenerObjectOwners.get(file + '::' + callbackKey);
         const resolvedObjectOwners = objectOwners || (namedObjectOwner
           ? new Map([[namedObjectOwner.file + '::' + namedObjectOwner.key, namedObjectOwner]]) : null);
-        if (resolvedObjectOwners?.size === 1 && ![...resolvedObjectOwners.values()][0].unresolved) {
-          const owner = [...resolvedObjectOwners.values()][0];
-          callbackName = '[handleEvent listener]';
-          callbackTarget = rel(root, owner.file) + '::' + owner.key;
-          certainty = 'resolved-object-event-handler-binding';
+        if (resolvedObjectOwners?.size) {
+          const knownOwners = [...resolvedObjectOwners.values()].filter(owner => owner && !owner.unresolved);
+          const hasUnknownOwner = [...resolvedObjectOwners.values()].some(owner => !owner || owner.unresolved);
+          const listenerIdentity = file + '::' + callbackKey;
+          if (reassignedListenerObjects.has(listenerIdentity)) {
+            callbackName = '[handleEvent listener]';
+            callbackTarget = null;
+            callbackTargets = [];
+            certainty = 'unresolved-callback-owner';
+            unresolvedCallbackOwner = true;
+            knownExternalCallback = false;
+          } else if (knownOwners.length) {
+            callbackName = '[handleEvent listener]';
+            callbackTargets = knownOwners.map(owner => rel(root, owner.file) + '::' + owner.key);
+            callbackTarget = callbackTargets.length === 1 ? callbackTargets[0] : null;
+            certainty = callbackTargets.length === 1
+              ? 'resolved-object-event-handler-binding'
+              : 'resolved-multiple-object-event-handler-bindings';
+            unresolvedCallbackOwner = hasUnknownOwner;
+            if (hasUnknownOwner) certainty = 'partially-resolved-object-event-handler-bindings';
+            knownExternalCallback = false;
+          } else if (hasUnknownOwner) {
+            callbackName = '[handleEvent listener]';
+            unresolvedCallbackOwner = true;
+            knownExternalCallback = false;
+          }
         }
       } else if (callback?.type === 'MemberExpression' && callback.object.type === 'Identifier') {
         const binding = bindings.get(callback.object);
@@ -1620,11 +1679,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (owner) {
           callbackName = '[stored callback]';
           callbackTarget = rel(root, owner.file) + '::' + owner.key;
+          callbackTargets = [callbackTarget];
           certainty = 'resolved-stored-callback-binding';
         }
       } else if (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') {
         callbackName = '[inline callback]';
         callbackTarget = rel(root, file) + '::function@' + callback.loc.start.line;
+        callbackTargets = [callbackTarget];
         certainty = 'resolved-inline-callback';
       } else if (callback?.type === 'ObjectExpression') {
         const handler = callback.properties.find(property => {
@@ -1637,6 +1698,7 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (handler) {
           callbackName = '[handleEvent listener]';
           callbackTarget = rel(root, file) + '::function@' + (handler.loc?.start.line || callback.loc.start.line);
+          callbackTargets = [callbackTarget];
           certainty = 'resolved-object-event-handler';
         } else {
           callbackName = '[listener object]';
@@ -1668,24 +1730,29 @@ function analyze(root = path.resolve(__dirname, '..')) {
         if (boundHandlerOwner && !reassignedListenerObjects.has(listenerIdentity)) {
           callbackName = '[bound handleEvent listener]';
           callbackTarget = rel(root, boundHandlerOwner.file) + '::' + boundHandlerOwner.key;
+          callbackTargets = [callbackTarget];
           certainty = 'resolved-bound-object-event-handler';
         } else {
           const owner = resolveReturnedCallbackOwner(file, callback);
           if (owner && !owner.unresolved) {
             callbackName = '[factory callback]';
             callbackTarget = rel(root, owner.file) + '::' + owner.key;
+            callbackTargets = [callbackTarget];
             certainty = 'resolved-factory-return';
           } else {
             callbackName = '[factory callback]';
           }
         }
       }
+      if (callbackTarget && !callbackTargets.length) callbackTargets = [callbackTarget];
+      const unresolved = unresolvedCallbackOwner ||
+        (!knownExternalCallback && !callbackTarget && callbackTargets.length === 0);
       sites.push({
         file: rel(root, file), line, kind: 'external-callback-registration',
-        expression, callback: callbackName, callbackTarget, certainty,
+        expression, callback: callbackName, callbackTarget, callbackTargets, certainty,
         resolved: callbackTarget, affectedRoots: []
       });
-      if (certainty === 'unresolved-callback-owner') {
+      if (unresolved) {
         uncertainty.push({
           file: rel(root, file), line, kind: 'unresolved-external-callback-owner',
           certainty, expression, registrationApi: api, affectedRoots: []
@@ -1941,6 +2008,8 @@ function analyze(root = path.resolve(__dirname, '..')) {
         const isObserver = node.type === 'NewExpression' && callee.type === 'Identifier' &&
           ((!observerBinding && observerConstructors.has(callee.name)) ||
             (observerBinding && observerConstructorBindings.has(observerBinding)));
+        const isPromiseExecutor = node.type === 'NewExpression' && pathName === 'Promise' &&
+          callee.type === 'Identifier' && !bindings.get(callee);
         const isExtensionApi = pathName.startsWith('chrome.') || pathName.startsWith('browser.');
         const calleeBinding = callee.type === 'Identifier' ? bindings.get(callee) : null;
         const vueHookName = calleeBinding && vueHookBindings.get(calleeBinding) ||
@@ -1956,12 +2025,13 @@ function analyze(root = path.resolve(__dirname, '..')) {
               definition.file === file && definition.node.id?.name === lastArgument.name
             ).length === 1);
         const extensionCallback = isExtensionApi && lastArgumentIsCallable &&
+          !(pathName === 'chrome.tabs.update' && node.arguments.length < 3) &&
           (node.arguments.length > 1 || lastArgument.type !== 'Identifier' || resolvedLastArgumentFunction);
         const isCallbackCandidate = argument => argument &&
           ['Identifier', 'ArrowFunctionExpression', 'FunctionExpression', 'MemberExpression',
             'CallExpression', 'ConditionalExpression', 'ObjectExpression'].includes(argument.type);
         let callbackIndices = [];
-        if (isObserver) callbackIndices = [0];
+        if (isObserver || isPromiseExecutor) callbackIndices = [0];
         else if (method === 'addEventListener') callbackIndices = [1];
         else if (['on', 'once', 'addListener'].includes(method)) {
           const candidates = node.arguments.map((argument, index) => isCallbackCandidate(argument) ? index : -1).filter(index => index >= 0);
@@ -2826,3 +2896,4 @@ function run(root) {
 }
 if (require.main === module) run(process.argv[2]);
 module.exports = { analyze, run, staticValue, resolveFile, resolveModuleFile };
+24
